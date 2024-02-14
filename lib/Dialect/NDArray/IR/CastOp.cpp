@@ -175,7 +175,7 @@ public:
     if (!defSrcNDTyp || !defSrcNDTyp.hasStaticShape()) {
       return mlir::failure();
     }
-    rewriter.updateRootInPlace(op, [&]() { op->setOperand(0, defOpSrc); });
+    rewriter.modifyOpInPlace(op, [&]() { op->setOperand(0, defOpSrc); });
     return ::mlir::success();
   }
 };

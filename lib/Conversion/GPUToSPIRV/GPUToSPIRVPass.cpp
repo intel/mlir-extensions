@@ -198,8 +198,7 @@ void GPUXToSPIRVPass::runOnOperation() {
       mlir::spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
 
       mlir::RewritePatternSet patterns(context);
-      mlir::spirv::populateMemorySpaceToStorageClassPatterns(converter,
-                                                             patterns);
+      mlir::spirv::convertMemRefTypesAndAttrs(gpuModule, converter);
 
       if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
         return signalPassFailure();
