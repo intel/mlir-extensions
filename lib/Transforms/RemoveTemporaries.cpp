@@ -379,9 +379,9 @@ static void replaceUsesAndPropagateType(mlir::RewriterBase &rewriter,
   // Perform late replacement.
   for (mlir::OpOperand *operand : operandsToReplace) {
     mlir::Operation *op = operand->getOwner();
-    rewriter.startRootUpdate(op);
+    rewriter.startOpModification(op);
     operand->set(val);
-    rewriter.finalizeRootUpdate(op);
+    rewriter.finalizeOpModification(op);
   }
 
   // Perform late op erasure.

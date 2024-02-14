@@ -120,7 +120,7 @@ struct MergeAdjacentRegions
         auto *owner = use.getOwner();
         if (nextOp->isProperAncestor(owner)) {
           auto arg = yieldArgs[i];
-          rewriter.updateRootInPlace(owner, [&]() { use.set(arg); });
+          rewriter.modifyOpInPlace(owner, [&]() { use.set(arg); });
         }
       }
     }

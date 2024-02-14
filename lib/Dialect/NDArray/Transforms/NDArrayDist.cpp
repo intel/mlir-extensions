@@ -144,7 +144,7 @@ struct DistInsertSliceOpRWP : public DistOpRWP<::imex::ndarray::InsertSliceOp> {
     // Repartition source
     auto nSrc = createRePartition(loc, rewriter, src, tSlcOffs, tSlcSizes);
 
-    rewriter.updateRootInPlace(op, [&]() { op.getSourceMutable().set(nSrc); });
+    rewriter.modifyOpInPlace(op, [&]() { op.getSourceMutable().set(nSrc); });
     return ::mlir::success();
   }
 };

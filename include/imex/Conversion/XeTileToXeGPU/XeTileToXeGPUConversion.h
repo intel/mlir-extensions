@@ -76,7 +76,7 @@ public:
   }
 
   void inlineRegionBefore(mlir::Region &region, mlir::Region &parent,
-                          mlir::Region::iterator before) override {
+                          mlir::Region::iterator before) {
     rewriter.inlineRegionBefore(region, parent, before);
   }
 
@@ -90,8 +90,8 @@ public:
   void eraseOp(mlir::Operation *op) override { rewriter.eraseOp(op); }
 
   template <typename CallableT>
-  void updateRootInPlace(mlir::Operation *root, CallableT &&callable) {
-    rewriter.updateRootInPlace(root, callable);
+  void modifyOpInPlace(mlir::Operation *root, CallableT &&callable) {
+    rewriter.modifyOpInPlace(root, callable);
   }
 
   mlir::ConversionPatternRewriter &mlirConversionPatterRewriter() {
