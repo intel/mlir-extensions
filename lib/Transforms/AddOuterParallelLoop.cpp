@@ -14,27 +14,31 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "imex/Dialect/Region/IR/RegionOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "llvm/ADT/SetVector.h"
-
 using namespace mlir;
 using namespace imex;
 
 namespace {
 struct AddOuterParallelLoopPass
     : public AddOuterParallelLoopBase<AddOuterParallelLoopPass> {
-public:
-  void runOnOperation() override {
-    auto func = getOperation();
-    if (func.getBody().empty())
-      return;
+private:
+  void runOnBlock(::mlir::Block &block, ::mlir::Operation *parent,
+                  mlir::OpBuilder &builder) {
     llvm::SmallVector<llvm::SmallVector<Operation *, 4>, 4> groupedOps;
     // populate the top level for-loop
-    for (auto topIt = func.getBody().front().begin();
-         topIt != func.getBody().front().end();) {
+    for (auto topIt = block.begin(); topIt != block.end();) {
+      auto regOp = dyn_cast<::imex::region::EnvironmentRegionOp>(*topIt);
+      if (regOp) {
+        runOnBlock(regOp.getRegion().front(), regOp, builder);
+        ++topIt;
+        continue;
+      }
+
       scf::ForOp forOp = dyn_cast<scf::ForOp>(*topIt++);
       if (!forOp) {
         continue;
@@ -58,7 +62,7 @@ public:
             hasReturnOp = true;
             break;
           }
-          while (user->getParentOp() != func) {
+          while (user->getParentOp() != parent) {
             user = user->getParentOp();
           }
           topUsers.insert(user->getResults().begin(), user->getResults().end());
@@ -80,7 +84,6 @@ public:
       }
     }
     // move the for-loop and its users into the newly created parallel-loop
-    mlir::OpBuilder builder(func.getContext());
     for (const auto &ops : groupedOps) {
       auto op = ops.front();
       builder.setInsertionPoint(op);
@@ -96,6 +99,17 @@ public:
         op->moveBefore(yieldOp);
       }
     }
+  }
+
+public:
+  void runOnOperation() override {
+    auto func = getOperation();
+    if (func.getBody().empty())
+      return;
+    llvm::SmallVector<llvm::SmallVector<Operation *, 4>, 4> groupedOps;
+    mlir::OpBuilder builder(func.getContext());
+    // populate the top level for-loop
+    runOnBlock(func.getBody().front(), func, builder);
   }
 };
 } // namespace
