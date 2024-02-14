@@ -141,7 +141,8 @@ Attribute `transpose_bit_width` specifies the bit_width of the data unit for the
      tile<32x16xf16, #sg_map> into vector<8x64xf16>
 ```
 
-The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].  
+The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a tile<32x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the tile as <32x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x64xbf16> using tile's element data type. User can use vector.shape_cast to explicitly represent the VNNI layout for the output vector without introducing any data movement. 
+
 ```mlir  
   %at = XeGPU.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32, mode = vc} :
      tile<32x16xf16> into vector<8x64xf16>
