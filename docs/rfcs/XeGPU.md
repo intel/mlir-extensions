@@ -111,7 +111,7 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
      tile<8x16xf32> into vector<16x8xf32>
 ```
 
-Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the column dimension and fits them into 32-bit data along the row dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
+Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the specified axis and fits them into 32-bit data along the row dimension (axis 1). It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
 
 An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
 ```mlir  
@@ -132,14 +132,20 @@ When setting vnni_axis to 1, VNNI transformation has no impact on the physical d
   %at = XeGPU.load_nd %tdesc2 {vnni_axis = 1, mode = vc} :
      tile<8x16xbf16> into vector<8x8x2xbf16>
 ```
-VNNI transformation and transpose can be combined for low-precision data type like fp16, bf16, int8. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].  
-```mlir  
-  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
-  %at = XeGPU.load_nd %block_a {transpose = [1, 0], vnni_axis = 0} :
-     tile<8x16xbf16, #sg_map_a> into vector<4x1x2bf16>
+VNNI transformation and transpose can not be combined. 
 
-  %at = XeGPU.load_nd %block_a {transpose = [1, 0], vnni_axis = 0, mode = vc} :
-     tile<8x16xbf16> into vector<8x8x2bf16>
+Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with "transpose_bit_width == 32` may applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only. 
+
+```mlir
+  %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32, mode = vc} :
+     tile<32x16xf16, #sg_map> into vector<8x64xf16>
+```
+
+The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].  
+```mlir  
+  %at = XeGPU.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32, mode = vc} :
+     tile<32x16xf16> into vector<8x64xf16>
+  %bt = vector.shape_cast %at :  vector<8x64xf16> into vector<8x32x2xf16>
 ```
 
 `dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3D vectors. When the input matrix is a lower-precision data type (lower than 32bit), the input vectors uses 3D representation. As the matrix B must be in VNNI layout, the reduction dimension needs to be split into 2 dimensions, and the 3rd inner dimension has 2 or 4 data elements fitting the 32bit. The result tensor is always in 2D.
