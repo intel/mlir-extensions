@@ -75,9 +75,9 @@ public:
       (void)op.getRegion().walk<WalkOrder::PreOrder>(
           [&](Operation *lop) -> WalkResult {
             auto oname = lop->getName().getStringRef();
-            if (oname.starts_with("arith.") || oname.starts_with("math.")) {
+            if (oname.startswith("arith.") || oname.startswith("math.")) {
               // Skip bitcast operation as we cannot change width of operand
-              if (!oname.starts_with("arith.bitcast")) {
+              if (!oname.startswith("arith.bitcast")) {
                 bool needWidening = false;
                 for (const auto &oper : lop->getOperands()) {
                   if (oper.getType().isBF16()) {
