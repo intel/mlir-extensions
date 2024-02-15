@@ -62,24 +62,20 @@ jobs:
       - name: Setup IMEX and run tests on FS simulator
         shell: bash -l {0}
         run: |
-          pip install psutil
           source /opt/intel/oneapi/setvars.sh
-          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ -DLLVM_LIT_ARGS="-j 1 --debug --timeout=300" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
           set -x
-          set -o pipefail
-          sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_xesim-test.sh
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ -DLLVM_LIT_ARGS="-j 1 --debug --timeout=600" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
+          sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_xesim.sh
           (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && umd_driver_rasty_backend_env_variables_export && ./run_in_a_loop_xesim.sh) &> fs-sim.log &
           SIM_PID=$!
           cmake --build build --target check-imex | tee build/tests.txt
+          TEST_RESULT=${PIPESTATUS[0]}
           kill $SIM_PID
           wait $SIM_PID
-
-          # /home/gta/anaconda3/envs/imex-dev/bin/python $HOME_DIR/mlir-extensions/build/bin/imex-runner.py -i $HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg_addf.mlir -e main --pass-pipeline-file=$HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg-to-gpux-opencl.pp -entry-point-result=void --shared-libs=$HOME_DIR/llvm-mlir/_mlir_install/lib/libmlir_runner_utils.so,$HOME_DIR/mlir-extensions/build/lib/liblevel-zero-runtime.so
-      #- name: Run perf script
-      #  run: |
-      #    cd ${{ env.HOME_DIR }}/mlir-extensions/scripts
-      #    ./run_perf_test.sh
+          cd ${WORK_ROOT}/fs/scripts
+          zip -qr9 /tmp/fs-sim-tbx-logs.zip tbx*.log
+          exit $TEST_RESULT
 
       - name: Upload tests.txt
         if: ${{ always() }}
@@ -94,9 +90,10 @@ jobs:
         with:
           name: fs-sim.log
           path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/fs-sim.log
-  
-            #- name: Upload report.txt
-            # uses: actions/upload-artifact@v2
-            #with:
-            #name: report.txt
-            #path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/scripts/report.txt
+
+      - name: Upload fs-sim-tbx-logs.zip
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: fs-sim-tbx-logs.zip
+          path: /tmp/fs-sim-tbx-logs.zip
