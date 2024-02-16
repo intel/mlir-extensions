@@ -134,7 +134,7 @@ When setting vnni_axis to 1, VNNI transformation has no impact on the physical d
 ```
 VNNI transformation and transpose can not be combined. 
 
-Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with "transpose_bit_width == 32` may applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only. 
+Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only. 
 
 ```mlir
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32, mode = vc} :
