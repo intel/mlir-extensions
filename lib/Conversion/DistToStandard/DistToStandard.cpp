@@ -20,6 +20,7 @@
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
+#include <imex/Dialect/Region/Transforms/RegionConversions.h>
 #include <imex/Utils/ArithUtils.h>
 #include <imex/Utils/PassUtils.h>
 #include <imex/Utils/PassWrapper.h>
@@ -28,8 +29,6 @@
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/Func/Transforms/DecomposeCallGraphTypes.h>
-#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Utils/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -431,9 +430,11 @@ struct SubviewOpConverter
       // get static size==1 and strides back
       ::mlir::SmallVector<::mlir::OpFoldResult> pOffs, pStrides, pSizes;
       for (size_t i = 0; i < rank; ++i) {
-        auto lOff = rewriter.createOrFold<::mlir::arith::SubIOp>(
-            loc, pOffsets[i], lOffs[i]);
-        pOffs.emplace_back(lOff);
+        auto pOff_ = easyIdx(loc, rewriter, pOffsets[i]);
+        auto lOff_ = easyIdx(loc, rewriter, lOffs[i]);
+        auto lShp_ = easyIdx(loc, rewriter, pShape[i]);
+        auto lOff = (pOff_ - lOff_).min(lShp_);
+        pOffs.emplace_back(lOff.get());
         auto s = sSlcStrides[i];
         pStrides.emplace_back(
             ::mlir::ShapedType::isDynamic(s)
@@ -487,8 +488,7 @@ struct InsertSliceOpConverter
     }
 
     auto loc = op.getLoc();
-    auto dest = adaptor.getDestination();
-    auto src = adaptor.getSource();
+    auto dest = op.getDestination();
     auto slcOffs = ::mlir::getMixedValues(adaptor.getStaticOffsets(),
                                           adaptor.getOffsets(), rewriter);
     auto slcSizes = ::mlir::getMixedValues(adaptor.getStaticSizes(),
@@ -497,8 +497,7 @@ struct InsertSliceOpConverter
                                              adaptor.getStrides(), rewriter);
 
     auto srcRank = srcArType.getRank();
-    auto srcParts =
-        createPartsOf(loc, rewriter, srcRank ? src : op.getSource());
+    auto srcParts = createPartsOf(loc, rewriter, op.getSource());
     unsigned ownPartIdx = srcParts.size() == 1 ? 0 : 1;
 
     // the destination is assumed to be contiguous always
@@ -749,8 +748,8 @@ struct EWBinOpConverter
     auto rank = resDistType.getRank();
     auto lhsRank = lhsDistType.getRank();
     auto rhsRank = rhsDistType.getRank();
-    auto lhs = lhsRank ? adaptor.getLhs() : op.getLhs();
-    auto rhs = rhsRank ? adaptor.getRhs() : op.getRhs();
+    auto lhs = op.getLhs();
+    auto rhs = op.getRhs();
     auto resGShape = resDistType.getShape();
     auto lhsNeedsView =
         !(lhsDistType.hasUnitSize() || lhsDistType.hasZeroSize());
@@ -1127,19 +1126,23 @@ struct InitDistArrayOpConverter
   using ::mlir::OpConversionPattern<
       ::imex::dist::InitDistArrayOp>::OpConversionPattern;
 
+  void initialize() {
+    /// Signal that this pattern safely handles recursive application.
+    setHasBoundedRewriteRecursion();
+  }
+
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::InitDistArrayOp op,
                   ::imex::dist::InitDistArrayOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto distType =
         op.getResult().getType().cast<::imex::ndarray::NDArrayType>();
-    if (distType.getRank() == 0) { // grr
-      auto parts = adaptor.getParts();
-      assert(parts.size() == 1);
-      rewriter.replaceOp(op, parts[0]);
-    } else {
-      rewriter.eraseOp(op);
+    if (!distType) {
+      return ::mlir::failure();
     }
+    rewriter.replaceOpWithNewOp<::imex::dist::InitDistArrayOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getLOffset(),
+        adaptor.getParts());
     return ::mlir::success();
   }
 };
@@ -1157,24 +1160,27 @@ struct PartsOfOpConverter
                   typename ::imex::dist::PartsOfOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto base = adaptor.getArray();
-    auto distType =
-        base.getType().template dyn_cast<::imex::ndarray::NDArrayType>();
-    if (!distType) {
+    auto distType = op.getArray()
+                        .getType()
+                        .template dyn_cast<::imex::ndarray::NDArrayType>();
+    if (!distType || !isDist(distType)) {
       return ::mlir::failure();
-    }
-    if (!isDist(distType)) {
-      rewriter.replaceOp(op, base);
-      return ::mlir::success();
     }
 
-    auto defOp = base.template getDefiningOp<::imex::dist::InitDistArrayOp>();
-    if (defOp) {
-      rewriter.replaceOp(op, defOp.getParts());
-    } else {
-      // not a InitDistArrayOp
-      return ::mlir::failure();
+    auto defOp = base.getDefiningOp();
+    while (defOp && defOp->getNumOperands() == 1 &&
+           ::mlir::isa<::mlir::UnrealizedConversionCastOp>(defOp)) {
+      defOp = defOp->getOperand(0).getDefiningOp();
     }
-    return ::mlir::success();
+    if (defOp) {
+      if (auto initOp =
+              ::mlir::dyn_cast<::imex::dist::InitDistArrayOp>(defOp)) {
+        rewriter.replaceOp(op, initOp.getParts());
+        return ::mlir::success();
+      }
+    }
+    // not a InitDistArrayOp
+    return ::mlir::failure();
   }
 };
 
@@ -1190,27 +1196,35 @@ struct LocalOffsetsOfOpConverter
   matchAndRewrite(::imex::dist::LocalOffsetsOfOp op,
                   typename ::imex::dist::LocalOffsetsOfOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
+    auto base = adaptor.getArray();
+    auto distType = op.getArray()
+                        .getType()
+                        .template dyn_cast<::imex::ndarray::NDArrayType>();
+    if (!distType || !isDist(distType)) {
+      return ::mlir::failure();
+    }
+
     // 0d array
     if (op.getNumResults() == 0) {
+      assert(distType.getRank() == 0);
       rewriter.eraseOp(op);
       return ::mlir::success();
     }
 
-    auto base = adaptor.getArray();
-    auto DistType =
-        base.getType().template dyn_cast<::imex::ndarray::NDArrayType>();
-    if (!DistType || !isDist(DistType)) {
-      return ::mlir::failure();
+    auto defOp = base.getDefiningOp();
+    while (defOp && defOp->getNumOperands() == 1 &&
+           ::mlir::isa<::mlir::UnrealizedConversionCastOp>(defOp)) {
+      defOp = defOp->getOperand(0).getDefiningOp();
     }
-
-    auto defOp = base.template getDefiningOp<::imex::dist::InitDistArrayOp>();
     if (defOp) {
-      rewriter.replaceOp(op, defOp.getLOffset());
-    } else {
-      // not a InitDistArrayOp
-      return ::mlir::failure();
+      if (auto initOp =
+              ::mlir::dyn_cast<::imex::dist::InitDistArrayOp>(defOp)) {
+        rewriter.replaceOp(op, initOp.getLOffset());
+        return ::mlir::success();
+      }
     }
-    return ::mlir::success();
+    // not a InitDistArrayOp
+    return ::mlir::failure();
   }
 };
 
@@ -1277,13 +1291,13 @@ struct LocalTargetOfSliceOpConverter
   matchAndRewrite(::imex::dist::LocalTargetOfSliceOp op,
                   ::imex::dist::LocalTargetOfSliceOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-
-    auto src = adaptor.getArray(); // global offset of local base
-    auto distType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto distType =
+        op.getArray().getType().dyn_cast<::imex::ndarray::NDArrayType>();
     if (!(distType && isDist(distType)))
       return ::mlir::failure();
 
     auto loc = op.getLoc();
+    auto src = op.getArray();
     auto slcOffs = adaptor.getOffsets();
     auto slcSizes = adaptor.getSizes();
     auto slcStrides = adaptor.getStrides();
@@ -1309,7 +1323,6 @@ struct LocalTargetOfSliceOpConverter
     results[1 * rank] = lSzs[0];
 
     for (auto i = 1; i < rank; ++i) {
-      // results[0 * rank + i] = slcOffs[i];
       results[1 * rank + i] = slcSizes[i];
     }
 
@@ -1605,216 +1618,118 @@ struct ConvertDistToStandardPass
   void runOnOperation() override {
     auto &ctxt = getContext();
     ::mlir::TypeConverter typeConverter;
-    ::mlir::ValueDecomposer decomposer;
+
     // Convert unknown types to itself
-    auto convT2T = [](::mlir::Type type) { return type; };
+    typeConverter.addConversion([](::mlir::Type type) { return type; });
+
     // distributed array gets converted into its individual members
-    auto convDArray = [&ctxt](::imex::ndarray::NDArrayType type,
-                              ::mlir::SmallVectorImpl<::mlir::Type> &types) {
+    typeConverter.addConversion([&ctxt](::imex::ndarray::NDArrayType type)
+                                    -> std::optional<::mlir::Type> {
       if (auto dEnv = getDistEnv(type)) {
+        ::mlir::SmallVector<::mlir::Type> types;
         auto rank = type.getRank();
-        for (auto pttyp : getPartsTypes(type)) {
-          types.emplace_back(pttyp); // parts
-        }
         if (rank) {
+          for (auto pttyp : getPartsTypes(type)) {
+            types.emplace_back(pttyp); // parts
+          }
           auto mrTyp = ::mlir::MemRefType::get(::std::array<int64_t, 1>{rank},
                                                ::mlir::IndexType::get(&ctxt));
           types.emplace_back(mrTyp); // loffs
+        } else {
+          auto pts = getPartsTypes(type);
+          types.emplace_back(pts[pts.size() == 1 ? 0 : 1]);
         }
-      } else {
-        types.emplace_back(type);
+        return ::mlir::TupleType::get(&ctxt, types);
       }
-      return ::mlir::success();
-    };
-
-    typeConverter.addConversion(convT2T);
-    typeConverter.addConversion(convDArray);
-
-    /// Convert multiple elements (as converted by the above convDArray) into a
-    /// single distributed array
-    auto materializeCast =
-        [](::mlir::OpBuilder &builder, ::mlir::Type type,
-           ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> std::optional<::mlir::Value> {
-      return builder
-          .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
-          .getResult(0);
-    };
+      return type;
+    });
 
     auto materializeArray =
         [&](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
             ::mlir::ValueRange inputs,
             ::mlir::Location loc) -> std::optional<::mlir::Value> {
-      if (inputs.size() == 1) {
-        auto input = inputs[0];
-        auto itype = input.getType();
-        auto ary = itype.dyn_cast<::imex::ndarray::NDArrayType>();
-        if (type != itype && ary) {
-          if (isDist(ary)) {
-            assert(ary.getRank() == 0);
-            auto parts = createPartsOf(loc, builder, input);
-            assert(parts.size() == 1);
-            return parts[0];
-          } else {
-            return builder.create<::imex::ndarray::CastOp>(loc, type, input)
-                .getResult();
-          }
-        }
-      }
-      return materializeCast(builder, type, inputs, loc);
-    };
-
-    auto materializeDistArray =
-        [&](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
-            ::mlir::ValueRange inputs,
-            ::mlir::Location loc) -> std::optional<::mlir::Value> {
-      if (inputs.size() == 1 && type.getRank() == 0) {
-        if (auto dEnv = getDistEnv(type)) {
-          return createDistArray(loc, builder, dEnv.getTeam(), type.getShape(),
-                                 {}, {inputs[0]});
-        }
-      }
-      return materializeArray(builder, type, inputs, loc);
-    };
-
-    auto materializeDistArrayArg =
-        [](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
-           ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> std::optional<::mlir::Value> {
-      if (auto dEnv = getDistEnv(type)) {
-        ::imex::ValVec lOffs;
-        auto gShape = type.getShape();
-        auto team = dEnv.getTeam();
-        auto sOffs = dEnv.getLOffsets();
-        auto nParts = dEnv.getPartsShapes().size();
-        assert(nParts == 3 || nParts == 1);
-        auto rank =
-            inputs[0].getType().cast<::imex::ndarray::NDArrayType>().getRank();
-        if (rank) {
-          lOffs = createValuesFromMemRef(builder, loc, inputs[nParts]);
-          for (auto i = 0u; i < sOffs.size(); ++i) {
-            if (!::mlir::ShapedType::isDynamic(sOffs[i])) {
-              lOffs[i] = createIndex(loc, builder, sOffs[i]);
-            }
-          }
-        }
-        if (nParts > 1) {
-          return createDistArray(loc, builder, team, gShape, lOffs,
-                                 {inputs[0], inputs[1], inputs[2]}, sOffs);
-        }
-        return createDistArray(loc, builder, team, gShape, lOffs, {inputs[0]},
-                               sOffs);
-      }
       assert(inputs.size() == 1);
-      return inputs.front();
+      auto input = inputs[0];
+      auto itype = input.getType();
+      auto ary = itype.dyn_cast<::imex::ndarray::NDArrayType>();
+      if (type != itype && ary) {
+        if (isDist(ary)) {
+          assert(ary.getRank() == 0);
+          auto parts = createPartsOf(loc, builder, input);
+          assert(parts.size() == 1);
+          return parts[0];
+        } else {
+          return builder.create<::imex::ndarray::CastOp>(loc, type, input)
+              .getResult();
+        }
+      }
+      return builder
+          .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
+          .getResult(0);
     };
 
-    typeConverter.addArgumentMaterialization(materializeDistArrayArg);
-    typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeArray);
-    typeConverter.addSourceMaterialization(materializeDistArray);
-    typeConverter.addTargetMaterialization(materializeArray);
-
-    // the inverse of the ArgumentMaterialization splits a distributed array
-    // into multiple return args
-    decomposer.addDecomposeValueConversion(
-        [](::mlir::OpBuilder &builder, ::mlir::Location loc,
-           ::imex::ndarray::NDArrayType resultType, ::mlir::Value value,
-           ::mlir::SmallVectorImpl<::mlir::Value> &values) {
-          if (auto dEnv = getDistEnv(resultType)) {
-            auto rank = resultType.getRank();
-            auto parts = createPartsOf(loc, builder, value);
-            assert(rank == 0 || parts.size() == 3);
-            if (rank) {
-              for (auto p : parts) {
-                values.emplace_back(p);
-              }
-              values.emplace_back(createMemRefFromElements(
-                  builder, loc, builder.getIndexType(),
-                  createLocalOffsetsOf(loc, builder, value)));
-            } else { // 0d
-              assert(parts.size() == 1 || parts.size() == 3);
-              values.emplace_back(parts.size() == 1 ? parts[0] : parts[1]);
-            }
-          } else {
-            values.emplace_back(value);
-          }
-          return ::mlir::success();
-        });
 
     // we need two passes because argument materialization goes after all the
-    // other conversions. To use the materialization which generates
-    // InitDistArrayOp we first convert "function boundaries" first and
-    // everything else in a second pass.
-    for (auto i = 0; i < 2; ++i) {
-      ::mlir::ConversionTarget target(ctxt);
+    // other conversions. The first part converts all dist stuff except
+    // InitDistArrayOp which should then have no use. In the second pass we
+    // erase all InitDistArrayOps
 
-      if (i) {
-        // No dist should remain after 2nd pass
-        target.addIllegalDialect<::imex::dist::DistDialect>();
-      } else {
-        target.addLegalDialect<::imex::dist::DistDialect>();
-      }
+    ::mlir::ConversionTarget target(ctxt);
+    target.addIllegalDialect<::imex::dist::DistDialect>();
+    target.addLegalDialect<
+        ::imex::distruntime::DistRuntimeDialect, ::mlir::func::FuncDialect,
+        ::mlir::linalg::LinalgDialect, ::mlir::arith::ArithDialect,
+        ::imex::ndarray::NDArrayDialect, ::mlir::tensor::TensorDialect,
+        ::mlir::memref::MemRefDialect, ::mlir::cf::ControlFlowDialect,
+        ::mlir::bufferization::BufferizationDialect,
+        ::imex::region::RegionDialect>();
+    target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
 
-      target.addLegalDialect<
-          ::imex::distruntime::DistRuntimeDialect,
-          ::mlir::linalg::LinalgDialect, ::mlir::arith::ArithDialect,
-          ::imex::ndarray::NDArrayDialect, ::mlir::tensor::TensorDialect,
-          ::mlir::memref::MemRefDialect, ::mlir::cf::ControlFlowDialect,
-          ::mlir::bufferization::BufferizationDialect>();
-      target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
+    // make sure function boundaries get converted
+    target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
+        [&](::mlir::func::FuncOp op) {
+          return typeConverter.isSignatureLegal(op.getFunctionType()) &&
+                 typeConverter.isLegal(&op.getBody());
+        });
+    target.addDynamicallyLegalOp<
+        ::mlir::func::CallOp, ::imex::ndarray::ReshapeOp,
+        ::imex::ndarray::InsertSliceOp, ::imex::ndarray::EWBinOp,
+        ::imex::ndarray::EWUnyOp, ::imex::ndarray::LinSpaceOp,
+        ::imex::ndarray::CreateOp, ::imex::ndarray::CopyOp,
+        ::imex::ndarray::ReductionOp, ::imex::ndarray::ToTensorOp,
+        ::imex::ndarray::DeleteOp, ::imex::ndarray::CastElemTypeOp,
+        ::imex::region::EnvironmentRegionOp,
+        ::imex::region::EnvironmentRegionYieldOp>(
+        [&](::mlir::Operation *op) { return typeConverter.isLegal(op); });
+    target.addLegalOp<::imex::dist::InitDistArrayOp>();
 
-      // make sure function boundaries get converted
-      target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
-          [&](::mlir::func::FuncOp op) {
-            return typeConverter.isSignatureLegal(op.getFunctionType()) &&
-                   typeConverter.isLegal(&op.getBody());
-          });
-      if (i) {
-        target.addDynamicallyLegalOp<
-            ::mlir::func::CallOp, ::imex::ndarray::ReshapeOp,
-            ::imex::ndarray::InsertSliceOp, ::imex::ndarray::EWBinOp,
-            ::imex::ndarray::EWUnyOp, ::imex::ndarray::LinSpaceOp,
-            ::imex::ndarray::CreateOp, ::imex::ndarray::CopyOp,
-            ::imex::ndarray::ReductionOp, ::imex::ndarray::ToTensorOp,
-            ::imex::ndarray::DeleteOp, ::imex::ndarray::CastElemTypeOp>(
-            [&](::mlir::Operation *op) { return typeConverter.isLegal(op); });
-      } else {
-        target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
-            [&](::mlir::func::ReturnOp op) {
-              return typeConverter.isLegal(op.getOperandTypes());
-            });
-      }
-
-      // All the dist conversion patterns/rewriter
-      ::mlir::RewritePatternSet patterns(&ctxt);
-      if (i) {
-        // all these patterns are converted in the 2nd pass
-        patterns.insert<
-            LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
-            ReductionOpConverter, ToTensorOpConverter, InsertSliceOpConverter,
-            SubviewOpConverter, EWBinOpConverter, EWUnyOpConverter,
-            LocalBoundingBoxOpConverter, LocalCoreOpConverter,
-            RePartitionOpConverter, ReshapeOpConverter,
-            InitDistArrayOpConverter, LocalTargetOfSliceOpConverter,
-            DefaultPartitionOpConverter, LocalOffsetsOfOpConverter,
-            PartsOfOpConverter, DeleteOpConverter, CastElemTypeOpConverter>(
+    // All the dist conversion patterns/rewriter
+    ::mlir::RewritePatternSet patterns(&ctxt);
+    // all these patterns are converted
+    patterns
+        .insert<LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
+                ReductionOpConverter, ToTensorOpConverter,
+                InsertSliceOpConverter, SubviewOpConverter, EWBinOpConverter,
+                EWUnyOpConverter, LocalBoundingBoxOpConverter,
+                LocalCoreOpConverter, RePartitionOpConverter,
+                ReshapeOpConverter, LocalTargetOfSliceOpConverter,
+                DefaultPartitionOpConverter, LocalOffsetsOfOpConverter,
+                PartsOfOpConverter, DeleteOpConverter, CastElemTypeOpConverter>(
             typeConverter, &ctxt);
-        mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
-            typeConverter, patterns, target);
-      } else {
-        // This enables the function boundary handling with the above
-        // converters/materializations (1st pass)
-        populateDecomposeCallGraphTypesPatterns(&ctxt, typeConverter,
-                                                decomposer, patterns);
-      }
+    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
+        typeConverter, patterns, target);
+    ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 
-      // Let's go!
-      if (::mlir::failed(::mlir::applyPartialConversion(
-              getOperation(), target, ::std::move(patterns)))) {
-        signalPassFailure();
-      }
+    // Let's go!
+    if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
+                                                      ::std::move(patterns)))) {
+      signalPassFailure();
     }
+
+    // now remove all InitDistArrayOps
+    getOperation()->walk(
+        [&](::imex::dist::InitDistArrayOp op) { op->erase(); });
   }
 };
 

@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/Region/RegionUtils.h>
@@ -47,8 +48,7 @@ static ::mlir::LogicalResult
 matchAndRewritePTOP(::mlir::Operation *op, ::mlir::PatternRewriter &rewriter,
                     bool checkOprnds) {
   auto parent = op->getParentOp();
-  if (!parent ||
-      !::mlir::isa<::imex::ndarray::NDArrayDialect>(op->getDialect())) {
+  if (!parent) {
     return ::mlir::failure();
   } else {
     auto pregion =
@@ -111,6 +111,7 @@ struct AddGPURegionsPass : public ::imex::AddGPURegionsBase<AddGPURegionsPass> {
     // It would be nicer to have a single rewrite-pattern which covers all
     // NDArrayOps
     insertPatterns<NDArrayOpRWP<::imex::ndarray::ToTensorOp>,
+                   NDArrayOpRWP<::imex::ndarray::FromMemRefOp>,
                    NDArrayOpRWP<::imex::ndarray::DeleteOp>,
                    NDArrayOpRWP<::imex::ndarray::DimOp>,
                    NDArrayOpRWP<::imex::ndarray::SubviewOp>,
@@ -120,13 +121,24 @@ struct AddGPURegionsPass : public ::imex::AddGPURegionsBase<AddGPURegionsPass> {
                    NDArrayOpRWP<::imex::ndarray::LoadOp>,
                    NDArrayOpRWP<::imex::ndarray::CopyOp, false>,
                    NDArrayOpRWP<::imex::ndarray::CastOp>,
+                   NDArrayOpRWP<::imex::ndarray::CastElemTypeOp>,
                    NDArrayOpRWP<::imex::ndarray::LinSpaceOp>,
                    NDArrayOpRWP<::imex::ndarray::CreateOp>,
                    NDArrayOpRWP<::imex::ndarray::ReshapeOp>,
                    NDArrayOpRWP<::imex::ndarray::EWBinOp>,
                    NDArrayOpRWP<::imex::ndarray::EWUnyOp>,
-                   NDArrayOpRWP<::imex::ndarray::ReductionOp>>(getContext(),
-                                                               patterns);
+                   NDArrayOpRWP<::imex::ndarray::ReductionOp>,
+                   NDArrayOpRWP<::imex::dist::InitDistArrayOp>,
+                   NDArrayOpRWP<::imex::dist::LocalOffsetsOfOp>,
+                   NDArrayOpRWP<::imex::dist::PartsOfOp>,
+                   NDArrayOpRWP<::imex::dist::DefaultPartitionOp>,
+                   NDArrayOpRWP<::imex::dist::LocalTargetOfSliceOp>,
+                   NDArrayOpRWP<::imex::dist::LocalBoundingBoxOp>,
+                   NDArrayOpRWP<::imex::dist::LocalCoreOp>,
+                   NDArrayOpRWP<::imex::dist::RePartitionOp>,
+                   NDArrayOpRWP<::imex::dist::SubviewOp>,
+                   NDArrayOpRWP<::imex::dist::EWBinOp>,
+                   NDArrayOpRWP<::imex::dist::EWUnyOp>>(getContext(), patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }
 };
