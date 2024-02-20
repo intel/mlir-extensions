@@ -315,7 +315,7 @@ func.func @test_ewbin_type_cast4(%arg0: !ndarray.ndarray<16xf64>, %arg1: !ndarra
 // CHECK-NEXT: arith.addf
 
 // -----
-func.func @ddpt_jit() -> (!ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>, !ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>) attributes {llvm.emit_c_interface} {
+func.func @test() -> (!ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>, !ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>) attributes {llvm.emit_c_interface} {
     %c16 = arith.constant 16 : index
     %cst = arith.constant 1.000000e+00 : f32
     %0 = region.env_region #region.gpu_env<device = "g"> -> !ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">> {
@@ -328,7 +328,7 @@ func.func @ddpt_jit() -> (!ndarray.ndarray<16x16xf32, #region.gpu_env<device = "
     }
     return %0, %1 : !ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>, !ndarray.ndarray<16x16xf32, #region.gpu_env<device = "g">>
 }
-// CHECK-LABEL: func.func @ddpt_jit
+// CHECK-LABEL: func.func @test
 // CHECK: region.env_region #region.gpu_env<device = "g"> -> tensor<16x16xf32> {
 // CHECK: tensor.empty
 // CHECK: linalg.generic

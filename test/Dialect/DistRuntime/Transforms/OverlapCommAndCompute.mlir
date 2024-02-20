@@ -1,7 +1,7 @@
 // RUN: imex-opt %s -overlap-comm-and-compute | FileCheck %s
 
 module {
-  func.func @ddpt_jit() { // (!ndarray.ndarray<?x?xf64>, !ndarray.ndarray<?x?xf64>, !ndarray.ndarray<?x?xf64>, memref<2xindex>) attributes {llvm.emit_c_interface} {
+  func.func @test() { // (!ndarray.ndarray<?x?xf64>, !ndarray.ndarray<?x?xf64>, !ndarray.ndarray<?x?xf64>, memref<2xindex>) attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %c34 = arith.constant 34 : index
     %c96 = arith.constant 96 : index
@@ -49,7 +49,7 @@ module {
   }
 }
 
-// CHECK-LABEL: func.func @ddpt_jit()
+// CHECK-LABEL: func.func @test()
 // CHECK: [[handle:%.*]], [[lHalo:%.*]], [[rHalo:%.*]] = "distruntime.get_halo"
 // CHECK: [[lHaloCast:%.*]] = ndarray.cast [[lHalo]]
 // CHECK: ndarray.ewbin
