@@ -48,7 +48,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      i64 into tile<8x16xbf16>
 ```
 
-`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. So if the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column-major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set.
+`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. The order must be consistent with the data layout specified by the memref represening the base matirx. If the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column-major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set.
 
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
@@ -79,7 +79,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `load_tile` needs to be used with the tile_mma.
 
-`load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Title's dimensions. 
+`load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions. 
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
@@ -98,7 +98,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   XeTile.store_tile %tile_a, %vector_a :
    vector<64x64xbf16> into tile<64x64xbf16>
 ```
-`store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Title's dimensions. 
+`store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions. 
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
