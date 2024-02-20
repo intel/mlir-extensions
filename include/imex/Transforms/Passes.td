@@ -121,4 +121,13 @@ def RemoveTemporaries : Pass<"imex-remove-temporaries"> {
   let constructor = "imex::createRemoveTemporariesPass()";
 }
 
+def VectorLinearize : Pass<"imex-vector-linearize"> {
+  let summary = "Linearizes ND vectors into 1D for N >= 2";
+  let constructor = "imex::createVectorLinearizePass()";
+    let dependentDialects = [
+    "::mlir::vector::VectorDialect"
+  ];
+}
+
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

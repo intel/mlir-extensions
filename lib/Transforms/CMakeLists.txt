@@ -1,12 +1,13 @@
 add_mlir_library(IMEXTransforms
-  SerializeSPIRV.cpp
-  InsertGPUAllocs.cpp
-  SetSPIRVCapabilities.cpp
-  SetSPIRVAbiAttribute.cpp
   AddOuterParallelLoop.cpp
-  LowerMemRefCopy.cpp
   BF16ToGPU.cpp
+  InsertGPUAllocs.cpp
+  LowerMemRefCopy.cpp
   RemoveTemporaries.cpp
+  SerializeSPIRV.cpp
+  SetSPIRVAbiAttribute.cpp
+  SetSPIRVCapabilities.cpp
+  VectorLinearize.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms
