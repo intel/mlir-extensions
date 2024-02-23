@@ -16,7 +16,7 @@
 #define _XeTileOpConversion_H_INCLUDED_
 
 #include "imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h"
-
+#include "imex/Utils/XeArch.h"
 namespace imex {
 
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,

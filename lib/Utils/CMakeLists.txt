@@ -3,6 +3,7 @@ add_mlir_library(IMEXUtil
     PassUtils.cpp
     TypeConversion.cpp
     XeCommon.cpp
+    XeArch.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Utils

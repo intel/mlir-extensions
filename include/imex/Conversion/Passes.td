@@ -402,7 +402,11 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::ModuleOp"> {
                            "::mlir::vector::VectorDialect",
                            "::mlir::arith::ArithDialect",
                            ];
-  let options = [];
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
 }
 
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

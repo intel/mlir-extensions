@@ -146,6 +146,31 @@ struct GPUSYCLQUEUE {
 
 }; // end of GPUSYCLQUEUE
 
+static std::string getDeviceID(GPUSYCLQUEUE *queue) {
+  auto syclDevice = queue->syclDevice_;
+
+  int deviceID =
+      syclDevice.get_info<sycl::ext::intel::info::device::device_id>();
+  std::string deviceName = "";
+  switch (deviceID) {
+  case 0x0BDA:          // 1100
+  case 0x0BD5:          // 1550
+  case 0x0BD0:          // Future
+  case 0x0BD6:          // Future
+  case 0x0BD7:          // Future
+  case 0x0BDB:          // Future
+  case 0x0BD9:          // Future
+    deviceName = "pvc"; // Intel® Data Center GPU Max Series, XeHPC
+    break;
+  case 0x56C0:
+  case 0x56C1:
+    deviceName = "acm"; // Intel® Data Center GPU Flex Seriex, XeHPG
+  default:
+    deviceName = "pvc"; // TODO: Throw an error for unsupported platform
+  }
+  return deviceName;
+}
+
 static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
                                size_t alignment, bool isShared) {
   void *memPtr = nullptr;
@@ -170,6 +195,10 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
   assert(data);
   auto syclQueue = queue->syclQueue_;
   ze_module_handle_t zeModule;
+
+  // TODO: Enable this for current Device
+  // query and throw an error for unsupported platforms
+  // getDeviceID(syclQueue);
 
   auto it = moduleCache.find((void *)data);
   // Check the map if the module is present/cached.

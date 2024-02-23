@@ -28,6 +28,7 @@ def XeTileTiling : Pass<"xetile-tiling", "::mlir::ModuleOp">{
 
   let constructor = "imex::createXeTileTilingPass()";
   let dependentDialects = ["::imex::xetile::XeTileDialect"];
+  let options = [];
 }
 
 #endif // _XeTile_PASSES_TD_INCLUDED_

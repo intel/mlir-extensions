@@ -61,21 +61,6 @@ static void transpose(llvm::ArrayRef<int64_t> trans,
     shape[i] = old[trans[i]];
 };
 
-bool dpasSupportedTypes(mlir::Type type, bool isResult) {
-  if (isResult) {
-    if (type.isF32() || type.isInteger(32))
-      return true;
-    else
-      return false;
-  } else {
-    if (type.isF16() || type.isBF16() || type.isInteger(16) ||
-        type.isInteger(8))
-      return true;
-    else
-      return false;
-  }
-}
-
 extern bool printDefaultValues();
 
 template <typename CustomEnum, typename CustomEnumAttr>
@@ -836,31 +821,6 @@ mlir::LogicalResult LoadNDOp::verify() {
     return emitOpError(
         "Value should have the same element type as TensorDesc.");
 
-  if (tdescTy.getRank() == 2) {
-    // TODO: The following logic are architecture
-    // dependent, pending to be moved out
-    auto width = tdescTy.getShape()[1];
-    auto height = tdescTy.getShape()[0];
-    auto elemTyByteWidth = tdescElemTy.getIntOrFloatBitWidth() / 8;
-
-    if (width < MIN_2D_BLOCK_WIDTH_IN_ELEMENTS ||
-        width > MAX_2D_BLOCK_WIDTH_IN_ELEMENTS ||
-        (width * elemTyByteWidth) % 4 != 0) {
-      return emitOpError(
-          "Invalid width size for 2D block load.  "
-          "The specification expects the value to "
-          "be in range [1, 64], and The the total "
-          "data size (width * elemTyBytes) to be multiple of 4.\n");
-    }
-
-    if (height < MIN_2D_BLOCK_HEIGHT_IN_ELEMENTS ||
-        height > MAX_2D_BLOCK_HEIGHT_IN_ELEMENTS) {
-      return emitOpError("Invalid height size for 2D block load. The "
-                         "specification expects the "
-                         "value to be in range [1, 32].\n");
-    }
-  }
-
   auto mode = getMode();
   auto tdescShape = tdescTy.getShape().vec();
   auto valueShape = valueTy.getShape().vec();
@@ -1028,30 +988,6 @@ mlir::LogicalResult StoreNDOp::verify() {
                        "the elem type of memory (dst) shape.\n");
   }
 
-  if (dstTy.getRank() == 2) { // TODO: The following logic are architecture
-                              // dependent, pending to be moved
-    // out
-    auto width = dstTy.getShape()[1];
-    auto height = dstTy.getShape()[0];
-    auto elemTyByteWidth = dstElemTy.getIntOrFloatBitWidth() / 8;
-    if (width < MIN_2D_BLOCK_WIDTH_IN_ELEMENTS ||
-        width > MAX_2D_BLOCK_WIDTH_IN_ELEMENTS ||
-        (width * elemTyByteWidth) % 4 != 0) {
-      return emitOpError(
-          "Invalid width size for 2D block write. "
-          "The specification expects the value to "
-          "be in range [1, 64], and The the total "
-          "data size (width * elemTyBytes) to be multiple of 4.\n");
-    }
-
-    if (height < MIN_2D_BLOCK_HEIGHT_IN_ELEMENTS ||
-        height > MAX_2D_BLOCK_HEIGHT_IN_ELEMENTS) {
-      return emitOpError(
-          "Invalid height size for 2D block write. The specification"
-          "expects the value to be in range [1, 32].\n");
-    }
-  }
-
   auto mode = getMode();
 
   if (mode == imex::xegpu::Mode::VC) { // for VC mode, no attr attached
@@ -1147,43 +1083,12 @@ void PrefetchNDOp::print(mlir::OpAsmPrinter &printer) {
 
 mlir::LogicalResult DpasOp::verify() {
 
-  int64_t lhsRank = getLhsType().getRank();
-  int64_t rhsRank = getRhsType().getRank();
-  mlir::Type lhsElemType = getLhsType().getElementType();
-  mlir::Type rhsElemType = getRhsType().getElementType();
-  mlir::Type resultElemType = getResultType().getElementType();
-
-  // TODO: this is hardware specific, need to be moved out.
-  if (!dpasSupportedTypes(lhsElemType, 0)) {
-    return emitOpError("Unsupported src datatype for dpas op");
-  }
-
-  // TODO: this is hardware specific, need to be moved out.
-  if (!dpasSupportedTypes(resultElemType, 1)) {
-    return emitOpError("Unsupported result datatype for dpas op");
-  }
-
-  if (lhsElemType != rhsElemType) {
-    return emitOpError("lhs and rhs element type does not match for dpas op");
-  }
-
-  if (getAcc()) {
-    if (getAccType() != getResultType())
-      return emitOpError("Accumulator and Result for dpas op should have the "
-                         "same type (both shape and element type).");
-  }
-
   // TODO: SIMT makes it harder to check semantic errors for DPAS op.
   // the only thing we can check seems to be vnni factor. But it
   // depends on hardware though.
   // if (!dpasSupportedShapes(*this)) {
   //   return emitOpError("Incorrect shapes for dpas op");
   // }
-
-  if (lhsRank != rhsRank || lhsRank != 3) {
-    return emitOpError(
-        "lhs and rhs rank does not match for dpas op, or their rank is not 3.");
-  }
 
   return mlir::success();
 }
