@@ -24,13 +24,18 @@
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
+#include "imex/Utils/XeArch.h"
 
+#include <memory>
 namespace imex {
 
 class XeTileConversionTarget : public mlir::ConversionTarget {
 public:
-  explicit XeTileConversionTarget(mlir::MLIRContext &context)
+  explicit XeTileConversionTarget(mlir::MLIRContext &context,
+                                  std::shared_ptr<XeuArchInterface> ptruArch)
       : mlir::ConversionTarget(context) {
+
+    this->uArchInterface = ptruArch;
     addIllegalOp<imex::xetile::InitTileOp>();
 
     addLegalOp<mlir::UnrealizedConversionCastOp>();
@@ -42,13 +47,50 @@ public:
 
     addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
         [&](mlir::Operation *op) { return isLegalSCFOp(op); });
+
+    addDynamicallyLegalOp<imex::xegpu::DpasOp>(
+        [&](mlir::Operation *op) -> bool {
+          return (uArchInterface &&
+                  mlir::succeeded(uArchInterface->isLegalDpasOp(op)));
+        });
+
+    addDynamicallyLegalOp<imex::xegpu::LoadNDOp>(
+        [&](mlir::Operation *op) -> bool {
+          return (uArchInterface &&
+                  mlir::succeeded(uArchInterface->isLegalLoad2dOp(op)));
+        });
+
+    addDynamicallyLegalOp<imex::xegpu::StoreNDOp>(
+        [&](mlir::Operation *op) -> bool {
+          return (uArchInterface &&
+                  mlir::succeeded(uArchInterface->isLegalStore2dOp(op)));
+        });
+
+    addDynamicallyLegalOp<imex::xegpu::PrefetchNDOp>(
+        [&](mlir::Operation *op) -> bool {
+          return (uArchInterface &&
+                  mlir::succeeded(uArchInterface->isLegalPrefetch2dOp(op)));
+        });
   }
+
+private:
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 };
 
 // Full Pass
 struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
     : public ::imex::ConvertXeTileToXeGPUBase<ConvertXeTileToXeGPUPass> {
   ConvertXeTileToXeGPUPass() = default;
+
+  ConvertXeTileToXeGPUPass(const std::string &deviceName) {
+    if (this->device.getNumOccurrences() == 0) {
+      this->device = deviceName;
+
+      if (deviceName == "pvc") {
+        uArchInterface = std::make_shared<XePVCuArch>();
+      }
+    }
+  }
 
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
@@ -72,6 +114,11 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       return signalPassFailure();
     }
 
+    if (!uArchInterface) {
+      mod.emitOpError("Can not get GPU Arch Definition for given Arch param");
+      return signalPassFailure();
+    }
+
     imex::ValueAttributeMap map;
     mod.walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::TileMMAOp op) {
       markDefChainValues(op.getA(), OperandType::DPASA, map);
@@ -81,7 +128,8 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
     });
 
     XeGPUTypeConverter typeConverter(context, map);
-    XeTileConversionTarget target(context);
+    XeTileConversionTarget target(context, uArchInterface);
+
     mlir::RewritePatternSet patterns(&context);
 
     populateXeTileToXeGPUConversionPatterns(typeConverter, patterns);
@@ -90,6 +138,9 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
       return signalPassFailure();
   }
+
+private:
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 };
 
 /// Populate the given list with patterns that convert XeTile to XeGPU
@@ -102,8 +153,8 @@ void populateXeTileToXeGPUConversionPatterns(
 
 /// Create a pass that convert XeTile to XeGPU
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertXeTileToXeGPUPass() {
-  return std::make_unique<ConvertXeTileToXeGPUPass>();
+createConvertXeTileToXeGPUPass(const std::string &deviceName) {
+  return std::make_unique<ConvertXeTileToXeGPUPass>(deviceName);
 }
 
 } // namespace imex

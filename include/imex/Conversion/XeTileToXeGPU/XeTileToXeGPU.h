@@ -38,7 +38,7 @@ void populateXeTileToXeGPUConversionPatterns(XeGPUTypeConverter &converter,
 
 /// Create a pass to convert the XeTile dialect to the XeGPU dialect.
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createConvertXeTileToXeGPUPass();
+createConvertXeTileToXeGPUPass(const std::string &device = "pvc");
 
 } // namespace imex
 

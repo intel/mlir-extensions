@@ -18,6 +18,7 @@
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
+#include "imex/Utils/XeArch.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace imex {
