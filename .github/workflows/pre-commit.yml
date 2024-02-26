@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
 
+permissions: read-all
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
