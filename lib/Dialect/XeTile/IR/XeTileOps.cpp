@@ -680,6 +680,19 @@ mlir::LogicalResult TilePackOp::verify() {
   return mlir::success();
 }
 
+mlir::OpFoldResult TilePackOp::fold(FoldAdaptor /*adaptor*/) {
+  mlir::Value in = this->getInVec();
+  if (auto unpack = in.getDefiningOp<TileUnpackOp>()) {
+    mlir::Value src = unpack.getInVec();
+    if (src.getType() != this->getType() ||
+        unpack.getInnerBlocks() != this->getInnerBlocks())
+      return nullptr;
+
+    return src;
+  }
+  return nullptr;
+}
+
 mlir::ParseResult TileUnpackOp::parse(mlir::OpAsmParser &parser,
                                       mlir::OperationState &result) {
   mlir::OpAsmParser::UnresolvedOperand in_vecRawOperands[1];
@@ -769,6 +782,19 @@ mlir::LogicalResult TileUnpackOp::verify() {
                        "outVecShape[1] == inVecShape[1] * innerBlocks[1]");
 
   return mlir::success();
+}
+
+mlir::OpFoldResult TileUnpackOp::fold(FoldAdaptor /*adaptor*/) {
+  mlir::Value in = this->getInVec();
+  if (auto pack = in.getDefiningOp<TilePackOp>()) {
+    mlir::Value src = pack.getInVec();
+    if (src.getType() != this->getType() ||
+        pack.getInnerBlocks() != this->getInnerBlocks())
+      return nullptr;
+
+    return src;
+  }
+  return nullptr;
 }
 
 } // namespace xetile
