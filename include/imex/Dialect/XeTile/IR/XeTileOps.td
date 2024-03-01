@@ -406,7 +406,7 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
     }];
 }
 
-def XeTile_TilePackOp : XeTile_Op<"tile_pack", []> {
+def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
     let summary = "pack 2D vector into a 4D blocked vector";
     let description = [{
         "tile_pack" operation is used for converting a 2D vector into a blocked 4D vector. The
@@ -431,9 +431,10 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", []> {
 
     let hasCustomAssemblyFormat = true;
     let hasVerifier = true;
+    let hasFolder = 1;
 }
 
-def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", []> {
+def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
     let summary = "unpack a blocked 4D vector into a 2D vector";
     let description = [{
         "tile_unpack" operation performs the reverse of "tile_pack". Given a 4D vector and
@@ -456,6 +457,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", []> {
 
     let hasCustomAssemblyFormat = true;
     let hasVerifier = true;
+    let hasFolder = 1;
 }
 
 def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
