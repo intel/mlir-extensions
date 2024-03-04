@@ -132,16 +132,16 @@ When setting vnni_axis to 1, VNNI transformation has no impact on the physical d
   %at = XeGPU.load_nd %tdesc2 {vnni_axis = 1, mode = vc} :
      tile<8x16xbf16> into vector<8x8x2xbf16>
 ```
-VNNI transformation and transpose can not be combined. 
+VNNI transformation and transpose can not be combined.
 
-Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only. 
+Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only.
 
 ```mlir
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32, mode = vc} :
      tile<32x16xf16, #sg_map> into vector<8x64xf16>
 ```
 
-The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a tile<32x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the tile as <32x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x64xbf16> using tile's element data type. User can use vector.shape_cast to explicitly represent the VNNI layout for the output vector without introducing any data movement. 
+The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a tile<32x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the tile as <32x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x64xbf16> using tile's element data type. User can use vector.shape_cast to explicitly represent the VNNI layout for the output vector without introducing any data movement.
 
 ```mlir  
   %at = XeGPU.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32, mode = vc} :
