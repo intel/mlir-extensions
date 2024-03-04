@@ -79,7 +79,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `load_tile` needs to be used with the tile_mma.
 
-`load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions. 
+`load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
@@ -98,7 +98,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   XeTile.store_tile %tile_a, %vector_a :
    vector<64x64xbf16> into tile<64x64xbf16>
 ```
-`store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions. 
+`store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
