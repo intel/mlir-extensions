@@ -16,6 +16,7 @@
 #ifndef _XeTileToXeGPU_H_INCLUDED_
 #define _XeTileToXeGPU_H_INCLUDED_
 
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -25,6 +26,9 @@
 namespace mlir {
 class MLIRContext;
 class ModuleOp;
+namespace gpu {
+class GPUModuleOp;
+}
 template <typename T> class OperationPass;
 class RewritePatternSet;
 } // namespace mlir
@@ -37,7 +41,7 @@ void populateXeTileToXeGPUConversionPatterns(XeGPUTypeConverter &converter,
                                              mlir::RewritePatternSet &patterns);
 
 /// Create a pass to convert the XeTile dialect to the XeGPU dialect.
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+std::unique_ptr<mlir::OperationPass<mlir::gpu::GPUModuleOp>>
 createConvertXeTileToXeGPUPass(const std::string &device = "pvc");
 
 } // namespace imex
