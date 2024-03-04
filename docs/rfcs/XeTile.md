@@ -20,7 +20,7 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
 |init_tile	| operation ::= XeTile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index -> type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
-|load_tile	| operation ::=XeTile.load_tile $tile attr-dict:type($tile) ->type($res)	 | %vector_a = XeTile.load_tile %tile_a {transpose = [1,0], padding=0} : tile<64x32xbf16> into vector<32x64xbf16>|
+|load_tile	| operation ::=XeTile.load_tile $tile attr-dict:type($tile) ->type($res)	 | %vector_a = XeTile.load_tile %tile_a {padding=0} : tile<64x32xbf16> into vector<32x64xbf16>|
 |store_tile	| operation ::=XeTile.store_tile $value, $tile attr-dict: type($value), type($tile) | XeTile.store_tile %tile_a, %vector_a: vector<64x64xbf16> into tile<64x64xbf16> |
 |update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
@@ -48,7 +48,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      i64 into tile<8x16xbf16>
 ```
 
-`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. So if the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set.
+`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. The order must be consistent with the data layout specified by the memref represening the base matirx. If the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column-major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set.
 
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
@@ -79,37 +79,37 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `load_tile` needs to be used with the tile_mma.
 
-`load_tile` loads a tile with an `order` attribute. The `order` attribute affects the indexing order for the tile access, however, it doesn't change the logical representation of loading a 2D tile to a 2D vector. There is no need to reverse the order of vector length at the XeTile level regardless of the `order` attribute value.
+`load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
-     tile<64x32xbf16> into vector<64x32xb16, #tile_attr>
+     tile<64x32xbf16, #tile_attr> into vector<64x32xb16>
 ```
 
 `load_tile` loads a 2D tile with an `inner_block` attribute  to 4D vector.
 ```mlir
   #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
   %vector_a = XeTile.load_tile %tile_a :
-     tile<64x32xbf16> into vector<4x2x16x16xb16, #tile_attr>
+     tile<64x32xbf16, #tile_attr> into vector<4x2x16x16xb16>
 ```
 
-`store_tile` stores a vector to memory. Transpose and padding attributes are not supported.
+`store_tile` stores a vector to memory. Padding attributes are not supported.
 ```mlir  
   XeTile.store_tile %tile_a, %vector_a :
    vector<64x64xbf16> into tile<64x64xbf16>
 ```
-`store_tile` stores a tile according to the `order` attribute. With the `order` attribute, there is no need to reorder the 2D vector dimensions. The op does the reordering.
+`store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
-     vector<64x32xb16, #tile_attr> to tile<64x32xbf16>
+     vector<64x32xb16> to tile<64x32xbf16, #tile_attr>
 ```
 
 `load_tile` stores a 4D vector to a 2D tile with an `inner_block`.
 ```mlir
   #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
   %vector_a = XeTile.store_tile %tile_a :
-     vector<4x2x16x16xb16, #tile_attr> into tile<64x32xbf16>
+     vector<4x2x16x16xb16> into tile<64x32xbf16, #tile_attr>
 ```
 
 `prefetch_tile` prefetches the tile to cache.  
