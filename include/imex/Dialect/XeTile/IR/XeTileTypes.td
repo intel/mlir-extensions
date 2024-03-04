@@ -85,6 +85,42 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
     TileType clone(mlir::Type elementType) {
       return llvm::cast<TileType>(cloneWith(getShape(), elementType));
     }
+
+    xetile::SubGroupMapAttr getSgMap() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getSgMap();
+      return xetile::SubGroupMapAttr();
+    }
+
+    xetile::WorkGroupMapAttr getWgMap() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getWgMap();
+      return xetile::WorkGroupMapAttr();
+    }
+
+    mlir::DenseI32ArrayAttr getWgData() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getWgData();
+      return mlir::DenseI32ArrayAttr();
+    }
+
+    mlir::DenseI64ArrayAttr getInnerBlocks() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getInnerBlocks();
+      return mlir::DenseI64ArrayAttr();
+    }
+
+    mlir::DenseI32ArrayAttr getOrder() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getOrder();
+      return mlir::DenseI32ArrayAttr::get(getContext(), {1, 0});
+    }
+
   }];
 
   let assemblyFormat = "`<` custom<XeTileType>($shape, $elementType, $encoding) `>`";

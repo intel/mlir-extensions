@@ -194,6 +194,36 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         bool hasDynamicStrides() {
             return getDynamicStrides().size();
         }
+
+        /// Returns the offsets info to the source. It consolidates
+        /// information from both dynamic_offsets and static_offsets
+        /// parameters. static_offsets parameter always has the expected
+        /// ranks with some dim could have mlir::ShapeType::kDynamic value
+        /// indicating the corresponding value should be from dynamic_offsets.
+        // llvm::SmallVector<mlir::OpFoldResult> getOffsets() {
+        //   llvm::SmallVector<mlir::OpFoldResult> offsets;
+        //   auto dynamicOffsets = getOffsets(); // from offsets variable
+        //   auto staticOffsets = getStaticOffsets(); // from static_offsets attribute
+
+        //   // in case static_offsets is missing
+        //   if (staticOffsets.size() == 0) {
+        //     offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
+        //     return offsets;
+        //   }
+
+        //   for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
+        //     if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
+        //       assert(j < dynamicOffsets.size());
+        //       offsets.push_back(dynamicOffsets[j++]);
+        //     } else {
+        //       auto ty = mlir::IndexType::get(getContext());
+        //       auto attr = mlir::IntegerAttr::get(ty, staticOffsets[i]);
+        //       offsets.push_back(attr);
+        //     }
+        //   }
+        //   return offsets;
+        // }
+
     }];
 
     let hasVerifier = 1;
@@ -361,9 +391,15 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
-        mlir::VectorType getAType() { return llvm::cast<mlir::VectorType>(getA().getType()); }
-
-        mlir::VectorType getBType() { return llvm::cast<mlir::VectorType>(getB().getType()); }
+        mlir::VectorType getAType() {
+            return llvm::cast<mlir::VectorType>(getA().getType());
+        }
+        mlir::VectorType getBType() {
+            return llvm::cast<mlir::VectorType>(getB().getType());
+        }
+        mlir::Type getElementType() {
+            return getA().getType().getElementType();
+        }
     }];
 
     let hasVerifier = 1;

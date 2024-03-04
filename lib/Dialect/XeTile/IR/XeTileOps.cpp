@@ -337,7 +337,7 @@ void LoadTileOp::print(mlir::OpAsmPrinter &printer) {
   printer << getValue().getType();
 }
 
-bool verifyInnerBlocksWithVecShape(mlir::DenseI32ArrayAttr &innerBlocks,
+bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
                                    llvm::ArrayRef<int64_t> &vecShape,
                                    llvm::ArrayRef<int64_t> &tileShape) {
   if (!(vecShape[2] == innerBlocks[0] && vecShape[3] == innerBlocks[1] &&

@@ -16,6 +16,7 @@
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/Transforms/Passes.h>
@@ -39,6 +40,11 @@ public:
     addIllegalOp<imex::xetile::InitTileOp>();
 
     addLegalOp<mlir::UnrealizedConversionCastOp>();
+
+    addLegalOp<mlir::vector::ExtractOp>();
+    addLegalOp<mlir::vector::ExtractStridedSliceOp>();
+    addLegalOp<mlir::vector::ShuffleOp>();
+    addLegalOp<mlir::vector::ShapeCastOp>();
 
     addLegalDialect<imex::xegpu::XeGPUDialect>();
 
@@ -93,22 +99,11 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
   }
 
   void runOnOperation() override {
-    mlir::ModuleOp mod = getOperation();
+    auto mod = getOperation();
     mlir::MLIRContext &context = getContext();
 
     // skip functions with XeTile.TileType inputs and outputs
-    bool hasTileTyInFuncTy = false;
-    mod.walk<mlir::WalkOrder::PreOrder>([&](mlir::func::FuncOp op) {
-      auto funcTy = op.getFunctionType();
-      hasTileTyInFuncTy |= std::any_of(
-          funcTy.getInputs().begin(), funcTy.getInputs().end(),
-          [](mlir::Type ty) { return llvm::isa<imex::xetile::TileType>(ty); });
-      hasTileTyInFuncTy |= std::any_of(
-          funcTy.getResults().begin(), funcTy.getInputs().end(),
-          [](mlir::Type ty) { return llvm::isa<imex::xetile::TileType>(ty); });
-    });
-
-    if (hasTileTyInFuncTy) {
+    if (!isSupportedModule(mod)) {
       mod.emitOpError(
           "Currently FunctionType with xetile.TileType is not supported.");
       return signalPassFailure();
@@ -119,17 +114,9 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       return signalPassFailure();
     }
 
-    imex::ValueAttributeMap map;
-    mod.walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::TileMMAOp op) {
-      markDefChainValues(op.getA(), OperandType::DPASA, map);
-      markDefChainValues(op.getB(), OperandType::DPASB, map);
-      markDefChainValues(op.getC(), OperandType::DPASC, map);
-      markUseChainValues(op.getOutput(), OperandType::DPASR, map);
-    });
-
-    XeGPUTypeConverter typeConverter(context, map);
+    auto &usageAnalysis = getAnalysis<TileUsageAnalysis>();
+    XeGPUTypeConverter typeConverter(context, &usageAnalysis);
     XeTileConversionTarget target(context, uArchInterface);
-
     mlir::RewritePatternSet patterns(&context);
 
     populateXeTileToXeGPUConversionPatterns(typeConverter, patterns);
@@ -152,7 +139,7 @@ void populateXeTileToXeGPUConversionPatterns(
 }
 
 /// Create a pass that convert XeTile to XeGPU
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
+std::unique_ptr<::mlir::OperationPass<::mlir::gpu::GPUModuleOp>>
 createConvertXeTileToXeGPUPass(const std::string &deviceName) {
   return std::make_unique<ConvertXeTileToXeGPUPass>(deviceName);
 }

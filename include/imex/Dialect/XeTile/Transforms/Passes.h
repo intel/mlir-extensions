@@ -34,11 +34,16 @@ class XeTypeConverter;
 /// XeTile passes.
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> createXeTileTilingPass();
+std::unique_ptr<mlir::Pass> createXeTileInitDuplicatePass();
+std::unique_ptr<mlir::Pass> createXeTileBlockingPass();
 
 ///
-void populateXeTileTilingPatterns(imex::XeTypeConverter &converter,
-                                  mlir::RewritePatternSet &patterns);
+void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
+                                         mlir::RewritePatternSet &patterns);
+
+///
+void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
+                                    mlir::RewritePatternSet &patterns);
 
 //===----------------------------------------------------------------------===//
 // Registration

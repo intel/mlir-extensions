@@ -26,39 +26,40 @@ class SgArithConstantOpPattern
   matchAndRewrite(mlir::arith::ConstantOp op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto result = op.getResult();
-    auto resultTy = result.getType();
-
-    if (!resultTy.isa<mlir::VectorType>())
-      return mlir::failure();
-
-    auto vectorTy = resultTy.cast<mlir::VectorType>();
+    auto value =
+        llvm::dyn_cast_if_present<mlir::DenseElementsAttr>(op.getValue());
 
     // We only interesting 4D vectors
-    if (vectorTy.getRank() != 4)
+    if (!value || value.getType().getRank() != 4)
       return mlir::failure();
 
-    auto shape = vectorTy.getShape();
-    auto subVectorTy = ::mlir::VectorType::get({shape[2], shape[3]},
-                                               vectorTy.getElementType());
+    llvm::SmallVector<mlir::Attribute> elems(
+        value.value_begin<mlir::Attribute>(),
+        value.value_end<mlir::Attribute>());
 
-    auto valueAttr = op.getValue();
-    if (!valueAttr.isa<mlir::DenseElementsAttr>())
-      return mlir::failure();
+    auto shape = value.getType().getShape();
+    auto vecTy =
+        mlir::VectorType::get({shape[2], shape[3]}, value.getElementType());
 
-    auto denseElementsAttr = valueAttr.cast<mlir::DenseElementsAttr>();
-    if (!denseElementsAttr.isSplat())
-      return mlir::failure();
-
-    auto splatVal = denseElementsAttr.getSplatValue<mlir::FloatAttr>();
+    // slice a block of (shape[2], shape[3]) from elems.
+    auto slice = [&](int i, int j) {
+      llvm::SmallVector<mlir::Attribute> block;
+      auto width = shape[1] * shape[3];
+      i = i * shape[2];
+      j = j * shape[3];
+      for (int64_t r = 0; r < shape[2]; r++)
+        for (int64_t c = 0; c < shape[3]; c++)
+          block.push_back(elems[(i + r) * width + j + c]);
+      return block;
+    };
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> newOps;
     for (auto i = 0; i < shape[0]; i++) {
       for (auto j = 0; j < shape[1]; j++) {
-        auto newOp = rewriter.create<mlir::arith::ConstantOp>(
-            loc, subVectorTy,
-            mlir::DenseElementsAttr::get(subVectorTy, splatVal));
+        auto values = slice(i, j);
+        auto attr = mlir::DenseElementsAttr::get(vecTy, values);
+        auto newOp = rewriter.create<mlir::arith::ConstantOp>(loc, attr);
         newOps.push_back(newOp);
       }
     }
