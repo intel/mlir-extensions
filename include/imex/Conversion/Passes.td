@@ -365,11 +365,11 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 // XeTileToXeGPU
 //===----------------------------------------------------------------------===//
 
-def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::ModuleOp"> {
+def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModuleOp"> {
   let summary = "Convert from the XeTile dialect to the XeGPU dialect.";
   let description = [{
     Convert XeTile dialect operations into the XeGPU dialect operations. It expects
-    the input code is tiled using xetile-tiling.
+    the input code is tiled using xetile-blocking.
 
     #### Input invariant
 
@@ -399,6 +399,7 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::ModuleOp"> {
   let constructor = "::imex::createConvertXeTileToXeGPUPass()";
   let dependentDialects = ["::imex::xegpu::XeGPUDialect",
                            "::imex::xetile::XeTileDialect",
+                           "::mlir::gpu::GPUDialect",
                            "::mlir::vector::VectorDialect",
                            "::mlir::arith::ArithDialect",
                            ];

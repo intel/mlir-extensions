@@ -306,7 +306,7 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
     int elementSize = loadOp.getTensorDescType().getElementTypeBitWidth();
 
     LoadStore2DConfig loadParams;
-    bool vnni = loadOp.getVnniAxis() ? true : false;
+    bool vnni = loadOp.getVnniAxis() == 0 ? true : false;
     bool transpose = loadOp.getTranspose() ? true : false;
 
     mlir::FailureOr<LoadStore2DConfig> configParams =

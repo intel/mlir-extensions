@@ -45,12 +45,20 @@ buildUnrealizedBackwardsCasts(mlir::ValueRange convertedValues,
                               const mlir::OneToNTypeMapping &typeConversion,
                               mlir::RewriterBase &rewriter) {
 
-  // assert(typeConversion.getConvertedTypes() == convertedValues.getTypes());
-
   // Create unrealized cast op for each converted result of the op.
-  llvm::SmallVector<mlir::Value> recastValues;
   mlir::TypeRange originalTypes = typeConversion.getOriginalTypes();
+  llvm::SmallVector<mlir::Value> recastValues;
   recastValues.reserve(originalTypes.size());
+
+  if (llvm::range_size(originalTypes) == 1 &&
+      llvm::range_size(convertedValues) > 1) {
+    mlir::ValueRange recastValue =
+        buildUnrealizedCast(rewriter, originalTypes[0], convertedValues);
+    assert(recastValue.size() == 1);
+    recastValues.push_back(recastValue.front());
+    return recastValues;
+  }
+
   auto convertedValueIt = convertedValues.begin();
   for (auto [idx, originalType] : llvm::enumerate(originalTypes)) {
     mlir::TypeRange convertedTypes = typeConversion.getConvertedTypes(idx);
@@ -74,8 +82,10 @@ buildUnrealizedBackwardsCasts(mlir::ValueRange convertedValues,
 }
 
 XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context,
-                                       imex::ValueAttributeMap &map)
-    : XeTypeConverter(context, map) {
+                                       TileUsageAnalysis *analysis)
+    : XeTypeConverter(context, analysis) {
+  targetOp = nullptr;
+
   addConversion(
       [&](mlir::IndexType type) -> std::optional<mlir::Type> { return type; });
 
@@ -103,17 +113,10 @@ XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context,
 
 std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertTileType(
     xetile::TileType tileTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
-  if (tileTy.getRank() == 2) {
-    resultTypes.push_back(tileTy);
-    return mlir::success();
-  } else if (tileTy.getRank() == 4) {
-    auto shape = tileTy.getShape();
-    auto tdescTy = xegpu::TensorDescType::get({shape[2], shape[3]},
-                                              tileTy.getElementType());
-    auto numElements = shape[0] * shape[1];
-    resultTypes.assign(numElements, tdescTy);
-    return mlir::success();
-  }
+  llvm::dbgs()
+      << "convertTileType is disabled, since there is no unique "
+      << "way to convert an XeTile::TileType into XeGPU::TensorDescType "
+      << "becasue of array_length selection.\n";
   return std::nullopt;
 }
 
@@ -133,6 +136,96 @@ std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertVectorType(
   return std::nullopt;
 }
 
+// mlir::LogicalResult XeGPUTypeConverter::computeTypeMapping(
+//                             mlir::ValueRange originalVals,
+//                             llvm::ArrayRef<mlir::ValueRange> convertedVals,
+//                             mlir::OneToNTypeMapping &resultMap) {
+//   for (auto [i, val] : llvm::enumerate(convertedVals)) {
+//     llvm::SmallVector<mlir::Type> convertedTypes(val.getTypes());
+//     resultMap.addInputs(i, convertedTypes);
+//   }
+//   return mlir::success();
+// }
+
+// It computes the mapping between types orginal values and
+// converted values. The standard type conversion method doesn't
+// work here because a TileType could have multiple decomposions
+// into TensorDescType depending on the choice for array_len.
+// For given types of inputs of
+// originalTypes = [xetile.tile<32x64xf16>, vector<32x64xf16>]
+// convertedTypes = [xegpu.tensor_desc<32x16xf16, arr_len=2>,
+//                   xegpu.tensor_desc<32x16xf16, arr_len=2>,
+//                   vector<32x32xf16>, vector<32x32xf16>]
+//
+// It will build a map as shown in below, and store it in resultMap.
+// xetile.tile<32x64xf16> --> [xegpu.tensor_desc<32x16xf16, arr_len=2>,
+//                             xegpu.tensor_desc<32x16xf16, arr_len=2>]
+//
+// vector<32x64xf16> --> [vector<32x16xf16>, vector<32x16xf16>]
+//
+// The alogrithm works by inferring the number of new types based on their
+// size info. It assumes the origianlTyps and convertedTypes has been aligned.
+// the originalTypes, which is the key, has been added into resultMap as
+// constructor
+mlir::LogicalResult
+XeGPUTypeConverter::computeTypeMapping(mlir::ValueRange original,
+                                       mlir::ValueRange converted,
+                                       mlir::OneToNTypeMapping &resultMap) {
+  llvm::SmallVector<mlir::Type> originalTypes(original.getType());
+  llvm::SmallVector<mlir::Type> convertedTypes(converted.getType());
+
+  for (size_t i = 0, j = 0; i < originalTypes.size(); i++) {
+    assert(j < convertedTypes.size());
+    if (originalTypes[i] == convertedTypes[j]) {
+      resultMap.addInputs(i, convertedTypes[j++]);
+      continue;
+    }
+
+    if (auto tileTy = llvm::dyn_cast<xetile::TileType>(originalTypes[i])) {
+      auto tdescTy = llvm::dyn_cast<xegpu::TensorDescType>(convertedTypes[j]);
+      if (!tdescTy)
+        return mlir::failure();
+      auto shape = tileTy.getShape();
+      auto blkSZ = tdescTy.getShape();
+      auto arr_len = tdescTy.getArrayLength();
+      auto size = shape[0] / blkSZ[0] * shape[1] / (blkSZ[1] * arr_len);
+      llvm::ArrayRef<mlir::Type> types(convertedTypes.begin() + j,
+                                       convertedTypes.begin() + j + size);
+      resultMap.addInputs(i, types);
+      j += size;
+      continue;
+    }
+
+    if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(originalTypes[i])) {
+      auto cvtTy = llvm::dyn_cast<mlir::VectorType>(convertedTypes[j]);
+      if (vecTy.getRank() != 4 || !cvtTy)
+        return mlir::failure();
+
+      auto shape = vecTy.getShape();
+      auto blkSZ = cvtTy.getShape();
+
+      auto product = [&](llvm::ArrayRef<int64_t> arr) {
+        return std::accumulate(arr.begin(), arr.end(), 1, std::multiplies<>{});
+      };
+
+      // using the total size to check whether cvtTy is derived from vecTy
+      // vnni factors restrict us from apple to apple compare.
+      if (product(shape.take_back(2)) != product(blkSZ))
+        return mlir::failure();
+
+      auto size = shape[0] * shape[1];
+      llvm::ArrayRef<mlir::Type> types(convertedTypes.begin() + j,
+                                       convertedTypes.begin() + j + size);
+      resultMap.addInputs(i, types);
+      j += size;
+      continue;
+    }
+
+    return mlir::failure();
+  }
+  return mlir::success();
+}
+
 mlir::Block *XeGPUOneToNPatterRewriter::applySignatureConversion(
     mlir::Region *region, mlir::TypeConverter::SignatureConversion &conversion,
     const mlir::TypeConverter *converter) {
@@ -141,25 +234,31 @@ mlir::Block *XeGPUOneToNPatterRewriter::applySignatureConversion(
 
 void XeGPUOneToNPatterRewriter::replaceOp(mlir::Operation *op,
                                           mlir::ValueRange newValues) {
-  // It is one-to-one mapping, let the ConvertionPatternRewriter handle it
-  // directly.
+  // It is one-to-one mapping, let the ConvertionPatternRewriter
+  // handle it directly.
   if (newValues.size() == op->getNumResults()) {
     rewriter.replaceOp(op, newValues);
-  } else { // it is one-to-N mapping, so create unrealizedCasts to make it as
-           // one-to-one mapping
-    llvm::SmallVector<mlir::Value> recastValues;
-    auto resultTys = op->getResultTypes();
-    mlir::OneToNTypeMapping resultMapping(resultTys);
-    if (mlir::succeeded(
-            typeConverter.computeTypeMapping(resultTys, resultMapping))) {
-      auto castValues =
-          buildUnrealizedBackwardsCasts(newValues, resultMapping, rewriter);
-      rewriter.replaceOp(op, castValues);
-    } else {
-      llvm_unreachable("It is an unexpected failure of failing to convert the "
-                       "result types.");
-    }
+    return;
   }
+
+  // it is one-to-N mapping, so create unrealizedCasts
+  // to make it as one-to-one mapping
+  assert(newValues.size() > op->getNumResults() &&
+         "It is unexpected that the num of new op results "
+         "is less than num of orignial op results.\n");
+
+  mlir::OneToNTypeMapping resultMapping(op->getResultTypes());
+  auto status = typeConverter.computeTypeMapping(op->getResults(), newValues,
+                                                 resultMapping);
+  if (mlir::failed(status)) {
+    (void)rewriter.notifyMatchFailure(op,
+                                      "Failed to convert the result types.");
+    return;
+  }
+
+  auto castValues =
+      buildUnrealizedBackwardsCasts(newValues, resultMapping, rewriter);
+  rewriter.replaceOp(op, castValues);
 }
 
 } // namespace imex
