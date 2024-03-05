@@ -39,6 +39,7 @@ config.imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 config.imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
 config.imex_enable_bf16_tests = @IMEX_ENABLE_BF16_TESTS@
 config.imex_enable_excluded_tests = @IMEX_ENABLE_EXCLUDED_TESTS@
+config.imex_enable_fs_simulator = @IMEX_ENABLE_FS_SIMULATOR@
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
@@ -64,6 +65,22 @@ if config.imex_enable_igpu:
             config.igpu_fp64 = "--no-igpu-fp64"
     except subprocess.TimeoutExpired:
         config.igpu_fp64 = "--no-igpu-fp64"
+if config.imex_enable_fs_simulator:
+    config.environment.update({
+        "ForceBCSForInternalCopyEngine": "1",
+        "ForceBcsEngineIndex": "1",
+        "ForceDeviceId": "0B73",
+        "HardwareInfoOverride": "1x4x8",
+        "IGC_Disable512GRFISA": "0",
+        "NEOReadDebugKeys": "1",
+        "OverrideSlmSize": "320",
+        "PrintDebugSettings": "1",
+        "ProductFamilyOverride": "fcs",
+        "RebuildPrecompiledKernels": "1",
+        "SetCommandStreamReceiver": "2",
+        "TbxPort": "1234",
+    })
+
 config.imex_runner_utils = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "imex_runner_utils" + config.llvm_shlib_ext))
 
 # Support substitution of the tools_dir with user parameters. This is

@@ -1,7 +1,7 @@
-From 2f9f2b667724ecae67228781a830f54624fcb241 Mon Sep 17 00:00:00 2001
+From 5a8746dbc8a0853f8bbb7570ed360105970b8894 Mon Sep 17 00:00:00 2001
 From: "Prajapati, Dimple" <dimpalben.r.prajapati@intel.com>
 Date: Fri, 12 Jan 2024 09:12:03 -0800
-Subject: [PATCH] [mlir][spirv] Add Constant attribute in ParseDecoration
+Subject: [PATCH 3/6] Add Constant attribute in ParseDecoration
 
 ---
  mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 1 +
@@ -9,28 +9,28 @@ Subject: [PATCH] [mlir][spirv] Add Constant attribute in ParseDecoration
  2 files changed, 2 insertions(+)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 89e2e7ad52fa..88a2c25a66d4 100644
+index 02d03b3a0fae..ba3ecc5344bc 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -297,6 +297,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -296,6 +296,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      decorations[words[0]].set(symbol, llvm::dyn_cast<Attribute>(linkageAttr));
      break;
    }
 +  case spirv::Decoration::Constant:
    case spirv::Decoration::Aliased:
+   case spirv::Decoration::AliasedPointer:
    case spirv::Decoration::Block:
-   case spirv::Decoration::BufferBlock:
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 9e9a16456cc1..48b5b24e3249 100644
+index 40337e007bbf..518facc41e28 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -266,6 +266,7 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
-              << attrName << " attribute " << strAttr.getValue();
-     }
-     return emitError(loc, "expected string attribute for ") << attrName;
-+  case spirv::Decoration::Constant:
+@@ -263,6 +263,7 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+            << stringifyDecoration(decoration);
    case spirv::Decoration::Aliased:
+   case spirv::Decoration::AliasedPointer:
++  case spirv::Decoration::Constant:
    case spirv::Decoration::Flat:
    case spirv::Decoration::NonReadable:
+   case spirv::Decoration::NonWritable:
 --
 2.34.1

@@ -9,7 +9,6 @@ _install/
 cmake-build-debug/
 cmake-build-release/
 dev_scripts/
-docker/
 
 compile_commands.json
 *~

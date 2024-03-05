@@ -8,6 +8,8 @@ on:
     branches:
       - main
 
+permissions: read-all
+
 jobs:
   build_linux:
     name: Builds IMEX on Linux
@@ -79,7 +81,7 @@ jobs:
           cd llvm-project || exit 1
           git checkout ${LLVM_SHA} || exit 1
           if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
-          cmake G Ninja -B _build -S llvm                                  \
+          cmake -G Ninja -B _build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \

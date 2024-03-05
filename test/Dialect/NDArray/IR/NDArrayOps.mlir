@@ -193,3 +193,12 @@ func.func @test_castelem(%arg0: !ndarray.ndarray<5xi64>) -> !ndarray.ndarray<5xi
 // CHECK-LABEL: func.func @test_castelem
 // CHECK: [[V0:%.*]] = ndarray.cast_elemtype
 // CHECK-NEXT: return [[V0]] : !ndarray.ndarray<5xi32>
+
+// -----
+func.func @test_from_memref(%arg0: memref<?xi32, strided<[?], offset: ?>>) -> !ndarray.ndarray<?xi32> {
+    %0 = ndarray.from_memref %arg0 : memref<?xi32, strided<[?], offset: ?>> -> !ndarray.ndarray<?xi32>
+    return %0 : !ndarray.ndarray<?xi32>
+}
+// CHECK-LABEL: func.func @test_from_memref
+// CHECK: [[V0:%.*]] = ndarray.from_memref
+// CHECK-NEXT: return [[V0]] : !ndarray.ndarray<?xi32>

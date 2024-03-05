@@ -194,6 +194,36 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         bool hasDynamicStrides() {
             return getDynamicStrides().size();
         }
+
+        /// Returns the offsets info to the source. It consolidates
+        /// information from both dynamic_offsets and static_offsets
+        /// parameters. static_offsets parameter always has the expected
+        /// ranks with some dim could have mlir::ShapeType::kDynamic value
+        /// indicating the corresponding value should be from dynamic_offsets.
+        // llvm::SmallVector<mlir::OpFoldResult> getOffsets() {
+        //   llvm::SmallVector<mlir::OpFoldResult> offsets;
+        //   auto dynamicOffsets = getOffsets(); // from offsets variable
+        //   auto staticOffsets = getStaticOffsets(); // from static_offsets attribute
+
+        //   // in case static_offsets is missing
+        //   if (staticOffsets.size() == 0) {
+        //     offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
+        //     return offsets;
+        //   }
+
+        //   for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
+        //     if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
+        //       assert(j < dynamicOffsets.size());
+        //       offsets.push_back(dynamicOffsets[j++]);
+        //     } else {
+        //       auto ty = mlir::IndexType::get(getContext());
+        //       auto attr = mlir::IntegerAttr::get(ty, staticOffsets[i]);
+        //       offsets.push_back(attr);
+        //     }
+        //   }
+        //   return offsets;
+        // }
+
     }];
 
     let hasVerifier = 1;
@@ -361,9 +391,15 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
-        mlir::VectorType getAType() { return llvm::cast<mlir::VectorType>(getA().getType()); }
-
-        mlir::VectorType getBType() { return llvm::cast<mlir::VectorType>(getB().getType()); }
+        mlir::VectorType getAType() {
+            return llvm::cast<mlir::VectorType>(getA().getType());
+        }
+        mlir::VectorType getBType() {
+            return llvm::cast<mlir::VectorType>(getB().getType());
+        }
+        mlir::Type getElementType() {
+            return getA().getType().getElementType();
+        }
     }];
 
     let hasVerifier = 1;
@@ -406,7 +442,7 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
     }];
 }
 
-def XeTile_TilePackOp : XeTile_Op<"tile_pack", []> {
+def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
     let summary = "pack 2D vector into a 4D blocked vector";
     let description = [{
         "tile_pack" operation is used for converting a 2D vector into a blocked 4D vector. The
@@ -431,9 +467,10 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", []> {
 
     let hasCustomAssemblyFormat = true;
     let hasVerifier = true;
+    let hasFolder = 1;
 }
 
-def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", []> {
+def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
     let summary = "unpack a blocked 4D vector into a 2D vector";
     let description = [{
         "tile_unpack" operation performs the reverse of "tile_pack". Given a 4D vector and
@@ -456,6 +493,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", []> {
 
     let hasCustomAssemblyFormat = true;
     let hasVerifier = true;
+    let hasFolder = 1;
 }
 
 def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {

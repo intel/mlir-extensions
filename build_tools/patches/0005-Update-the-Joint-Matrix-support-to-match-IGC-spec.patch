@@ -1,7 +1,7 @@
-From 9837f33f72569d59c0ebef542e3647ec554f369c Mon Sep 17 00:00:00 2001
+From d5ebe45bf81da292d01fbda90990a100bc617ba7 Mon Sep 17 00:00:00 2001
 From: Md Abdullah Shahneous Bari <md.abdullah.shahneous.bari@intel.com>
 Date: Tue, 26 Sep 2023 19:07:40 +0000
-Subject: [PATCH] Update the Joint Matrix support to match IGC spec
+Subject: [PATCH 5/6] Update the Joint Matrix support to match IGC spec
 
 Update the Joint Matrix support to match the following spec:
 https://github.com/MrSidims/llvm/blob/private/MrSidims/add-matrix-use/sycl/doc/design/spirv-extensions/SPV_INTEL_joint_matrix.asciidoc
@@ -11,15 +11,15 @@ https://github.com/MrSidims/llvm/blob/private/MrSidims/add-matrix-use/sycl/doc/d
  mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    | 12 +++++--
  mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      | 20 ++++++++----
  .../SPIRV/Deserialization/Deserializer.cpp    | 17 +++++++---
- .../Target/SPIRV/Serialization/Serializer.cpp |  2 ++
- mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp      | 10 +++---
- 7 files changed, 70 insertions(+), 28 deletions(-)
+ .../Target/SPIRV/Serialization/Serializer.cpp |  3 +-
+ mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp      |  2 +-
+ 7 files changed, 66 insertions(+), 25 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index ee1fbba1e284..d3e756c31889 100644
+index 75e42c024553..91a8bb51ad65 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4038,15 +4038,28 @@ def SPIRV_SamplerUseAttr: SPIRV_I32EnumAttr<
+@@ -4032,15 +4032,28 @@ def SPIRV_SamplerUseAttr: SPIRV_I32EnumAttr<
    "image_sampler_use_info",
    [SPIRV_ISUI_SamplerUnknown, SPIRV_ISUI_NeedSampler, SPIRV_ISUI_NoSampler]>;
 
@@ -58,10 +58,10 @@ index ee1fbba1e284..d3e756c31889 100644
  // Cooperative Matrix Use for the SPV_KHR_cooperative_matrix extension.
  def SPIRV_KHR_CMU_MatrixA   : I32EnumAttrCase<"MatrixA", 0>;
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h
-index d946d936d4e6..0c08d7c083e5 100644
+index 55f0c787b444..744ea1aa21ef 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h
-@@ -457,7 +457,8 @@ public:
+@@ -430,7 +430,8 @@ public:
    static constexpr StringLiteral name = "spirv.jointmatrix";
 
    static JointMatrixINTELType get(Type elementType, Scope scope, unsigned rows,
@@ -71,7 +71,7 @@ index d946d936d4e6..0c08d7c083e5 100644
    Type getElementType() const;
 
    /// Return the scope of the joint matrix.
-@@ -470,6 +471,9 @@ public:
+@@ -443,6 +444,9 @@ public:
    /// return the layout of the matrix
    MatrixLayout getMatrixLayout() const;
 
@@ -82,10 +82,10 @@ index d946d936d4e6..0c08d7c083e5 100644
                       std::optional<StorageClass> storage = std::nullopt);
    void getCapabilities(SPIRVType::CapabilityArrayRefVector &capabilities,
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 8a68decc5878..00905c32f98a 100644
+index 0b139b79f051..13641961a248 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -393,7 +393,8 @@ static Type parseCooperativeMatrixNVType(SPIRVDialect const &dialect,
+@@ -367,7 +367,8 @@ static Type parseCooperativeMatrixType(SPIRVDialect const &dialect,
 
  // joint-matrix-type ::= `!spirv.jointmatrix` `<`rows `x` columns `x`
  // element-type
@@ -95,7 +95,7 @@ index 8a68decc5878..00905c32f98a 100644
  static Type parseJointMatrixType(SPIRVDialect const &dialect,
                                   DialectAsmParser &parser) {
    if (parser.parseLess())
-@@ -420,10 +421,14 @@ static Type parseJointMatrixType(SPIRVDialect const &dialect,
+@@ -394,10 +395,14 @@ static Type parseJointMatrixType(SPIRVDialect const &dialect,
    if (parser.parseComma() ||
        spirv::parseEnumKeywordAttr(scope, parser, "scope <id>"))
      return Type();
@@ -111,7 +111,7 @@ index 8a68decc5878..00905c32f98a 100644
  }
 
  // TODO: Reorder methods to be utilities first and parse*Type
-@@ -927,7 +932,8 @@ static void print(JointMatrixINTELType type, DialectAsmPrinter &os) {
+@@ -893,7 +898,8 @@ static void print(JointMatrixINTELType type, DialectAsmPrinter &os) {
    os << "jointmatrix<" << type.getRows() << "x" << type.getColumns() << "x";
    os << type.getElementType() << ", "
       << stringifyMatrixLayout(type.getMatrixLayout());
@@ -122,10 +122,10 @@ index 8a68decc5878..00905c32f98a 100644
 
  static void print(MatrixType type, DialectAsmPrinter &os) {
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index f1bac6490837..7890f292a50a 100644
+index 2d64fea0dc26..c9ecfcc5e137 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-@@ -336,7 +336,8 @@ void CooperativeMatrixNVType::getCapabilities(
+@@ -287,7 +287,8 @@ void CooperativeMatrixType::getCapabilities(
  //===----------------------------------------------------------------------===//
 
  struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
@@ -135,7 +135,7 @@ index f1bac6490837..7890f292a50a 100644
 
    static JointMatrixTypeStorage *construct(TypeStorageAllocator &allocator,
                                             const KeyTy &key) {
-@@ -345,26 +346,29 @@ struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
+@@ -296,26 +297,29 @@ struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
    }
 
    bool operator==(const KeyTy &key) const {
@@ -170,7 +170,7 @@ index f1bac6490837..7890f292a50a 100644
  }
 
  Type JointMatrixINTELType::getElementType() const {
-@@ -381,6 +385,10 @@ MatrixLayout JointMatrixINTELType::getMatrixLayout() const {
+@@ -332,6 +336,10 @@ MatrixLayout JointMatrixINTELType::getMatrixLayout() const {
    return getImpl()->matrixLayout;
  }
 
@@ -182,10 +182,10 @@ index f1bac6490837..7890f292a50a 100644
      SPIRVType::ExtensionArrayRefVector &extensions,
      std::optional<StorageClass> storage) {
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 89e2e7ad52fa..84e43ae858a6 100644
+index 072672b106f3..0c7268f7982a 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -988,7 +988,7 @@ LogicalResult spirv::Deserializer::processCooperativeMatrixTypeNV(
+@@ -1024,7 +1024,7 @@ LogicalResult spirv::Deserializer::processCooperativeMatrixTypeKHR(
 
  LogicalResult
  spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
@@ -194,7 +194,7 @@ index 89e2e7ad52fa..84e43ae858a6 100644
      return emitError(unknownLoc, "OpTypeJointMatrix must have element "
                                   "type and row x column parameters");
    }
-@@ -999,6 +999,14 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
+@@ -1035,6 +1035,14 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
             << operands[1];
    }
 
@@ -209,7 +209,7 @@ index 89e2e7ad52fa..84e43ae858a6 100644
    auto scope = spirv::symbolizeScope(getConstantInt(operands[5]).getInt());
    if (!scope) {
      return emitError(unknownLoc,
-@@ -1009,14 +1017,15 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
+@@ -1045,14 +1053,15 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
        spirv::symbolizeMatrixLayout(getConstantInt(operands[4]).getInt());
    if (!matrixLayout) {
      return emitError(unknownLoc,
@@ -229,10 +229,10 @@ index 89e2e7ad52fa..84e43ae858a6 100644
  }
 
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 9e9a16456cc1..412be6ac208d 100644
+index 9830a0c818e9..6ed110fdc601 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -667,7 +667,8 @@ LogicalResult Serializer::prepareBasicType(
+@@ -670,7 +670,8 @@ LogicalResult Serializer::prepareBasicType(
          operands, elementTypeID, getConstantOp(jointMatrixType.getRows()),
          getConstantOp(jointMatrixType.getColumns()),
          getConstantOp(static_cast<uint32_t>(jointMatrixType.getMatrixLayout())),

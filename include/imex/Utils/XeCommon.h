@@ -16,6 +16,8 @@
 #ifndef _IMEX_XECOMMON_H_
 #define _IMEX_XECOMMON_H_
 
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -23,45 +25,202 @@
 
 namespace imex {
 
-/**
- * None: Not associated with dpas
- * DPASA: asscociated with dpas A operand
- * DPASB: asscociated with dpas B operand
- * DPASC: asscociated with dpas C operand
- * DPASR: asscociated with dpas result value.
- */
-enum class OperandType { None = 0, DPASA = 1, DPASB = 2, DPASC = 4, DPASR = 8 };
-
-class ValueAttributeMap {
-public:
-  ValueAttributeMap() {}
-
-  void add(mlir::BlockArgument arg, imex::OperandType type);
-  void add(mlir::Operation *op, imex::OperandType type);
-
-  imex::OperandType get(mlir::Operation *op);
-  imex::OperandType get(mlir::BlockArgument arg);
-
-private:
-  llvm::DenseMap<mlir::Operation *, int> operationMap;
-  llvm::DenseMap<mlir::BlockArgument, int> argumentMap;
-};
-
-void markDefChainValues(mlir::Value value, imex::OperandType type,
-                        imex::ValueAttributeMap &map);
-void markUseChainValues(mlir::Value value, imex::OperandType type,
-                        imex::ValueAttributeMap &map);
+// It checks each GPUFuncOp in the module to see
+// whether they have arguments and outputs with
+// xetile.TileType. They are currently not supported yet.
+bool isSupportedModule(mlir::gpu::GPUModuleOp mod);
 
 mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
                                      mlir::TypeRange resultTypes,
                                      mlir::ValueRange inputs);
 
+// An analysis hook used by mlir::getUsageAnalysis for analyzing
+// how a tile created by init_tile are used in the program, e.g.,
+// is it created for load, store, or prefetch. It also analyzes
+// how the result of a load_tile is used, including as A operand
+// of tile_mma, B operand of tile_mma or C operand of tile_mma.
+// since they need different lowering strategy for in each use
+// case.
+class TileUsageAnalysis {
+public:
+  TileUsageAnalysis(mlir::Operation *op) {
+    op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::InitTileOp op) {
+      Usage[op] = (uint)UsageType::None;
+      llvm::SmallVector<mlir::Value> q({op});
+      while (q.size()) {
+        auto curr = q.pop_back_val();
+        for (mlir::Operation *user : curr.getUsers()) {
+          if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
+            Usage[op] |= (uint)UsageType::LOAD;
+          } else if (llvm::isa<imex::xetile::PrefetchTileOp>(user)) {
+            Usage[op] |= (uint)UsageType::PREFETCH;
+          } else if (llvm::isa<imex::xetile::StoreTileOp>(user)) {
+            Usage[op] |= (uint)UsageType::STORE;
+          } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
+            Usage[op] |= (uint)UsageType::OTHER;
+          } else if (auto forOp =
+                         llvm::dyn_cast_if_present<mlir::scf::ForOp>(user)) {
+            auto arg = getArgForOperand(forOp, curr);
+            q.push_back(arg);
+          }
+        }
+      }
+    }); // walk on InitTileOp
+
+    op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::LoadTileOp op) {
+      Usage[op] = (uint)UsageType::None;
+      llvm::SmallVector<mlir::Value> q({op});
+      while (q.size()) {
+        auto curr = q.pop_back_val();
+        for (mlir::Operation *user : curr.getUsers()) {
+          if (auto mma = llvm::dyn_cast_if_present<xetile::TileMMAOp>(user)) {
+            auto idx = getOperandIndex(mma, curr);
+            if (idx == 0)
+              Usage[op] |= (uint)UsageType::DPAS_A;
+            else if (idx == 1)
+              Usage[op] |= (uint)UsageType::DPAS_B;
+            else if (idx == 2)
+              Usage[op] |= (uint)UsageType::DPAS_C;
+            else
+              llvm::dbgs() << "unknown usage: " << idx;
+          }
+
+          if (auto unpack =
+                  llvm::dyn_cast_if_present<xetile::TileUnpackOp>(user)) {
+            q.push_back(unpack);
+          }
+
+          if (auto pack = llvm::dyn_cast_if_present<xetile::TilePackOp>(user)) {
+            q.push_back(pack);
+          }
+        }
+      }
+    }); // walk on LoadTileOp
+  };
+
+  uint getUsage(imex::xetile::InitTileOp op) {
+    if (Usage.count(op))
+      return Usage[op];
+    return UsageType::None;
+  }
+
+  uint getUsage(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op))
+      return Usage[op];
+    return UsageType::None;
+  }
+
+  bool isForDPASA(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op)) {
+      return Usage[op] & UsageType::DPAS_A;
+    }
+    return false;
+  }
+
+  bool isForDPASB(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op)) {
+      return Usage[op] & UsageType::DPAS_B;
+    }
+    return false;
+  }
+
+  bool isForDPASC(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op)) {
+      return Usage[op] & UsageType::DPAS_C;
+    }
+    return false;
+  }
+
+  bool isForLoad(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      return load && !store && !prefetch;
+    }
+    return false;
+  }
+
+  bool isForPrefetch(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      return !load && !store && prefetch;
+    }
+    return false;
+  }
+
+  //
+  bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      return load && !store && prefetch;
+    }
+    return false;
+  }
+
+  bool isForStore(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      return !load && store && !prefetch;
+    }
+    return false;
+  }
+
+  bool isForLoadAndStore(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      return load && store && !prefetch;
+    }
+    return false;
+  }
+
+private:
+  enum UsageType {
+    None = 0,
+    LOAD = 1,
+    PREFETCH = 2,
+    STORE = 4,
+    DPAS_A = 8,
+    DPAS_B = 16,
+    DPAS_C = 32,
+    OTHER = 64
+  };
+
+  int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
+    for (auto [i, value] : llvm::enumerate(op->getOperands())) {
+      if (operand == value)
+        return i;
+    }
+    return -1;
+  };
+
+  mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
+                                       mlir::Value operand) {
+    auto idx = getOperandIndex(op, operand);
+    auto numControls = op.getNumControlOperands();
+    assert(idx >= (int)numControls);
+    return op.getRegionIterArg(idx - numControls);
+  };
+
+  llvm::DenseMap<mlir::Operation *, uint> Usage;
+};
+
 class XeTypeConverter : public mlir::OneToNTypeConverter {
 public:
+  friend class XeConversionPattern;
   using mlir::OneToNTypeConverter::convertType;
 
-  XeTypeConverter(mlir::MLIRContext &context, imex::ValueAttributeMap &map)
-      : context(context), map(map) {
+  XeTypeConverter(mlir::MLIRContext &context,
+                  TileUsageAnalysis *analysis = nullptr)
+      : context(context), usageAnalysis(analysis) {
     addConversion([&](xetile::TileType tileTy,
                       llvm::SmallVectorImpl<mlir::Type> &resultTypes)
                       -> std::optional<mlir::LogicalResult> {
@@ -87,62 +246,14 @@ public:
     llvm_unreachable("Pending Implementation for convertVectorType.");
   }
 
-  imex::OperandType get(mlir::Operation *op) { return map.get(op); }
-
-  imex::OperandType get(mlir::BlockArgument arg) { return map.get(arg); }
-
-  bool isA(mlir::Operation *op) {
-    return (int(map.get(op)) & int(imex::OperandType::DPASA));
-  }
-
-  bool isA(mlir::BlockArgument arg) {
-    return (int(map.get(arg)) & int(imex::OperandType::DPASA));
-  }
-
-  bool isAOnly(mlir::Operation *op) { return isA(op) && !isB(op) && !isRC(op); }
-
-  bool isAOnly(mlir::BlockArgument arg) {
-    return isA(arg) && !isB(arg) && !isRC(arg);
-  }
-
-  bool isB(mlir::Operation *op) {
-    return (int(map.get(op)) & int(imex::OperandType::DPASB));
-  }
-
-  bool isB(mlir::BlockArgument arg) {
-    return (int(map.get(arg)) & int(imex::OperandType::DPASB));
-  }
-
-  bool isBOnly(mlir::Operation *op) { return isB(op) && !isA(op) && !isRC(op); }
-
-  bool isBOnly(mlir::BlockArgument arg) {
-    return isB(arg) && !isB(arg) && !isRC(arg);
-  }
-
-  bool isRC(mlir::Operation *op) {
-    return int(map.get(op)) &
-           (int(imex::OperandType::DPASC) | int(imex::OperandType::DPASR));
-  }
-
-  bool isRC(mlir::BlockArgument arg) {
-    return int(map.get(arg)) &
-           (int(imex::OperandType::DPASC) | int(imex::OperandType::DPASR));
-  }
-
-  bool isRCOnly(mlir::Operation *op) {
-    return isRC(op) && !isA(op) && !isB(op);
-  }
-
-  bool isRCOnly(mlir::BlockArgument arg) {
-    return isRC(arg) && !isA(arg) && !isB(arg);
-  }
-
 private:
   mlir::MLIRContext &context;
-  imex::ValueAttributeMap &map;
+
+protected:
+  TileUsageAnalysis *usageAnalysis;
 };
 
-// A simple mlir::RewritePattern wrapper with methods for accessing OperandType
+// A simple mlir::RewritePattern wrapper with methods for accessing UsageType
 class XeConversionPattern : public mlir::RewritePattern {
 public:
   using mlir::RewritePattern::RewritePattern;
@@ -158,26 +269,36 @@ public:
     llvm_unreachable("must override matchAndRewrite or a rewrite method");
   };
 
-  imex::OperandType getOperandType(mlir::Operation *op) const {
-    return typeConverter.get(op);
+  bool isForDPASA(imex::xetile::LoadTileOp op) const {
+    return typeConverter.usageAnalysis->isForDPASA(op);
   }
 
-  imex::OperandType getOperandType(mlir::BlockArgument arg) const {
-    return typeConverter.get(arg);
+  bool isForDPASB(imex::xetile::LoadTileOp op) const {
+    return typeConverter.usageAnalysis->isForDPASB(op);
   }
 
-  bool isA(mlir::Operation *op) const { return typeConverter.isAOnly(op); }
+  bool isForDPASC(imex::xetile::LoadTileOp op) const {
+    return typeConverter.usageAnalysis->isForDPASC(op);
+  }
 
-  bool isA(mlir::BlockArgument arg) const { return typeConverter.isAOnly(arg); }
+  bool isForLoad(imex::xetile::InitTileOp op) const {
+    return typeConverter.usageAnalysis->isForLoad(op);
+  }
 
-  bool isB(mlir::Operation *op) const { return typeConverter.isBOnly(op); }
+  bool isForStore(imex::xetile::InitTileOp op) const {
+    return typeConverter.usageAnalysis->isForStore(op);
+  }
 
-  bool isB(mlir::BlockArgument arg) const { return typeConverter.isBOnly(arg); }
+  bool isForPrefetch(imex::xetile::InitTileOp op) const {
+    return typeConverter.usageAnalysis->isForPrefetch(op);
+  }
 
-  bool isRC(mlir::Operation *op) const { return typeConverter.isRCOnly(op); }
+  bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) const {
+    return typeConverter.usageAnalysis->isForLoadAndPrefetch(op);
+  }
 
-  bool isRC(mlir::BlockArgument arg) const {
-    return typeConverter.isRCOnly(arg);
+  bool isForLoadAndStore(imex::xetile::InitTileOp op) const {
+    return typeConverter.usageAnalysis->isForLoadAndStore(op);
   }
 
   imex::XeTypeConverter &getTypeConverter() const { return typeConverter; }

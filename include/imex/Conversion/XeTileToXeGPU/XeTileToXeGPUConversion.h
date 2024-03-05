@@ -38,7 +38,8 @@ namespace imex {
 
 class XeGPUTypeConverter : public imex::XeTypeConverter {
 public:
-  XeGPUTypeConverter(mlir::MLIRContext &context, ValueAttributeMap &map);
+  XeGPUTypeConverter(mlir::MLIRContext &context,
+                     TileUsageAnalysis *analysis = nullptr);
 
   std::optional<mlir::LogicalResult>
   convertTileType(xetile::TileType tileTy,
@@ -47,6 +48,13 @@ public:
   std::optional<mlir::LogicalResult>
   convertVectorType(mlir::VectorType vectorTy,
                     llvm::SmallVectorImpl<mlir::Type> &resultTypes) override;
+
+  mlir::LogicalResult computeTypeMapping(mlir::ValueRange original,
+                                         mlir::ValueRange converted,
+                                         mlir::OneToNTypeMapping &resultMap);
+
+private:
+  mlir::Operation *targetOp;
 };
 
 class XeGPUOneToNPatterRewriter : public mlir::PatternRewriter,
@@ -76,7 +84,7 @@ public:
   }
 
   void inlineRegionBefore(mlir::Region &region, mlir::Region &parent,
-                          mlir::Region::iterator before) override {
+                          mlir::Region::iterator before) {
     rewriter.inlineRegionBefore(region, parent, before);
   }
 
@@ -90,8 +98,8 @@ public:
   void eraseOp(mlir::Operation *op) override { rewriter.eraseOp(op); }
 
   template <typename CallableT>
-  void updateRootInPlace(mlir::Operation *root, CallableT &&callable) {
-    rewriter.updateRootInPlace(root, callable);
+  void modifyOpInPlace(mlir::Operation *root, CallableT &&callable) {
+    rewriter.modifyOpInPlace(root, callable);
   }
 
   mlir::ConversionPatternRewriter &mlirConversionPatterRewriter() {
@@ -140,35 +148,18 @@ public:
     if (mlir::failed(convertionPatternRewriter.getRemappedValues(
             op->getOperands(), remappedValues))) {
       return op->emitOpError("Failed to get remapped values.\n");
-      // return mlir::failure();
-    }
-
-    // get the One-to-N converted types.
-    auto operandTys = op->getOperandTypes();
-    mlir::OneToNTypeMapping operandMapping(operandTys);
-    if (mlir::failed(
-            typeConverter.computeTypeMapping(operandTys, operandMapping))) {
-      return op->emitOpError("Failed to compute Type mapping.\n");
-      // return mlir::failure();
     }
 
     // retrive mapped values for each operand. If its type is not convereted
     // (convertedTypes.size() == 1) we will reuse the current value. Otherwise,
     // it has one-to-n mapping, and the new value should be an
     // UnrealizedConversionCastOp.
-    for (auto [idx, value] : llvm::enumerate(remappedValues)) {
-      mlir::TypeRange convertedTypes = operandMapping.getConvertedTypes(idx);
-      if (convertedTypes.size() == 1) {
-        convertedValues.push_back(value);
-      } else if (auto castOp =
-                     llvm::dyn_cast_or_null<mlir::UnrealizedConversionCastOp>(
-                         value.getDefiningOp())) {
+    for (auto &value : remappedValues) {
+      auto castOp = value.getDefiningOp<mlir::UnrealizedConversionCastOp>();
+      if (castOp)
         convertedValues.push_back(castOp.getInputs());
-      } else {
-        return op->emitError(
-            "[SgXeTileToXeGPUConversion::matchAndRewrite] Unexpected that "
-            "cannot figure out the remapped input value.");
-      }
+      else
+        convertedValues.push_back(value);
     }
 
     auto sourceOp = llvm::dyn_cast<SourceOp>(op);

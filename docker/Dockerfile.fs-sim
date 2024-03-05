@@ -1,0 +1,55 @@
+FROM summerwind/actions-runner:ubuntu-22.04
+
+SHELL ["/bin/bash", "-ex", "-o", "pipefail", "-c"]
+
+USER root
+
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && curl -s https://repositories.intel.com/graphics/intel-graphics.key \
+        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
+    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/graphics/ubuntu jammy max' \
+        | tee /etc/apt/sources.list.d/intel-graphics.list \
+    && curl https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+        | gpg --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+        | tee /etc/apt/sources.list.d/oneAPI.list \
+    && apt-get update --yes \
+    && apt-get install \
+        # mlir-extensions requirements
+        python3-pip \
+        build-essential \
+        cmake \
+        ninja-build \
+        intel-opencl-icd \
+        intel-level-zero-gpu \
+        clinfo \
+        intel-basekit \
+        # Intel GPU requirements
+        intel-level-zero-gpu \
+        level-zero \
+        level-zero-dev \
+        # FS simulator requirements
+        openmpi-bin \
+        libgdk-pixbuf2.0-0 \
+        libglib2.0-0 \
+        wget \
+        --yes \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install psutil
+
+USER runner
+
+ENV WORK_ROOT=${HOME}/trees
+ENV WORKSPACE=${WORK_ROOT}/fs
+ENV HVT_OUTPUT_FOLDER=${WORKSPACE}/hvt-output
+
+RUN sudo apt-get update --yes \
+    && mkdir -p ${WORKSPACE} \
+    && cd ${WORKSPACE} \
+    && curl https://artifactory-kfs.habana-labs.com/artifactory/bin-generic-dev-local/CORAL_FS/latest/CORAL_FS-master.tgz | tar zxf - \
+    # Remove following line after Habana fixes their setup script \
+    && sed -e 's,    export KMD_VERSION="6.6.0-rc3",    export KMD_VERSION="6.7.0-rc5",g' -i ${WORKSPACE}/scripts/setup.sh \
+    && source ${WORKSPACE}/scripts/setup.sh \
+    && setup_fs_dev \
+    && umd_driver_install \
+    && sudo rm -rf /var/lib/apt/lists/*

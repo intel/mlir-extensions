@@ -63,7 +63,7 @@ func.func @two_dependent_loops_with_iterargs(%arg0: memref<10x20xf32>) -> memref
   // CHECK-NEXT: scf.for
   // CHECK-NEXT: scf.for
   // CHECK: scf.for
-  // CHECK: scf.yield
+  // CHECK: scf.reduce
   %res = scf.for %arg1 = %c0 to %c10 step %c1 iter_args (%it = %cst) -> f32 {
     scf.for %arg2 = %c0 to %c20 step %c1 {
       %0 = memref.load %arg0[%arg1, %arg2] : memref<10x20xf32>

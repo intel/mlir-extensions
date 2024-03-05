@@ -23,6 +23,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include <cassert>
 #include <cstdint>
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
@@ -655,12 +656,58 @@ public:
     // 15 for ugm
     auto sfid = createIntConstant(i8Type, 15);
     auto extMsg = createIntConstant(i32Type, 0);
+    auto dataSize2D = (encodeDataum(elmType) - 1);
+    auto payLoad = adaptor.getTensorDesc();
+    // vnni and transpose combination is required for the case where B matrix is
+    // transposed and we need to load from B in DPAS layout. However, HW does
+    // not support both vnni and transpose together. We can get the same layout
+    // for the B load by doing the transpose in 32 bit granularity.
+    // TODO: Transpose granularity must be explicitly represented in XeGPU op.
+    if (vnni && transpose) {
+      // in raw_send msg set vnni effect to false and update data size of
+      // payload item to 32 bits
+      vnni = false;
+      dataSize2D = (encodeDataum(i32Type) - 1);
+
+      // we also need to update the payload (address descriptor) to reflect that
+      // now we are viewing the memref and tile in 32 bit data type not original
+      // type. This requires updaing the offsetX (row dim offset) and block
+      // width (divide the value by vnni factor).
+      auto vnniFactor = 32 / elmType.getIntOrFloatBitWidth();
+      auto getLog2OfVnniFactor = [&]() -> unsigned {
+        if (vnniFactor == 2)
+          return 1;
+        else if (vnniFactor == 4)
+          return 2;
+        else
+          assert(false && "invalid vnni Factor!");
+      };
+      auto idx5 = createIntConstant(i32Type, 5);
+      auto idx7 = createIntConstant(i32Type, 7);
+
+      auto oldOffsetX =
+          rewriter.create<spirv::VectorExtractDynamicOp>(loc, payLoad, idx5);
+      // do an aritmetic right shift instead of divide.
+      auto newOffsetX = rewriter.create<spirv::ShiftRightArithmeticOp>(
+          loc, oldOffsetX, createIntConstant(i32Type, getLog2OfVnniFactor()));
+      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
+                                                              newOffsetX, idx5);
+      int array_length = op.getTensorDescType().getArrayLength();
+      unsigned blockVal = (array_length - 1) << 16;
+      auto blockWidth = tileType.getShape()[1];
+      auto blockHeight = tileType.getShape()[0];
+      auto newBlockWidth = blockWidth / vnniFactor;
+      blockVal |= ((blockHeight - 1) << 8) | (newBlockWidth - 1);
+      auto blockInfo = createIntConstant(i32Type, blockVal);
+      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
+                                                              blockInfo, idx7);
+    }
     // message descriptor
     uint32_t rawSendMsg = 0;
     if (rank == 2) {
       rawSendMsg |= (isLoad || isPrefetch) ? 3 : 7;
       rawSendMsg |= (vnni ? 1 : 0) << 7;
-      rawSendMsg |= (encodeDataum(elmType) - 1) << 9;
+      rawSendMsg |= dataSize2D << 9;
       rawSendMsg |= (transpose ? 1 : 0) << 15;
       rawSendMsg |= cacheHint << 17;
       rawSendMsg |= (isLoad ? numDstVal : 0) << 20;
@@ -677,7 +724,7 @@ public:
       rawSendMsg |= 1 << 25;
     }
     auto msg = createIntConstant(i32Type, rawSendMsg);
-    auto payLoad = adaptor.getTensorDesc();
+
     SmallVector<Value> args{modifier, execSize, pred, numSrc1, numDst,
                             sfid,     extMsg,   msg,  payLoad};
     if constexpr (isLoad) {

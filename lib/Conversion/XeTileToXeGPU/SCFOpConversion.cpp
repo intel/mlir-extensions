@@ -1,4 +1,4 @@
-//===- ArithOpConversion.cpp - XeTileToXeGPU conversion  -------*- C++ -*-===//
+//===- SCFOpConversion.cpp - XeTileToXeGPU conversion  -------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,11 +8,10 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements the ArithOpConversionPattern, used in XeTileToXeGPU
-/// conversion, converting the Arith Ops.
+/// This file implements the Conversion Patter for SCFOps.
 ///
 //===----------------------------------------------------------------------===//
-#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include "imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h"
@@ -26,36 +25,41 @@ struct SgSCFForOpBlockPattern
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ForOp op, OpAdaptor adaptor,
                   imex::XeGPUOneToNPatterRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-
-    llvm::SmallVector<mlir::Value> convertedArgs;
     // OpAdaptor is defined with ValueRange, so it contains results after
     // One-to-N mapping
+    llvm::SmallVector<mlir::Value> convertedArgs;
     for (auto &values : adaptor.getInitArgs())
       convertedArgs.append(values.begin(), values.end());
 
-    auto argumentTys = op.getRegion().getArgumentTypes();
-    mlir::OneToNTypeMapping argumentMapping(argumentTys);
-    // compute the type conversion (signature) for SCFFor body arguments.
-    // argumentMapping is essentially a TypeConverter::SignatureConversion
-    if (mlir::failed(
-            typeConverter.computeTypeMapping(argumentTys, argumentMapping))) {
-      op.emitOpError("Failed to compute the type mapping for arguments.\n");
-      return mlir::failure();
+    auto newOp = rewriter.create<mlir::scf::ForOp>(
+        op.getLoc(), op.getLowerBound(), op.getUpperBound(), op.getStep(),
+        convertedArgs);
+
+    // compute the type mapping (from origial to convereted) between
+    // orginal args and converted args. The standard typeconverter
+    // way doesnot work because array_length value is set in-the-fly based on
+    // whether tile is create for load or not, thus a TileType could be
+    // lowered into many different types of TensorDescType (due to different
+    // setting of array_length). But typeconverter has no knowledge about when
+    // to use array_lenght and when not.
+    auto typeConverter = getTypeConverter<XeGPUTypeConverter>();
+    auto argTys = op.getRegion().getArgumentTypes();
+    mlir::OneToNTypeMapping argumentMapping(argTys);
+    llvm::ArrayRef<mlir::Value> args(op.getRegion().getArguments().begin(),
+                                     op.getRegion().getArguments().end());
+    llvm::ArrayRef<mlir::Value> newArgs(
+        newOp.getRegion().getArguments().begin(),
+        newOp.getRegion().getArguments().end());
+    auto status =
+        typeConverter.computeTypeMapping(args, newArgs, argumentMapping);
+    if (mlir::failed(status)) {
+      llvm_unreachable("It is an unexpected failure of computing "
+                       "type mapping for SCF::ForOp arguments.");
     }
 
     // apply the signature convertion for SCFFor body arguments, an
-    // UnrealizedConversionCastOp will be inserted by typeConverted by the
-    // method registered in Materialization methods
-    if (mlir::failed(rewriter.convertRegionTypes(&op.getRegion(), typeConverter,
-                                                 &argumentMapping))) {
-      op.emitOpError("Failed to convert region types.\n");
-      return mlir::failure();
-    }
-
-    auto newOp = rewriter.create<mlir::scf::ForOp>(loc, op.getLowerBound(),
-                                                   op.getUpperBound(),
-                                                   op.getStep(), convertedArgs);
+    // UnrealizedConversionCastOp will be inserted by typeConverter
+    rewriter.applySignatureConversion(&op.getRegion(), argumentMapping);
 
     newOp.getBody()->erase();
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),

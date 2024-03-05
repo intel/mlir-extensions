@@ -63,7 +63,7 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
     OptionalParameter<"xetile::SubGroupMapAttr">:$sg_map,
     OptionalParameter<"xetile::WorkGroupMapAttr">:$wg_map,
     DefaultValuedParameter<"mlir::DenseI32ArrayAttr", "mlir::DenseI32ArrayAttr::get($_ctxt, {1, 0})">:$order,
-    OptionalParameter<"mlir::DenseI32ArrayAttr">:$inner_blocks,
+    OptionalParameter<"mlir::DenseI64ArrayAttr">:$inner_blocks,
     OptionalParameter<"mlir::DenseI32ArrayAttr">:$wg_data
   );
   let assemblyFormat = "`<` struct(params) `>`";
@@ -72,11 +72,11 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
     AttrBuilder<(ins  CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
                       CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
                       CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
-                      CArg<"llvm::ArrayRef<int32_t>", "{}">:$inner_blocks,
+                      CArg<"llvm::ArrayRef<int64_t>", "{}">:$inner_blocks,
                       CArg<"llvm::ArrayRef<int32_t>", "{}">:$wg_data),
     [{
         return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
-                      mlir::DenseI32ArrayAttr::get($_ctxt, inner_blocks),
+                      mlir::DenseI64ArrayAttr::get($_ctxt, inner_blocks),
                       mlir::DenseI32ArrayAttr::get($_ctxt, wg_data));
     }]>
 

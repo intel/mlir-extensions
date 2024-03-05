@@ -1,7 +1,7 @@
-From ac8f78755872a52d9882d5186c3d58732ccce0c2 Mon Sep 17 00:00:00 2001
+From ab730702ec16bceff41621360172197a73413021 Mon Sep 17 00:00:00 2001
 From: Md Abdullah Shahneous Bari <md.abdullah.shahneous.bari@intel.com>
 Date: Mon, 24 Jul 2023 18:25:05 +0000
-Subject: [PATCH 2/2] Add serialization and de-serialization support for
+Subject: [PATCH 4/6] Add serialization and de-serialization support for
  several decorations.
 
 Added decorations:
@@ -13,15 +13,15 @@ Added decorations:
 - VectorComputeFunctionINTEL
 - VectorComputeVariableINTEL
 ---
- mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 10 +++++++++-
- mlir/lib/Target/SPIRV/Serialization/Serializer.cpp     |  8 ++++++++
- 2 files changed, 17 insertions(+), 1 deletion(-)
+ mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 8 +++++++-
+ mlir/lib/Target/SPIRV/Serialization/Serializer.cpp     | 6 ++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 89e2e7ad52fa..f6bdc646f384 100644
+index ba3ecc5344bc..072672b106f3 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -251,8 +251,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -250,8 +250,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
          symbol, FPFastMathModeAttr::get(opBuilder.getContext(),
                                          static_cast<FPFastMathMode>(words[2])));
      break;
@@ -32,10 +32,10 @@ index 89e2e7ad52fa..f6bdc646f384 100644
      if (words.size() != 3) {
        return emitError(unknownLoc, "OpDecorate with ")
               << decorationName << " needs a single integer literal";
-@@ -308,6 +309,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   case spirv::Decoration::NoUnsignedWrap:
+@@ -310,6 +311,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::RelaxedPrecision:
    case spirv::Decoration::Restrict:
+   case spirv::Decoration::RestrictPointer:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
@@ -43,7 +43,7 @@ index 89e2e7ad52fa..f6bdc646f384 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -318,6 +323,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -320,6 +325,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      // it is needed for many validation rules.
      decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
      break;
@@ -52,30 +52,30 @@ index 89e2e7ad52fa..f6bdc646f384 100644
    case spirv::Decoration::SpecId:
      if (words.size() != 3) {
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 9e9a16456cc1..b4d467f6656c 100644
+index 518facc41e28..9830a0c818e9 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -247,8 +247,10 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
+@@ -239,8 +239,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
      }
      return emitError(loc, "expected FPFastMathModeAttr attribute for ")
-            << attrName;
+            << stringifyDecoration(decoration);
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::Binding:
    case spirv::Decoration::DescriptorSet:
 +  case spirv::Decoration::FuncParamIOKindINTEL:
    case spirv::Decoration::Location:
-     if (auto intAttr = dyn_cast<IntegerAttr>(attr.getValue())) {
+     if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -275,6 +277,10 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
-   case spirv::Decoration::NoUnsignedWrap:
+@@ -273,6 +275,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::RelaxedPrecision:
    case spirv::Decoration::Restrict:
+   case spirv::Decoration::RestrictPointer:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
 +  case spirv::Decoration::VectorComputeVariableINTEL:
-     // For unit attributes, the args list has no values so we do nothing
-     if (auto unitAttr = dyn_cast<UnitAttr>(attr.getValue()))
-       break;
+     // For unit attributes and decoration attributes, the args list
+     // has no values so we do nothing.
+     if (isa<UnitAttr, DecorationAttr>(attr))
 --
 2.34.1

@@ -1,4 +1,4 @@
-name: Rebuild base docker image for runners
+name: Rebuild base docker image for PVC runners
 
 on:
   workflow_dispatch:
@@ -31,6 +31,7 @@ jobs:
     runs-on:
       - self-hosted
       - glados
+      - pvc
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

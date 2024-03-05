@@ -31,11 +31,17 @@ static std::string makeString(T array, bool breakline = false) {
   llvm::raw_string_ostream os(buf);
   os << "[";
   for (size_t i = 1; i < array.size(); i++) {
-    os << array[i - 1] << ", ";
+    if (array[i - 1])
+      os << array[i - 1] << ", ";
+    else
+      os << "null, ";
     if (breakline)
       os << "\n\t\t";
   }
-  os << array.back() << "]";
+  if (array.back())
+    os << array.back() << "]";
+  else
+    os << "null ]";
   os.flush();
   return buf;
 }

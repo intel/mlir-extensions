@@ -27,7 +27,7 @@ bool replaceOperandInplaceWithCast(::mlir::PatternRewriter &rewriter,
       auto src = defOp.getSource();
       auto srcPtTyp = src.getType().cast<::imex::ndarray::NDArrayType>();
       if (srcPtTyp.hasStaticShape()) {
-        rewriter.updateRootInPlace(op, [&]() { op->setOperand(idx, src); });
+        rewriter.modifyOpInPlace(op, [&]() { op->setOperand(idx, src); });
         return true;
       }
     }

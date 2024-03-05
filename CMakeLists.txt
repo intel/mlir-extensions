@@ -236,6 +236,15 @@ else ()
     set(IMEX_ENABLE_VULKAN_RUNNER 0)
 endif()
 
+# Run tests using FS simulator
+set(IMEX_ENABLE_FS_SIMULATOR 0 CACHE BOOL "Enable FS simulator mode for tests")
+
+if (IMEX_ENABLE_FS_SIMULATOR)
+    set(IMEX_ENABLE_FS_SIMULATOR 1)
+else ()
+    set(IMEX_ENABLE_FS_SIMULATOR 0)
+endif()
+
 if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
     if (IMEX_ENABLE_DEBUG_BUILD)
         set (CMAKE_BUILD_TYPE Debug)

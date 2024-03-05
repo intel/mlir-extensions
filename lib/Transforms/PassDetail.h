@@ -34,6 +34,10 @@ class SCFDialect;
 namespace linalg {
 class LinalgDialect;
 }
+
+namespace vector {
+class VectorDialect;
+}
 } // end namespace mlir
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"

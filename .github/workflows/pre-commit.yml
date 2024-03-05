@@ -6,6 +6,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
   pre-commit:
     runs-on: gasp
