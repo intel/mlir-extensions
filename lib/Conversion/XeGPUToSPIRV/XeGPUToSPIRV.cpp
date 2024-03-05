@@ -20,6 +20,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include <cassert>
@@ -281,13 +282,33 @@ public:
       // fixme: support memref for now
       auto memType = cast<MemRefType>(op.getSource().getType());
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
-      auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
-      auto surfaceHeight = memType.getShape()[0] - 1;
-      // fixme: pitch = width for now
-      auto surfacePitch = surfaceWidth;
-      auto surfaceW = createIntConstant(i32Type, surfaceWidth);
-      auto surfaceH = createIntConstant(i32Type, surfaceHeight);
-      auto surfaceP = createIntConstant(i32Type, surfacePitch);
+      Value surfaceW, surfaceH, surfaceP;
+      if (memType.hasStaticShape()) {
+        auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
+        auto surfaceHeight = memType.getShape()[0] - 1;
+        // fixme: pitch = width for now
+        auto surfacePitch = surfaceWidth;
+        surfaceW = createIntConstant(i32Type, surfaceWidth);
+        surfaceH = createIntConstant(i32Type, surfaceHeight);
+        surfaceP = createIntConstant(i32Type, surfacePitch);
+
+      } else {
+        // get the surfaceWidth and Height from the op attributes
+        // compute surface width
+        auto bytesPerElem = createIntConstant(i32Type, bitWidth / 8);
+        auto one = createIntConstant(i32Type, 1);
+        surfaceW = rewriter.create<spirv::UConvertOp>(
+            loc, i32Type, adaptor.getDynamicShape()[1]);
+        surfaceW = rewriter.create<spirv::IMulOp>(loc, surfaceW, bytesPerElem);
+        surfaceW = rewriter.create<spirv::ISubOp>(loc, surfaceW, one);
+        // compute surface height
+        surfaceH = rewriter.create<spirv::UConvertOp>(
+            loc, i32Type, adaptor.getDynamicShape()[0]);
+        surfaceH = rewriter.create<spirv::ISubOp>(loc, surfaceH, one);
+        // fixme: pitch = width for now
+        surfaceP = surfaceW;
+      }
+
       payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
                                                               surfaceW, idx2);
       payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
