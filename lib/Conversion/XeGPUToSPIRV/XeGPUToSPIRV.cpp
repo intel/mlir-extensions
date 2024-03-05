@@ -18,10 +18,13 @@
 #include "../PassDetail.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include <cassert>
 #include <cstdint>
@@ -1453,6 +1456,45 @@ struct VectorShuffle final : public OpConversionPattern<vector::ShuffleOp> {
     return success();
   }
 };
+
+struct SpirvCLFMax : public OpConversionPattern<spirv::CLFMaxOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(spirv::CLFMaxOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType = getTypeConverter()->convertType(op.getType());
+    if (!dstType)
+      return failure();
+
+    // For scalar case, we keep the operation as is.
+    if (isa<spirv::ScalarType>(dstType)) {
+      rewriter.replaceOpWithNewOp<spirv::CLFMaxOp>(
+          op, dstType, adaptor.getLhs(), adaptor.getRhs());
+      return success();
+    }
+
+    // For vector case, corresponding VC intrinsics is used.
+    // Currently only f16/f32/bf16 vectors are supported.
+    auto dstVecElemTy = dstType.dyn_cast<VectorType>().getElementType();
+    if (!dstVecElemTy.isF32() && !dstVecElemTy.isF16() &&
+        !dstVecElemTy.isBF16())
+      return rewriter.notifyMatchFailure(
+          op,
+          "Unsupported type in Spirv.CL.FMax. Only f16/f32/bf16 vectors are "
+          "currently supported.");
+
+    std::string funcName = "llvm.genx.fmax.";
+    auto funcType = rewriter.getFunctionType(
+        {adaptor.getLhs().getType(), adaptor.getRhs().getType()}, {dstType});
+    funcName +=
+        encodeVectorType(rewriter, dstType.dyn_cast<VectorType>()).first;
+    lookupOrInsertIntrinsic(rewriter, op, funcName, funcType);
+    SmallVector<Value> args{adaptor.getLhs(), adaptor.getRhs()};
+    rewriter.replaceOpWithNewOp<spirv::FunctionCallOp>(op, dstType, funcName,
+                                                       args);
+    return success();
+  }
+};
 } // namespace
 
 void imex::populateXeGPUToVCIntrinsicsPatterns(
@@ -1462,7 +1504,7 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
                VectorExtract, VectorExtractStridedSlice, VectorShuffle,
-               GatherScatterToRawSend<LoadGatherOp>,
+               SpirvCLFMax, GatherScatterToRawSend<LoadGatherOp>,
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
   if (getenv("IMEX_NOT_PREFER_RAWSEND"))
