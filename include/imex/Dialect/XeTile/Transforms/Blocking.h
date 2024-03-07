@@ -98,6 +98,16 @@ public:
   }
 };
 
+template <template <typename> class TraitType>
+class XeTileTraitConversion : public imex::XeConversionPattern {
+public:
+  XeTileTraitConversion(mlir::MLIRContext *context,
+                        XeTypeConverter &typeConverter,
+                        mlir::PatternBenefit benefit = 1)
+      : XeConversionPattern(typeConverter, mlir::Pattern::MatchTraitOpTypeTag(),
+                            mlir::TypeID::get<TraitType>(), benefit, context) {}
+};
+
 } // namespace imex
 
 #endif

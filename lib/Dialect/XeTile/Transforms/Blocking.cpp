@@ -51,7 +51,7 @@ namespace imex {
 
 namespace imex {
 
-enum OpType { Prefetch, Load, Store };
+enum OpType { Prefetch, Load, Store, Elementwise };
 
 // TODO: placeholder, replace it with uArch interface
 template <OpType op>
@@ -136,6 +136,13 @@ llvm::SmallVector<int64_t> getInnerBlocks(mlir::Type elemTy, bool vnni = false,
       break;
     }
   }
+
+  if (op == OpType::Elementwise) {
+    // TODO: get from uArch?
+    int64_t subgroupSize = 16;
+
+    return {1, subgroupSize};
+  }
   llvm_unreachable("Unsupported.");
   return {};
 }
@@ -204,8 +211,63 @@ struct ArithConstantOpPattern
   }
 };
 
+// Pattern for generic elemetwise ops. Blocks op according to
+// getInnerBlocks<Elementwise>. Pack/Unpack ops are inserted on the ops
+// boundaries if needed.
+struct VectorizableOpPattern
+    : public XeTileTraitConversion<mlir::OpTrait::Vectorizable> {
+  using XeTileTraitConversion::XeTileTraitConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(op, "op must have 1 result");
+
+    auto res = op->getResult(0);
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+    if (!resType || resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    auto shape = resType.getShape();
+    auto blocks = getInnerBlocks<Elementwise>(resType.getElementType());
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / blocks[0], shape[1] / blocks[1], blocks[0], blocks[1]},
+        resType.getElementType());
+
+    Location loc = op->getLoc();
+    rewriter.startOpModification(op);
+    for (auto &&[i, arg] : llvm::enumerate(op->getOperands())) {
+      auto srcTy = mlir::dyn_cast<mlir::VectorType>(arg.getType());
+      if (!srcTy || srcTy.getRank() != 2)
+        continue;
+
+      auto unpackShape = srcTy.getShape();
+      int64_t packShape[] = {unpackShape[0] / blocks[0],
+                             unpackShape[1] / blocks[1], blocks[0], blocks[1]};
+
+      auto packTy = mlir::VectorType::get(packShape, srcTy.getElementType());
+      mlir::Value packOp = rewriter.create<xetile::TilePackOp>(
+          loc, packTy, arg, mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+
+      op->setOperand(i, packOp);
+    }
+
+    res.setType(newTy);
+    rewriter.finalizeOpModification(op);
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointAfter(op);
+    auto unpack = rewriter.create<xetile::TileUnpackOp>(
+        loc, resType, res, mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+
+    rewriter.replaceAllUsesExcept(res, unpack.getResult(), unpack);
+    return mlir::success();
+  }
+};
+
 // It rewrites the SCF forOp, it mainly updates the arguments of its
-// regeion block. unpack ops are added for VectorType operands if needed.
+// region block. unpack ops are added for VectorType operands if needed.
 struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
   using XeTileConversion<mlir::scf::ForOp>::XeTileConversion;
 
@@ -465,11 +527,11 @@ struct UpdateTileOffsetOpPattern
 
 void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
                                     mlir::RewritePatternSet &patterns) {
-
-  patterns.insert<ArithConstantOpPattern, SCFForOpPattern, SCFYieldOpPattern,
-                  InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
-                  TileMMAOpPattern, UpdateTileOffsetOpPattern>(
-      patterns.getContext(), converter);
+  patterns
+      .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
+              SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
+              StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern>(
+          patterns.getContext(), converter);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
