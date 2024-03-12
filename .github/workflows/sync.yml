@@ -55,6 +55,8 @@ jobs:
       - name: Merge Upstream with git merge
         run: |
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git config --global user.email "alexei.fedotov@gmail.com"
+          git config --global user.name "Alexei Fedotov"
           git merge upstream/main --no-edit
       - name: Push
         run: |
