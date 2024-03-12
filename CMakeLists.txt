@@ -245,6 +245,18 @@ else ()
     set(IMEX_ENABLE_FS_SIMULATOR 0)
 endif()
 
+if (IMEX_ENABLE_ATS_TARGET)
+    set(IMEX_ENABLE_ATS_TARGET 1)
+else ()
+    set(IMEX_ENABLE_ATS_TARGET 0)
+endif()
+
+if (IMEX_ENABLE_PVC_TARGET)
+    set(IMEX_ENABLE_PVC_TARGET 1)
+else ()
+    set(IMEX_ENABLE_PVC_TARGET 0)
+endif()
+
 if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
     if (IMEX_ENABLE_DEBUG_BUILD)
         set (CMAKE_BUILD_TYPE Debug)
