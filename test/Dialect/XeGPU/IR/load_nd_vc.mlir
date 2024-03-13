@@ -75,3 +75,19 @@ func.func @test_load_nd_block_array_simd_f16(%src: memref<8x32xf16>) {
               : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x16xf16>
   return
 }
+
+
+// CHECK-LABEL: func @test_load_nd_transpose_bit_width_simd_f16({{.*}}) {
+func.func @test_load_nd_transpose_bit_width_simd_f16(%src: memref<8x32xf16>) {
+  // CHECK: xegpu.create_nd_tdesc
+  // CHECK-SAME: {mode = vc}
+  // CHECK-SAME: memref<8x32xf16> -> !xegpu.tensor_desc<8x32xf16>
+  %1 = xegpu.create_nd_tdesc %src[0, 0] {mode = vc} : memref<8x32xf16> -> !xegpu.tensor_desc<8x32xf16>
+
+  // CHECK: xegpu.load_nd
+  // CHECK-SAME: {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = uncached}
+  // CHECK-SAME: !xegpu.tensor_desc<8x32xf16> -> vector<16x8x2xf16>
+  %2 = xegpu.load_nd %1 {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = uncached}
+              : !xegpu.tensor_desc<8x32xf16> -> vector<16x8x2xf16>
+  return
+}

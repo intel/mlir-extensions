@@ -68,3 +68,15 @@ func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
                           : !xegpu.tensor_desc<16x8xf16, #xegpu.scattered>, vector<16x8xi1> -> vector<8x8x4xf16>
   return
 }
+
+// -----
+func.func @test_load_nd(%input: memref<24x32xf16>) {
+  %c0 = arith.constant 0 : index
+  %1 = xegpu.create_nd_tdesc %input[%c0, %c0] {mode = vc}
+                              : memref<24x32xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // Hardware doesn't support VNNI transform and transpose at the same time.
+  // expected-error@+1 {{Transpose and VNNI are mutually exclusive.}}
+  %2 = xegpu.load_nd %1  {mode = vc, vnni_axis = 0, transpose = [1, 0]}
+                              : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+  return
+}

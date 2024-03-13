@@ -307,7 +307,14 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
 
     LoadStore2DConfig loadParams;
     bool vnni = loadOp.getVnniAxis() == 0 ? true : false;
-    bool transpose = loadOp.getTranspose() ? true : false;
+    bool transpose =
+        loadOp.getTranspose() == llvm::ArrayRef<int64_t>({1, 0}) ? true : false;
+
+    if (vnni && transpose) {
+      return loadOp->emitOpError(
+          "Transpose and VNNI are mutually exclusive. They are "
+          "not supported by the PVC hardware at the same time.\n");
+    }
 
     mlir::FailureOr<LoadStore2DConfig> configParams =
         this->get2DLoadConfig(op, elementSize, vnni, transpose);

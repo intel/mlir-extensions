@@ -661,12 +661,13 @@ public:
     auto extMsg = createIntConstant(i32Type, 0);
     auto dataSize2D = (encodeDataum(elmType) - 1);
     auto payLoad = adaptor.getTensorDesc();
-    // vnni and transpose combination is required for the case where B matrix is
-    // transposed and we need to load from B in DPAS layout. However, HW does
-    // not support both vnni and transpose together. We can get the same layout
-    // for the B load by doing the transpose in 32 bit granularity.
-    // TODO: Transpose granularity must be explicitly represented in XeGPU op.
-    if (vnni && transpose) {
+
+    // TODO: currently limit transposeBitWidth to 32, it is
+    // an architecture feature, and 32 works on PVC but may
+    // be not FS. To support other bits, we cannot hardcode
+    // with i32Type, and need to generalize the logic.
+    auto loadOp = llvm::dyn_cast<LoadNDOp>(op.getOperation());
+    if (loadOp && transpose && loadOp.getTransposeBitWidth() == 32) {
       // in raw_send msg set vnni effect to false and update data size of
       // payload item to 32 bits
       vnni = false;

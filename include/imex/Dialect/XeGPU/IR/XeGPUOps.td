@@ -218,14 +218,16 @@ def XeGPU_LoadNDOp : XeGPU_Op<"load_nd"> {
     XeGPU_TensorDesc: $TensorDesc,
     OptionalAttr<I32Attr>: $vnni_axis,
     OptionalAttr<DenseI64ArrayAttr>: $transpose,
+    OptionalAttr<I32Attr>: $transpose_bit_width,
     OptionalAttr<XeGPU_CacheReadAttr>: $l1_hint,
     OptionalAttr<XeGPU_CacheReadAttr>: $l2_hint,
     OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
     DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
+
   let results = (outs XeGPU_ValueType: $value);
 
   let extraClassDeclaration = [{
-    mlir::VectorType getValueType() {
+    mlir::VectorType getType() {
       return llvm::dyn_cast_if_present<mlir::VectorType>(getValue().getType());
     }
 
