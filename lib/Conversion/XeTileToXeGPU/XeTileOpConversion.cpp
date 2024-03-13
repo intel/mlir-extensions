@@ -440,6 +440,7 @@ struct SgLoadTileOpPattern
     auto L3 = xegpu::CacheReadHintAttr::get(ctx, xegpu::CacheReadHint::CACHED);
 
     mlir::IntegerAttr vnniAttr;
+    mlir::IntegerAttr transposeBitWidthAttr;
     // TODO: move these two into architecture abstracture in future.
     const int SIMD_WIDTH_IN_BITS = 32;
     int factor = SIMD_WIDTH_IN_BITS / elemTy.getIntOrFloatBitWidth();
@@ -471,8 +472,8 @@ struct SgLoadTileOpPattern
 
       auto vectorTy = mlir::VectorType::get(shape, tileTy.getElementType());
       auto ldOp = rewriter.create<xegpu::LoadNDOp>(
-          op.getLoc(), vectorTy, src, vnniAttr, transposeAttr, L1, L2, L3,
-          imex::xegpu::Mode::VC);
+          op.getLoc(), vectorTy, src, vnniAttr, transposeAttr,
+          transposeBitWidthAttr, L1, L2, L3, imex::xegpu::Mode::VC);
       if (array_length == 1) {
         xegpuOps.push_back(ldOp);
       } else {
