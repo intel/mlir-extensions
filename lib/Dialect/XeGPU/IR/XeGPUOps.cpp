@@ -140,7 +140,8 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
       return parseCustomEnumAttr<Mode, ModeAttr>(parser, result, nameId);
     }
 
-    if (nameId == "chunk_size_per_lane" || nameId == "vnni_axis")
+    if (nameId == "chunk_size_per_lane" || nameId == "vnni_axis" ||
+        nameId == "transpose_bit_width")
       return parseBoolAndIntegerAttr<mlir::IntegerAttr>(parser, result, nameId);
 
     if (nameId == "boundary_check")
@@ -727,9 +728,10 @@ mlir::ParseResult LoadNDOp::parse(mlir::OpAsmParser &parser,
   if (parser.parseOperand(TensorDescRawOperands[0]))
     return mlir::failure();
 
-  if (parseOptionalAttrDict(
-          parser, result,
-          {"mode", "vnni_axis", "transpose", "l1_hint", "l2_hint", "l3_hint"}))
+  if (parseOptionalAttrDict(parser, result,
+                            {"mode", "vnni_axis", "transpose",
+                             "transpose_bit_width", "l1_hint", "l2_hint",
+                             "l3_hint"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -789,6 +791,13 @@ void LoadNDOp::print(mlir::OpAsmPrinter &printer) {
     printSep = true;
   }
 
+  if (getTransposeBitWidthAttr()) {
+    if (printSep)
+      printer << "," << ' ';
+    printer << "transpose_bit_width = " << getTransposeBitWidth().value();
+    printSep = true;
+  }
+
   printCacheHintAttrs<LoadNDOp>(printer, *this, printSep);
 
   if (printDefaults || mode != imex::xegpu::Mode::SIMT || numAttrs > 1) {
@@ -805,7 +814,7 @@ void LoadNDOp::print(mlir::OpAsmPrinter &printer) {
 
 mlir::LogicalResult LoadNDOp::verify() {
   auto tdescTy = getTensorDescType();
-  auto valueTy = getValueType();
+  auto valueTy = getType();
 
   if (tdescTy.getRank() > 2)
     return emitOpError(
@@ -845,6 +854,17 @@ mlir::LogicalResult LoadNDOp::verify() {
     }
   }
 
+  // TODO: remove the following two checks when we have a verfier
+  // against a architecture for handwritten code.
+  if (getTranspose() == llvm::ArrayRef<int64_t>({1, 0}) && getVnniAxis() == 0) {
+    return emitOpError("Transpose and VNNI are mutually exclusive.");
+  }
+
+  if (getVnniAxis() == 0 && getTransposeBitWidth()) {
+    return emitOpError("TransposeBitWidth and VNNI are mutually exclusive. "
+                       "TransposeBitWidth implies a VNNI transform on axis 0.");
+  }
+
   if (getTranspose()) {
     auto trans = getTranspose().value();
     if (tdescShape.size() >= trans.size())
@@ -857,6 +877,16 @@ mlir::LogicalResult LoadNDOp::verify() {
     auto axis = getVnniAxis().value();
     auto vnni_factor = valueShape.back();
     tdescShape[axis] /= vnni_factor;
+    tdescShape.push_back(vnni_factor);
+  }
+
+  if (getTransposeBitWidth()) {
+    auto bitWidth = getTransposeBitWidth().value();
+    if (bitWidth != 32)
+      return emitOpError("Invalid bit width for transpose.");
+    auto vnni_factor = valueShape.back();
+    // transpose_bit_width imply a vnni transform on axis 0
+    tdescShape[0] /= vnni_factor;
     tdescShape.push_back(vnni_factor);
   }
 

@@ -41,7 +41,7 @@ module @gemm attributes {gpu.container_module} {
         %7 = xegpu.create_nd_tdesc %arg0[%2, %arg3] {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
         %8 = xegpu.create_nd_tdesc %arg1[%3, %arg3] {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
         %9 = xegpu.load_nd %7  {mode = vc, vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-        %10 = xegpu.load_nd %8  {mode = vc, vnni_axis = 0, transpose = [1, 0]} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+        %10 = xegpu.load_nd %8  {mode = vc, transpose_bit_width = 32, transpose = [1, 0]} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
         %11 = xegpu.dpas %9, %10, %arg4 {mode = vc} : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
         scf.yield %11 : vector<8x16xf32>
       }
