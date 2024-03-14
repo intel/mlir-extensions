@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -465,6 +466,12 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
     auto rounds = 1000;
     auto warmups = 3;
 
+    // Before each run we need to flush the L2 cache to make sure each profiling
+    // run has the same cache state. This is done by writing to zero to a buffer
+    // larger than the L2 cache size.
+    size_t cacheSize = 256000000;
+    auto *cache = allocDeviceMemory(queue, cacheSize, 64, true);
+
     if (getenv("IMEX_PROFILING_RUNS")) {
       auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
       if (runs)
@@ -497,7 +504,10 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
         maxTime = duration;
       if (duration < minTime)
         minTime = duration;
+      // flush the cache.
+      memset(cache, 0, cacheSize);
     }
+    deallocDeviceMemory(queue, cache);
     fprintf(stdout,
             "the kernel execution time is (ms, on L0 runtime):"
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
