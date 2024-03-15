@@ -152,7 +152,7 @@ gpu.module @test_kernel {
     //CHECK: gpu.func @tile_mma(%[[arg0:.*]]: memref<128x128xf16>, %[[arg1:.*]]: memref<128x128xf16>)
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[R0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<128x128xf16> -> !xetile.tile<90x76xf16, #xetile.tile_attr<inner_blocks = [30, 19]>>
-    //CHECK: %[[R1:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x128xf16> -> !xetile.tile<76x90xf16, #xetile.tile_attr<order = [0, 1], inner_blocks = [19, 6]>>
+    //CHECK: %[[R1:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x128xf16> -> !xetile.tile<76x90xf16, #xetile.tile_attr<order = [0, 1], inner_blocks = [4, 30]>>
     gpu.func @tile_mma(%a: memref<128x128xf16>, %b: memref<128x128xf16>) {
       %c0 = arith.constant 0 : index
   	  %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<90x76xf16>
