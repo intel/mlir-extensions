@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -303,6 +304,12 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
     auto rounds = 100;
     auto warmups = 3;
 
+    // Before each run we need to flush the L2 cache to make sure each profiling
+    // run has the same cache state. This is done by writing to zero to a buffer
+    // larger than the L2 cache size.
+    size_t cacheSize = 256000000;
+    auto *cache = allocDeviceMemory(queue, cacheSize, 64, true);
+
     if (getenv("IMEX_PROFILING_RUNS")) {
       auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
       if (runs)
@@ -337,8 +344,11 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
         maxTime = gap;
       if (gap < minTime)
         minTime = gap;
+      // flush the cache.
+      memset(cache, 0, cacheSize);
     }
 
+    deallocDeviceMemory(queue, cache);
     fprintf(stdout,
             "the kernel execution time is (ms):"
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
