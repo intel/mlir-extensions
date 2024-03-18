@@ -53,12 +53,16 @@ module @gemm attributes {gpu.container_module} {
     %A = memref.alloc() : memref<8x32xf16>
     %B = memref.alloc() : memref<16x32xf16>
     %Out_cpu = memref.alloc() : memref<8x16xf32>
-    %A_ = memref.collapse_shape %A [[0, 1]] :memref<8x32xf16> into memref<256xf16>
-    %B_ = memref.collapse_shape %B [[0, 1]] :memref<16x32xf16> into memref<512xf16>
-    %A_random = memref.cast %A_ : memref<256xf16> to memref<?xf16>
-    %B_random = memref.cast %B_ : memref<512xf16> to memref<?xf16>
-    call @fillMatrixRandomF16(%A_random) : (memref<?xf16>) -> ()
-    call @fillMatrixRandomF16(%B_random) : (memref<?xf16>) -> ()
+    %A_random = memref.cast %A : memref<8x32xf16> to memref<*xf16>
+    %B_random = memref.cast %B : memref<16x32xf16> to memref<*xf16>
+
+    %c_gen_int = arith.constant 0 : i1
+    %cf_lower = arith.constant -0.5 : f32
+    %cf_upper = arith.constant 0.5 : f32
+
+    call @fillResource1DRandomF16(%A_random, %cf_lower, %cf_upper, %c_gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
+    call @fillResource1DRandomF16(%B_random, %cf_lower, %cf_upper, %c_gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
+
     // run GPU version
     %Out_gpu = call @test(%A, %B) : (memref<8x32xf16>, memref<16x32xf16>) -> memref<8x16xf32>
     %Out_gpu_cast = memref.cast %Out_gpu : memref<8x16xf32> to memref<*xf32>
@@ -103,6 +107,6 @@ module @gemm attributes {gpu.container_module} {
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
-  func.func private @fillMatrixRandomF16(memref<?xf16>) attributes {llvm.emit_c_interface}
+  func.func private @fillResource1DRandomF16(memref<*xf16>, f32, f32, i1) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }

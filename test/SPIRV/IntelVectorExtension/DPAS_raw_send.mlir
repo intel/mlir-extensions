@@ -254,7 +254,7 @@ module attributes {gpu.container_module}  {
     %memref_B_bf16 = memref.view %memref_B[%c0][%B_size] : memref<?xi8> to memref<?xbf16>
 
     // Initialize it to 1.1 as bf16, since that's the original data type for B
-    call @fillResource1DBF16(%memref_B_bf16, %cst_1) : (memref<?xbf16>, f32) -> ()
+    call @fillResource1DBF16(%memref_B_bf16, %cst_1) : (memref<*xbf16>, f32) -> ()
 
     // Setting up the Vector A
     %A_size = arith.muli %tmp_sys_dpth, %arg_rpt_cnt : index
@@ -270,7 +270,7 @@ module attributes {gpu.container_module}  {
     // SPIR-V type does not support bf16, hence passing vector 1, and vector 2 as i8, will load bf16 from this vector using the intel vc-intrinsic
 
     // Initialize it to 2.2 as bf16, since that's the original data type for A
-    call @fillResource1DBF16(%memref_A_bf16, %cst_2) : (memref<?xbf16>, f32) -> ()
+    call @fillResource1DBF16(%memref_A_bf16, %cst_2) : (memref<*xbf16>, f32) -> ()
 
     // Calling the reference function/CPU version
     call @dpas_ref(%arg_sys_dpth, %arg_rpt_cnt,  %arg_N, %memref_C, %memref_B_bf16, %memref_A_bf16) : (index, index, index, memref<?xf32>, memref<?xbf16>, memref<?xbf16>) -> ()
@@ -297,9 +297,9 @@ module attributes {gpu.container_module}  {
   }
 
   // Helper functions
-  func.func private @fillResource1DBF16(memref<?xbf16>, f32) attributes {llvm.emit_c_interface}
-  func.func private @fillResource1DF16(memref<?xf16>, f32) attributes {llvm.emit_c_interface}
-  func.func private @fillResource1DF32(memref<?xf32>, f32) attributes {llvm.emit_c_interface}
+  func.func private @fillResource1DBF16(memref<*xbf16>, f32) attributes {llvm.emit_c_interface}
+  func.func private @fillResource1DF16(memref<*xf16>, f32) attributes {llvm.emit_c_interface}
+  func.func private @fillResource1DF32(memref<*xf32>, f32) attributes {llvm.emit_c_interface}
   func.func private @printMemrefBF16(memref<*xbf16>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}

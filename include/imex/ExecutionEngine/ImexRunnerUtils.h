@@ -41,19 +41,36 @@ template <typename T, int N> struct MemRefDescriptor {
   int64_t strides[N];
 };
 
+template <typename T>
+void _mlir_ciface_fillResource1D(UnrankedMemRefType<T> *ptr, // NOLINT
+                                 const float value);
+template <typename T>
+void _mlir_ciface_fillResource1DRandom(UnrankedMemRefType<T> *ptr,
+                                       const float lower, const float upper,
+                                       const bool genInt);
+
+template <typename T> void _mlir_ciface_printMemref(UnrankedMemRefType<T> *M);
+
+template <typename T>
+bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
+                           UnrankedMemRefType<float> *N);
+
+template <typename T>
+void _mlir_ciface_printAllclose(UnrankedMemRefType<T> *M,
+                                UnrankedMemRefType<float> *N);
+
+template <typename T>
+void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
+                                UnrankedMemRefType<T> *N);
+
 extern "C" IMEX_RUNNERUTILS_EXPORT void
-_mlir_ciface_fillResource1DBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
-                                float value);
+_mlir_ciface_fillResource1DRandomBF16(UnrankedMemRefType<bf16> *ptr,
+                                      const float lower, const float upper,
+                                      const bool genInt);
 extern "C" IMEX_RUNNERUTILS_EXPORT void
-_mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
-                               float value);
-extern "C" IMEX_RUNNERUTILS_EXPORT void
-_mlir_ciface_fillResource1DF32(MemRefDescriptor<float, 1> *ptr, // NOLINT
-                               float value);
-extern "C" IMEX_RUNNERUTILS_EXPORT void
-_mlir_ciface_fillMatrixRandomBF16(MemRefDescriptor<bf16, 1> *ptr);
-extern "C" IMEX_RUNNERUTILS_EXPORT void
-_mlir_ciface_fillMatrixRandomF16(MemRefDescriptor<f16, 1> *ptr);
+_mlir_ciface_fillResource1DRandomF16(UnrankedMemRefType<f16> *ptr,
+                                     const float lower, const float upper,
+                                     const bool genInt);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *m);
@@ -82,6 +99,18 @@ _mlir_ciface_printAllcloseF16(UnrankedMemRefType<f16> *M,
                               UnrankedMemRefType<float> *N);
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printAllcloseF32(UnrankedMemRefType<float> *M,
+                              UnrankedMemRefType<float> *N);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorF16(UnrankedMemRefType<f16> *M,
+                              UnrankedMemRefType<f16> *N);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorBF16(UnrankedMemRefType<bf16> *M,
+                               UnrankedMemRefType<bf16> *N);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorF32(UnrankedMemRefType<float> *M,
                               UnrankedMemRefType<float> *N);
 
 #endif // IMEX_EXECUTIONENGINE_IMEXRUNNERUTILS_H

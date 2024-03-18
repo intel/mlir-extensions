@@ -497,6 +497,10 @@ module @gemm attributes {gpu.container_module} {
     %c4096 = arith.constant 4096 : index
     %cf_0 = arith.constant 0.0 : f16
     %cf_1 = arith.constant 1.0 : f16
+    %c_gen_int = arith.constant 0 : i1
+    %cf_lower = arith.constant -0.5 : f32
+    %cf_upper = arith.constant 0.5 : f32
+
     %A = memref.alloc() : memref<4096x4096xf16>
     %B = memref.alloc() : memref<4096x4096xf16>
     %C = memref.alloc() : memref<4096x4096xf16>
@@ -514,9 +518,8 @@ module @gemm attributes {gpu.container_module} {
     //   }
     // }
     // Option 2:  convert the memref to 1D and fill with random values in (-0.5, 0.5)
-    %A_random_ = memref.collapse_shape %A [[0, 1]] :memref<4096x4096xf16> into memref<16777216xf16>
-    %A_random = memref.cast %A_random_ : memref<16777216xf16> to memref<?xf16>
-    call @fillMatrixRandomF16(%A_random) : (memref<?xf16>) -> ()
+    %A_random = memref.cast %A : memref<4096x4096xf16> to memref<*xf16>
+    call @fillResource1DRandomF16(%A_random, %cf_lower, %cf_upper, %c_gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
 
     // Use one of the two options below to initialize the B matrix
     // Option 1: make matrix B an identity matrix
@@ -534,9 +537,8 @@ module @gemm attributes {gpu.container_module} {
     //   }
     // }
     // Option 2:  convert the memref to 1D and fill with random values in (-0.5, 0.5)
-    %B_random_ = memref.collapse_shape %B [[0, 1]] :memref<4096x4096xf16> into memref<16777216xf16>
-    %B_random = memref.cast %B_random_ : memref<16777216xf16> to memref<?xf16>
-    call @fillMatrixRandomF16(%B_random) : (memref<?xf16>) -> ()
+    %B_random = memref.cast %B : memref<4096x4096xf16>  to memref<*xf16>
+    call @fillResource1DRandomF16(%B_random, %cf_lower, %cf_upper, %c_gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
 
     // intialize matrix C and C_ref ; C[i, j] = 0
     %c0_f16 = arith.constant 0.0 : f16
@@ -583,6 +585,6 @@ module @gemm attributes {gpu.container_module} {
   func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF16(memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
-  func.func private @fillMatrixRandomF16(memref<?xf16>) attributes {llvm.emit_c_interface}
+  func.func private @fillResource1DRandomF16(memref<*xf16>, f32, f32, i1) attributes {llvm.emit_c_interface}
 
 }

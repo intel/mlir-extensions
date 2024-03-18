@@ -22,61 +22,78 @@
 
 // NOLINTBEGIN(*-identifier-naming)
 
+/// Fills the given 1D unranked memref with the given float value.
+template <typename T>
+void _mlir_ciface_fillResource1D(UnrankedMemRefType<T> *ptr, // NOLINT
+                                 const float value) {
+  static_assert(std::is_same_v<T, bf16> || std::is_same_v<T, f16> ||
+                std::is_same_v<T, float>);
+  DynamicMemRefType<T> Dptr = DynamicMemRefType<T>(*ptr);
+  T fill_val(value);
+  std::fill(Dptr.begin(), Dptr.end(), fill_val);
+}
+
+template <typename T>
+void _mlir_ciface_fillResource1DRandom(UnrankedMemRefType<T> *ptr,
+                                       const float lower, const float upper,
+                                       const bool genInt) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<> dist(lower, upper);
+
+  DynamicMemRefType<T> Dptr = DynamicMemRefType<T>(*ptr);
+  for (DynamicMemRefIterator<T> i = Dptr.begin(); i != Dptr.end(); ++i) {
+    *i = T(genInt ? static_cast<int>(dist(gen)) : dist(gen));
+  }
+}
+
+template <typename T> void _mlir_ciface_printMemref(UnrankedMemRefType<T> *M) {
+  impl::printMemRef(*M);
+}
+
 /// Fills the given 1D bf16 memref with the given float value.
 extern "C" void
-_mlir_ciface_fillResource1DBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
+_mlir_ciface_fillResource1DBF16(UnrankedMemRefType<bf16> *ptr, // NOLINT
                                 float value) {
-  bf16 bf16_val(value);
-  std::fill_n(ptr->allocated, ptr->sizes[0], bf16_val);
+  _mlir_ciface_fillResource1D(ptr, value);
 }
 
 /// Fills the given 1D f16 memref with the given float value.
 extern "C" void
-_mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
+_mlir_ciface_fillResource1DF16(UnrankedMemRefType<f16> *ptr, // NOLINT
                                float value) {
-  f16 f16_val(value);
-  std::fill_n(ptr->allocated, ptr->sizes[0], f16_val);
-}
-
-/// Fills 1D memref of bf16 type with random values uniformly
-/// distributed in the range (-0.5, 0.5)
-extern "C" void
-_mlir_ciface_fillMatrixRandomBF16(MemRefDescriptor<bf16, 1> *ptr) {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<> dist(-0.5f, 0.5f);
-
-  for (int i = 0; i < ptr->sizes[0]; i++) {
-    ptr->allocated[i] = dist(gen);
-  }
-}
-
-/// Fills 1D memref of f16 type with random values uniformly
-/// distributed in the range (-0.5, 0.5)
-extern "C" void
-_mlir_ciface_fillMatrixRandomF16(MemRefDescriptor<f16, 1> *ptr) {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<> dist(-0.5f, 0.5f);
-
-  for (int i = 0; i < ptr->sizes[0]; i++) {
-    ptr->allocated[i] = dist(gen);
-  }
+  _mlir_ciface_fillResource1D(ptr, value);
 }
 
 /// Fills the given 1D float (f32) memref with the given float value.
 extern "C" void
-_mlir_ciface_fillResource1DF32(MemRefDescriptor<float, 1> *ptr, // NOLINT
+_mlir_ciface_fillResource1DF32(UnrankedMemRefType<float> *ptr, // NOLINT
                                float value) {
-  std::fill_n(ptr->allocated, ptr->sizes[0], value);
+  _mlir_ciface_fillResource1D(ptr, value);
+}
+
+/// Fills 1D memref of bf16 type with random values uniformly
+extern "C" void
+_mlir_ciface_fillResource1DRandomBF16(UnrankedMemRefType<bf16> *ptr,
+                                      const float lower, const float upper,
+                                      const bool genInt) {
+  _mlir_ciface_fillResource1DRandom(ptr, lower, upper, genInt);
+}
+
+/// Fills 1D memref of f16 type with random values uniformly
+extern "C" void
+_mlir_ciface_fillResource1DRandomF16(UnrankedMemRefType<f16> *ptr,
+                                     const float lower, const float upper,
+                                     const bool genInt) {
+  _mlir_ciface_fillResource1DRandom(ptr, lower, upper, genInt);
 }
 
 extern "C" void _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *M) {
-  impl::printMemRef(*M);
+  _mlir_ciface_printMemref(M);
 }
 
 extern "C" void _mlir_ciface_printMemrefF16(UnrankedMemRefType<f16> *M) {
-  impl::printMemRef(*M);
+  _mlir_ciface_printMemref(M);
 }
 
 extern "C" void printMemrefBF16(int64_t rank, void *ptr) {
@@ -141,63 +158,34 @@ static float bfloat2float(uint16_t bfloatBits) {
   return floatBits.f;
 }
 
+template <typename T> float getFloat(T val) {
+  static_assert(std::is_same_v<T, bf16> || std::is_same_v<T, f16> ||
+                std::is_same_v<T, float>);
+  if constexpr (std::is_same_v<T, bf16>) {
+    return bfloat2float(val.bits);
+  } else if constexpr (std::is_same_v<T, f16>) {
+    return half2float(val.bits);
+  } else if constexpr (std::is_same_v<T, float>) {
+    return val;
+  }
+}
+
 // For information on how to Iterate over UnrankedMemRefType, start with
 // https://github.com/llvm/llvm-project/blob/main/mlir/include/mlir/ExecutionEngine/CRunnerUtils.h
-extern "C" bool _mlir_ciface_allcloseF16(UnrankedMemRefType<f16> *M,
-                                         UnrankedMemRefType<float> *N) {
+template <typename T>
+bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
+                           UnrankedMemRefType<float> *N) {
   // atol, rtol values copied from
   // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
   // values may need to adjusted in the future
   const float atol = 1e-04;
   const float rtol = 1e-03;
-  DynamicMemRefType<f16> DM = DynamicMemRefType<f16>(*M);
+  DynamicMemRefType<T> DM = DynamicMemRefType<T>(*M);
   DynamicMemRefType<float> DN = DynamicMemRefType<float>(*N);
-  DynamicMemRefIterator<f16> i = DM.begin();
+  DynamicMemRefIterator<T> i = DM.begin();
   DynamicMemRefIterator<float> j = DN.begin();
   for (; i != DM.end() && j != DN.end(); ++i, ++j) {
-    f16 lhs = *i;
-    float rhs = *j;
-    if (fabs(half2float(lhs.bits) - rhs) > atol + rtol * fabs(rhs)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-extern "C" bool _mlir_ciface_allcloseBF16(UnrankedMemRefType<bf16> *M,
-                                          UnrankedMemRefType<float> *N) {
-  // atol, rtol values copied from
-  // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
-  // values may need to adjusted in the future
-  const float atol = 1e-08;
-  const float rtol = 1e-01;
-  DynamicMemRefType<bf16> DM = DynamicMemRefType<bf16>(*M);
-  DynamicMemRefType<float> DN = DynamicMemRefType<float>(*N);
-  DynamicMemRefIterator<bf16> i = DM.begin();
-  DynamicMemRefIterator<float> j = DN.begin();
-  for (; i != DM.end() && j != DN.end(); ++i, ++j) {
-    bf16 lhs = *i;
-    float rhs = *j;
-    if (fabs(bfloat2float(lhs.bits) - rhs) > atol + rtol * fabs(rhs)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-extern "C" bool _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
-                                         UnrankedMemRefType<float> *N) {
-  // atol, rtol values copied from
-  // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
-  // values may need to adjusted in the future
-  const float atol = 1e-08;
-  const float rtol = 1e-04;
-  DynamicMemRefType<float> DM = DynamicMemRefType<float>(*M);
-  DynamicMemRefType<float> DN = DynamicMemRefType<float>(*N);
-  DynamicMemRefIterator<float> i = DM.begin();
-  DynamicMemRefIterator<float> j = DN.begin();
-  for (; i != DM.end() && j != DN.end(); ++i, ++j) {
-    float lhs = *i;
+    float lhs = getFloat(*i);
     float rhs = *j;
     if (fabs(lhs - rhs) > atol + rtol * fabs(rhs)) {
       return false;
@@ -206,31 +194,84 @@ extern "C" bool _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
   return true;
 }
 
-extern "C" void _mlir_ciface_printAllcloseF16(UnrankedMemRefType<f16> *M,
-                                              UnrankedMemRefType<float> *N) {
-  if (_mlir_ciface_allcloseF16(M, N)) {
+template <typename T>
+void _mlir_ciface_printAllclose(UnrankedMemRefType<T> *M,
+                                UnrankedMemRefType<float> *N) {
+  if (_mlir_ciface_allclose(M, N)) {
     std::cout << "[ALLCLOSE: TRUE]\n";
   } else {
     std::cout << "[ALLCLOSE: FALSE]\n";
   }
+}
+
+template <typename T>
+void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
+                                UnrankedMemRefType<T> *N) {
+  DynamicMemRefType<T> DM = DynamicMemRefType<T>(*M);
+  DynamicMemRefType<T> DN = DynamicMemRefType<T>(*N);
+  DynamicMemRefIterator<T> i = DM.begin();
+  DynamicMemRefIterator<T> j = DN.begin();
+  std::pair<float, DynamicMemRefIterator<T>> max_rel_err_idx{0.0, DM.begin()};
+  std::pair<float, DynamicMemRefIterator<T>> max_abs_err_idx{0.0, DM.begin()};
+  for (; i != DM.end() && j != DN.end(); ++i, ++j) {
+    const float delta = getFloat(*i) - getFloat(*j);
+    const float delta_abs = fabs(delta);
+    if (delta > max_abs_err_idx.first) {
+      max_abs_err_idx = {delta_abs, i};
+      max_rel_err_idx = {delta, i};
+    }
+  }
+  std::cout << "Max absolute error " << max_abs_err_idx.first
+            << " at idx=" << std::distance(DM.begin(), max_abs_err_idx.second)
+            << '\n';
+  std::cout << "Max relative error " << max_rel_err_idx.first
+            << " at idx=" << std::distance(DM.begin(), max_rel_err_idx.second)
+            << '\n';
+}
+
+extern "C" void _mlir_ciface_printMaxErrorF16(UnrankedMemRefType<f16> *M,
+                                              UnrankedMemRefType<f16> *N) {
+  _mlir_ciface_printMaxError(M, N);
+}
+
+extern "C" void _mlir_ciface_printMaxErrorBF16(UnrankedMemRefType<bf16> *M,
+                                               UnrankedMemRefType<bf16> *N) {
+  _mlir_ciface_printMaxError(M, N);
+}
+
+extern "C" void _mlir_ciface_printMaxErrorF32(UnrankedMemRefType<float> *M,
+                                              UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printMaxError(M, N);
+}
+
+extern "C" bool _mlir_ciface_allcloseF16(UnrankedMemRefType<f16> *M,
+                                         UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N);
+}
+
+extern "C" bool _mlir_ciface_allcloseBF16(UnrankedMemRefType<bf16> *M,
+                                          UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N);
+}
+
+extern "C" bool _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
+                                         UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N);
+}
+
+extern "C" void _mlir_ciface_printAllcloseF16(UnrankedMemRefType<f16> *M,
+                                              UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printAllclose(M, N);
 }
 
 extern "C" void _mlir_ciface_printAllcloseBF16(UnrankedMemRefType<bf16> *M,
                                                UnrankedMemRefType<float> *N) {
-  if (_mlir_ciface_allcloseBF16(M, N)) {
-    std::cout << "[ALLCLOSE: TRUE]\n";
-  } else {
-    std::cout << "[ALLCLOSE: FALSE]\n";
-  }
+  _mlir_ciface_printAllclose(M, N);
 }
 
 extern "C" void _mlir_ciface_printAllcloseF32(UnrankedMemRefType<float> *M,
                                               UnrankedMemRefType<float> *N) {
-  if (_mlir_ciface_allcloseF32(M, N)) {
-    std::cout << "[ALLCLOSE: TRUE]\n";
-  } else {
-    std::cout << "[ALLCLOSE: FALSE]\n";
-  }
+  _mlir_ciface_printAllclose(M, N);
 }
 
 // NOLINTEND(*-identifier-naming)
