@@ -1,6 +1,9 @@
 // linalg dialect to gpu dialect lowering pipeline
 // Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
-builtin.module(convert-tensor-to-linalg
+builtin.module(
+    func.func(test-linalg-elementwise-fusion-patterns{fuse-generic-ops})
+    convert-tensor-to-linalg
+    func.func(test-linalg-elementwise-fusion-patterns{fuse-generic-ops})
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
           //eliminate-empty-tensors

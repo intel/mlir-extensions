@@ -16,6 +16,7 @@
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/ToolOutputFile.h>
+#include <mlir/IR/AsmState.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/InitAllDialects.h>
@@ -30,7 +31,14 @@
 #include <imex/InitIMEXPasses.h>
 #include <imex/Transforms/Passes.h>
 
+namespace mlir {
+namespace test {
+void registerTestLinalgElementwiseFusion();
+} // namespace test
+} // namespace mlir
+
 int main(int argc, char **argv) {
+  ::mlir::test::registerTestLinalgElementwiseFusion();
   ::mlir::registerAllPasses();
   ::imex::registerAllPasses();
 
@@ -39,6 +47,6 @@ int main(int argc, char **argv) {
   ::mlir::registerAllExtensions(registry);
   ::imex::registerAllDialects(registry);
 
-  return ::mlir::asMainReturnCode(
-      ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));
+  return ::mlir::asMainReturnCode(::mlir::MlirOptMain(
+      argc, argv, "Imex optimizer driver\n", registry, false));
 }
