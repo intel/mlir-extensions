@@ -16,6 +16,7 @@
 #include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
+#include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -44,6 +45,7 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 #include <numeric>
+#include <type_traits>
 
 using namespace imex;
 using namespace imex::xegpu;
@@ -1458,39 +1460,70 @@ struct VectorShuffle final : public OpConversionPattern<vector::ShuffleOp> {
   }
 };
 
-struct SpirvCLFMax : public OpConversionPattern<spirv::CLFMaxOp> {
-  using OpConversionPattern::OpConversionPattern;
+template <typename SPIRVOp> std::string getVCIntrinsicName() {
+  constexpr bool isFMaxOp = std::is_same_v<SPIRVOp, spirv::CLFMaxOp>;
+  constexpr bool isExpOp = std::is_same_v<SPIRVOp, spirv::CLExpOp>;
+  if (isFMaxOp)
+    return "llvm.genx.fmax.";
+  else if (isExpOp)
+    return "llvm.genx.exp.";
+  else
+    assert(0 && "Unsupported SPIRV Op. Add more support!");
+}
+
+template <typename SPIRVOp>
+struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
+  using OpConversionPattern<SPIRVOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(spirv::CLFMaxOp op, OpAdaptor adaptor,
+  matchAndRewrite(SPIRVOp op, typename SPIRVOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto dstType = getTypeConverter()->convertType(op.getType());
+    auto dstType = this->getTypeConverter()->convertType(op.getType());
     if (!dstType)
       return failure();
 
-    // For scalar case, we keep the operation as is.
-    if (isa<spirv::ScalarType>(dstType)) {
-      rewriter.replaceOpWithNewOp<spirv::CLFMaxOp>(
-          op, dstType, adaptor.getLhs(), adaptor.getRhs());
+    auto vecSize = dstType.template dyn_cast<VectorType>().getNumElements();
+    auto hasGenericVecSize = [&]() -> bool {
+      // if the input is scalar, we keep the operation as is.
+      if (isa<spirv::ScalarType>(dstType))
+        return true;
+      // or, if the vector size is 2, 3, 4, 8, or 16, we keep the operation.
+      return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
+             vecSize == 16;
+    };
+
+    if (hasGenericVecSize()) {
+      rewriter.replaceOpWithNewOp<SPIRVOp>(op, dstType, adaptor.getOperands());
       return success();
     }
 
-    // For vector case, corresponding VC intrinsics is used.
-    // Currently only f16/f32/bf16 vectors are supported.
-    auto dstVecElemTy = dstType.dyn_cast<VectorType>().getElementType();
-    if (!dstVecElemTy.isF32() && !dstVecElemTy.isF16() &&
-        !dstVecElemTy.isBF16())
-      return rewriter.notifyMatchFailure(
-          op,
-          "Unsupported type in Spirv.CL.FMax. Only f16/f32/bf16 vectors are "
-          "currently supported.");
+    // for larger vector lengths, "llvm.genx.exp" returns the base 2
+    // exponentiation of the input. To get the base e exponentiation, we need to
+    // scale the input by log2(e)
+    bool isExpOp = std::is_same_v<SPIRVOp, spirv::CLExpOp>;
+    SmallVector<Value> args{adaptor.getOperands()};
+    auto operands = adaptor.getOperands();
+    if (isExpOp) {
+      SmallVector<float> log2e(vecSize, 1.442695040888963);
+      auto log2eConstVec = rewriter.create<spirv::ConstantOp>(
+          op.getLoc(), dstType, rewriter.getF32VectorAttr(log2e));
+      auto input = operands[0];
+      auto scaledInput =
+          rewriter.create<spirv::FMulOp>(op.getLoc(), input, log2eConstVec);
+      args.clear();
+      args.push_back(scaledInput);
+    }
 
-    std::string funcName = "llvm.genx.fmax.";
-    auto funcType = rewriter.getFunctionType(
-        {adaptor.getLhs().getType(), adaptor.getRhs().getType()}, {dstType});
+    // for large vectors, generate the corresponding VC intrinsic.
+    auto funcName = getVCIntrinsicName<SPIRVOp>();
+    SmallVector<Type> operandTypes;
+    for (auto operand : adaptor.getOperands())
+      operandTypes.push_back(operand.getType());
+    auto funcType = rewriter.getFunctionType(operandTypes, {dstType});
     funcName +=
-        encodeVectorType(rewriter, dstType.dyn_cast<VectorType>()).first;
+        encodeVectorType(rewriter, dstType.template dyn_cast<VectorType>())
+            .first;
     lookupOrInsertIntrinsic(rewriter, op, funcName, funcType);
-    SmallVector<Value> args{adaptor.getLhs(), adaptor.getRhs()};
+
     rewriter.replaceOpWithNewOp<spirv::FunctionCallOp>(op, dstType, funcName,
                                                        args);
     return success();
@@ -1505,7 +1538,9 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
                VectorExtract, VectorExtractStridedSlice, VectorShuffle,
-               SpirvCLFMax, GatherScatterToRawSend<LoadGatherOp>,
+               SPIRVElementwiseToVC<spirv::CLFMaxOp>,
+               SPIRVElementwiseToVC<spirv::CLExpOp>,
+               GatherScatterToRawSend<LoadGatherOp>,
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
   if (getenv("IMEX_NOT_PREFER_RAWSEND"))

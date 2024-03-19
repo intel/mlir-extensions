@@ -24,6 +24,8 @@ class Pass;
 } // namespace mlir
 
 namespace imex {
+
+template <typename SPIRVOp> std::string getVCIntrinsicName(SPIRVOp op);
 // XeGPU to VC Intrinsics pattern
 void populateXeGPUToVCIntrinsicsPatterns(
     mlir::SPIRVTypeConverter &typeConverter, mlir::RewritePatternSet &patterns);
