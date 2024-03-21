@@ -1369,29 +1369,86 @@ struct VectorExtractStridedSlice final
     if (!dstType)
       return failure();
 
-    // fixme : currently only support 1D vectors
-    if (extractOp.getSourceVectorType().getRank() != 1)
-      return failure();
+    auto offsets = extractOp.getOffsets().getValue();
+    auto sizes = extractOp.getSizes().getValue();
+    auto strides = extractOp.getStrides().getValue();
 
-    uint64_t offset = getFirstIntValue(extractOp.getOffsets());
-    uint64_t size = getFirstIntValue(extractOp.getSizes());
-    uint64_t stride = getFirstIntValue(extractOp.getStrides());
-
-    if (stride != 1)
-      return failure();
+    if (strides[0].cast<IntegerAttr>().getInt() != 1)
+      return rewriter.notifyMatchFailure(
+          extractOp, "Strided slice with stride != 1 is not supported.");
 
     Value srcVector = adaptor.getOperands().front();
 
     // Extract vector<1xT> case.
     if (isa<spirv::ScalarType>(dstType)) {
+      uint64_t offset = getFirstIntValue(extractOp.getOffsets());
       rewriter.replaceOpWithNewOp<spirv::CompositeExtractOp>(extractOp,
                                                              srcVector, offset);
       return success();
     }
 
-    SmallVector<int32_t, 2> indices(size);
-    std::iota(indices.begin(), indices.end(), offset);
+    // if kD offsets are specified for nd source vector (n > k), the granularity
+    // of the extraction is greater than 1. In this case last (n-k) dimensions
+    // form the extraction granularity. example : %0 =
+    // vector.extract_strided_slice %src { offsets = [0, 0], sizes = [2, 2],
+    // strides = [1, 1]} : vector<4x8x8xf32> to vector<2x2x8xf32>
+    // here, extraction granularity is 8.
+    int64_t extractSliceLen = 1;
+    auto n = extractOp.getSourceVectorType().getRank();
+    auto k = (int64_t)offsets.size();
+    if (n > k) {
+      for (unsigned i = 0; i < n - k; i++) {
+        extractSliceLen *= extractOp.getSourceVectorType().getShape()[i + k];
+      }
+    }
 
+    // get total number of extracted slices
+    int64_t nExtractedSlices = 1;
+    for (auto size : sizes) {
+      nExtractedSlices *= size.cast<IntegerAttr>().getInt();
+    }
+
+    // compute the strides of the source vector considering first k dimensions
+    SmallVector<int32_t, 4> sourceStrides(k, extractSliceLen);
+    for (int i = k - 2; i >= 0; --i) {
+      sourceStrides[i] = sourceStrides[i + 1] *
+                         extractOp.getSourceVectorType().getShape()[i + 1];
+    }
+    // final shuffle indices has nExtractedElems * extractSliceLen elements
+    SmallVector<int32_t, 4> indices(nExtractedSlices * extractSliceLen);
+    // compute the strides of the extracted kD vector
+    SmallVector<int32_t, 4> extractedStrides(k, 1);
+    // compute extractedStrides
+    for (int i = k - 2; i >= 0; --i) {
+      extractedStrides[i] =
+          extractedStrides[i + 1] * sizes[i + 1].cast<IntegerAttr>().getInt();
+    }
+    // iterate over all extracted slices from 0 to nExtractedElems-1
+    // and compute the multi-dimensional index and the corresponding linearized
+    // index within the source vector
+    for (int64_t i = 0; i < nExtractedSlices; ++i) {
+      int64_t index = i;
+      // compute the corresponding multi-dimensional index
+      SmallVector<int32_t, 4> multiDimIndex(k, 0);
+      for (int64_t j = 0; j < k; ++j) {
+        multiDimIndex[j] = (index / extractedStrides[j]);
+        index -= multiDimIndex[j] * extractedStrides[j];
+      }
+      // compute the corresponding linearized index in the source vector
+      // i.e. shift the multiDimIndex by the offsets
+      int64_t linearizedIndex = 0;
+      for (int64_t j = 0; j < k; ++j) {
+        linearizedIndex +=
+            (offsets[j].cast<IntegerAttr>().getInt() + multiDimIndex[j]) *
+            sourceStrides[j];
+      }
+      // fill the indices array form linearizedIndex to linearizedIndex +
+      // sliceLen
+      for (int64_t j = 0; j < extractSliceLen; ++j) {
+        indices[i * extractSliceLen + j] = linearizedIndex + j;
+      }
+    }
+    // perform a shuffle to extract the kD vector
     rewriter.replaceOpWithNewOp<spirv::VectorShuffleOp>(
         extractOp, dstType, srcVector, srcVector,
         rewriter.getI32ArrayAttr(indices));
