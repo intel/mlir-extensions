@@ -34,6 +34,7 @@ struct VectorLinearizePass final
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
+    typeConverter.addConversion([](mlir::Type type) { return type; });
     mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
         typeConverter, patterns, target);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
