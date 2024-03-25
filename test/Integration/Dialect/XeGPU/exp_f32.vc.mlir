@@ -35,7 +35,7 @@ module @gemm attributes {gpu.container_module} {
       // do DPAS
       %val4 = xegpu.dpas %val0, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // take exp
-      %t6 = spirv.CL.exp %val4 : vector<8x16xf32>
+      %t6 = math.exp %val4 : vector<8x16xf32>
       // store
       %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] { mode = vc } : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
       xegpu.store_nd %t6, %out_tile { mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
@@ -65,14 +65,14 @@ module @gemm attributes {gpu.container_module} {
       %v6 = vector.extract %val4[6] : vector<16xf32> from vector<8x16xf32>
       %v7 = vector.extract %val4[7] : vector<16xf32> from vector<8x16xf32>
       // do generic size exp
-      %v0_exp = spirv.CL.exp %v0 : vector<16xf32>
-      %v1_exp = spirv.CL.exp %v1 : vector<16xf32>
-      %v2_exp = spirv.CL.exp %v2 : vector<16xf32>
-      %v3_exp = spirv.CL.exp %v3 : vector<16xf32>
-      %v4_exp = spirv.CL.exp %v4 : vector<16xf32>
-      %v5_exp = spirv.CL.exp %v5 : vector<16xf32>
-      %v6_exp = spirv.CL.exp %v6 : vector<16xf32>
-      %v7_exp = spirv.CL.exp %v7 : vector<16xf32>
+      %v0_exp = math.exp %v0 : vector<16xf32>
+      %v1_exp = math.exp %v1 : vector<16xf32>
+      %v2_exp = math.exp %v2 : vector<16xf32>
+      %v3_exp = math.exp %v3 : vector<16xf32>
+      %v4_exp = math.exp %v4 : vector<16xf32>
+      %v5_exp = math.exp %v5 : vector<16xf32>
+      %v6_exp = math.exp %v6 : vector<16xf32>
+      %v7_exp = math.exp %v7 : vector<16xf32>
       %v0_exp_cast = vector.shape_cast %v0_exp : vector<16xf32> to vector<1x16xf32>
       %v1_exp_cast = vector.shape_cast %v1_exp : vector<16xf32> to vector<1x16xf32>
       %v2_exp_cast = vector.shape_cast %v2_exp : vector<16xf32> to vector<1x16xf32>

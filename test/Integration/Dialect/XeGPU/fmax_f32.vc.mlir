@@ -37,7 +37,7 @@ module @gemm attributes {gpu.container_module} {
       %val4 = xegpu.dpas %val0, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       %val5 = xegpu.dpas %val1, %val3 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // take fmax
-      %val6 = spirv.CL.fmax %val4, %val5 : vector<8x16xf32>
+      %val6 = arith.maximumf %val4, %val5 fastmath<nnan> : vector<8x16xf32>
       // store fmax
       %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] { mode = vc } : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
       xegpu.store_nd %val6, %out_tile { mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>

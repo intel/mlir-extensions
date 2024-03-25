@@ -211,6 +211,8 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::RewritePatternSet patterns(context);
     mlir::SPIRVConversionOptions options;
     options.use64bitIndex = true;
+    // FIXME: activate fast math per operator basis.
+    options.enableFastMathMode = true;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
 
@@ -360,9 +362,24 @@ void GPUXToSPIRVPass::runOnOperation() {
           });
     }
 
+    // SPIR-V elementwise arith/math ops require special handling if the operate
+    // on large vectors. We dynamically legalize these ops based on the vector
+    // size they consume.
+    // FIXME: this is not an exhaustive list of arith/math ops that need special
+    // handling.
+    target->addDynamicallyLegalOp<mlir::spirv::CLExpOp>(
+        [&](mlir::spirv::CLExpOp op) {
+          return imex::isGenericVectorTy(op.getType());
+        });
+    target->addDynamicallyLegalOp<mlir::spirv::CLFMaxOp>(
+        [&](mlir::spirv::CLFMaxOp op) {
+          return imex::isGenericVectorTy(op.getType());
+        });
+
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
     mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
     // ---------------------------------------
