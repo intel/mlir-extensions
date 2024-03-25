@@ -7,8 +7,8 @@ USER root
 RUN export DEBIAN_FRONTEND=noninteractive \
     && curl -s https://repositories.intel.com/graphics/intel-graphics.key \
         | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
-    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/graphics/ubuntu jammy max' \
-        | tee /etc/apt/sources.list.d/intel-graphics.list \
+    && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy max' \
+        | tee /etc/apt/sources.list.d/intel-gpu.list \
     && curl https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
         | gpg --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
