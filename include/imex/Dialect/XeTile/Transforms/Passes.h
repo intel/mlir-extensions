@@ -16,6 +16,7 @@
 #ifndef _XeTile_PASSES_H_INCLUDED_
 #define _XeTile_PASSES_H_INCLUDED_
 
+#include "imex/Utils/XeArch.h"
 #include <mlir/Pass/Pass.h>
 
 namespace mlir {
@@ -35,7 +36,9 @@ class XeTypeConverter;
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass> createXeTileInitDuplicatePass();
-std::unique_ptr<mlir::Pass> createXeTileBlockingPass();
+
+std::unique_ptr<mlir::Pass>
+createXeTileBlockingPass(const std::string &device = "pvc");
 
 ///
 void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
@@ -43,7 +46,8 @@ void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
 
 ///
 void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
-                                    mlir::RewritePatternSet &patterns);
+                                    mlir::RewritePatternSet &patterns,
+                                    std::shared_ptr<XeuArchInterface> ptruArch);
 
 //===----------------------------------------------------------------------===//
 // Registration
