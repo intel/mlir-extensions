@@ -17,3 +17,13 @@ func.func @test_linearize(%arg0: vector<2x2xf32>) -> vector<2x2xf32> {
 //       CHECK: return %[[RES]] : vector<2x2xf32>
   return %0 : vector<2x2xf32>
 }
+
+// -----
+
+// CHECK-LABEL: test_const_novector
+//       CHECK:  %[[R:.*]] = arith.constant 42 : i32
+//       CHECK:  return %[[R]] : i32
+func.func @test_const_novector() -> i32 {
+  %0 = arith.constant 42 : i32
+  return %0 : i32
+}
