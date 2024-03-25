@@ -25,6 +25,7 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -38,6 +39,7 @@
 #include "imex/Dialect/XeTile/Transforms/Blocking.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "imex/Utils/DebugUtils.h"
+#include "imex/Utils/XeArch.h"
 
 #include "PassDetail.h"
 
@@ -53,88 +55,110 @@ namespace imex {
 
 enum OpType { Prefetch, Load, Store, Elementwise };
 
+// Find the maximum divisible number between minHeight/Width and maxHeight/Width
+// and use that as the inner block sizes.
+int findMaxInnerBlockSize(int num, int maxNum, int minNum) {
+  for (int i = maxNum; i >= minNum; i--) {
+    if (num % i == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+llvm::SmallVector<int64_t, 2>
+getInnerBlockHeightWidth(int maxHeight, int maxWidth, int minHeight,
+                         int minWidth, int height, int width) {
+
+  llvm::SmallVector<int64_t, 2> innerBlockSizes;
+
+  if (height < minHeight || width < minWidth) {
+    llvm::dbgs() << "Invalid Block Size \n";
+    return {};
+  }
+
+  if (height == maxHeight || height < maxHeight) {
+    innerBlockSizes.push_back(height);
+  } else if (height > maxHeight) {
+    auto innerBlockHeight =
+        imex::findMaxInnerBlockSize(height, maxHeight, minHeight);
+    if (innerBlockHeight != -1)
+      innerBlockSizes.push_back(innerBlockHeight);
+    else {
+      llvm::dbgs() << "Invalid Block Height Shape \n";
+      return {};
+    }
+  }
+
+  if (width == maxWidth || width < maxWidth) {
+    innerBlockSizes.push_back(width);
+  } else if (width > maxWidth) {
+    auto innerBlockWidth =
+        imex::findMaxInnerBlockSize(width, maxWidth, minWidth);
+    if (innerBlockWidth != -1)
+      innerBlockSizes.push_back(innerBlockWidth);
+    else {
+      llvm::dbgs() << "Invalid Block Width Shape \n";
+      return {};
+    }
+  }
+  return innerBlockSizes;
+}
+
 // TODO: placeholder, replace it with uArch interface
 template <OpType op>
-llvm::SmallVector<int64_t> getInnerBlocks(mlir::Type elemTy, bool vnni = false,
-                                          bool transpose = false) {
+llvm::SmallVector<int64_t, 2>
+getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
+                   int width, std::shared_ptr<XeuArchInterface> uArchInterface,
+                   bool vnni = false, bool transpose = false) {
   assert(elemTy.isIntOrFloat());
-  int bits = elemTy.getIntOrFloatBitWidth();
-  if (op == OpType::Load && bits > 16 && vnni) {
+  int elementSize = elemTy.getIntOrFloatBitWidth();
+  if (op == OpType::Load && elementSize > 16 && vnni) {
     llvm::dbgs() << "load with VNNI for \"" << elemTy
                  << "\" is not supported.\n";
     return {};
   }
 
-  if (op == OpType::Prefetch) {
-    switch (bits) {
-    case 8:
-      // return {32, 256, 256};
-      return {32, 256};
-      break;
-    case 16:
-      // return {32, 128, 128};
-      return {32, 128};
-      break;
-    case 32:
-      // return {32, 64, 64};
-      return {32, 64};
-      break;
-    case 64:
-      // return {32, 32, 32};
-      return {32, 32};
-      break;
-    default:
-      llvm_unreachable("Unsupported data type.\n");
-      break;
-    }
-  }
+  imex::LoadStore2DConfig configParams;
+  int maxHeight, maxWidth, minHeight, minWidth;
 
-  if (op == OpType::Load) {
-    switch (bits) {
-    case 8:
-      // return {32, 64, 64};
-      return {32, 64};
-      break;
-    case 16:
-      // return {32, 32, 32};
-      return {32, 32};
-      break;
-    case 32:
-      // return {32, 16, 16};
-      return {32, 16};
-      break;
-    case 64:
-      // return {32, 8, 8};
-      return {32, 8};
-      break;
-    default:
-      llvm_unreachable("Unsupported data type.\n");
-      break;
+  // TODO : Separate it in future.
+  if (op == OpType::Load || op == OpType::Prefetch) {
+
+    mlir::FailureOr<LoadStore2DConfig> params = uArchInterface->get2DLoadConfig(
+        operation, elementSize, vnni, transpose);
+    if (mlir::succeeded(params)) {
+      configParams = *params;
+      maxHeight = configParams.blockHeight.max;
+      minHeight = configParams.blockHeight.min;
+      maxWidth = configParams.blockWidth.max;
+      minWidth = configParams.blockWidth.min;
+    } else {
+      llvm::dbgs() << "Invalid Config Params \n";
+      return {};
     }
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
   }
 
   if (op == OpType::Store) {
-    switch (bits) {
-    case 8:
-      // return {8, 64, 1};
-      return {8, 64};
-      break;
-    case 16:
-      // return {8, 32, 1};
-      return {8, 32};
-      break;
-    case 32:
-      // return {8, 16, 1};
-      return {8, 16};
-      break;
-    case 64:
-      // return {8, 8, 1};
-      return {8, 8};
-      break;
-    default:
-      llvm_unreachable("Unsupported data type.\n");
-      break;
+
+    mlir::FailureOr<LoadStore2DConfig> params =
+        uArchInterface->get2DStoreConfig(elementSize);
+    if (mlir::succeeded(params)) {
+      configParams = *params;
+      maxHeight = configParams.blockHeight.max;
+      minHeight = configParams.blockHeight.min;
+      maxWidth = configParams.blockWidth.max;
+      minWidth = configParams.blockWidth.min;
+    } else {
+      llvm::dbgs() << "Invalid Config Params \n";
+      return {};
     }
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
   }
 
   if (op == OpType::Elementwise) {
@@ -155,7 +179,17 @@ llvm::SmallVector<int64_t> getInnerBlocks(mlir::Type elemTy, bool vnni = false,
 // [8, 16] is the block size.
 struct ArithConstantOpPattern
     : public XeTileConversion<mlir::arith::ConstantOp> {
+
   using XeTileConversion<mlir::arith::ConstantOp>::XeTileConversion;
+
+  ArithConstantOpPattern(mlir::MLIRContext *context,
+                         imex::XeTypeConverter &converter,
+                         std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::ConstantOp op, OpAdaptor adaptor,
@@ -166,7 +200,14 @@ struct ArithConstantOpPattern
       return mlir::failure();
 
     auto shape = value.getType().getShape();
-    auto blkSZ = getInnerBlocks<Load>(value.getElementType());
+    auto blkSZ =
+        getInnerBlockSizes<Load>(op.getOperation(), value.getElementType(),
+                                 shape[0], shape[1], this->uArchInterface);
+    if (blkSZ.empty()) {
+      op->emitOpError() << "Invalid inner block sizes ";
+      return mlir::failure();
+    }
+
     auto newTy = mlir::VectorType::get(
         {shape[0] / blkSZ[0], shape[1] / blkSZ[1], blkSZ[0], blkSZ[1]},
         value.getElementType());
@@ -216,7 +257,17 @@ struct ArithConstantOpPattern
 // boundaries if needed.
 struct VectorizableOpPattern
     : public XeTileTraitConversion<mlir::OpTrait::Vectorizable> {
+
   using XeTileTraitConversion::XeTileTraitConversion;
+
+  VectorizableOpPattern(mlir::MLIRContext *context,
+                        imex::XeTypeConverter &converter,
+                        std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileTraitConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -230,7 +281,14 @@ struct VectorizableOpPattern
       return rewriter.notifyMatchFailure(op, "type is not 2D vector");
 
     auto shape = resType.getShape();
-    auto blocks = getInnerBlocks<Elementwise>(resType.getElementType());
+    auto blocks = getInnerBlockSizes<Elementwise>(
+        op, resType.getElementType(), shape[0], shape[1], this->uArchInterface);
+
+    if (blocks.empty()) {
+      op->emitOpError() << "Invalid inner block sizes ";
+      return mlir::failure();
+    }
+
     auto newTy = mlir::VectorType::get(
         {shape[0] / blocks[0], shape[1] / blocks[1], blocks[0], blocks[1]},
         resType.getElementType());
@@ -269,7 +327,16 @@ struct VectorizableOpPattern
 // It rewrites the SCF forOp, it mainly updates the arguments of its
 // region block. unpack ops are added for VectorType operands if needed.
 struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
+
   using XeTileConversion<mlir::scf::ForOp>::XeTileConversion;
+
+  SCFForOpPattern(mlir::MLIRContext *context, imex::XeTypeConverter &converter,
+                  std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(mlir::scf::ForOp op, OpAdaptor adaptor,
@@ -317,7 +384,17 @@ struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
 // This op pattern will insert a pack op to make it consistent with the
 // corresponding argument type.
 struct SCFYieldOpPattern : public XeTileConversion<mlir::scf::YieldOp> {
+
   using XeTileConversion<mlir::scf::YieldOp>::XeTileConversion;
+
+  SCFYieldOpPattern(mlir::MLIRContext *context,
+                    imex::XeTypeConverter &converter,
+                    std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(mlir::scf::YieldOp op, OpAdaptor adaptor,
@@ -350,7 +427,17 @@ struct SCFYieldOpPattern : public XeTileConversion<mlir::scf::YieldOp> {
 // tile. The block size is choosed based on how the tile is used, including
 // prefetch, load, store. Since hardware support different sizes for them.
 struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
+
   using XeTileConversion<xetile::InitTileOp>::XeTileConversion;
+
+  InitTileOpPattern(mlir::MLIRContext *context,
+                    imex::XeTypeConverter &converter,
+                    std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::InitTileOp op, OpAdaptor adaptor,
@@ -367,19 +454,64 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
       return mlir::failure();
 
     auto elemTy = tileTy.getElementType();
+    int elementSize = elemTy.getIntOrFloatBitWidth();
     if (isForPrefetch(op)) {
       innerBlocks = mlir::DenseI64ArrayAttr::get(
-          getContext(), getInnerBlocks<Prefetch>(elemTy));
+          getContext(), getInnerBlockSizes<Prefetch>(
+                            op.getOperation(), elemTy, tileTy.getShape()[0],
+                            tileTy.getShape()[1], this->uArchInterface));
     } else if (isForLoad(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(),
-                                                 getInnerBlocks<Load>(elemTy));
+
+      // Set transpose and vnni
+      bool vnni = false;
+      bool transpose = false;
+
+      auto order = tileTy.getOrder();
+      if (order[0] == 0 && order[1] == 1)
+        transpose = true;
+
+      for (auto user : op->getUsers()) {
+        if (llvm::dyn_cast<xetile::LoadTileOp>(user)) {
+          auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user);
+          if (isForDPASB(loadTileOp) && elementSize < 32) {
+            vnni = true;
+          }
+          break;
+        }
+      }
+      if (vnni && transpose && elementSize < 32) {
+
+        int factor = 32 / elementSize;
+        vnni = false;
+        innerBlocks = mlir::DenseI64ArrayAttr::get(
+            getContext(),
+            getInnerBlockSizes<Load>(
+                op.getOperation(), mlir::FloatType::getF32(getContext()),
+                tileTy.getShape()[0], (tileTy.getShape()[1]) * factor,
+                this->uArchInterface, vnni, transpose));
+      } else if (transpose && elementSize < 32) {
+        return rewriter.notifyMatchFailure(op, "Invalid transpose.");
+      } else {
+        innerBlocks = mlir::DenseI64ArrayAttr::get(
+            getContext(),
+            getInnerBlockSizes<Load>(op.getOperation(), elemTy,
+                                     tileTy.getShape()[0], tileTy.getShape()[1],
+                                     this->uArchInterface, vnni, transpose));
+      }
     } else if (isForStore(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(),
-                                                 getInnerBlocks<Store>(elemTy));
+      innerBlocks = mlir::DenseI64ArrayAttr::get(
+          getContext(), getInnerBlockSizes<Store>(
+                            op.getOperation(), elemTy, tileTy.getShape()[0],
+                            tileTy.getShape()[1], this->uArchInterface));
     } else {
       return rewriter.notifyMatchFailure(
           op, "The tile is used for multiple purpose. The init-duplicate pass "
               "should be run first to resolve this issue.");
+    }
+
+    if (innerBlocks.empty()) {
+      op->emitOpError() << "Invalid inner block sizes ";
+      return mlir::failure();
     }
 
     auto attr = imex::xetile::XeTileAttr::get(
@@ -402,7 +534,17 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
 // representing value as 4D vector. An unpack op is added at the end
 // to make this change to be transparent to its users.
 struct LoadTileOpPattern : public XeTileConversion<xetile::LoadTileOp> {
+
   using XeTileConversion<xetile::LoadTileOp>::XeTileConversion;
+
+  LoadTileOpPattern(mlir::MLIRContext *context,
+                    imex::XeTypeConverter &converter,
+                    std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::LoadTileOp op, OpAdaptor adaptor,
@@ -435,7 +577,17 @@ struct LoadTileOpPattern : public XeTileConversion<xetile::LoadTileOp> {
 // It updates store_tile to reveal effects of innerblock attribute.
 // It uses pack op to align the shape of its vector value to the tile shape.
 struct StoreTileOpPattern : public XeTileConversion<xetile::StoreTileOp> {
+
   using XeTileConversion<xetile::StoreTileOp>::XeTileConversion;
+
+  StoreTileOpPattern(mlir::MLIRContext *context,
+                     imex::XeTypeConverter &converter,
+                     std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::StoreTileOp op, OpAdaptor adaptor,
@@ -449,17 +601,23 @@ struct StoreTileOpPattern : public XeTileConversion<xetile::StoreTileOp> {
   }
 };
 
-// TODO: M, K, N. replace it with uArch
-llvm::SmallVector<int> getMMASize(mlir::Type elemTy) {
+llvm::SmallVector<unsigned int>
+getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
+           const int CPrecision, const int DPrecision,
+           std::shared_ptr<XeuArchInterface> uArchInterface) {
   assert(elemTy.isIntOrFloat());
   auto bits = elemTy.getIntOrFloatBitWidth();
-  llvm::SmallVector<int> result;
+  imex::DPASConfig dpasParams;
+  llvm::SmallVector<unsigned int> result;
   switch (bits) {
   case 16:
-    result = llvm::SmallVector<int>({8, 16, 16});
+    dpasParams = uArchInterface->getDPASConfig(APrecision, BPrecision,
+                                               CPrecision, DPrecision);
+    result = llvm::SmallVector<unsigned int>(
+        {dpasParams.m, dpasParams.k, dpasParams.n});
     break;
   default:
-    result = llvm::SmallVector<int>({8, 8, 8});
+    result = llvm::SmallVector<unsigned int>({8, 8, 8});
     break;
   }
   return result;
@@ -469,7 +627,16 @@ llvm::SmallVector<int> getMMASize(mlir::Type elemTy) {
 // Values will be reprented as 4D vectors. An unpack op is applied
 // to its result to make the change transparent to its users.
 struct TileMMAOpPattern : public XeTileConversion<xetile::TileMMAOp> {
+
   using XeTileConversion<xetile::TileMMAOp>::XeTileConversion;
+
+  TileMMAOpPattern(mlir::MLIRContext *context, imex::XeTypeConverter &converter,
+                   std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
@@ -480,9 +647,21 @@ struct TileMMAOpPattern : public XeTileConversion<xetile::TileMMAOp> {
     auto b = adaptor.getB();
     auto c = adaptor.getC();
 
+    unsigned int CPrecision = 0;
+    if (c) {
+      auto ty = c.getType().dyn_cast<mlir::VectorType>();
+      auto accTy = c ? ty.getElementType() : nullptr;
+      if (accTy)
+        CPrecision = op.getBType().getElementType().getIntOrFloatBitWidth();
+    }
     assert(a && b && "a operand or b operand is (are) missing.\n");
 
-    auto mmaSize = getMMASize(op.getElementType());
+    auto mmaSize = getMMASize(
+        op.getElementType(),
+        op.getAType().getElementType().getIntOrFloatBitWidth(),
+        op.getBType().getElementType().getIntOrFloatBitWidth(), CPrecision,
+        op.getResult().getType().getElementType().getIntOrFloatBitWidth(),
+        this->uArchInterface);
 
     a = addPackOp(a, {mmaSize[0], mmaSize[1]}, rewriter);
     b = addPackOp(b, {mmaSize[1], mmaSize[2]}, rewriter);
@@ -513,7 +692,17 @@ struct TileMMAOpPattern : public XeTileConversion<xetile::TileMMAOp> {
 // by updating the type of it result.
 struct UpdateTileOffsetOpPattern
     : public XeTileConversion<xetile::UpdateTileOffsetOp> {
+
   using XeTileConversion<xetile::UpdateTileOffsetOp>::XeTileConversion;
+
+  UpdateTileOffsetOpPattern(mlir::MLIRContext *context,
+                            imex::XeTypeConverter &converter,
+                            std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::UpdateTileOffsetOp op, OpAdaptor adaptor,
@@ -525,19 +714,33 @@ struct UpdateTileOffsetOpPattern
   }
 };
 
-void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
-                                    mlir::RewritePatternSet &patterns) {
+void populateXeTileBlockingPatterns(
+    imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
+    std::shared_ptr<XeuArchInterface> ptruArch) {
   patterns
       .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
               SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
               StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern>(
-          patterns.getContext(), converter);
+          patterns.getContext(), converter, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
 class XeTileBlockingPass
     : public imex::impl::XeTileBlockingBase<imex::XeTileBlockingPass> {
+
 public:
+  XeTileBlockingPass() = default;
+
+  XeTileBlockingPass(const std::string &deviceName) {
+    if (this->device.getNumOccurrences() == 0) {
+      this->device = deviceName;
+
+      if (deviceName == "pvc") {
+        uArchInterface = std::make_shared<XePVCuArch>();
+      }
+    }
+  }
+
   void runOnOperation() override {
     mlir::MLIRContext &context = getContext();
     auto mod = this->getOperation();
@@ -549,12 +752,17 @@ public:
       return signalPassFailure();
     }
 
+    if (!uArchInterface) {
+      mod.emitOpError("Can not get GPU Arch Definition for given Arch param");
+      return signalPassFailure();
+    }
+
     auto &usageAnalysis = getAnalysis<TileUsageAnalysis>();
 
     mlir::RewritePatternSet patterns(&context);
     XeTypeConverter typeConverter(context, &usageAnalysis);
 
-    populateXeTileBlockingPatterns(typeConverter, patterns);
+    populateXeTileBlockingPatterns(typeConverter, patterns, uArchInterface);
 
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
@@ -567,10 +775,14 @@ public:
       return signalPassFailure();
     }
   }
+
+private:
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 };
 
 /// Create a pass
-std::unique_ptr<::mlir::Pass> createXeTileBlockingPass() {
-  return std::make_unique<XeTileBlockingPass>();
+std::unique_ptr<::mlir::Pass>
+createXeTileBlockingPass(const std::string &deviceName) {
+  return std::make_unique<XeTileBlockingPass>(deviceName);
 }
 } // namespace imex

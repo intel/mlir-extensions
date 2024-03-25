@@ -54,10 +54,10 @@ def XeTileBlocking : Pass<"xetile-blocking", "::mlir::gpu::GPUModuleOp">{
                            "mlir::vector::VectorDialect"];
 
   let options = [
-    Option<"device", "device", "std::string", /*default=*/"\"default\"",
-           "Specify the target device arch. Available examples are pvc. "
-           "If not specified a default one will be used.">
-  ];
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
 }
 
 #endif // _XeTile_PASSES_TD_INCLUDED_
