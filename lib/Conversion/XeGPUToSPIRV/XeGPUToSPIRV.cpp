@@ -363,7 +363,7 @@ public:
     auto desc = adaptor.getTensorDesc();
     for (size_t i = 0; i < offsets.size(); i++) {
       auto offset = offsets[i];
-      if (auto cst = dyn_cast<spirv::ConstantOp>(offset.getDefiningOp()))
+      if (auto cst = offset.getDefiningOp<arith::ConstantOp>())
         if (auto attr = dyn_cast<mlir::IntegerAttr>(cst.getValue());
             attr && attr.getInt() == 0)
           continue;
@@ -1538,21 +1538,13 @@ struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
     if (!dstType)
       return failure();
 
+    // This lowering pattern is needed only for spirv ops with large vector
+    // lengths.
+    assert(
+        !imex::isGenericVectorTy(dstType) &&
+        "Vector size is considered generic and op does not require lowering to "
+        "VC intrinsic. Consider marking this op + vector length as legal.");
     auto vecSize = dstType.template dyn_cast<VectorType>().getNumElements();
-    auto hasGenericVecSize = [&]() -> bool {
-      // if the input is scalar, we keep the operation as is.
-      if (isa<spirv::ScalarType>(dstType))
-        return true;
-      // or, if the vector size is 2, 3, 4, 8, or 16, we keep the operation.
-      return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
-             vecSize == 16;
-    };
-
-    if (hasGenericVecSize()) {
-      rewriter.replaceOpWithNewOp<SPIRVOp>(op, dstType, adaptor.getOperands());
-      return success();
-    }
-
     // for larger vector lengths, "llvm.genx.exp" returns the base 2
     // exponentiation of the input. To get the base e exponentiation, we need to
     // scale the input by log2(e)
@@ -1587,6 +1579,14 @@ struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
   }
 };
 } // namespace
+
+bool imex::isGenericVectorTy(mlir::Type type) {
+  if (isa<spirv::ScalarType>(type))
+    return true;
+  auto vecSize = type.dyn_cast<VectorType>().getNumElements();
+  return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
+         vecSize == 16;
+}
 
 void imex::populateXeGPUToVCIntrinsicsPatterns(
     SPIRVTypeConverter &typeConverter, RewritePatternSet &patterns) {

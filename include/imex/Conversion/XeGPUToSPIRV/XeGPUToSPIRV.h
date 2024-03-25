@@ -14,6 +14,7 @@
 #ifndef IMEX_CONVERSION_XEGPUTOSPIRV_H
 #define IMEX_CONVERSION_XEGPUTOSPIRV_H
 
+#include "mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h"
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -25,7 +26,9 @@ class Pass;
 
 namespace imex {
 
-template <typename SPIRVOp> std::string getVCIntrinsicName(SPIRVOp op);
+// helper to check the legal vector lengths for arith/math ops
+bool isGenericVectorTy(mlir::Type type);
+
 // XeGPU to VC Intrinsics pattern
 void populateXeGPUToVCIntrinsicsPatterns(
     mlir::SPIRVTypeConverter &typeConverter, mlir::RewritePatternSet &patterns);
