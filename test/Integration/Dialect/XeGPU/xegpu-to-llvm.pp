@@ -1,6 +1,7 @@
 // linalg dialect to gpu dialect lowering pipeline
 // Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 builtin.module(
+    imex-vector-linearize
     imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
