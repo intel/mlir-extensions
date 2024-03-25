@@ -152,7 +152,6 @@ XePVCuArch::get2DLoadConfig(mlir::Operation *op, int element_data_size,
            << "Given element data size: d" << element_data_size;
     break;
   }
-
   loadParams.GRFDataSize.load = 2048;
   return loadParams;
 }
