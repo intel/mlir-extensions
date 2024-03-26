@@ -25,8 +25,10 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         clinfo \
         intel-basekit \
         # Intel GPU requirements
-        intel-level-zero-gpu \
-        level-zero \
+        # Simulator installs its own .deb for level-zero* packages so they are commented for now
+        # intel-level-zero-gpu
+        # level-zero
+        # level-zero-dev
         # FS simulator requirements
         openmpi-bin \
         libgdk-pixbuf2.0-0 \
@@ -46,8 +48,8 @@ RUN sudo apt-get update --yes \
     && mkdir -p ${WORKSPACE} \
     && cd ${WORKSPACE} \
     && curl https://artifactory-kfs.habana-labs.com/artifactory/bin-generic-dev-local/CORAL_FS/latest/CORAL_FS-master.tgz | tar zxf - \
-    # Remove following line after Habana fixes their setup script \
-    && sed -e 's,    export KMD_VERSION="6.6.0-rc3",    export KMD_VERSION="6.7.0-rc5",g' -i ${WORKSPACE}/scripts/setup.sh \
+    && export KMD_VERSION=6.8.0-rc6 \
+    && export KMD_RELEASE=0.4.0 \
     && source ${WORKSPACE}/scripts/setup.sh \
     && setup_fs_dev \
     && umd_driver_install \
