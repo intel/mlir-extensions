@@ -25,8 +25,15 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
 |tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
-|tile_pack	| operation ::=XeTile.tile_pack $matA attr_dict: type($matA) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
-|tile_unpack	| operation ::=XeTile.tile_upack $matA attr_dict: type($matA) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
+|atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile $vec $kind $tile: type($vec), type($tile) -> type($res)	 | %vector_a =
+atomic_rmw_tile <add> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_broadcast	| operation ::=XeTile.tile_broadcast $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
+|tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
+|tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
+*Operations only used to support internal lowering. 
+**OP name convention: xxx_tile operates on the tile type and involves memory access, tile_xxx operates on vector data type only.  
 
 To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory. Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix. The base matrix must be 2D and must be contiguous. The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape. Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
 
@@ -56,13 +63,6 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
 
-`init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set.
-
-```mlir
-  #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
-     memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
-```
 
 With the tile date type, XeTile supports load_tile, prefetch_tile, and store_tile.
 
@@ -86,13 +86,6 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
      tile<64x32xbf16, #tile_attr> into vector<64x32xb16>
 ```
 
-`load_tile` loads a 2D tile with an `inner_block` attribute  to 4D vector.
-```mlir
-  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
-  %vector_a = XeTile.load_tile %tile_a :
-     tile<64x32xbf16, #tile_attr> into vector<4x2x16x16xb16>
-```
-
 `store_tile` stores a vector to memory. Padding attributes are not supported.
 ```mlir  
   XeTile.store_tile %tile_a, %vector_a :
@@ -105,13 +98,6 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
      vector<64x32xb16> to tile<64x32xbf16, #tile_attr>
 ```
 
-`load_tile` stores a 4D vector to a 2D tile with an `inner_block`.
-```mlir
-  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
-  %vector_a = XeTile.store_tile %tile_a :
-     vector<4x2x16x16xb16> into tile<64x32xbf16, #tile_attr>
-```
-
 `prefetch_tile` prefetches the tile to cache.  
 ```mlir
   XeTile.prefetch_tile %coop_tile: tile<8x32xbf16>
@@ -121,12 +107,6 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
      vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16>
 	   into vector<64x128xfloat>  
-
-To support blocking, `tile_mma` also works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
-%vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
-     vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
-	   into vector<8x8x8x16xfloat>  
-```
 
 A `tile_mma` variant without vector_c initialization.
 ```mlir
@@ -139,7 +119,54 @@ A `tile_mma` variant without vector_c initialization.
   %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
+`atomic_rmw_tile` atomically reads, modifies, and writes back data to the memory specified by the tile.
+```mlir
+  %ret_value = XeTile.atomic_rmw “addf” %value, %tile:
+          vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>
+```
+XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKindAttr.
 
+
+`tile_transpose` transpose a 2D vector. It has the same semantics as the vector.transpose, but restricts the vector dimension to 2D. 
+```mlir
+   %vector_a = XeTile.transpose_tile %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  
+```
+`tile_reduce` performs a reduction operation over a 2D vector. The result is a 2D vector with the size of reduced axis being 1. It has the same semantics as the vector.multi_dimesnion, but restricts the vector dimension to 2D. The reduce operation are the same as vector.multi_dimension:add/mul/minsi/minui/maxsi/maxui /and/or/xor for integers, and add/mul/minnumf/maxnumf/minimumf /maximumf for floats.   
+```mlir
+   %vector_a = XeTile.tile_reduce <add> %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  
+```
+`tile_broadcast` broadcast from 1D vector to a 2D vector. 
+```mlir
+   %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
+```
+
+## Internal Operations to support gradual lowering
+
+`init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set.
+
+```mlir
+  #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
+  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
+     memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
+```
+
+`load_tile` loads a 2D tile with an `inner_block` attribute  to 4D vector.
+```mlir
+  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
+  %vector_a = XeTile.load_tile %tile_a :
+     tile<64x32xbf16, #tile_attr> into vector<4x2x16x16xb16>
+```
+`load_tile` stores a 4D vector to a 2D tile with an `inner_block`.
+```mlir
+  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
+  %vector_a = XeTile.store_tile %tile_a :
+     vector<4x2x16x16xb16> into tile<64x32xbf16, #tile_attr>
+```
+To support blocking, `tile_mma` also works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
+%vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
+     vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
+	   into vector<8x8x8x16xfloat>  
+```
 `tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute.
 
 ```mlir
@@ -154,11 +181,8 @@ A `tile_mma` variant without vector_c initialization.
 ```
 The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1].
 
-atomic_rmw atomically reads, modifies, and writes back data to the memory specified by the tile.
-  %ret_value = XeTile.atomic_rmw “addf” %value, %tile:
-          vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>
-XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKindAttr.
 
+## Workgroup Level XeTile extension
 `xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups.
 `xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect.
 `xetile.wg_map` and `xeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup to tune the performance.
