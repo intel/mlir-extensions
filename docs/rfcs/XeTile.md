@@ -190,10 +190,7 @@ With the data being presented as 4D vector, all the vector based XeTile operatio
    %vector_a = XeTile.tile_broadcast %vector_b: vector<8x1x8x1xfloat> into vector<8x4x8x16xfloat>
 ```
 
-`tile_transpose` transpose 4D vector. The transpose is usually implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  The transpose_tile may require a different block size to support effiecient share local memory access. 
-```mlir
-   %vector_a = XeTile.transpose_tile [1, 0, 3, 2] %vector_b: vector<8x4x8x8xfloat> into vector<4x8x8x8xfloat>  
-```
+`tile_transpose` doesn't have support 4D vector. The transpose is usually implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.   
 
 `tile_pack` and `tile_unpack` are introduced to support the gradual lowering. It allows the XeTile IR to be blocked with different block size, and then try to find a good blocking strategy with minimum tile_pack and tile_unpack overhead. 
  
@@ -235,7 +232,9 @@ For example, for the tile size [128, 128] and sg_data [32, 128], along the secon
 | [ 64:95, 0:127] | [0, 0] , [0, 1] |
 | [96:127, 0:127] | [1, 0] , [1, 1] |
 
-With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type. The proposal is to attach the `xetile.wg_map` to the vector based XeTile operations as illustrated below. 
+With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type. 
+
+The proposal is to attach the `xetile.wg_map` to the vector based XeTile operations as illustrated below. These operations may have different subgroup layout for the input and output, which means the data may move from one subgroup to another. 
 
 With these attributes, `tile_mma` does a matrix multiplication at a work group level vector. 
 ```mlir
@@ -255,9 +254,9 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.tile_reduce #wg_map_b #wg_map_a  <add> %vector_b [1]: vector<256x128xfloat> into vector<256x1xfloat>
 ```
 
-`tile_broadcast` broadcast 4D vector. The input is expected to be first reshaped from 1D vector to 2D vector, and then blocked to 4D.  
+`tile_broadcast` broadcast 4D vector.   
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
+   #wg_map_b = #xetile.wg_map<sg_layout = [16], sg_data = [16]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
    %vector_a = XeTile.tile_broadcast #wg_map_b #wg_map_a  %vector_b: vector<256x1xfloat> into vector<256x256xfloat>
 ```
@@ -269,11 +268,11 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.transpose_tile #wg_map_b #wg_map_a %vector_b: vector<512x128xfloat> into vector<128x512xfloat>  
 ```
 
-`tile_convert_layout` changes the layout of subgroup threads and the data layout correspondingly.  
+`tile_reshape` changes the layout of subgroup threads and the data layout correspondingly. 
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
-   #wg_map_a = #xetile.wg_map<sg_layout = [1, 16], sg_data = [1, 16]>
-   %vector_a = XeTile.tile_convert_layout #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x1xfloat> into vector<1x256xfloat>
+   #wg_map_a = #xetile.wg_map<sg_layout = [16], sg_data = [16]>
+   %vector_a = XeTile.tile_reshape #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x1xfloat> into vector<256xfloat>
 ```
 
 ## Alternative design considerations
