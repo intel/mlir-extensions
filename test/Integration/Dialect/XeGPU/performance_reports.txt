@@ -24,3 +24,10 @@ Requirements : doubleGRF
 Kernel test_kernel : 250 registers
 the kernel execution time is (ms, on L0 runtime):avg: 0.7909, min: 0.5862, max: 2.3459 (over 1000 runs)
 TFlops : avg:173.775, min:58.587, max:234.457
+---------------------------------------------------------------------------------------------------------
+Benchmark name: flash_attention_fwd
+Platform :  Intel(R) Data Center GPU Max 1550
+Requirements : doubleGRF
+
+the kernel execution time is (ms, on L0 runtime):avg: 5.8612, min: 5.7430, max: 6.0309 (over 1000 runs)
+TFlops : avg:117.245, min:113.946, max:119.658
