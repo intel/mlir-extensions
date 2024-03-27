@@ -269,11 +269,11 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.transpose_tile #wg_map_b #wg_map_a %vector_b: vector<512x128xfloat> into vector<128x512xfloat>  
 ```
 
-`tile_reshape` changes the data shape and also layout of subgroup threads. 
+`tile_convert_layout` changes the layout of subgroup threads and the data layout correspondingly.  
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
    #wg_map_a = #xetile.wg_map<sg_layout = [1, 16], sg_data = [1, 16]>
-   %vector_a = XeTile.tile_reduce #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x1xfloat> into vector<1x256xfloat>
+   %vector_a = XeTile.tile_convert_layout #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x1xfloat> into vector<1x256xfloat>
 ```
 
 ## Alternative design considerations
