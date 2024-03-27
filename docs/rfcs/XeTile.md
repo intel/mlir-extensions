@@ -25,13 +25,13 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
 |tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
-|atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile $vec $kind $tile: type($vec), type($tile) -> type($res)	 | %vector_a =
-atomic_rmw_tile <add> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
+|atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile $vec $kind $tile: type($vec), type($tile) -> type($res)	 | %vector_a = atomic_rmw_tile <add> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
 |tile_transpose	| operation ::=XeTile.tile_transpose $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
 |tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
 |tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
+
 *Operations only used to support internal lowering. 
 **OP name convention: xxx_tile operates on the tile type and involves memory access, tile_xxx operates on vector data type only.  
 
@@ -119,7 +119,9 @@ A `tile_mma` variant without vector_c initialization.
   %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
+
 `atomic_rmw_tile` atomically reads, modifies, and writes back data to the memory specified by the tile.
+
 ```mlir
   %ret_value = XeTile.atomic_rmw “addf” %value, %tile:
           vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>
