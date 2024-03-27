@@ -27,12 +27,13 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
 |atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile $vec $kind $tile: type($vec), type($tile) -> type($res)	 | %vector_a = atomic_rmw_tile <add> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
 |tile_transpose	| operation ::=XeTile.tile_transpose $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
-|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
 |tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
 |tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
 
 *Operations only used to support internal lowering. 
+
 **OP name convention: xxx_tile operates on the tile type and involves memory access, tile_xxx operates on vector data type only.  
 
 To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory. Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix. The base matrix must be 2D and must be contiguous. The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape. Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
@@ -120,6 +121,7 @@ A `tile_mma` variant without vector_c initialization.
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
 
+
 `atomic_rmw_tile` atomically reads, modifies, and writes back data to the memory specified by the tile.
 
 ```mlir
@@ -135,14 +137,15 @@ XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
 ```
 `tile_reduce` performs a reduction operation over a 2D vector. The result is a 2D vector with the size of reduced axis being 1. It has the same semantics as the vector.multi_dimesnion, but restricts the vector dimension to 2D. The reduce operation are the same as vector.multi_dimension:add/mul/minsi/minui/maxsi/maxui /and/or/xor for integers, and add/mul/minnumf/maxnumf/minimumf /maximumf for floats.   
 ```mlir
-   %vector_a = XeTile.tile_reduce <add> %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  
+   %vector_a = XeTile.tile_reduce <add> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>
 ```
 `tile_broadcast` broadcast from 1D vector to a 2D vector. 
 ```mlir
-   %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
+   %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>
 ```
 
 ## Internal Operations to support gradual lowering
+The 2D XeTile IR needs to be lowered in an intermediate form to support `blocking` optimization. The `blocking` optimization loads the tile in blocks and feed the block to matrix hardware. Since the load block size and matrix hardware size are not necessary same, we need to represent the data block in some form to assist the optimization. Conceptually, when a 2D tile data being loaded with a specified block size, the vector presented the 2D tile in 4D block layout. So we uses 4D dimension vector to describe the data being loaded with the block size. 
 
 `init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set.
 
@@ -158,17 +161,39 @@ XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
   %vector_a = XeTile.load_tile %tile_a :
      tile<64x32xbf16, #tile_attr> into vector<4x2x16x16xb16>
 ```
-`load_tile` stores a 4D vector to a 2D tile with an `inner_block`.
+`store_tile` stores a 4D vector to a 2D tile with an `inner_block`.
 ```mlir
   #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
   %vector_a = XeTile.store_tile %tile_a :
      vector<4x2x16x16xb16> into tile<64x32xbf16, #tile_attr>
 ```
-To support blocking, `tile_mma` also works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
-%vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
+`atomic_rmw_tile` performs atomic operation on 4D vectors. 
+```mlir
+#tile_attr = #xetile.tile_ttr<inner_blocks=[8,16]>
+%vector_a = atomic_rmw_tile <add> %value, %tile: vector<8x48x16xbf16>, tile<64x64xbf16, #tile_attr> to vector<8x4x8x16xbf16>
+```
+
+With the data being presented as 4D vector, all the vector based XeTile operations are required to support blocking. 
+`tile_mma` works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
+```mlir
+   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
      vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
 	   into vector<8x8x8x16xfloat>  
 ```
+`tile_reduce` follows the vector.multi-reduction semantics and can be applied to 4D vector. 
+```mlir
+   %vector_a = XeTile.tile_reduce <add> %vector_b [1, 3]: vector<8x4x8x16xfloat> into vector<8x1x8x1float>
+```
+
+`tile_broadcast` broadcast 4D vector. The input is expected to be first reshaped from 1D vector to 2D vector, and then blocked to 4D.  
+```mlir
+   %vector_a = XeTile.tile_broadcast %vector_b: vector<8x1x8x1xfloat> into vector<8x4x8x16xfloat>
+```
+
+`tile_transpose` doens't support 4D vector, since the transpose is usually implemented by saving and restoring from the share local memory. To support this, we also relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  
+
+`tile_pack` and `tile_unpack` are introduced to support the gradual lowering. It allows the XeTile IR to be blocked with different block size, and then try to find a good blocking strategy with minimum tile_pack and tile_unpack overhead. 
+ 
 `tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute.
 
 ```mlir
@@ -186,15 +211,12 @@ The tile_pack and tile_unpack operation is similar to pack and unpack operation 
 
 ## Workgroup Level XeTile extension
 `xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups.
-`xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect.
-`xetile.wg_map` and `xeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup to tune the performance.
-
+`xetile.wg_map` gives the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup to tune the performance.
 
 Below is an example.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
-   #sg_map_a = #xetile.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
-   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, sg = #sg_map_a, order = [0, 1], inner_blocks=[32,16]>
+   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, order = [0, 1], inner_blocks=[32,16]>
 
    %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #tile_attr>
 ```
@@ -211,10 +233,6 @@ For example, for the tile size [128, 128] and sg_data [32, 128], along the secon
 | [ 64:95, 0:127] | [0, 0] , [0, 1] |
 | [96:127, 0:127] | [1, 0] , [1, 1] |
 
-
-Within the `xetile.sg_map`, `wi_layout` specifies the layout in which WI threads correspond to the memory, and `wi_data` describes the data block accessed by each WI thread. In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment. The data elements with each data fragment assigned to a WI thread must be contiguous. So the sg_map describes a total [2,16] submatrix at the subgroup level.
-
-The size of `sg_data` within `xetile.wg_map` must be divisible by sg_map size, which equals to `wi_layout` multiplying with `wi_data` within `xetile.sg_map`. More specifically, for each dimension, the `sg_data` size must be divisible by `wi_layout` x `wi_data`. The sg_data size must be larger than or equal to the sg_map size. When the 2D subtensor size is larger than the sg_map size, it is distributed to WI threads in a round-robin fashion.
 
 
 ## Alternative design considerations
