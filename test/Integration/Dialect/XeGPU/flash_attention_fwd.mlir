@@ -147,8 +147,11 @@ module @flash_attention attributes {gpu.container_module} {
       %zero_dpas = vector.shape_cast %zero : vector<128xf32> to vector<8x16xf32>
 
       // softmax scaling
-      %qk_scale_8 = spirv.CompositeConstruct %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale : (f32, f32, f32, f32, f32, f32, f32, f32) -> vector<8xf32>
-      %qk_scale_16 = spirv.CompositeConstruct %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale,%sm_scale, %sm_scale, %sm_scale, %sm_scale,%sm_scale, %sm_scale, %sm_scale, %sm_scale : (f32, f32, f32, f32,f32, f32, f32, f32,f32, f32, f32, f32,f32, f32, f32, f32 ) -> vector<16xf32>
+      // %qk_scale_8 = spirv.CompositeConstruct %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale : (f32, f32, f32, f32, f32, f32, f32, f32) -> vector<8xf32>
+      // %qk_scale_16 = spirv.CompositeConstruct %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale, %sm_scale,%sm_scale, %sm_scale, %sm_scale, %sm_scale,%sm_scale, %sm_scale, %sm_scale, %sm_scale : (f32, f32, f32, f32,f32, f32, f32, f32,f32, f32, f32, f32,f32, f32, f32, f32 ) -> vector<16xf32>
+      // FIXME: value 0.5 is hard coded. need to take it from %sm_scale
+      %qk_scale_8 = arith.constant dense<0.5> : vector<8xf32>
+      %qk_scale_16 = arith.constant dense<0.5> : vector<16xf32>
       %qk_scale_8x1 = vector.shape_cast %qk_scale_8 : vector<8xf32> to vector<8x1xf32>
       %qk_scale_1x16 = vector.shape_cast %qk_scale_16 : vector<16xf32> to vector<1x16xf32>
       %qk_scale_8x16 = vector.shuffle %qk_scale_1x16, %qk_scale_1x16 [0, 0, 0, 0, 0, 0, 0, 0] : vector<1x16xf32>, vector<1x16xf32>
