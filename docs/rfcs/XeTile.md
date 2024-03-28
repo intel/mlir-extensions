@@ -105,7 +105,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `tile_mma` represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.  
 ```mlir
-  %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
+  %vector_c = XeTile.tile_mma %vector_c, %vector_b, %vector_a :
      vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16>
 	   into vector<64x128xfloat>
 ```
@@ -176,7 +176,7 @@ The 2D XeTile IR needs to be lowered in an intermediate form to support `blockin
 With the data being presented as 4D vector, all the vector based XeTile operations are required to support blocking. 
 `tile_mma` works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
 ```mlir
-   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
+   %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b :
      vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
 	   into vector<8x8x8x16xfloat>  
 ```
@@ -235,6 +235,14 @@ For example, for the tile size [128, 128] and sg_data [32, 128], along the secon
 With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type. 
 
 The proposal is to attach the `xetile.wg_map` to the vector based XeTile operations as illustrated below. These operations may have different subgroup layout for the input and output, which means the data may move from one subgroup to another. 
+| Ops	| Syntax	| Example |
+| :---   | :----   | :--- |
+|tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b #mp_c #mp_a #mp_b #mp_c : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose attr_dict $permuation_dims $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b  #mp_b #mp_a: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1] #mp_b #mp_a: vector<64x32xfloat> into vector<64x1xfloat>  |
+|tile_broadcast	| operation ::=XeTile.tile_broadcast $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b #mp_b #mp_a: vector<32xfloat> into vector<64x32xfloat>  |
+|tile_conv_layout	| operation ::=XeTile.conv_layout attr_dict $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_conv_layout %vector_b #mp_b #mp_a : vector<256x256xfloat> into vector<256x256xfloat>  |
+
 
 With these attributes, `tile_mma` does a matrix multiplication at a work group level vector. 
 ```mlir
@@ -242,7 +250,7 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
    #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 
-   %vector_c = XeTile.tile_mma #wg_map_a #wg_map_b #wg_map_c #wg_map_c %vector_a, %vector_b, %vector_c :
+   %vector_c = XeTile.tile_mma #wg_map_c #wg_map_a #wg_map_b #wg_map_c %vector_c, %vector_a, %vector_b :
      vector<256x256xfloat>, vector<256x256xbf16>, vector<256x256xbf16>
 	   into vector<256x256xfloat>  
 ```
@@ -424,7 +432,7 @@ func.func @test_gemm(%a : memref<1024x1024xf16>,
 
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
-           %6 = tile_mma %4, %5, %6 #mp_a #mp_b #mp_c #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
            %1 = update_tile_offset   %1, %c0, %c64 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
            %2 = update_tile_offset   %2, %c0, %c64 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
          }  
