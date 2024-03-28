@@ -30,7 +30,7 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b: vector<32xfloat> into vector<64x32xfloat>  |
 |tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
-|tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
+|tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b inner_blocks=[16, 16] : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
 
 *Operations only used to support internal lowering. 
 
@@ -238,9 +238,9 @@ The proposal is to attach the `xetile.wg_map` to the vector based XeTile operati
 
 With these attributes, `tile_mma` does a matrix multiplication at a work group level vector. 
 ```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 256]>
-   #wg_map_b = #xetile.wg_map<sg_layout = [4, 4], sg_data = [256, 64]>
-   #wg_map_c = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
+   #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+   #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 
    %vector_c = XeTile.tile_mma #wg_map_a #wg_map_b #wg_map_c #wg_map_c %vector_a, %vector_b, %vector_c :
      vector<256x256xfloat>, vector<256x256xbf16>, vector<256x256xbf16>
@@ -249,14 +249,14 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
 
 `tile_reduce` follows the vector.multi-reduction semantics and can be applied to 4D vector. 
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
-   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
-   %vector_a = XeTile.tile_reduce #wg_map_b #wg_map_a  <add> %vector_b [1]: vector<256x128xfloat> into vector<256x1xfloat>
+   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
+   #wg_map_a2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
+   %vector_a = XeTile.tile_reduce #wg_map_a #wg_map_a2  <add> %vector_b [1]: vector<256x128xfloat> into vector<256x1xfloat>
 ```
 
 `tile_broadcast` broadcast 4D vector.   
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [16], sg_data = [16]>
+   #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
    %vector_a = XeTile.tile_broadcast #wg_map_b #wg_map_a  %vector_b: vector<256x1xfloat> into vector<256x256xfloat>
 ```
@@ -268,11 +268,11 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.transpose_tile #wg_map_b #wg_map_a %vector_b: vector<512x128xfloat> into vector<128x512xfloat>  
 ```
 
-`tile_reshape` changes the layout of subgroup threads and the data layout correspondingly. 
+`tile_convert_layout` changes the layout of subgroup threads.  
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
-   #wg_map_a = #xetile.wg_map<sg_layout = [16], sg_data = [16]>
-   %vector_a = XeTile.tile_reshape #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x1xfloat> into vector<256xfloat>
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>
+   %vector_a = XeTile.tile_convert_layout #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x256xfloat> into vector<256x256float>
 ```
 
 ## Alternative design considerations
@@ -380,3 +380,61 @@ Incorrect lowering -
 ```
 
 
+## Appendix 2 - Code example for work group level XeTile using wg_map attribute
+
+This is the pseduo code for the original problem
+```mlir
+C[1024, 1024] = matmul (A[1024, 1024], BT[1024, 1024]) + broad_cast(bcast[1024], dim=0)
+Reduce[1024] = reduce_add(C[1024, 1024], dim=1)
+```
+
+```mlir
+#mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]> 
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]> 
+#mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
+#mp_bt_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]> 
+#mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+
+#mp_bcast = #wg_map<sg_layout=[8, 4], sg_data=[1,64]>
+#mp_reduce= #wg_map<sg_layout=[32, 1], sg_data=[8, 1]>
+#mp_reduce2= #wg_map<sg_layout=[32, 1], sg_data=[8, 256]>
+
+func.func @test_gemm(%a : memref<1024x1024xf16>, 
+       %b: memref<1024x1024xf16>, 
+       %bcast: memref<1024xf32>
+       %res: memref<1024xf32> ) {
+  scf.for %i = %c0 to %c1024 step %c256 {
+    scf.for %j = %c0 to %c1024 step %c256 {
+       %1 = init_tile %a[%i, %k] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = init_tile %bt[%j, %k] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt> // sg_layout=[4,8], sg_data=[64,32]
+       %1p = init_tile %a[%i, %k+3] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = init_tile %bt[%j, %k+3] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt_pfh> // sg_layout=[32,1]
+
+       %bcast'= memref.cast %bcast: memref<1024xf32> -> memref<1x1024xf32> 
+       %7 = init_tile %bcast'[%j] : memref<1x1024xf32> -> tile<1x256xf32, #mp_bast>           // sg_layout=[4, 8], sg_data=[1,32]
+
+       %res'= memref.cast %res: memref<1024xf32> -> memref<1024x1xf32> 
+       %3 = init_tile %res'[%i] : memref<1024x1xf32> -> tile<256x1xf32, #mp_reduce>           // sg_layout=[32, 1]
+
+       scf.for %k= %c0 to %c1024 step %c64 {
+           %4  = load_tile %1 : tile<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
+           %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
+           %5  = tile_transpose %10 #mp_bt #mp_b: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+
+           prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
+           prefetch_tile %2  : tile<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
+           %6 = tile_mma %4, %5, %6 #mp_a #mp_b #mp_c #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_tile_offset   %1, %c0, %c64 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
+           %2 = update_tile_offset   %2, %c0, %c64 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
+         }  
+
+         %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
+         %13 = tile_broadcast #mp_bcast #mp_c %12 [0], vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
+         %14 = Vector.add %6, %13
+         %15 = tile_convert_layout #mp_c #mp_reduce2 %14             					   // sg_layout=[4, 8] -> sg_layout=[32, 1] 
+         %16 = tile_reduce #mp_reduce2 #mp_reduce <add> %15 [1], vector<256x256xf32> => vector<256x1xf32>  // sg_layout=[32, 1]
+         store_tile %3, %7: (tile<256x1xf32, #mp_reduce>, vector<256x1xf32>)                               // sg_layout=[32, 1]
+    }  
+  }
+```
