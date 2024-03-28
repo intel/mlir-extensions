@@ -483,12 +483,14 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
 
         int factor = 32 / elementSize;
         vnni = false;
-        innerBlocks = mlir::DenseI64ArrayAttr::get(
-            getContext(),
-            getInnerBlockSizes<Load>(
-                op.getOperation(), mlir::FloatType::getF32(getContext()),
-                tileTy.getShape()[0], (tileTy.getShape()[1]) * factor,
-                this->uArchInterface, vnni, transpose));
+        llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(
+            op.getOperation(), mlir::FloatType::getF32(getContext()),
+            tileTy.getShape()[1], (tileTy.getShape()[0]) / factor,
+            this->uArchInterface, vnni, transpose);
+        std::swap(innerBlock[0], innerBlock[1]);
+        innerBlock[0] *= factor;
+        innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlock);
+
       } else if (transpose && elementSize < 32) {
         return rewriter.notifyMatchFailure(op, "Invalid transpose.");
       } else {

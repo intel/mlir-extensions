@@ -294,15 +294,22 @@ class SgInitTileOpPattern
     auto loc = op.getLoc();
     auto source = op.getSource();
     auto tileTy = op.getType();
-    auto innerBlk = tileTy.getInnerBlocks();
-    auto shape = tileTy.getShape();
+    auto innerBlocks = tileTy.getInnerBlocks();
+    auto shape = llvm::to_vector(tileTy.getShape());
     auto indexType = rewriter.getIndexType();
 
     if (tileTy.getRank() != 2)
       return op.emitOpError("The tile shape should be 2D.");
 
-    if (!innerBlk || innerBlk.size() != 2)
+    if (!innerBlocks || innerBlocks.size() != 2)
       return op.emitOpError("Missing valid innerBlock for the tile in op.");
+
+    // Need to make a copy, so we can swap values.
+    auto innerBlk = llvm::to_vector(innerBlocks.asArrayRef());
+    if (tileTy.getOrder().asArrayRef() == mlir::ArrayRef({0, 1})) {
+      std::swap(innerBlk[0], innerBlk[1]);
+      std::swap(shape[0], shape[1]);
+    }
 
     // using array_length for load if dim1 of innerBlocks
     // is smaller than dim 1 of shape.
@@ -330,6 +337,7 @@ class SgInitTileOpPattern
 
     auto offsetsX = offsets[0];
     auto offsetsY = offsets[1];
+
     auto tDescTy = xegpu::TensorDescType::get(
         innerBlk, tileTy.getElementType(), xegpu::MemoryScope::GLOBAL,
         array_length, true /*boundary_check*/, {} /*scattered*/,
@@ -450,8 +458,26 @@ struct SgLoadTileOpPattern
       vnniAttr = rewriter.getI32IntegerAttr(axis);
     }
 
-    // TODO: add transpose info
     mlir::DenseI64ArrayAttr transposeAttr;
+    auto srcOrder = tileTy.getOrder();
+    if (srcOrder.asArrayRef() == mlir::ArrayRef({1, 0})) {
+      // Nothing to do
+    } else if (srcOrder.asArrayRef() == mlir::ArrayRef({0, 1})) {
+      auto elemWidth = elemTy.getIntOrFloatBitWidth();
+      if (elemWidth == 32) {
+        transposeAttr = rewriter.getDenseI64ArrayAttr({1, 0});
+      } else if (elemWidth == 16 && vnniAttr && vnniAttr.getInt() == 0) {
+        transposeAttr = rewriter.getDenseI64ArrayAttr({1, 0});
+        transposeBitWidthAttr = rewriter.getI32IntegerAttr(32);
+        vnniAttr = nullptr;
+      } else {
+        return ((mlir::PatternRewriter &)rewriter)
+            .notifyMatchFailure(op, "Unsupported element type for transpose");
+      }
+    } else {
+      return ((mlir::PatternRewriter &)rewriter)
+          .notifyMatchFailure(op, "Unsupported order");
+    }
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<::mlir::Value> xegpuOps;
@@ -461,8 +487,15 @@ struct SgLoadTileOpPattern
       auto shape = tdescTy.getShape().vec();
       auto array_length = tdescTy.getArrayLength();
 
+      if (transposeAttr)
+        std::swap(shape[0], shape[1]);
+
       if (vnniAttr) {
         auto axis = vnniAttr.getInt();
+        shape[axis] /= factor;
+        shape.push_back(factor);
+      } else if (transposeBitWidthAttr) {
+        auto axis = 0;
         shape[axis] /= factor;
         shape.push_back(factor);
       }
