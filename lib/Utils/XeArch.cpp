@@ -95,12 +95,14 @@ XePVCuArch::get2DLoadConfig(mlir::Operation *op, int element_data_size,
            << "transpose and transform are not supported together";
   }
 
+  // FIXME: We do support transpose on f16 wtih transpose_bit_width==32,
+  // disable check for now.
   // only d32 and d64 is supported for transpose operations
-  if ((transpose) && (element_data_size != 32 && element_data_size != 64)) {
-    return op->emitOpError()
-           << "transposed load only supports d32 and d64 data sizes. "
-           << "Given element data size: d" << element_data_size;
-  }
+  // if ((transpose) && (element_data_size != 32 && element_data_size != 64)) {
+  //   return op->emitOpError()
+  //          << "transposed load only supports d32 and d64 data sizes. "
+  //          << "Given element data size: d" << element_data_size;
+  // }
 
   // only d8 and d16 are suported for VNNI transform operations
   if ((vnni) && (element_data_size != 8 && element_data_size != 16)) {
