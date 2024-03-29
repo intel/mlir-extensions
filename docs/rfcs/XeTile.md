@@ -390,7 +390,7 @@ Incorrect lowering -
 
 ## Appendix 2 - Code examples for work group level XeTile using wg_map attribute
 
-First exampel shows a simple gemm. It demonstrates the different wg_map we used for prefetch and load.  
+The first example shows a simple gemm. It demonstrates the different wg_map we used for prefetch and load.  
 ```mlir
 Pseudo code for simple gemm
 C[1024, 1024] = matmul (A[1024, 1024], B[1024, 1024]) 
@@ -408,31 +408,31 @@ func.func @test_gemm(%a : memref<1024x1024xf16>,
        %c: memref<1024xf32> ) {
   scf.for %i = %c0 to %c1024 step %c256 {
     scf.for %j = %c0 to %c1024 step %c256 {
-       %1 = init_tile %a[%i, %k] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
-       %2 = init_tile %b[%k, %j] : memref<1024x1024xf16> -> tile<32x256xf16, #mp_bt> // sg_layout=[8,4], sg_data=[32,64]
+       %1 = init_tile %a[%i, %c0] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = init_tile %b[%c0, %j] : memref<1024x1024xf16> -> tile<32x256xf16, #mp_bt> // sg_layout=[8,4], sg_data=[32,64]
        %1p = init_tile %a[%i, %c192] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
        %2p = init_tile %bt[%c192, %j] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt_pfh> // sg_layout=[4,8]
 
-       %3 = init_tile %c[%i, %j] : memref<1024x1024xf32> -> tile<256x256xf32, #mp_reduce>           // sg_layout=[32, 1]
+       %3 = init_tile %c[%i, %j] : memref<1024x1024xf32> -> tile<256x256xf32, #mp_c>           // sg_layout=[32, 1]
 
-       scf.for %k= %c0 to %c1024 step %c64 {
+       scf.for %k= %c0 to %c1024 step %c32 {
            %4  = load_tile %1 : tile<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
            %10 = load_tile %2  : tile<32x256xf16 #mp_b> -> vector<32x256xf16>                // sg_layout=[8,4], sg_data=[32,64]
            
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<32x256xf16, #mp_a_pfh>                                    // sg_layout=[4,8]
-           %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
-           %1 = update_tile_offset   %1, %c0, %c64 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
-           %2 = update_tile_offset   %2, %c64, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
-           %1p = update_tile_offset   %1p, %c0, %c64 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %2p = update_tile_offset   %2p, %c64, %c0 :  tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
+           %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c %4, %10 : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
+           %2 = update_tile_offset   %2, %c32, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
+           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
          }  
          store_tile %3, %6: (tile<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 4]
     }  
   }
 ```
 
-Second example contains transpose, broadcast, and reduction. 
+The second example contains transpose, broadcast, and reduction. 
 ```mlir
 Pseduo code for the original problem.
 C[1024, 1024] = matmul (A[1024, 1024], BT[1024, 1024]) + broad_cast(bcast[1024], dim=0)
@@ -457,10 +457,10 @@ func.func @test_gemm(%a : memref<1024x1024xf16>,
        %res: memref<1024xf32> ) {
   scf.for %i = %c0 to %c1024 step %c256 {
     scf.for %j = %c0 to %c1024 step %c256 {
-       %1 = init_tile %a[%i, %k] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
-       %2 = init_tile %bt[%j, %k] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt> // sg_layout=[4,8], sg_data=[64,32]
-       %1p = init_tile %a[%i, %k+3] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
-       %2p = init_tile %bt[%j, %k+3] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt_pfh> // sg_layout=[32,1]
+       %1 = init_tile %a[%i, %c0] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = init_tile %bt[%j, %c0] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt> // sg_layout=[4,8], sg_data=[64,32]
+       %1p = init_tile %a[%i, %c192] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = init_tile %bt[%j, %c192] : memref<1024x1024xf16> -> tile<256x32xf16, #mp_bt_pfh> // sg_layout=[32,1]
 
        %bcast'= memref.cast %bcast: memref<1024xf32> -> memref<1x1024xf32> 
        %7 = init_tile %bcast'[%j] : memref<1x1024xf32> -> tile<1x256xf32, #mp_bast>           // sg_layout=[4, 8], sg_data=[1,32]
@@ -468,7 +468,7 @@ func.func @test_gemm(%a : memref<1024x1024xf16>,
        %res'= memref.cast %res: memref<1024xf32> -> memref<1024x1xf32> 
        %3 = init_tile %res'[%i] : memref<1024x1xf32> -> tile<256x1xf32, #mp_reduce>           // sg_layout=[32, 1]
 
-       scf.for %k= %c0 to %c1024 step %c64 {
+       scf.for %k= %c0 to %c1024 step %c32 {
            %4  = load_tile %1 : tile<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
            %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
            %5  = tile_transpose %10 #mp_bt #mp_b: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
@@ -476,10 +476,10 @@ func.func @test_gemm(%a : memref<1024x1024xf16>,
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
            %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
-           %1 = update_tile_offset   %1, %c0, %c64 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
-           %2 = update_tile_offset   %2, %c0, %c64 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
-           %1p = update_tile_offset   %1p, %c0, %c64 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %2p = update_tile_offset   %2p, %c64, %c0 :  tile<256x32xf16, #mp_bt_pft> -> tile<256x32xf16, #mp_bt_pft>
+           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
+           %2 = update_tile_offset   %2, %c0, %c32 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
+           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<256x32xf16, #mp_bt_pft> -> tile<256x32xf16, #mp_bt_pft>
          }  
 
          %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
