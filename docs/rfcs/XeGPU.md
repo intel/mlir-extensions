@@ -22,8 +22,8 @@ Below is a summary.
 |store_nd	| operation ::= XeGPU.store_nd $value, $tdesc attr-dict : type($value), type($tdesc) | XeGPU.store_nd %value, %tdesc2 {L1_hint = uncached, L3_hint = uncached} : vector<8x16xbf16>, tensor_desc<8x16xbf16> |
 |update_nd_offset	| operation ::= XeGPU.update_nd_offset $tdesc, $delta0, $delta1 : type($tdesc), index, index -> type($tdesc)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y, tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16> |
 |prefetch_nd	| operation ::= XeGPU.prefetch_nd $tdesc, attr-dict : type($tdesc) | XeGPU.prefetch_nd %tdesc2: tensor_desc<8x16xbf16> |
-|alloc_nbarrier	| operation ::= XeGPU.alloc_nbarrier $barrier_couter : uint8_t | XeGPU.alloc_nbarrier %nbarrier_count: Uint8_t |
-|create_nbarrier	| operation ::= XeGPU.create_nbarrier $nbarrier_id, $nbarrier_role attr-dict : uint8_t, type($nbarrier_role) -> type($nbarrier) | %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 2, num_consumers = 2} : Uint8_t, nbarrier_role -> !XeGPU.nbarrier |
+|create_nbarrier	| operation ::= XeGPU.create_nbarrier $barrier_num : index | XeGPU.creat_nbarrier %nbarrier_num: Uint8_t |
+|init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $nbarrier_count attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
 |nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier_id : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
 |nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier_id : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
 |Mfence	| operation ::= XeGPU.mfence attr-dict | XeGPU.mfence {fence_scope = global} |
@@ -253,15 +253,14 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to prefetch.
 XeGPU.atomic_rmw reuses the arith dialect attribute, ::mlir::arith::AtomicRMWKindAttr.
 In case that certain Xe GPU target does not support atomic operation for a certain data type, the user needs to convert the matrix to the supported datatype to perform the atomic operation.
 
-alloc_nbarrier allocates named barriers. Named barrier is workgroup level resource, shared by all subgroups.
+create_nbarrier creates a set of named barriers with the specified number. Named barrier is workgroup level resource, shared by all subgroups.
 ```mlir
-  XeGPU.alloc_nbarrier %nbarrier_count: i8
+  XeGPU.create_nbarrier %nbarrier_num: i8
 ```
-`create_nbarrier` assigns a role for a specific named barrier to be producer and/or consumer. The returned nbarrier object holds a description of the specified barrier, which encodes all the barrier information.  It also binds the current thread with the named barrier by holding the returned nbarrier object. Multiple threads may bind to the same nbarrier so that they can sync with each other.
+`init_nbarrier` assigns one named barrier with the specified barrier ID to the current thread. Multiple threads may bind to the same named barrier, and the input specifies the total count of threads. The returned nbarrier object holds a description of the specified barrier, which encodes all the barrier information.  
 ```mlir  
-  %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 2, num_consumers = 2} : i8, i8, nbarrier_role into nbarrier
+  %nbarrier = XeGPU.init_nbarrier %nbarrier_id, %nbarrier_count : i8, i8 into nbarrier
 ```
-enum class nbarrier_role : uint8_t {producer_consumer = 0, producer = 1, consumer = 2 };
 
 `nbarrier_arrive` notifies other threads sharing the same named barrier that it has arrived.
 ```mlir  
@@ -269,7 +268,7 @@ enum class nbarrier_role : uint8_t {producer_consumer = 0, producer = 1, consume
 ```
 `nbarrier_wait` waits until all other threads sharing the same named barrier have signaled the arrival.
 ```mlir  
-  XeGPU. nbarrier_wait %nbarrier  
+  XeGPU.nbarrier_wait %nbarrier  
 ```
 
 `mfence` synchronizes the memory access between write and following read or write.
