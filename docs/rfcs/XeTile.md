@@ -42,17 +42,17 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 
 `init_tile` with memref of static shape. Tile uses memref’s shape and strides as base_shape and base_strides.
 ```mlir
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2] :
+  %tile0 = XeTile.init_tile %base_memref[%tile_offset:2] :
      memref<128x128xbf16> into tile<8x16xbf16>
 ```
 `init_tile` with memref of dynamic shape. The memref has a dynamic shape, so that its shape and strides have to be passed as runtime parameters to init_tile.
 ```mlir
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2], [%base_shape:2], [%base_strides:2]:
+  %tile0 = XeTile.init_tile %base_memref[%tile_offset:2], [%base_shape:2], [%base_strides:2]:
      memref<?x?xbf16> into tile<8x16xbf16>
 ```
  `init_tile` with an address for the base matrix. This form is to support the use case which doesn’t use a memref to describe the base matrix.
 ```mlir
-  %tile0 = XeTile.init_tile %base_addr, [%tile_offset:2], [%base_shape:2], [%base_strides:2]:
+  %tile0 = XeTile.init_tile %base_addr[%tile_offset:2], [%base_shape:2], [%base_strides:2]:
      i64 into tile<8x16xbf16>
 ```
 
@@ -60,7 +60,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
+  %tile0 = XeTile.init_tile %base_memref[%tile_offset:2]:
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
 
