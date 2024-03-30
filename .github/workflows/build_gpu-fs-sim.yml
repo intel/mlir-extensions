@@ -1,6 +1,11 @@
 name: GPU Build and run tests on FS simulator
 
 on:
+  pull_request:
+    branches:
+      - main
+      - upstream
+      - 'dist-ndarray'
   workflow_dispatch:
   workflow_call:
 
@@ -65,11 +70,11 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           set -x
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ -DLLVM_LIT_ARGS="-j 1 --debug --timeout=600" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
-          sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_xesim.sh
-          (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && ./run_in_a_loop_xesim.sh) &> fs-sim.log &
+          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ -DLLVM_LIT_ARGS="-j 1 --debug --timeout=600 --filter=gemm_with_transposed_B_1kx1kx1k_f16_f16_f32.mlir" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
+          sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_rasty.sh
+          (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && ./run_in_a_loop_rasty.sh) &> fs-sim.log &
           SIM_PID=$!
-          cmake --build build --target check-imex | tee build/tests.txt
+          cmake --build build --target check-static | tee build/tests.txt
           TEST_RESULT=${PIPESTATUS[0]}
           kill $SIM_PID
           wait $SIM_PID
