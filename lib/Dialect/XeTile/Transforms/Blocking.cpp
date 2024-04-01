@@ -34,6 +34,7 @@
 #include <llvm/ADT/SetVector.h>
 #include <llvm/Support/Debug.h>
 
+#include <algorithm>
 #include <optional>
 
 #include "imex/Dialect/XeTile/Transforms/Blocking.h"
@@ -169,6 +170,23 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
   }
   llvm_unreachable("Unsupported.");
   return {};
+}
+
+// works similar to getUsers. If the user is a SCF::ForOp,
+// it will return the users of corresponding scf::ForOp argument.
+// TODO: make it to be general to handle composite ops, e.g,
+// SCF::ForOp, SCF::WhileOp, etc.
+static llvm::SmallVector<mlir::Operation *> getEffectiveUsers(mlir::Value val) {
+  llvm::SmallVector<mlir::Operation *> users;
+  for (auto user : val.getUsers()) {
+    if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(user)) {
+      auto arg = getArgForOperand(forOp, val);
+      users.append(arg.user_begin(), arg.user_end());
+    } else {
+      users.push_back(user);
+    }
+  }
+  return users;
 }
 
 // it blocks a constant dense value if it is used by XeTile operators,
@@ -470,17 +488,16 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
       if (order[0] == 0 && order[1] == 1)
         transpose = true;
 
-      for (auto user : op->getUsers()) {
-        if (llvm::dyn_cast<xetile::LoadTileOp>(user)) {
-          auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user);
+      for (auto user : getEffectiveUsers(op)) {
+        if (auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user)) {
           if (isForDPASB(loadTileOp) && elementSize < 32) {
             vnni = true;
+            break;
           }
-          break;
         }
       }
-      if (vnni && transpose && elementSize < 32) {
 
+      if (vnni && transpose && elementSize < 32) {
         int factor = 32 / elementSize;
         vnni = false;
         llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(

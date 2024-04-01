@@ -39,14 +39,14 @@ gpu.module @test_kernel {
     %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<4096x4096xf16> -> !xetile.tile<64x128xf16>
 
     //CHECK: %[[R9:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[R3]]] : memref<4096x4096xf16>
-    //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
+    //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
     %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<4096x4096xf16> -> !xetile.tile<128x128xf16>
 
     //CHECK: %[[R10:.*]] = xetile.tile_pack %[[R7]] { inner_blocks = [32, 16] }  : vector<64x128xf32> -> vector<2x8x32x16xf32>
     //CHECK: %[[R11:.*]]:3 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c4096]] step %[[c128]]
     //CHECK-SAME: iter_args(%[[arg4:.*]] = %[[R8]], %[[arg5:.*]] = %[[R9]], %[[arg6:.*]] = %[[R10]])
     //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
-    //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, vector<2x8x32x16xf32>
+    //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, vector<2x8x32x16xf32>
     %out:3 = scf.for %k = %c0 to %c4096 step %c128
       iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
       -> (!xetile.tile<64x128xf16>, !xetile.tile<128x128xf16>, vector<64x128xf32>) {
@@ -56,8 +56,8 @@ gpu.module @test_kernel {
       %a_value = xetile.load_tile %a_tile : !xetile.tile<64x128xf16> -> vector<64x128xf16>
 
       //CHECK: %[[R16:.*]] = xetile.load_tile %[[arg5]] { padding = 0.000000e+00 : f32 }
-      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>> -> vector<4x4x32x32xf16>
-      //CHECK: %[[R17:.*]] = xetile.tile_unpack %[[R16]] { inner_blocks = [32, 32] }  : vector<4x4x32x32xf16> -> vector<128x128xf16>
+      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<4x8x32x16xf16>
+      //CHECK: %[[R17:.*]] = xetile.tile_unpack %[[R16]] { inner_blocks = [32, 16] }  : vector<4x8x32x16xf16> -> vector<128x128xf16>
       %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16> -> vector<128x128xf16>
 
       //CHECK: %[[R18:.*]] = xetile.tile_pack %[[R15]] { inner_blocks = [8, 16] }  : vector<64x128xf16> -> vector<8x8x8x16xf16>
@@ -73,8 +73,8 @@ gpu.module @test_kernel {
       //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, index, index
       //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
       //CHECK: %[[R25:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c128]],  %[[c0]]]
-      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, index, index
-      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
+      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index
+      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
       %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128]
         : !xetile.tile<64x128xf16>, index, index -> !xetile.tile<64x128xf16>
       %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
@@ -83,7 +83,7 @@ gpu.module @test_kernel {
       //CHECK: %[[R26:.*]] = xetile.tile_pack %[[R23]] { inner_blocks = [32, 16] }  : vector<64x128xf32> -> vector<2x8x32x16xf32>
       //CHECK: scf.yield %[[R24]], %[[R25]], %[[R26]]
       //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
-      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, vector<2x8x32x16xf32>
+      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, vector<2x8x32x16xf32>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value
         : !xetile.tile<64x128xf16>, !xetile.tile<128x128xf16>, vector<64x128xf32>
     }
