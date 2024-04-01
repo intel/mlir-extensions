@@ -24,6 +24,22 @@
 
 namespace imex {
 
+int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
+  for (auto [i, value] : llvm::enumerate(op->getOperands())) {
+    if (operand == value)
+      return i;
+  }
+  return -1;
+};
+
+mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
+                                     mlir::Value operand) {
+  auto idx = getOperandIndex(op, operand);
+  auto numControls = op.getNumControlOperands();
+  assert(idx >= (int)numControls);
+  return op.getRegionIterArg(idx - numControls);
+};
+
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod) {
   bool hasTileTyInFuncTy = false;
   mod.walk<mlir::WalkOrder::PreOrder>([&](mlir::gpu::GPUFuncOp op) {

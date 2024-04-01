@@ -30,6 +30,9 @@ namespace imex {
 // xetile.TileType. They are currently not supported yet.
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod);
 
+int getOperandIndex(mlir::Operation *op, mlir::Value operand);
+mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op, mlir::Value operand);
+
 mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
                                      mlir::TypeRange resultTypes,
                                      mlir::ValueRange inputs);
@@ -192,22 +195,6 @@ private:
     DPAS_B = 16,
     DPAS_C = 32,
     OTHER = 64
-  };
-
-  int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
-    for (auto [i, value] : llvm::enumerate(op->getOperands())) {
-      if (operand == value)
-        return i;
-    }
-    return -1;
-  };
-
-  mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
-                                       mlir::Value operand) {
-    auto idx = getOperandIndex(op, operand);
-    auto numControls = op.getNumControlOperands();
-    assert(idx >= (int)numControls);
-    return op.getRegionIterArg(idx - numControls);
   };
 
   llvm::DenseMap<mlir::Operation *, uint> Usage;
