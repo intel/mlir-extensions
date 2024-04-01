@@ -117,7 +117,6 @@ class SgTileUnpackPackOpPattern
   mlir::LogicalResult
   matchAndRewrite(xetile::TileUnpackOp op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
-
     using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
                                     mlir::PatternRewriter &);
 
