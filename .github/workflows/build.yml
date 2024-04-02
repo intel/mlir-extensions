@@ -90,8 +90,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD=X86                                    \
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
-            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install \
-            -DLLVM_LIT_ARGS=-a
+            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
           cmake --build _build --target install
           popd
 
@@ -104,7 +103,8 @@ jobs:
           cmake -S . -B _build -GNinja  \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_EXTERNAL_LIT=${external_lit} \
-            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir
+            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
+            -DLLVM_LIT_ARGS=-a
           cmake --build _build --target check-imex
 
       - name: Build doxygen docs
