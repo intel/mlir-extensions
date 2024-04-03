@@ -400,7 +400,7 @@ C[4096, 4096] = matmul (A[4096, 4096], B[4096, 4096])
 #mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
 #mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
-#mp_bt_pfh = #wg_map<sg_layout=[4,8], sg_data=[8,32]>  
+#mp_b_pfh = #wg_map<sg_layout=[4,8], sg_data=[8,32]>  
 #mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 
 func.func @test_gemm(%a : memref<4096x4096xf16>,
@@ -409,7 +409,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
   scf.for %i = %c0 to %c4096 step %c256 {
     scf.for %j = %c0 to %c4096 step %c256 {
        %1 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
-       %2 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_bt> // sg_layout=[8,4], sg_data=[32,64]
+       %2 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b> // sg_layout=[8,4], sg_data=[32,64]
        %1p = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
        %2p = init_tile %b[%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_pfh> // sg_layout=[4,8]
 
@@ -483,9 +483,9 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
          } 
 
          %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
-         %13 = tile_broadcast #mp_bcast #mp_c %12 [0], vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
-         %14 = add %6, %13
-         %15 = tile_conv_layout #mp_c #mp_reduce2 %14             					   // sg_layout=[4, 8] -> sg_layout=[32, 1]
+         %13 = tile_broadcast #mp_bcast #mp_c %12 [0]: vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
+         %14 = add %6, %13 : vector<256x256xf32>
+         %15 = tile_conv_layout #mp_c #mp_reduce2 %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
          %16 = tile_reduce #mp_reduce2 #mp_reduce <add> %15 [1], vector<256x256xf32> => vector<256x1xf32>  // sg_layout=[32, 1]
          store_tile %3, %7: (tile<256x1xf32, #mp_reduce>, vector<256x1xf32>)                               // sg_layout=[32, 1]
     } 
