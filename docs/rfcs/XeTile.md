@@ -411,7 +411,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
        %1 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
        %2 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_bt> // sg_layout=[8,4], sg_data=[32,64]
        %1p = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
-       %2p = init_tile %bt[%c96, %j] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_bt_pfh> // sg_layout=[4,8]
+       %2p = init_tile %b[%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_pfh> // sg_layout=[4,8]
 
        %3 = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<256x256xf32, #mp_c>           // sg_layout=[32, 1]
 
