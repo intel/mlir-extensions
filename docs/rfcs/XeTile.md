@@ -441,7 +441,7 @@ Reduce[4096] = reduce_add(C[4096, 4096], dim=1)
 
 ```mlir
 #mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
-#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>   
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
 #mp_bt_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
