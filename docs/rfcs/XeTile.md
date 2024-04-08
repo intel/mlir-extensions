@@ -19,16 +19,16 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|init_tile	| operation ::= XeTile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index -> type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
+|init_tile	| operation ::= XeTile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index, attr-dict-> type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
 |load_tile	| operation ::=XeTile.load_tile $tile attr-dict:type($tile) ->type($res)	 | %vector_a = XeTile.load_tile %tile_a {padding=0} : tile<64x32xbf16> into vector<32x64xbf16>|
 |store_tile	| operation ::=XeTile.store_tile $value, $tile attr-dict: type($value), type($tile) | XeTile.store_tile %tile_a, %vector_a: vector<64x64xbf16> into tile<64x64xbf16> |
 |update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
-|tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
+|tile_mma	| operation ::=XeTile.tile_mma $matA, $matB, $matC attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
 |atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile \<$kind\>, $vec, $tile: type($vec), type($tile) -> type($res)	 | %vector_a = atomic_rmw_tile \<add\> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
-|tile_transpose	| operation ::=XeTile.tile_transpose attr_dict $permuation_dims $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b: vector<64x32xfloat> into vector<32x64xfloat>  |
-|tile_reduce	| operation ::=XeTile.tile_reduce \<$kind\> $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce \<add\> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
-|tile_broadcast	| operation ::=XeTile.tile_broadcast $src attr_dict $broadcast_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b[0]: vector<1x32xfloat> into vector<64x32xfloat>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose $vec $permuation_dims attr_dict: type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b [1, 0]: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_reduce	| operation ::=XeTile.tile_reduce \<$kind\> $src  $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce \<add\> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
+|tile_broadcast	| operation ::=XeTile.tile_broadcast $src $broadcast_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b[0]: vector<1x32xfloat> into vector<64x32xfloat>  |
 |tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
 |tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b inner_blocks=[16, 16] : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
 
@@ -82,7 +82,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 
 `load_tile` loads a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
-  #tile_attr = #xetile.tile_ttr<order = [0, 1]>
+  #tile_attr = #xetile.tile_attr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
      tile<64x32xbf16, #tile_attr> into vector<64x32xb16>
 ```
@@ -94,7 +94,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `store_tile` stores a tile according to the tile's `order` attribute. Regardless of the `order` attribute value, the vector's dimensions must match exactly the Tile's dimensions.
 ```mlir
-  #tile_attr = #xetile.tile_ttr<order = [0, 1]>
+  #tile_attr = #xetile.tile_attr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
      vector<64x32xb16> to tile<64x32xbf16, #tile_attr>
 ```
@@ -105,8 +105,8 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `tile_mma` represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.
 ```mlir
-  %vector_c = XeTile.tile_mma %vector_c, %vector_b, %vector_a :
-     vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16>
+  %vector_c = XeTile.tile_mma %vector_b, %vector_a, %vector_c:
+     vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat>
 	   into vector<64x128xfloat>
 ```
 A `tile_mma` variant without vector_c initialization.
@@ -125,7 +125,7 @@ A `tile_mma` variant without vector_c initialization.
 `atomic_rmw_tile` atomically reads, modifies, and writes back data to the memory specified by the tile.
 
 ```mlir
-  %ret_value = XeTile.atomic_rmw “addf” %value, %tile:
+  %ret_value = XeTile.atomic_rmw <addf> %value, %tile:
           vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>
 ```
 XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKindAttr.
@@ -145,7 +145,7 @@ XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
 ```
 
 ## Internal Operations to support gradual lowering
-The 2D XeTile IR needs to be lowered in an intermediate form to support `blocking` optimization. The `blocking` optimization loads the tile in blocks and feed the block to matrix hardware. Since the load block size and matrix hardware size are not necessary same, we need to represent the data block in some form to assist the optimization. Conceptually, when a 2D tile data being loaded with a specified block size, the vector presented the 2D tile in 4D block layout. So we uses 4D dimension vector to describe the data being loaded with the block size.
+The 2D XeTile IR needs to be lowered in an intermediate form to support `blocking` optimization. The `blocking` optimization loads the tile in blocks and feed the block to matrix hardware. Since the load block size and matrix hardware size are not necessary same, we need to represent the data block in some form to assist the optimization. Conceptually, when a 2D tile data being loaded with a specified block size, the vector represents the 2D tile in 4D block layout. So we uses 4D dimension vector to describe the data being loaded with the block size.
 
 `init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set.
 
@@ -157,30 +157,30 @@ The 2D XeTile IR needs to be lowered in an intermediate form to support `blockin
 
 `load_tile` loads a 2D tile with an `inner_block` attribute  to 4D vector.
 ```mlir
-  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
+  #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
   %vector_a = XeTile.load_tile %tile_a :
      tile<64x32xbf16, #tile_attr> into vector<4x2x16x16xb16>
 ```
 `store_tile` stores a 4D vector to a 2D tile with an `inner_block`.
 ```mlir
-  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
-  %vector_a = XeTile.store_tile %tile_a :
+  #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
+  XeTile.store_tile %vector_a, %tile_a :
      vector<4x2x16x16xb16> into tile<64x32xbf16, #tile_attr>
 ```
 `atomic_rmw_tile` performs atomic operation on 4D vectors.
 ```mlir
-#tile_attr = #xetile.tile_ttr<inner_blocks=[8,16]>
+#tile_attr = #xetile.tile_attr<inner_blocks=[8,16]>
 %vector_a = atomic_rmw_tile <add> %value, %tile: vector<8x48x16xbf16>, tile<64x64xbf16, #tile_attr> to vector<8x4x8x16xbf16>
 ```
 
 With the data being presented as 4D vector, all the vector based XeTile operations are required to support blocking.
 `tile_mma` works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
 ```mlir
-   %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b :
-     vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
+   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
+     vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>, vector<8x8x8x16xfloat>
 	   into vector<8x8x8x16xfloat>
 ```
-`tile_reduce` follows the vector.multi-reduction semantics and can be applied to 4D vector.
+`tile_reduce` follows the vector.multi-reduction semantics and can be applied to 4D vector. The tile_reduce on 4D vector is an internal operation and only used in the transformation passes to support gradual lowering.
 ```mlir
    %vector_a = XeTile.tile_reduce <add> %vector_b [1, 3]: vector<8x4x8x16xfloat> into vector<8x1x8x1float>
 ```
@@ -210,7 +210,7 @@ The tile_pack and tile_unpack operation is similar to pack and unpack operation 
 
 
 ## Workgroup Level XeTile extension (experimental)
-`xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. XeTile operations work by default at the subgroup level without wg_map attribute. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. It gives the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup for optimal performance.
+`xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. XeTile operations work by default at the subgroup level without wg_map attribute. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guides the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. It gives the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup for optimal performance.
 
 Below is an example.
 ```mlir
@@ -237,11 +237,11 @@ With the `xetile.wg_map` attribute being included in the tile data type, the til
 The proposal is to attach the `xetile.wg_map` to the vector based XeTile operations as illustrated below. These operations may have different subgroup layout for the input and output, which means the data may move from one subgroup to another.
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b #mp_c #mp_a #mp_b #mp_c : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
-|tile_transpose	| operation ::=XeTile.tile_transpose attr_dict $permuation_dims $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b  #mp_b #mp_a: vector<64x32xfloat> into vector<32x64xfloat>  |
-|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src attr_dict $reduction_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1] #mp_b #mp_a: vector<64x32xfloat> into vector<64x1xfloat>  |
-|tile_broadcast	| operation ::=XeTile.tile_broadcast $src attr_dict $broadcast_dims: type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b #mp_b #mp_a [0]: vector<1x32xfloat> into vector<64x32xfloat>  |
-|tile_conv_layout	| operation ::=XeTile.conv_layout attr_dict $src : type($value) -> type($res)	 | %vector_a = XeTile.tile_conv_layout %vector_b #mp_b #mp_a : vector<256x256xfloat> into vector<256x256xfloat>  |
+|tile_mma	| operation ::=XeTile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c {#mp_a #mp_b #mp_c #mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose $permuation_dims attr_dict $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b {#mp_b #mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_reduce	| operation ::=XeTile.tile_reduce $kind $src $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1] {#mp_b #mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
+|tile_broadcast	| operation ::=XeTile.tile_broadcast $src $broadcast_dims attr_dict : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b  [0] {#mp_b #mp_a}: vector<1x32xfloat> into vector<64x32xfloat>  |
+|tile_conv_layout	| operation ::=XeTile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_conv_layout %vector_b {#mp_b #mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
 
 
 With these attributes, `tile_mma` does a matrix multiplication at a work group level vector.
@@ -250,7 +250,7 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
    #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 
-   %vector_c = XeTile.tile_mma #wg_map_c #wg_map_a #wg_map_b #wg_map_c %vector_c, %vector_a, %vector_b :
+   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c {#wg_map_a #wg_map_b #wg_map_c #wg_map_c}:
      vector<256x256xfloat>, vector<256x256xbf16>, vector<256x256xbf16>
 	   into vector<256x256xfloat>
 ```
@@ -259,28 +259,31 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
    #wg_map_a2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
-   %vector_a = XeTile.tile_reduce #wg_map_a #wg_map_a2  <add> %vector_b [1]: vector<256x128xfloat> into vector<256x1xfloat>
+   %vector_a = XeTile.tile_reduce <add> %vector_b [1] {#wg_map_a #wg_map_a2}: vector<256x128xfloat> into vector<256x1xfloat>
 ```
 
 `tile_broadcast` broadcast 4D vector.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
-   %vector_a = XeTile.tile_broadcast #wg_map_b #wg_map_a [1] %vector_b: vector<256x1xfloat> into vector<256x256xfloat>
+   %vector_a = XeTile.tile_broadcast %vector_b [1] {#wg_map_b #wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
 ```
 
 `tile_transpose` transpose 4D vector. The transpose is usually implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  The transpose_tile may require a different block size to support effiecient share local memory access.
+
+The transpose_tile example below can be furhter lowered to two operations: 1) save the vector to to shared memory with the #wg_map_b mapping and 2) use wg_map_a mapping to load the data from shared memory to vector.
+
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
-   %vector_a = XeTile.transpose_tile #wg_map_b #wg_map_a %vector_b: vector<512x128xfloat> into vector<128x512xfloat>
+   %vector_a = XeTile.transpose_tile %vector_b {#wg_map_b #wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
 ```
 
 `tile_convert_layout` changes the layout of subgroup threads.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>
-   %vector_a = XeTile.tile_convert_layout #wg_map_b #wg_map_a <add> %vector_b [1]: vector<256x256xfloat> into vector<256x256float>
+   %vector_a = XeTile.tile_convert_layout <add> %vector_b [1] {#wg_map_b #wg_map_a}: vector<256x256xfloat> into vector<256x256float>
 ```
 
 ## Alternative design considerations
@@ -334,7 +337,7 @@ For i = 0, M-1, M_tile  Do
              %vc = tile_mma %va, %vbt : vector<64x32xbf16>, vector<32x64x bf16> into vector<64x64xbf16>;
 ```
 
-All these three use cases can be programed by using memref and vector dialect. User may run into the same issue that matrix B is given as BT, so it is presented as the memory as a transposed matrix. User also have the same two choices to write the program, either use the plain layout memref reflecting the physical memory layout (3rd use case), or try to use the stride or affine_map attribute to represent it as “col-major” layout  (2nd use case).   Memref has a stride and affine_map attribute, both can used to describe the memory layout. So a memref a[i, j] could be refer to the position to i*stride_i + j*stride_j (using stride), j*stride_i + i (using affien_map to swap index).  This effectively creates the same effect that order[0, 1] attribute try to provide to user. User now can swap the i, j in the program.
+All these three use cases can be programed by using memref and vector dialect. User may run into the same issue that matrix B is given as BT, so it is presented in the memory as a transposed matrix. User also have the same two choices to write the program, either use the plain layout memref reflecting the physical memory layout (3rd use case), or try to use the stride or affine_map attribute to represent it as “col-major” layout  (2nd use case).   Memref has a stride and affine_map attribute, both can be used to describe the memory layout. So a memref a[i, j] could be refer to the position to i*stride_i + j*stride_j (using stride), j*stride_i + i (using affien_map to swap index).  This effectively creates the same effect that order[0, 1] attribute try to provide to user. User now can swap the i, j in the program.
 
 Below is a code example that user uses the “col-major” layout for BT matrix.  This is corresponding to the XeTile’s 2nd user case.
 ```mlir
@@ -421,7 +424,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
           
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<32x256xf16, #mp_a_pfh>                                    // sg_layout=[4,8]
-           %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c %4, %10 : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %6 = tile_mma %4, %5 {#mp_a #mp_b #mp_c} %4, %10 : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
            %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
            %2 = update_tile_offset   %2, %c32, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
            %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
@@ -471,11 +474,11 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
        scf.for %k= %c0 to %c4096 step %c32 {
            %4  = load_tile %1 : tile<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
            %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
-           %5  = tile_transpose %10 #mp_bt #mp_b: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+           %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
 
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
-           %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %6 = tile_mma %4, %5 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
            %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
            %2 = update_tile_offset   %2, %c0, %c32 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
            %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
@@ -483,10 +486,10 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
          } 
 
          %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
-         %13 = tile_broadcast #mp_bcast #mp_c %12 [0]: vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
+         %13 = tile_broadcast {#mp_bcast #mp_c} %12 [0]: vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
          %14 = add %6, %13 : vector<256x256xf32>
-         %15 = tile_conv_layout #mp_c #mp_reduce2 %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
-         %16 = tile_reduce #mp_reduce2 #mp_reduce <add> %15 [1], vector<256x256xf32> => vector<256x1xf32>  // sg_layout=[32, 1]
+         %15 = tile_conv_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
+         %16 = tile_reduce {#mp_reduce2 #mp_reduce} <add> %15 [1], vector<256x256xf32> => vector<256x1xf32>  // sg_layout=[32, 1]
          store_tile %3, %7: (tile<256x1xf32, #mp_reduce>, vector<256x1xf32>)                               // sg_layout=[32, 1]
     } 
   }
@@ -497,10 +500,10 @@ Note that the transpose in the program can be optimized to use a slightly differ
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]          
-%5  = tile_transpose %10 #mp_bt #mp_b: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+%5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
 
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[32,1], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>// sg_layout=[32,1], sg_data=[64,32]
-%5  = tile_transpose %10 #mp_bt #mp_b: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[32,1] ->sg_layout=[8,4]
+%5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[32,1] ->sg_layout=[8,4]
 ```
