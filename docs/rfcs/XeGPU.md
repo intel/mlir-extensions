@@ -22,10 +22,10 @@ Below is a summary.
 |store_nd	| operation ::= XeGPU.store_nd $value, $tdesc attr-dict : type($value), type($tdesc) | XeGPU.store_nd %value, %tdesc2 {L1_hint = uncached, L3_hint = uncached} : vector<8x16xbf16>, tensor_desc<8x16xbf16> |
 |update_nd_offset	| operation ::= XeGPU.update_nd_offset $tdesc, $delta0, $delta1 : type($tdesc), index, index -> type($tdesc)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y, tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16> |
 |prefetch_nd	| operation ::= XeGPU.prefetch_nd $tdesc, attr-dict : type($tdesc) | XeGPU.prefetch_nd %tdesc2: tensor_desc<8x16xbf16> |
-|create_nbarrier	| operation ::= XeGPU.create_nbarrier $barrier_num : index | XeGPU.creat_nbarrier %nbarrier_num: Uint8_t |
-|init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $nbarrier_count attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
-|nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier_id : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
-|nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier_id : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
+|alloc_nbarrier	| operation ::= XeGPU.alloc_nbarrier $total_barrier_num : index | XeGPU.creat_nbarrier %total_nbarrier_num: Uint8_t |
+|init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $participant_thread_num attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.alloc_nbarrier %nbarrier_id, %participant_thread_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
+|nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
+|nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
 |Mfence	| operation ::= XeGPU.mfence attr-dict | XeGPU.mfence {fence_scope = global} |
 |complile-hint	| operation ::= XeGPU.compile_hint attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
 
@@ -253,13 +253,13 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to prefetch.
 XeGPU.atomic_rmw reuses the arith dialect attribute, ::mlir::arith::AtomicRMWKindAttr.
 In case that certain Xe GPU target does not support atomic operation for a certain data type, the user needs to convert the matrix to the supported datatype to perform the atomic operation.
 
-create_nbarrier creates a set of named barriers with the specified number. Named barrier is workgroup level resource, shared by all subgroups.
+alloc_nbarrier allocates a set of named barriers with the specified number. Named barrier is workgroup level resource, shared by all subgroups.
 ```mlir
-  XeGPU.create_nbarrier %nbarrier_num: i8
+  XeGPU.alloc_nbarrier %total_nbarrier_num: i8
 ```
-`init_nbarrier` assigns one named barrier with the specified barrier ID to the current thread. Multiple threads may bind to the same named barrier, and the input specifies the total count of threads. The returned nbarrier object holds a description of the specified barrier, which encodes all the barrier information.  
+`init_nbarrier` returns one named barrier with the specified barrier ID to the current thread. Multiple threads may bind to the same named barrier, and the input specifies the number of total participant threads. The returned nbarrier object holds a description of the specified barrier, which encodes all the barrier information.  
 ```mlir  
-  %nbarrier = XeGPU.init_nbarrier %nbarrier_id, %nbarrier_count : i8, i8 into nbarrier
+  %nbarrier = XeGPU.init_nbarrier %nbarrier_id, %participant_thread_num : i8, i8 into nbarrier
 ```
 
 `nbarrier_arrive` notifies other threads sharing the same named barrier that it has arrived.
