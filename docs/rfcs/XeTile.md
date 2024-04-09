@@ -269,15 +269,19 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.tile_broadcast %vector_b [1] {#wg_map_b #wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
 ```
 
-`tile_transpose` transpose 4D vector. The transpose is usually implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  The transpose_tile may require a different block size to support effiecient share local memory access.
+`tile_transpose` transpose 4D vector. 
 
-The transpose_tile example below can be furhter lowered to two operations: 1) save the vector to to shared memory with the #wg_map_b mapping and 2) use wg_map_a mapping to load the data from shared memory to vector.
+The transpose could be implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  
 
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
    %vector_a = XeTile.transpose_tile %vector_b {#wg_map_b #wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
 ```
+The transpose_tile example above can be further lowered to two operations: 1) save the vector to to shared memory with the #wg_map_b mapping and 2) use wg_map_a mapping to load the data from shared memory to vector. The transpose_tile may require a different block size to support effiecient share local memory access.
+
+An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.  
+
 
 `tile_convert_layout` changes the layout of subgroup threads.
 ```mlir
@@ -393,6 +397,7 @@ Incorrect lowering -
 
 ## Appendix 2 - Code examples for work group level XeTile using wg_map attribute
 
+## Appendix 2.1 Simple Gemm with prefetch
 The first example shows a simple gemm. It demonstrates the different wg_map we used for prefetch and load.
 ```mlir
 Pseudo code for simple gemm
@@ -434,7 +439,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
     } 
   }
 ```
-
+## Appendix 2.2 Gemm with transpose, broadcast, and reduction
 The second example contains transpose, broadcast, and reduction.
 ```mlir
 Pseduo code for the original problem.
@@ -495,13 +500,17 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
   }
 ```
 
-Note that the transpose in the program can be optimized to use a slightly different map to remove the cross subgroup data shuffle requires for the first mapping.
+## Appendix 2.3 Transpose optimization
+The transpose in the program above can be optimized to use a slightly different mapping to remove the cross subgroup data shuffle requires for the first mapping.
 ```mlir
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]          
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+```
 
+With the optimized mapping, the tile_transpose below could be implemented with in-register transpose. 
+```mlir
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[32,1], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>// sg_layout=[32,1], sg_data=[64,32]
