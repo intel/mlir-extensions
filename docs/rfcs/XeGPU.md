@@ -22,7 +22,7 @@ Below is a summary.
 |store_nd	| operation ::= XeGPU.store_nd $value, $tdesc attr-dict : type($value), type($tdesc) | XeGPU.store_nd %value, %tdesc2 {L1_hint = uncached, L3_hint = uncached} : vector<8x16xbf16>, tensor_desc<8x16xbf16> |
 |update_nd_offset	| operation ::= XeGPU.update_nd_offset $tdesc, $delta0, $delta1 : type($tdesc), index, index -> type($tdesc)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y, tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16> |
 |prefetch_nd	| operation ::= XeGPU.prefetch_nd $tdesc, attr-dict : type($tdesc) | XeGPU.prefetch_nd %tdesc2: tensor_desc<8x16xbf16> |
-|alloc_nbarrier	| operation ::= XeGPU.alloc_nbarrier $total_barrier_num : index | XeGPU.creat_nbarrier %total_nbarrier_num: Uint8_t |
+|alloc_nbarrier	| operation ::= XeGPU.alloc_nbarrier $total_barrier_num attr-dict: index | XeGPU.creat_nbarrier %total_nbarrier_num: Uint8_t |
 |init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $participant_thread_num attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.alloc_nbarrier %nbarrier_id, %participant_thread_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
 |nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
 |nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
