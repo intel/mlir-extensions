@@ -13,17 +13,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
+#include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Transforms/Utils/AddDiscriminators.h"
-#include <cstdint>
-#include <imex/Transforms/Passes.h>
 
-#include <mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h>
-#include <mlir/Pass/Pass.h>
-#include <mlir/Transforms/DialectConversion.h>
+#include "imex/Transforms/Passes.h"
+
+#include <cstdint>
 #include <numeric>
 
 namespace imex {
@@ -227,15 +229,23 @@ struct VectorLinearizePass final
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+
     target.addDynamicallyLegalOp<mlir::vector::ShuffleOp>([&](mlir::Operation
                                                                   *op) {
       return op->getResult(0).getType().cast<mlir::VectorType>().getRank() == 1;
     });
 
+    target.addIllegalOp<mlir::vector::TransposeOp>();
+    target.addLegalOp<mlir::vector::ShapeCastOp>();
+
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion>(typeConverter, context);
 
-    typeConverter.addConversion([](mlir::Type type) { return type; });
+    mlir::vector::populateVectorTransposeLoweringPatterns(
+        patterns,
+        mlir::vector::VectorTransformsOptions().setVectorTransposeLowering(
+            mlir::vector::VectorTransposeLowering::Shuffle1D));
     mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
         typeConverter, patterns, target);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
