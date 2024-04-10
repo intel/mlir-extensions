@@ -269,7 +269,7 @@ With these attributes, `tile_mma` does a matrix multiplication at a work group l
    %vector_a = XeTile.tile_broadcast %vector_b [1] {#wg_map_b #wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
 ```
 
-`tile_transpose` transpose 4D vector. 
+`tile_transpose` transpose 4D vector.
 
 The transpose could be implemented by saving and restoring from the share local memory. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  
 
@@ -509,11 +509,10 @@ The transpose in the program above can be optimized to use a slightly different 
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
 ```
 
-With the optimized mapping, the tile_transpose below could be implemented with in-register transpose. 
+With the optimized mapping, the tile_transpose below could be implemented with in-register transpose.
 ```mlir
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[32,1], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>// sg_layout=[32,1], sg_data=[64,32]
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[32,1] ->sg_layout=[8,4]
 ```
-
