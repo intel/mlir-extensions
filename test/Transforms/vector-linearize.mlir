@@ -98,3 +98,17 @@ func.func @test_vector_extract(%arg0: vector<2x8x4xf32>) -> vector<8x4xf32> {
   %0 = vector.extract %arg0[1]: vector<8x4xf32> from vector<2x8x4xf32>
   return %0 : vector<8x4xf32>
 }
+
+// -----
+
+// CHECK-LABEL: test_vector_transpose
+// CHECK-SAME: (%[[ORIG_ARG:.*]]: vector<2x8xf32>) -> vector<8x2xf32>
+// CHECK: %[[ARG:.*]] = vector.shape_cast %[[ORIG_ARG]] : vector<2x8xf32> to vector<16xf32>
+// CHECK: %[[SHUFFLE:.*]] = vector.shuffle %[[ARG]], %[[ARG]]
+// CHECK: [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15] : vector<16xf32>, vector<16xf32>
+// CHECK: %[[RES:.*]] = vector.shape_cast %[[SHUFFLE]] : vector<16xf32> to vector<8x2xf32>
+// CHECK: return %[[RES]] : vector<8x2xf32>
+func.func @test_vector_transpose(%arg: vector<2x8xf32>) -> vector<8x2xf32> {
+  %0 = vector.transpose %arg, [1, 0] : vector<2x8xf32> to vector<8x2xf32>
+  return %0 : vector<8x2xf32>
+}
