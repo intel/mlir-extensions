@@ -26,7 +26,7 @@ Below is a summary.
 |init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $participant_thread_num attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.alloc_nbarrier %nbarrier_id, %participant_thread_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
 |nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
 |nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
-|Mfence	| operation ::= XeGPU.mfence attr-dict | XeGPU.mfence {fence_scope = global} |
+|fence	| operation ::= XeGPU.fence attr-dict | XeGPU.mfence {fence_scope = global_range, memory_kind = global} |
 |complile-hint	| operation ::= XeGPU.compile_hint attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
 
 The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.  
@@ -271,19 +271,18 @@ alloc_nbarrier allocates a set of named barriers with the specified number. Name
   XeGPU.nbarrier_wait %nbarrier  
 ```
 
-`mfence` synchronizes the memory access between write and following read or write.
+`fence` synchronizes the memory access between write and following read or write.
 ```mlir  
-  XeGPU.mfence {memory_kind = "ugm", fence_op = "none", fence_scope = "local"}
+  XeGPU.fence {fence_scope = "global_range",  memory_kind = "global", }
 ```
-Attribute `Fence_op` describes the operations associated with the fence, the current value is limited to {"none"}.
-Attribute `Fence_scope` describes the scope of fence. "local" means that the scope would be within each XeCore. "tile" means the scope would be across XeCore with one tile.
-Attribute `Memory_kind` describes the memory kind. "ugm" means the global memory, "slm" means the share local memory.
+Attribute `Fence_scope` describes the scope of fence. "workgroup" means that the scope is within each work group. "global_range" means the scope is across work groups within the global range.
+Attribute `Memory_kind` describes the memory kind. "global" means the global memory, "local" means the share local memory.
 
 `compile_hint` passes performance hints to the lower-level compiler. The schedule_barrier hint prevents instructions from being reordered by a lower-level compiler. For example, a prefetch instruction is location-sensitive, but the lower-level compiler may schedule it to an undesired location.  
 ```mlir  
 XeGPU.compile_hint {hint=schedule_barrier}
 ```
-nbarrrier, mfence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
+nbarrrier, fence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
 
 ## Notes
 
