@@ -1,5 +1,5 @@
-// RUN: imex-opt --split-input-file --xetile-blocking --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
-
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking --xetile-block-aligning \
+// RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 gpu.module @test_kernel {
   //CHECK: gpu.func @sglevel_tiled_gemm(%[[arg0:.*]]: memref<1024x1024xf16>, %[[arg1:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_tiled_gemm(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>) {

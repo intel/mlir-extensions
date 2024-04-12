@@ -38,7 +38,8 @@ class XeGPUTypeConverter;
 
 /// Populate the given list with patterns rewrite XeTile Ops
 void populateXeTileToXeGPUConversionPatterns(XeGPUTypeConverter &converter,
-                                             mlir::RewritePatternSet &patterns);
+                                             mlir::RewritePatternSet &patterns,
+                                             imex::TileUsageAnalysis &analysis);
 
 /// Create a pass to convert the XeTile dialect to the XeGPU dialect.
 std::unique_ptr<mlir::OperationPass<mlir::gpu::GPUModuleOp>>

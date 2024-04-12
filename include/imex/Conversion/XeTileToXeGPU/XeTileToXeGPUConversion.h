@@ -38,8 +38,7 @@ namespace imex {
 
 class XeGPUTypeConverter : public imex::XeTypeConverter {
 public:
-  XeGPUTypeConverter(mlir::MLIRContext &context,
-                     TileUsageAnalysis *analysis = nullptr);
+  XeGPUTypeConverter(mlir::MLIRContext &context);
 
   std::optional<mlir::LogicalResult>
   convertTileType(xetile::TileType tileTy,
@@ -112,13 +111,15 @@ private:
 };
 
 template <typename SourceOp>
-class SgXeTileToXeGPUConversion : public XeConversionPattern {
+class SgXeTileToXeGPUConversion
+    : public XeConversionPattern<TileUsageAnalysis> {
 public:
   SgXeTileToXeGPUConversion(mlir::MLIRContext *context,
                             XeGPUTypeConverter &typeConverter,
+                            TileUsageAnalysis &analysis,
                             mlir::PatternBenefit benefit = 1)
-      : XeConversionPattern(typeConverter, SourceOp::getOperationName(),
-                            benefit, context) {}
+      : XeConversionPattern(typeConverter, analysis,
+                            SourceOp::getOperationName(), benefit, context) {}
 
   using RangeT = llvm::ArrayRef<mlir::ValueRange>;
   using OpAdaptor = typename SourceOp::template GenericAdaptor<RangeT>;

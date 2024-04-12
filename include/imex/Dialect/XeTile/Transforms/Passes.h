@@ -39,6 +39,7 @@ std::unique_ptr<mlir::Pass> createXeTileInitDuplicatePass();
 
 std::unique_ptr<mlir::Pass>
 createXeTileBlockingPass(const std::string &device = "pvc");
+std::unique_ptr<mlir::Pass> createXeTileBlockAligningPass();
 
 ///
 void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,

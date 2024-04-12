@@ -114,12 +114,12 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       return signalPassFailure();
     }
 
-    auto &usageAnalysis = getAnalysis<TileUsageAnalysis>();
-    XeGPUTypeConverter typeConverter(context, &usageAnalysis);
+    auto &analysis = getAnalysis<TileUsageAnalysis>();
+    XeGPUTypeConverter typeConverter(context);
     XeTileConversionTarget target(context, uArchInterface);
     mlir::RewritePatternSet patterns(&context);
 
-    populateXeTileToXeGPUConversionPatterns(typeConverter, patterns);
+    populateXeTileToXeGPUConversionPatterns(typeConverter, patterns, analysis);
 
     if (mlir::failed(
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
@@ -132,10 +132,11 @@ private:
 
 /// Populate the given list with patterns that convert XeTile to XeGPU
 void populateXeTileToXeGPUConversionPatterns(
-    imex::XeGPUTypeConverter &converter, mlir::RewritePatternSet &patterns) {
-  populateSCFOpConversionPatterns(converter, patterns);
-  populateArithOpConversionPatterns(converter, patterns);
-  populateXeTileOpConversionPatterns(converter, patterns);
+    imex::XeGPUTypeConverter &converter, mlir::RewritePatternSet &patterns,
+    TileUsageAnalysis &analysis) {
+  populateSCFOpConversionPatterns(converter, patterns, analysis);
+  populateArithOpConversionPatterns(converter, patterns, analysis);
+  populateXeTileOpConversionPatterns(converter, patterns, analysis);
 }
 
 /// Create a pass that convert XeTile to XeGPU
