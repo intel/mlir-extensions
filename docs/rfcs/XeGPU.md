@@ -253,7 +253,7 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to prefetch.
 XeGPU.atomic_rmw reuses the arith dialect attribute, ::mlir::arith::AtomicRMWKindAttr.
 In case that certain Xe GPU target does not support atomic operation for a certain data type, the user needs to convert the matrix to the supported datatype to perform the atomic operation.
 
-alloc_nbarrier allocates a set of named barriers with the specified number. Named barrier is workgroup level resource, shared by all subgroups.
+`alloc_nbarrier` allocates a set of named barriers with the specified number. Named barrier is workgroup level resource, shared by all subgroups.
 ```mlir
   XeGPU.alloc_nbarrier %total_nbarrier_num: i8
 ```
