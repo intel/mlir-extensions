@@ -115,9 +115,10 @@ bool isLegalSCFOp(mlir::Operation *op) {
 }
 
 void populateSCFOpConversionPatterns(imex::XeGPUTypeConverter &converter,
-                                     mlir::RewritePatternSet &patterns) {
+                                     mlir::RewritePatternSet &patterns,
+                                     TileUsageAnalysis &analysis) {
   patterns.add<SgSCFForOpBlockPattern, SgSCFYieldOpPattern>(
-      patterns.getContext(), converter);
+      patterns.getContext(), converter, analysis);
 }
 
 } // namespace imex

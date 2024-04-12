@@ -101,18 +101,6 @@ public:
     }); // walk on LoadTileOp
   };
 
-  uint getUsage(imex::xetile::InitTileOp op) {
-    if (Usage.count(op))
-      return Usage[op];
-    return UsageType::None;
-  }
-
-  uint getUsage(imex::xetile::LoadTileOp op) {
-    if (Usage.count(op))
-      return Usage[op];
-    return UsageType::None;
-  }
-
   bool isForDPASA(imex::xetile::LoadTileOp op) {
     if (Usage.count(op)) {
       return Usage[op] & UsageType::DPAS_A;
@@ -200,14 +188,93 @@ private:
   llvm::DenseMap<mlir::Operation *, uint> Usage;
 };
 
+// This analysis is used to propagate the inner block size of an operator
+// to its uses or users. Current implementation is to propagate the MMA
+// size used by an MMA operator to the definition (InitTileOp) for its operands.
+// TODO: This analysis can be extended to propagate the block size for other ops
+// such that it can be used as a general analysis for other block size
+// optimizations.
+class PropagateAnalysis {
+private:
+  llvm::DenseMap<mlir::Operation *, mlir::DenseI64ArrayAttr> OpAttrMap;
+
+public:
+  PropagateAnalysis(mlir::Operation *op) {
+    op->walk<mlir::WalkOrder::PostOrder>([&](xetile::TileMMAOp op) {
+      mlir::Operation *operation = op.getOperation();
+      for (auto value : operation->getOperands()) {
+        auto packOp = value.getDefiningOp<xetile::TilePackOp>();
+        if (packOp) {
+          auto blkSZ = packOp.getInnerBlocksAttr();
+          propagate(value, blkSZ);
+        }
+      }
+    });
+  }
+
+  bool maybeUpdated(mlir::Operation *op) { return OpAttrMap.count(op); }
+
+  mlir::DenseI64ArrayAttr getValue(mlir::Operation *op) {
+    if (OpAttrMap.count(op))
+      return OpAttrMap[op];
+    return {};
+  }
+
+private:
+  mlir::Operation *getDefineOrParentOp(mlir::Value value) {
+    if (llvm::isa<mlir::OpResult>(value))
+      return value.getDefiningOp();
+    if (auto arg = llvm::dyn_cast_or_null<mlir::BlockArgument>(value))
+      return arg.getOwner()->getParentOp();
+    return nullptr;
+  };
+
+  mlir::Value getOperandForArg(mlir::scf::ForOp &forOp, mlir::Value &value) {
+    auto arg = llvm::dyn_cast<mlir::BlockArgument>(value);
+    if (arg && arg.getArgNumber() >= forOp.getNumInductionVars()) {
+      auto &iterOperand = *forOp.getTiedLoopInit(arg);
+      auto numCtrlOperands = forOp.getNumControlOperands();
+      auto operandIdx = iterOperand.getOperandNumber();
+      return forOp.getInitArgs()[operandIdx - numCtrlOperands];
+    }
+    return mlir::Value();
+  };
+
+  void propagate(mlir::Value start, mlir::DenseI64ArrayAttr attr) {
+    llvm::SmallVector<mlir::Value> queue;
+    if (bool(start))
+      queue.push_back(start);
+
+    while (queue.size()) {
+      auto value = queue.pop_back_val();
+      if (!bool(value))
+        continue;
+
+      auto *op = getDefineOrParentOp(value);
+
+      // stop when meet a function.
+      if (!op || llvm::isa<mlir::FunctionOpInterface>(op))
+        return;
+
+      OpAttrMap[op] = attr;
+
+      if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(op)) {
+        auto opr = getOperandForArg(forOp, value);
+        if (bool(opr))
+          queue.push_back(opr);
+      } else if (op->getNumOperands() == 1) {
+        queue.push_back(op->getOperand(0));
+      }
+    }
+  }
+};
+
 class XeTypeConverter : public mlir::OneToNTypeConverter {
 public:
-  friend class XeConversionPattern;
+  // friend class XeConversionPattern;
   using mlir::OneToNTypeConverter::convertType;
 
-  XeTypeConverter(mlir::MLIRContext &context,
-                  TileUsageAnalysis *analysis = nullptr)
-      : context(context), usageAnalysis(analysis) {
+  XeTypeConverter(mlir::MLIRContext &context) : context(context) {
     addConversion([&](xetile::TileType tileTy,
                       llvm::SmallVectorImpl<mlir::Type> &resultTypes)
                       -> std::optional<mlir::LogicalResult> {
@@ -235,58 +302,25 @@ public:
 
 private:
   mlir::MLIRContext &context;
-
-protected:
-  TileUsageAnalysis *usageAnalysis;
 };
 
 // A simple mlir::RewritePattern wrapper with methods for accessing UsageType
+template <typename AnalysisT>
 class XeConversionPattern : public mlir::RewritePattern {
 public:
   using mlir::RewritePattern::RewritePattern;
 
   template <typename... Args>
-  XeConversionPattern(imex::XeTypeConverter &typeConverter, Args &&...args)
+  XeConversionPattern(imex::XeTypeConverter &typeConverter, AnalysisT &analysis,
+                      Args &&...args)
       : mlir::RewritePattern(std::forward<Args>(args)...),
-        typeConverter(typeConverter) {}
+        typeConverter(typeConverter), analysis(analysis) {}
 
   virtual mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
                   mlir::PatternRewriter &rewriter) const override {
     llvm_unreachable("must override matchAndRewrite or a rewrite method");
   };
-
-  bool isForDPASA(imex::xetile::LoadTileOp op) const {
-    return typeConverter.usageAnalysis->isForDPASA(op);
-  }
-
-  bool isForDPASB(imex::xetile::LoadTileOp op) const {
-    return typeConverter.usageAnalysis->isForDPASB(op);
-  }
-
-  bool isForDPASC(imex::xetile::LoadTileOp op) const {
-    return typeConverter.usageAnalysis->isForDPASC(op);
-  }
-
-  bool isForLoad(imex::xetile::InitTileOp op) const {
-    return typeConverter.usageAnalysis->isForLoad(op);
-  }
-
-  bool isForStore(imex::xetile::InitTileOp op) const {
-    return typeConverter.usageAnalysis->isForStore(op);
-  }
-
-  bool isForPrefetch(imex::xetile::InitTileOp op) const {
-    return typeConverter.usageAnalysis->isForPrefetch(op);
-  }
-
-  bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) const {
-    return typeConverter.usageAnalysis->isForLoadAndPrefetch(op);
-  }
-
-  bool isForLoadAndStore(imex::xetile::InitTileOp op) const {
-    return typeConverter.usageAnalysis->isForLoadAndStore(op);
-  }
 
   imex::XeTypeConverter &getTypeConverter() const { return typeConverter; }
 
@@ -299,8 +333,64 @@ public:
 
 protected:
   imex::XeTypeConverter &typeConverter;
-};
+  AnalysisT &analysis;
 
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, PropagateAnalysis>>>
+  mlir::DenseI64ArrayAttr getValue(mlir::Operation *op) const {
+    if (op)
+      return llvm::cast<PropagateAnalysis>(analysis).getValue(op);
+    return {};
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForDPASA(imex::xetile::LoadTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForDPASA(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForDPASB(imex::xetile::LoadTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForDPASB(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForDPASC(imex::xetile::LoadTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForDPASC(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForLoad(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForLoad(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForStore(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForStore(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForPrefetch(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForPrefetch(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndPrefetch(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForLoadAndStore(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndStore(op);
+  }
+};
 } // namespace imex
 
 #endif

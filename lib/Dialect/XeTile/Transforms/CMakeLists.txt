@@ -1,6 +1,7 @@
 add_imex_dialect_library(IMEXXeTileTransforms
   Blocking.cpp
   InitDuplicate.cpp
+  BlockAligning.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/XeTile

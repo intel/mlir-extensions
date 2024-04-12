@@ -20,7 +20,8 @@
 namespace imex {
 
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
-                                        mlir::RewritePatternSet &patterns);
+                                        mlir::RewritePatternSet &patterns,
+                                        TileUsageAnalysis &analysis);
 
 } // namespace imex
 
