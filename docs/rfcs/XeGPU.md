@@ -26,7 +26,7 @@ Below is a summary.
 |init_nbarrier	| operation ::= XeGPU.init_nbarrier $nbarrier_id, $participant_thread_num attr-dict : Uint8_t, Uint8_t -> type($nbarrier) | %nbarrier = XeGPU.alloc_nbarrier %nbarrier_id, %participant_thread_num : Uint8_t, Uint8_t -> !XeGPU.nbarrier |
 |nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
 |nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
-|fence	| operation ::= XeGPU.fence attr-dict | XeGPU.mfence {scope = gpu, memory_kind = global} |
+|fence	| operation ::= XeGPU.fence attr-dict | XeGPU.fence {scope = gpu, memory_kind = global} |
 |complile-hint	| operation ::= XeGPU.compile_hint attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
 
 The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.  
