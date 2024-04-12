@@ -282,7 +282,7 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 ```mlir  
 XeGPU.compile_hint {hint=schedule_barrier}
 ```
-nbarrrier, fence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
+nbarrier, fence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
 
 ## Notes
 
