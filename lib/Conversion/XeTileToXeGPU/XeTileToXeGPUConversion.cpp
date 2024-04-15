@@ -81,9 +81,8 @@ buildUnrealizedBackwardsCasts(mlir::ValueRange convertedValues,
   return recastValues;
 }
 
-XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context,
-                                       TileUsageAnalysis *analysis)
-    : XeTypeConverter(context, analysis) {
+XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context)
+    : XeTypeConverter(context) {
   targetOp = nullptr;
 
   addConversion(

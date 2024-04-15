@@ -166,25 +166,13 @@ class SgTileUnpackPackOpPattern
       llvm::SmallVector<mlir::Value> valSet;
       for (auto j = 0; j < inGrids[1]; j++) {
         for (auto i = 0; i < inGrids[0]; i++) {
-          if (i && i % nums == 0) {
+          auto idx = i * inGrids[1] + j;
+          valSet.push_back(inputs[idx]);
+          if (valSet.size() == (size_t)nums) {
             auto newOp = transform(valSet, stack);
             intermediates.push_back(newOp);
             valSet.clear();
           }
-          auto idx = i * inGrids[1] + j;
-          valSet.push_back(inputs[idx]);
-        }
-      }
-
-      for (auto i = 0; i < inGrids[0]; i += nums) {
-        for (auto j = 0; j < inGrids[1]; j++) {
-          llvm::SmallVector<mlir::Value> values;
-          for (auto k = 0; k < nums; k++) {
-            auto idx = (i + k) * inGrids[1] + j;
-            values.push_back(inputs[idx]);
-          }
-          auto newOp = transform(values, stack);
-          intermediates.push_back(newOp);
         }
       }
     } else { // do extract on dim0 using vector::ExtractStridedSliceOp
@@ -638,12 +626,13 @@ struct SgUpdateTileOffsetOpPattern
 };
 
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
-                                        mlir::RewritePatternSet &patterns) {
+                                        mlir::RewritePatternSet &patterns,
+                                        TileUsageAnalysis &analysis) {
   patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
                   SgTileUnpackPackOpPattern, SgLoadTileOpPattern,
                   SgStoreTileOpPattern, SgTileMMAOpPattern,
-                  SgUpdateTileOffsetOpPattern>(patterns.getContext(),
-                                               converter);
+                  SgUpdateTileOffsetOpPattern>(patterns.getContext(), converter,
+                                               analysis);
 }
 
 } // namespace imex

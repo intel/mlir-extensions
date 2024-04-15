@@ -60,4 +60,25 @@ def XeTileBlocking : Pass<"xetile-blocking", "::mlir::gpu::GPUModuleOp">{
  ];
 }
 
+
+// TODO: [block-aligning] remove the following code when upstreaming the pass.
+// The pass is not supposed to be exposed to users. Temporary keep in case we
+// need debug it for down stream development.
+def XeTileBlockAligning: Pass <"xetile-block-aligning", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "optimize the performance for mma.";
+
+  let description = [{
+    This transform is to optimize performance by aligning the block size among operators
+    to reduce in-register data movements. Currently, it mainly focues on the alignment
+    between load and MMA operators.
+  }];
+
+  let constructor = "imex::createXeTileBlockAligningPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+}
+
 #endif // _XeTile_PASSES_TD_INCLUDED_
