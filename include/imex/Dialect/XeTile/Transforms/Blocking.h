@@ -1,4 +1,4 @@
-//===- Blocking.h ----- Blocking Pass -------*- C++ -*-===//
+//===- Blocking.h ----------- Blocking Pass ---------*- C++ -*------------===//
 //
 // Copyright 2024 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -32,16 +32,17 @@
 
 namespace imex {
 
-template <typename SourceOp>
-class XeTileConversion : public imex::XeConversionPattern {
+template <typename SourceOp, typename AnalysisT>
+class XeTileConversion : public imex::XeConversionPattern<AnalysisT> {
 public:
   using OpAdaptor = typename SourceOp::Adaptor;
   using OpPatternRewriter = typename mlir::PatternRewriter;
 
   XeTileConversion(mlir::MLIRContext *context, XeTypeConverter &typeConverter,
-                   mlir::PatternBenefit benefit = 1)
-      : XeConversionPattern(typeConverter, SourceOp::getOperationName(),
-                            benefit, context) {}
+                   AnalysisT &analysis, mlir::PatternBenefit benefit = 1)
+      : XeConversionPattern<AnalysisT>(typeConverter, analysis,
+                                       SourceOp::getOperationName(), benefit,
+                                       context) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -70,7 +71,7 @@ public:
     auto unpackTy = mlir::VectorType::get(unpackShape, srcTy.getElementType());
     return rewriter.create<xetile::TileUnpackOp>(
         src.getLoc(), unpackTy, src,
-        mlir::DenseI64ArrayAttr::get(getContext(), innerBlocks));
+        mlir::DenseI64ArrayAttr::get(src.getContext(), innerBlocks));
   }
 
   xetile::TilePackOp addPackOp(mlir::Value src,
@@ -86,7 +87,7 @@ public:
     auto packTy = mlir::VectorType::get(packShape, srcTy.getElementType());
     auto packOp = rewriter.create<xetile::TilePackOp>(
         src.getLoc(), packTy, src,
-        mlir::DenseI64ArrayAttr::get(getContext(), targetBlkSizes));
+        mlir::DenseI64ArrayAttr::get(src.getContext(), targetBlkSizes));
     return packOp;
   }
 
@@ -98,16 +99,16 @@ public:
   }
 };
 
-template <template <typename> class TraitType>
-class XeTileTraitConversion : public imex::XeConversionPattern {
+template <template <typename> class TraitType, typename AnalysisT>
+class XeTileTraitConversion : public imex::XeConversionPattern<AnalysisT> {
 public:
   XeTileTraitConversion(mlir::MLIRContext *context,
-                        XeTypeConverter &typeConverter,
+                        XeTypeConverter &typeConverter, AnalysisT &analysis,
                         mlir::PatternBenefit benefit = 1)
-      : XeConversionPattern(typeConverter, mlir::Pattern::MatchTraitOpTypeTag(),
-                            mlir::TypeID::get<TraitType>(), benefit, context) {}
+      : XeConversionPattern<AnalysisT>(
+            typeConverter, analysis, mlir::Pattern::MatchTraitOpTypeTag(),
+            mlir::TypeID::get<TraitType>(), benefit, context) {}
 };
-
 } // namespace imex
 
 #endif

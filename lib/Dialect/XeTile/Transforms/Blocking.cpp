@@ -54,6 +54,11 @@ namespace imex {
 
 namespace imex {
 
+extern void
+populateXeTileBlockAligningPatterns(imex::XeTypeConverter &converter,
+                                    mlir::RewritePatternSet &patterns,
+                                    PropagateAnalysis &analysis);
+
 enum OpType { Prefetch, Load, Store, Elementwise };
 
 // Find the maximum divisible number between minHeight/Width and maxHeight/Width
@@ -196,14 +201,16 @@ static llvm::SmallVector<mlir::Operation *> getEffectiveUsers(mlir::Value val) {
 //      --> arith.constant dense<0.0>: vector<4x2x8x16xf16>
 // [8, 16] is the block size.
 struct ArithConstantOpPattern
-    : public XeTileConversion<mlir::arith::ConstantOp> {
+    : public XeTileConversion<mlir::arith::ConstantOp, TileUsageAnalysis> {
 
-  using XeTileConversion<mlir::arith::ConstantOp>::XeTileConversion;
+  using XeTileConversion<mlir::arith::ConstantOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   ArithConstantOpPattern(mlir::MLIRContext *context,
                          imex::XeTypeConverter &converter,
+                         TileUsageAnalysis &analysis,
                          std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -274,14 +281,16 @@ struct ArithConstantOpPattern
 // getInnerBlocks<Elementwise>. Pack/Unpack ops are inserted on the ops
 // boundaries if needed.
 struct VectorizableOpPattern
-    : public XeTileTraitConversion<mlir::OpTrait::Vectorizable> {
+    : public XeTileTraitConversion<mlir::OpTrait::Vectorizable,
+                                   TileUsageAnalysis> {
 
   using XeTileTraitConversion::XeTileTraitConversion;
 
   VectorizableOpPattern(mlir::MLIRContext *context,
                         imex::XeTypeConverter &converter,
+                        TileUsageAnalysis &analysis,
                         std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileTraitConversion(context, converter) {
+      : XeTileTraitConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -344,13 +353,15 @@ struct VectorizableOpPattern
 
 // It rewrites the SCF forOp, it mainly updates the arguments of its
 // region block. unpack ops are added for VectorType operands if needed.
-struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
+struct SCFForOpPattern
+    : public XeTileConversion<mlir::scf::ForOp, TileUsageAnalysis> {
 
-  using XeTileConversion<mlir::scf::ForOp>::XeTileConversion;
+  using XeTileConversion<mlir::scf::ForOp, TileUsageAnalysis>::XeTileConversion;
 
   SCFForOpPattern(mlir::MLIRContext *context, imex::XeTypeConverter &converter,
+                  TileUsageAnalysis &analysis,
                   std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -401,14 +412,17 @@ struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
 // but its corresponding argument in forOp is with type vector<1x2x32x16xf16>
 // This op pattern will insert a pack op to make it consistent with the
 // corresponding argument type.
-struct SCFYieldOpPattern : public XeTileConversion<mlir::scf::YieldOp> {
+struct SCFYieldOpPattern
+    : public XeTileConversion<mlir::scf::YieldOp, TileUsageAnalysis> {
 
-  using XeTileConversion<mlir::scf::YieldOp>::XeTileConversion;
+  using XeTileConversion<mlir::scf::YieldOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   SCFYieldOpPattern(mlir::MLIRContext *context,
                     imex::XeTypeConverter &converter,
+                    TileUsageAnalysis &analysis,
                     std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -444,14 +458,17 @@ struct SCFYieldOpPattern : public XeTileConversion<mlir::scf::YieldOp> {
 // It updates init_tile by attaching innerBlock attribute to the result
 // tile. The block size is choosed based on how the tile is used, including
 // prefetch, load, store. Since hardware support different sizes for them.
-struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
+struct InitTileOpPattern
+    : public XeTileConversion<xetile::InitTileOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::InitTileOp>::XeTileConversion;
+  using XeTileConversion<xetile::InitTileOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   InitTileOpPattern(mlir::MLIRContext *context,
                     imex::XeTypeConverter &converter,
+                    TileUsageAnalysis &analysis,
                     std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -552,14 +569,17 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
 // It updates load_tile to reveal effects of innerblock attribute by
 // representing value as 4D vector. An unpack op is added at the end
 // to make this change to be transparent to its users.
-struct LoadTileOpPattern : public XeTileConversion<xetile::LoadTileOp> {
+struct LoadTileOpPattern
+    : public XeTileConversion<xetile::LoadTileOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::LoadTileOp>::XeTileConversion;
+  using XeTileConversion<xetile::LoadTileOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   LoadTileOpPattern(mlir::MLIRContext *context,
                     imex::XeTypeConverter &converter,
+                    TileUsageAnalysis &analysis,
                     std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -595,14 +615,17 @@ struct LoadTileOpPattern : public XeTileConversion<xetile::LoadTileOp> {
 
 // It updates store_tile to reveal effects of innerblock attribute.
 // It uses pack op to align the shape of its vector value to the tile shape.
-struct StoreTileOpPattern : public XeTileConversion<xetile::StoreTileOp> {
+struct StoreTileOpPattern
+    : public XeTileConversion<xetile::StoreTileOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::StoreTileOp>::XeTileConversion;
+  using XeTileConversion<xetile::StoreTileOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   StoreTileOpPattern(mlir::MLIRContext *context,
                      imex::XeTypeConverter &converter,
+                     TileUsageAnalysis &analysis,
                      std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -645,13 +668,16 @@ getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
 // It updates tile_mma to reveal effects of innerblock attribute.
 // Values will be reprented as 4D vectors. An unpack op is applied
 // to its result to make the change transparent to its users.
-struct TileMMAOpPattern : public XeTileConversion<xetile::TileMMAOp> {
+struct TileMMAOpPattern
+    : public XeTileConversion<xetile::TileMMAOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::TileMMAOp>::XeTileConversion;
+  using XeTileConversion<xetile::TileMMAOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   TileMMAOpPattern(mlir::MLIRContext *context, imex::XeTypeConverter &converter,
+                   TileUsageAnalysis &analysis,
                    std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -710,14 +736,16 @@ struct TileMMAOpPattern : public XeTileConversion<xetile::TileMMAOp> {
 // It updates update_tile_offset to reveal effects of innerblock attribute
 // by updating the type of it result.
 struct UpdateTileOffsetOpPattern
-    : public XeTileConversion<xetile::UpdateTileOffsetOp> {
+    : public XeTileConversion<xetile::UpdateTileOffsetOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::UpdateTileOffsetOp>::XeTileConversion;
+  using XeTileConversion<xetile::UpdateTileOffsetOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
   UpdateTileOffsetOpPattern(mlir::MLIRContext *context,
                             imex::XeTypeConverter &converter,
+                            TileUsageAnalysis &analysis,
                             std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter) {
+      : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
 
@@ -735,12 +763,12 @@ struct UpdateTileOffsetOpPattern
 
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
-    std::shared_ptr<XeuArchInterface> ptruArch) {
+    TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
   patterns
       .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
               SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
               StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern>(
-          patterns.getContext(), converter, ptruArch);
+          patterns.getContext(), converter, analysis, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
@@ -776,12 +804,8 @@ public:
       return signalPassFailure();
     }
 
-    auto &usageAnalysis = getAnalysis<TileUsageAnalysis>();
-
+    XeTypeConverter typeConverter(context);
     mlir::RewritePatternSet patterns(&context);
-    XeTypeConverter typeConverter(context, &usageAnalysis);
-
-    populateXeTileBlockingPatterns(typeConverter, patterns, uArchInterface);
 
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
@@ -789,9 +813,25 @@ public:
     config.useTopDownTraversal = true;
     config.maxIterations = 2;
     config.strictMode = GreedyRewriteStrictness::ExistingOps;
-    if (failed(
-            applyPatternsAndFoldGreedily(mod, std::move(patterns), config))) {
-      return signalPassFailure();
+
+    { // initialize the inner block size per op.
+      patterns.clear();
+      auto &analysis = getAnalysis<TileUsageAnalysis>();
+      populateXeTileBlockingPatterns(typeConverter, patterns, analysis,
+                                     uArchInterface);
+      if (failed(
+              applyPatternsAndFoldGreedily(mod, std::move(patterns), config))) {
+        return signalPassFailure();
+      }
+    }
+    { // aligning the inner block size among tile_mma and load_tile.
+      patterns.clear();
+      auto &analysis = getAnalysis<PropagateAnalysis>();
+      populateXeTileBlockAligningPatterns(typeConverter, patterns, analysis);
+      if (failed(
+              applyPatternsAndFoldGreedily(mod, std::move(patterns), config))) {
+        return signalPassFailure();
+      }
     }
   }
 

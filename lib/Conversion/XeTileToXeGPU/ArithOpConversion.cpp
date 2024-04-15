@@ -81,8 +81,10 @@ bool isLegalArithOp(mlir::Operation *op) {
 }
 
 void populateArithOpConversionPatterns(imex::XeGPUTypeConverter &converter,
-                                       mlir::RewritePatternSet &patterns) {
-  patterns.add<SgArithConstantOpPattern>(patterns.getContext(), converter);
+                                       mlir::RewritePatternSet &patterns,
+                                       TileUsageAnalysis &analysis) {
+  patterns.add<SgArithConstantOpPattern>(patterns.getContext(), converter,
+                                         analysis);
 }
 
 } // namespace imex
