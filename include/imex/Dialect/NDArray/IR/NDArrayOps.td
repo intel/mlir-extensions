@@ -875,11 +875,11 @@ def ReshapeOp : NDArray_Op<"reshape", []> {
       See Array API.
   }];
 
-  let arguments = (ins AnyType:$src, Variadic<Index>:$shape, OptionalAttr<I1Attr>:$copy);
+  let arguments = (ins AnyType:$source, Variadic<Index>:$shape, OptionalAttr<I1Attr>:$copy);
   let results = (outs AnyType);
 
   let assemblyFormat = [{
-    $src $shape attr-dict `:` qualified(type($src)) `->` qualified(type(results))
+    $source $shape attr-dict `:` qualified(type($source)) `->` qualified(type(results))
   }];
 }
 

@@ -110,6 +110,25 @@ func.func @test_local_target_of_slice(%arg0: !ndarray.ndarray<?xi64>, %arg1: !nd
 // CHECK: return
 
 // -----
+func.func @test_copy_reshape() -> () {
+  %i1 = arith.constant 1 : i32
+  %c2 = arith.constant 2 : index
+  %c3 = arith.constant 3 : index
+  %c4 = arith.constant 4 : index
+
+  %0 = ndarray.create %c3, %c4 value %i1 {dtype = 4 : i8} : (index, index, i32) -> !ndarray.ndarray<3x4xi32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>>
+  %1 = ndarray.reshape %0 %c2, %c3, %c2 {copy = true}
+       : !ndarray.ndarray<3x4xi32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>>
+       -> !ndarray.ndarray<2x3x2xi32, #dist.dist_env<team = 22 loffs = ?,?,? lparts = ?x?x?,?x?x?,?x?x?>>
+  return
+}
+// CHECK-LABEL: @test_copy_reshape
+// CHECK: "distruntime.team_size"() <{team = 22 : i64}> : () -> index
+// CHECK: "distruntime.team_member"() <{team = 22 : i64}> : () -> index
+// CHECK: [[handle:%.*]], [[nlArray:%.*]] = distruntime.copy_reshape
+// CHECK: "distruntime.wait"([[handle]]) : (!distruntime.asynchandle) -> ()
+
+// -----
 func.func @test_repartition(%arg0: !ndarray.ndarray<?x?xi64>, %arg1: !ndarray.ndarray<?x?xi64>, %arg2: !ndarray.ndarray<?x?xi64>) -> (!ndarray.ndarray<?x?xi64>, !ndarray.ndarray<?x?xi64>, !ndarray.ndarray<?x?xi64>) {
   %c0 = arith.constant 0 : index
   %a = dist.init_dist_array l_offset %c0, %c0 parts %arg0, %arg1, %arg2 : index, index, !ndarray.ndarray<?x?xi64>, !ndarray.ndarray<?x?xi64>, !ndarray.ndarray<?x?xi64> to !ndarray.ndarray<10x12xi64, #dist.dist_env<team = 22 loffs = 0,0 lparts = ?x?,?x?,?x?>>

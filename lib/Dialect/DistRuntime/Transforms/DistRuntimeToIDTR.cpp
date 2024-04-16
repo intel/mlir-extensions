@@ -96,9 +96,11 @@ struct RuntimePrototypes {
     requireFunc(loc, builder, module, "_idtr_prank", {i64Type}, {indexType});
     requireFunc(loc, builder, module, "_idtr_reduce_all", {dataMRType, opType},
                 {});
-    requireFunc(loc, builder, module, "_idtr_reshape",
-                // team, gshape, loffs, ownOutpart, nshape
-                {i64Type, idxMRType, idxMRType, dataMRType, idxMRType}, {});
+    requireFunc(loc, builder, module, "_idtr_copy_reshape",
+                // team, gshape, loffs, lPart, ngshape, nloffs, nPart
+                {i64Type, idxMRType, idxMRType, dataMRType, idxMRType,
+                 idxMRType, dataMRType},
+                {i64Type});
     requireFunc(loc, builder, module, "_idtr_update_halo",
                 // team,    gshape,    loffs,     lPart,      bbOffset, bbShape,
                 // lHalo,   rHalo, key
@@ -106,8 +108,8 @@ struct RuntimePrototypes {
                  idxMRType, dataMRType, dataMRType, i64Type},
                 {i64Type});
     requireFunc(loc, builder, module, "_idtr_wait",
-                // handle, lHalo, rHalo
-                {i64Type, dataMRType, dataMRType}, {});
+                // handle
+                {i64Type}, {});
   }
 };
 
@@ -147,6 +149,58 @@ struct TeamMemberOpPattern
         op, "_idtr_prank", rewriter.getIndexType(),
         createInt(loc, rewriter, team));
 
+    return ::mlir::success();
+  }
+};
+
+struct CopyReshapeOpPattern
+    : public ::mlir::OpRewritePattern<::imex::distruntime::CopyReshapeOp> {
+  using ::mlir::OpRewritePattern<
+      ::imex::distruntime::CopyReshapeOp>::OpRewritePattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::distruntime::CopyReshapeOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
+    auto lArray = op.getLArray();
+    auto arType = lArray.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto resType =
+        op.getNlArray().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    if (!arType || !resType) {
+      return ::mlir::failure();
+    }
+
+    auto loc = op.getLoc();
+    auto elType = resType.getElementType();
+    auto team = op.getTeam();
+    auto gShape = op.getGShape();
+    auto lOffs = op.getLOffsets();
+    auto ngShape = op.getNgShape();
+    auto nlOffs = op.getNlOffsets();
+    auto nlShape = op.getNlShape();
+
+    // create output array with target size
+    auto nlArray = rewriter.create<::imex::ndarray::CreateOp>(
+        loc, nlShape, ::imex::ndarray::fromMLIR(elType), nullptr,
+        resType.getEnvironments());
+
+    auto idxType = rewriter.getIndexType();
+    auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
+        loc, team.cast<::mlir::IntegerAttr>());
+    auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
+    auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
+    auto lArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lArray);
+    auto ngShapeMR =
+        createURMemRefFromElements(rewriter, loc, idxType, ngShape);
+    auto nlOffsMR = createURMemRefFromElements(rewriter, loc, idxType, nlOffs);
+    auto nlArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, nlArray);
+
+    auto fun =
+        rewriter.getStringAttr(mkTypedFunc("_idtr_copy_reshape", elType));
+    auto handle = rewriter.create<::mlir::func::CallOp>(
+        loc, fun, rewriter.getI64Type(),
+        ::mlir::ValueRange{teamC, gShapeMR, lOffsMR, lArrayMR, ngShapeMR,
+                           nlOffsMR, nlArrayMR});
+    rewriter.replaceOp(op, {handle.getResult(0), nlArray});
     return ::mlir::success();
   }
 };
@@ -291,24 +345,9 @@ struct WaitOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(::imex::distruntime::WaitOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto handle = op.getHandle();
-    auto uhOp = handle.getDefiningOp<::imex::distruntime::GetHaloOp>();
-    assert(uhOp);
-    auto lHalo = uhOp.getLHalo();
-    auto rHalo = uhOp.getRHalo();
-
-    auto arTyp = lHalo.getType().dyn_cast<::imex::ndarray::NDArrayType>();
-    if (!arTyp)
-      return ::mlir::failure();
-    auto elTyp = arTyp.getElementType();
-    auto lHaloMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lHalo);
-    auto rHaloMR = ::imex::ndarray::mkURMemRef(loc, rewriter, rHalo);
-
-    auto fsa = rewriter.getStringAttr(mkTypedFunc("_idtr_wait", elTyp));
+    auto fsa = rewriter.getStringAttr("_idtr_wait");
     rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
-        op, fsa, ::mlir::TypeRange(),
-        ::mlir::ValueRange{handle, lHaloMR, rHaloMR});
+        op, fsa, ::mlir::TypeRange(), ::mlir::ValueRange{op.getHandle()});
 
     return ::mlir::success();
   }
@@ -325,8 +364,9 @@ struct DistRuntimeToIDTRPass
     RuntimePrototypes::add_prototypes(builder, this->getOperation());
 
     ::mlir::FrozenRewritePatternSet patterns;
-    insertPatterns<TeamSizeOpPattern, TeamMemberOpPattern, GetHaloOpPattern,
-                   AllReduceOpPattern, WaitOpPattern>(getContext(), patterns);
+    insertPatterns<CopyReshapeOpPattern, TeamSizeOpPattern, TeamMemberOpPattern,
+                   GetHaloOpPattern, AllReduceOpPattern, WaitOpPattern>(
+        getContext(), patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }; // runOnOperation()
 
