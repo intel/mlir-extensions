@@ -646,13 +646,13 @@ struct ReshapeLowering
     // check output type and get operands
     auto retArTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
     auto srcArTyp =
-        op.getSrc().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        op.getSource().getType().dyn_cast<::imex::ndarray::NDArrayType>();
     if (!(retArTyp && srcArTyp)) {
       return ::mlir::failure();
     }
 
     auto loc = op.getLoc();
-    auto src = adaptor.getSrc();
+    auto src = adaptor.getSource();
     auto srcTnsr = src.getType().cast<::mlir::TensorType>();
     auto shape = adaptor.getShape();
     auto elTyp = srcTnsr.getElementType();

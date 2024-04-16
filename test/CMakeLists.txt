@@ -82,7 +82,7 @@ add_lit_testsuite(check-static "Running the IMEX regression tests"
 set_target_properties(check-static PROPERTIES FOLDER "Tests")
 
 add_custom_target(check-imex
-        DEPENDS check-gen check-static
+        DEPENDS check-static
         )
 
 add_lit_testsuites(IMEX ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${IMEX_TEST_DEPENDS})

@@ -591,9 +591,7 @@ struct ReshapeOpConverter
                   ::imex::ndarray::ReshapeOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
-    return ::mlir::failure();
-#ifdef FIXME_RESHAPE
-    auto src = op.getArray();
+    auto src = op.getSource();
     auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
     auto retDistType =
         op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
@@ -603,10 +601,13 @@ struct ReshapeOpConverter
     }
 
     auto loc = op.getLoc();
-    auto dEnv = getDistEnv(srcDistType);
-    auto nShape = adaptor.getShape();
-    auto gShape = createGlobalShapeOf(loc, rewriter, src);
     auto elType = srcDistType.getElementType();
+    auto dEnv = getDistEnv(srcDistType);
+    auto ngShape = adaptor.getShape();
+    auto gShape = createGlobalShapeOf(loc, rewriter, src);
+    auto lParts = createPartsOf(loc, rewriter, src);
+    auto lArray = lParts.size() == 1 ? lParts[0] : lParts[1];
+    auto lOffs = createLocalOffsetsOf(loc, rewriter, src);
 
     // Repartitioning is needed if any of the partitions' size is not a multiple
     // of the new chunksize.
@@ -615,37 +616,30 @@ struct ReshapeOpConverter
     assert(adaptor.getCopy().value_or(1) != 0 ||
            !"Distributed reshape currently requires copying");
 
+    // FIXME: Check return type: Check that static sizes are the same as the
+    // default part sizes
+
     auto team = dEnv.getTeam();
-    // get function args
-    auto lPart = createDefaultPartition(loc, rewriter, team, nShape);
-    auto lOffs = lPart.getLOffsets();
-    auto lShape = lPart.getLShape();
-
-    // create output array with target size
-    auto outArray = rewriter.create<::imex::ndarray::CreateOp>(
-        loc, lShape, ::imex::ndarray::fromMLIR(elType), nullptr,
-        getNonDistEnvs(srcDistType));
-    auto lUMR = ::imex::ndarray::mkURMemRef(loc, rewriter, outArray);
-
-    auto idxType = rewriter.getIndexType();
-    auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
-    auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
-    auto nShapePtr = createURMemRefFromElements(rewriter, loc, idxType, nShape);
+    auto nPart = createDefaultPartition(loc, rewriter, team, ngShape);
+    auto nlOffs = nPart.getLOffsets();
+    auto nlShape = nPart.getLShape();
+    auto shp = getShapeFromValues(nlShape);
+    auto lRetType = ::imex::ndarray::NDArrayType::get(
+        shp, elType, getNonDistEnvs(retDistType));
 
     // call the idt runtime
-    auto fun = rewriter.getStringAttr(mkTypedFunc("_idtr_reshape", elType));
-    auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
-        loc, team.cast<::mlir::IntegerAttr>());
-    (void)rewriter.create<::mlir::func::CallOp>(
-        loc, fun, ::mlir::TypeRange(),
-        ::mlir::ValueRange{teamC, gShapeMR, lOffsMR, lUMR, nShapePtr});
-
+    auto htype = ::imex::distruntime::AsyncHandleType::get(getContext());
+    auto nlArray = rewriter.create<::imex::distruntime::CopyReshapeOp>(
+        loc, ::mlir::TypeRange{htype, lRetType}, team, lArray, gShape, lOffs,
+        ngShape, nlOffs, nlShape);
+    (void)rewriter.create<::imex::distruntime::WaitOp>(loc,
+                                                       nlArray.getHandle());
     // finally init dist array
     rewriter.replaceOp(
-        op, createDistArray(loc, rewriter, team, nShape, lOffs, {outArray}));
+        op, createDistArray(loc, rewriter, team, ngShape, nlOffs,
+                            ::mlir::ValueRange{nlArray.getNlArray()}));
 
     return ::mlir::success();
-#endif
   }
 };
 

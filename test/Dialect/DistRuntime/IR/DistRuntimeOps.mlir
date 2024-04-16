@@ -27,3 +27,14 @@ func.func @test_allreduce(%arg0: memref<i64>) {
 }
 // CHECK-LABEL: func.func @test_allreduce(%arg0: memref<i64>) {
 // CHECK-NEXT: "distruntime.allreduce"(%arg0) <{op = 4 : i32}> : (memref<i64>) -> ()
+
+// -----
+func.func @test_copy_reshape(%arg0: !ndarray.ndarray<?x?xi64>) {
+    %c1 = arith.constant 1 : index
+    %c3 = arith.constant 3 : index
+    %c9 = arith.constant 9 : index
+    %h, %a = distruntime.copy_reshape %arg0 g_shape %c3, %c3 l_offs %c1, %c1 to n_g_shape %c9 n_offs %c3 n_shape %c3 {team=22 : i64} : (!ndarray.ndarray<?x?xi64>, index, index, index, index, index, index, index) -> (!distruntime.asynchandle, !ndarray.ndarray<?xi64>)
+    return
+}
+// CHECK-LABEL: func.func @test_copy_reshape(%arg0: !ndarray.ndarray<?x?xi64>) {
+// CHECK: distruntime.copy_reshape %arg0 g_shape %c3, %c3 l_offs %c1, %c1 to n_g_shape %c9 n_offs %c3 n_shape %c3 {team = 22 : i64} : (!ndarray.ndarray<?x?xi64>, index, index, index, index, index, index, index) -> (!distruntime.asynchandle, !ndarray.ndarray<?xi64>)
