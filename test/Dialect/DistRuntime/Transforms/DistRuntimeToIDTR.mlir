@@ -16,13 +16,13 @@ module {
 // CHECK-NEXT: func.func private @_idtr_reduce_all_i16(memref<*xi16>, i32)
 // CHECK-NEXT: func.func private @_idtr_reduce_all_i8(memref<*xi8>, i32)
 // CHECK-NEXT: func.func private @_idtr_reduce_all_i1(memref<*xi1>, i32)
-// CHECK-NEXT: func.func private @_idtr_reshape_f64(i64, memref<*xindex>, memref<*xindex>, memref<*xf64>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_f32(i64, memref<*xindex>, memref<*xindex>, memref<*xf32>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_i64(i64, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_i32(i64, memref<*xindex>, memref<*xindex>, memref<*xi32>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_i16(i64, memref<*xindex>, memref<*xindex>, memref<*xi16>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_i8(i64, memref<*xindex>, memref<*xindex>, memref<*xi8>, memref<*xindex>)
-// CHECK-NEXT: func.func private @_idtr_reshape_i1(i64, memref<*xindex>, memref<*xindex>, memref<*xi1>, memref<*xindex>)
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_f64(i64, memref<*xindex>, memref<*xindex>, memref<*xf64>, memref<*xindex>, memref<*xindex>, memref<*xf64>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_f32(i64, memref<*xindex>, memref<*xindex>, memref<*xf32>, memref<*xindex>, memref<*xindex>, memref<*xf32>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_i64(i64, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xindex>, memref<*xindex>, memref<*xi64>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_i32(i64, memref<*xindex>, memref<*xindex>, memref<*xi32>, memref<*xindex>, memref<*xindex>, memref<*xi32>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_i16(i64, memref<*xindex>, memref<*xindex>, memref<*xi16>, memref<*xindex>, memref<*xindex>, memref<*xi16>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_i8(i64, memref<*xindex>, memref<*xindex>, memref<*xi8>, memref<*xindex>, memref<*xindex>, memref<*xi8>) -> i64
+// CHECK-NEXT: func.func private @_idtr_copy_reshape_i1(i64, memref<*xindex>, memref<*xindex>, memref<*xi1>, memref<*xindex>, memref<*xindex>, memref<*xi1>) -> i64
 // CHECK-NEXT: func.func private @_idtr_update_halo_f64(i64, memref<*xindex>, memref<*xindex>, memref<*xf64>, memref<*xindex>, memref<*xindex>, memref<*xf64>, memref<*xf64>, i64)
 // CHECK-NEXT: func.func private @_idtr_update_halo_f32(i64, memref<*xindex>, memref<*xindex>, memref<*xf32>, memref<*xindex>, memref<*xindex>, memref<*xf32>, memref<*xf32>, i64)
 // CHECK-NEXT: func.func private @_idtr_update_halo_i64(i64, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xi64>, i64)
@@ -30,6 +30,7 @@ module {
 // CHECK-NEXT: func.func private @_idtr_update_halo_i16(i64, memref<*xindex>, memref<*xindex>, memref<*xi16>, memref<*xindex>, memref<*xindex>, memref<*xi16>, memref<*xi16>, i64)
 // CHECK-NEXT: func.func private @_idtr_update_halo_i8(i64, memref<*xindex>, memref<*xindex>, memref<*xi8>, memref<*xindex>, memref<*xindex>, memref<*xi8>, memref<*xi8>, i64)
 // CHECK-NEXT: func.func private @_idtr_update_halo_i1(i64, memref<*xindex>, memref<*xindex>, memref<*xi1>, memref<*xindex>, memref<*xindex>, memref<*xi1>, memref<*xi1>, i64)
+// CHECK-NEXT: func.func private @_idtr_wait(i64)
 // CHECK-LABEL: func.func @test_nprocs() -> index {
 // CHECK: [[C0:%.*]] = arith.constant
 // CHECK: call @_idtr_nprocs([[C0]])
@@ -80,7 +81,22 @@ module {
 // CHECK: ndarray.to_tensor
 // CHECK: [[handle:%.*]] = call @_idtr_update_halo_i64(
 // CHECK-SAME: : (i64, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xindex>, memref<*xindex>, memref<*xi64>, memref<*xi64>, i64) -> i64
-// CHECK: [[lHalo:%.*]] = memref.cast
-// CHECK: [[rHalo:%.*]] = memref.cast
-// CHECK: call @_idtr_wait_i64([[handle]], [[lHalo]], [[rHalo]]) : (i64, memref<*xi64>, memref<*xi64>) -> ()
+// CHECK: call @_idtr_wait([[handle]]) : (i64) -> ()
 // CHECK: return
+
+// -----
+module {
+  func.func @test_copy_reshape(%arg0: !ndarray.ndarray<?x?xi64>) -> !ndarray.ndarray<3xi64> {
+    %c1 = arith.constant 1 : index
+    %c3 = arith.constant 3 : index
+    %c9 = arith.constant 9 : index
+    %handle, %nlArray = distruntime.copy_reshape %arg0 g_shape %c3, %c3 l_offs %c1, %c1 to n_g_shape %c9 n_offs %c3 n_shape %c3 {team = 22 : i64} : (!ndarray.ndarray<?x?xi64>, index, index, index, index, index, index, index) -> (!distruntime.asynchandle, !ndarray.ndarray<3xi64>)
+    "distruntime.wait"(%handle) : (!distruntime.asynchandle) -> ()
+    return %nlArray : !ndarray.ndarray<3xi64>
+  }
+}
+// CHECK-LABEL: func.func @test_copy_reshape
+// CHECK: [[V0:%.*]] = ndarray.create %c3 : (index) -> !ndarray.ndarray<3xi64>
+// CHECK: [[handle:%.*]] = call @_idtr_copy_reshape_i64
+// CHECK: call @_idtr_wait([[handle]]) : (i64) -> ()
+// CHECK: return [[V0]] : !ndarray.ndarray<3xi64>

@@ -206,7 +206,7 @@ inline ::mlir::ValueRange createLocalOffsetsOf(const ::mlir::Location &loc,
   return builder.create<::imex::dist::LocalOffsetsOfOp>(loc, ary).getLOffsets();
 }
 
-// create operation returning halo of distributed array
+// create operation returning all parts (owned + halos) of distributed array
 inline ::mlir::ValueRange createPartsOf(const ::mlir::Location &loc,
                                         ::mlir::OpBuilder &builder,
                                         ::mlir::Value ary) {

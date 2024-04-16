@@ -61,17 +61,17 @@ module {
 }
 // CHECK-LABEL: func.func @test
 // CHECK: call @_idtr_update_halo_f32
-// CHECK: call @_idtr_wait_f32
+// CHECK: call @_idtr_wait
 // CHECK: call @_idtr_update_halo_f32
 // CHECK: call @_idtr_update_halo_f32
-// CHECK: call @_idtr_wait_f32
+// CHECK: call @_idtr_wait
 // CHECK-LABEL: linalg.generic
 // CHECK-NEXT: ^bb0
 // CHECK-NEXT-COUNT-9: arith.mulf
 // CHECK-COUNT-9: arith.addf
 // CHECK-NEXT: linalg.yield
 // CHECK-NEXT: } -> tensor<167x508xf32>
-// CHECK: call @_idtr_wait_f32
+// CHECK: call @_idtr_wait
 // CHECK-LABEL: linalg.generic
 // CHECK-NEXT: ^bb0
 // CHECK-NEXT: arith.mulf
