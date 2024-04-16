@@ -338,15 +338,6 @@ void GPUXToSPIRVPass::runOnOperation() {
         if (rank < 1 || type.getNumElements() == 1)
           return elemType;
 
-        // load2d/store2d is 3-d with vnni format, and 4d with array_length
-        // TODO: what if load without any vnni? are we going to transform all
-        // fp16/bf16
-        auto factor = 32 / elemType.getIntOrFloatBitWidth();
-        if ((rank == 3 || rank == 4) && type.getShape()[rank - 1] == factor) {
-          elemType = ::mlir::IntegerType::get(context, 32);
-          rank--;
-        }
-
         unsigned sum = 1;
         for (unsigned i = 0; i < rank; i++) {
           sum *= type.getShape()[i];

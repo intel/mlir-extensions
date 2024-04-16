@@ -30,9 +30,11 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK: -> vector<128xf32> "None" attributes {VectorComputeFunctionINTEL, linkage_attributes =
   // CHECK:  #spirv.linkage_attributes<linkage_name = "llvm.genx.dpas.nosrc0.v128f32.v128i32.v64i32", linkage_type = <Import>>}
   // CHECK-LABEL: spirv.func @dpas
-  // CHECK: (%[[A:.*]]: vector<64xi32>, %[[B:.*]]: vector<128xi32>)
+  // CHECK: (%[[A:.*]]: vector<128xf16>, %[[B:.*]]: vector<256xf16>)
   // CHECK-NEXT: %[[cst134744586_i32:.*]] = spirv.Constant 134744586 : i32
-  // CHECK-NEXT: %{{.*}} = spirv.FunctionCall @llvm_genx_dpas_nosrc0_v128f32_v128i32_v64i32(%[[B]], %[[A]], %[[cst134744586_i32]])
+  // CHECK-NEXT: %[[A_cast:.*]] = spirv.Bitcast %[[A]] : vector<128xf16> to vector<64xi32>
+  // CHECK-NEXT: %[[B_cast:.*]] = spirv.Bitcast %[[B]] : vector<256xf16> to vector<128xi32>
+  // CHECK-NEXT: %{{.*}} = spirv.FunctionCall @llvm_genx_dpas_nosrc0_v128f32_v128i32_v64i32(%[[B_cast]], %[[A_cast]], %[[cst134744586_i32]])
   // CHECK: (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
   gpu.func @dpas(%A : vector<8x8x2xf16>, %B : vector<8x16x2xf16>)
     kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
