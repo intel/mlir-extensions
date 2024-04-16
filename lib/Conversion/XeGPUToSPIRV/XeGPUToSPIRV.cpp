@@ -102,6 +102,20 @@ encodeVectorType(ConversionPatternRewriter &rewriter, VectorType type,
   auto newType = VectorType::get(size, elemType);
   return std::make_pair(str, newType);
 }
+
+/// @brief
+/// We have to use i32 for intrinsic calls like llvm_genx_raw_send2_*, if we
+/// want to get the original element type (e.g., f16) as the result of a load,
+/// we have to encode the resulting i32 vector back to it.
+VectorType encodeVectorTypeTo(VectorType currentVecType, Type toElemType) {
+  auto elemType = currentVecType.getElementType();
+  auto currentbitWidth = elemType.getIntOrFloatBitWidth();
+  auto newBitwidth = toElemType.getIntOrFloatBitWidth();
+  const int size =
+      currentVecType.getNumElements() * currentbitWidth / newBitwidth;
+  return VectorType::get(size, toElemType);
+}
+
 unsigned encodeDataum(Type type) {
   switch (type.getIntOrFloatBitWidth()) {
   case 8:
@@ -555,7 +569,17 @@ public:
       auto funcOp =
           rewriter.create<spirv::FunctionCallOp>(loc, retType, funcName, args);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType =
+            encodeVectorTypeTo(retType, tileType.getElementType());
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<spirv::BitcastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<spirv::BitcastOp>(loc, op.getType(),
                                                       funcOp->getResult(0));
@@ -745,7 +769,16 @@ public:
       auto funcOp =
           rewriter.create<spirv::FunctionCallOp>(loc, retType, funcName, args);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType = encodeVectorTypeTo(newType, elmType);
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<spirv::BitcastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<spirv::BitcastOp>(loc, op.getType(),
                                                       funcOp->getResult(0));
@@ -804,8 +837,24 @@ public:
     auto infoAttr = rewriter.getIntegerAttr(rewriter.getI32Type(), infoVal);
     auto info = rewriter.create<spirv::ConstantOp>(loc, rewriter.getI32Type(),
                                                    infoAttr);
-    auto newResultType = encodeVectorType(rewriter, resultType).second;
-    SmallVector<Value, 4> args{adaptor.getRhs(), adaptor.getLhs(), info};
+
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    // Intrinsic accepts i32 type, therefore the element type should be casted
+    // to i32
+    auto [lhsName, lhsNewType] = encodeVectorType(rewriter, lhsType);
+    auto [rhsName, rhsNewType] = encodeVectorType(rewriter, rhsType);
+    auto [resultName, newResultType] = encodeVectorType(rewriter, resultType);
+
+    if (lhsNewType != adaptor.getLhs().getType()) {
+      lhs =
+          rewriter.create<spirv::BitcastOp>(loc, lhsNewType, adaptor.getLhs());
+    }
+    if (rhsNewType != adaptor.getRhs().getType()) {
+      rhs =
+          rewriter.create<spirv::BitcastOp>(loc, rhsNewType, adaptor.getRhs());
+    }
+    SmallVector<Value, 4> args{rhs, lhs, info};
     std::string funcName = "llvm_genx_dpas_nosrc0_";
     if (op.getAcc()) {
       funcName = "llvm_genx_dpas2_";
@@ -819,14 +868,14 @@ public:
       auto sdArg = createIntConstant(i32Type, sd);
       auto rcArg = createIntConstant(i32Type, rc);
       auto signless = createIntConstant(i32Type, 0);
-      args.assign({adaptor.getAcc(), adaptor.getRhs(), adaptor.getLhs(),
-                   prec1Arg, prec2Arg, sdArg, rcArg, signless, signless});
+      args.assign({adaptor.getAcc(), rhs, lhs, prec1Arg, prec2Arg, sdArg, rcArg,
+                   signless, signless});
     }
-    funcName += encodeVectorType(rewriter, resultType).first;
+    funcName += resultName;
     funcName += "_";
-    funcName += encodeVectorType(rewriter, rhsType).first;
+    funcName += rhsName;
     funcName += "_";
-    funcName += encodeVectorType(rewriter, lhsType).first;
+    funcName += lhsName;
     auto funcType =
         rewriter.getFunctionType(ValueRange(args).getTypes(), newResultType);
     Operation *opPtr = op;
