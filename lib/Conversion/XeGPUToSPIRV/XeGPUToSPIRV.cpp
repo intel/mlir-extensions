@@ -32,6 +32,7 @@
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
 
+#include "imex/Utils/XeCommon.h"
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -52,57 +53,6 @@ using namespace imex::xegpu;
 using namespace mlir;
 
 namespace {
-/// @brief encodeVectorType(xxx, 8x8x2xf16, false) returns ["v64i32", 64xi32]
-std::pair<std::string, VectorType>
-encodeVectorType(ConversionPatternRewriter &rewriter, VectorType type,
-                 bool use64bitData = false, bool enforceInteger = false) {
-  auto elemType = type.getElementType();
-  auto bitWidth = elemType.getIntOrFloatBitWidth();
-  int size = type.getNumElements() * bitWidth / 32;
-  if (use64bitData) {
-    size /= 2;
-  }
-  std::string str;
-  switch (size) {
-  case 16:
-    str += "v16";
-    break;
-  case 32:
-    str += "v32";
-    break;
-  case 64:
-    str += "v64";
-    break;
-  case 128:
-    str += "v128";
-    break;
-  case 256:
-    str += "v256";
-    break;
-  case 512:
-    str += "v512";
-    break;
-  default:
-    assert(0 && "add more support");
-    break;
-  }
-  if (use64bitData) {
-    str += "i64";
-    elemType = rewriter.getI64Type();
-  } else if (enforceInteger) {
-    str += "i32";
-    elemType = rewriter.getI32Type();
-  } else if (elemType == rewriter.getF32Type())
-    str += "f32";
-  else if (elemType == rewriter.getF16Type()) {
-    str += "i32";
-    elemType = rewriter.getI32Type();
-  } else
-    assert(0 && "add more support");
-  auto newType = VectorType::get(size, elemType);
-  return std::make_pair(str, newType);
-}
-
 /// @brief
 /// We have to use i32 for intrinsic calls like llvm_genx_raw_send2_*, if we
 /// want to get the original element type (e.g., f16) as the result of a load,
@@ -114,126 +64,6 @@ VectorType encodeVectorTypeTo(VectorType currentVecType, Type toElemType) {
   const int size =
       currentVecType.getNumElements() * currentbitWidth / newBitwidth;
   return VectorType::get(size, toElemType);
-}
-
-unsigned encodeDataum(Type type) {
-  switch (type.getIntOrFloatBitWidth()) {
-  case 8:
-    return 1;
-  case 16:
-    return 2;
-  case 32:
-    return 3;
-  case 64:
-    return 4;
-  default:
-    assert(0 && "add more support");
-    return 0;
-  }
-}
-
-template <typename OpType> unsigned encodeCacheHint(OpType op) {
-  auto l1hint = op.getL1Hint();
-  // auto l2hint = op.getL2Hint();
-  auto l3hint = op.getL3Hint();
-  constexpr bool isWrite = std::is_same_v<OpType, StoreNDOp> ||
-                           std::is_same_v<OpType, StoreScatterOp>;
-  unsigned cacheHint = 1;
-  if constexpr (!isWrite) {
-    auto l1CacheValue =
-        l1hint.has_value() ? l1hint.value() : xegpu::CacheReadHint::UNCACHED;
-    auto l3CacheValue =
-        l3hint.has_value() ? l3hint.value() : xegpu::CacheReadHint::UNCACHED;
-    if (l1CacheValue == xegpu::CacheReadHint::UNCACHED) {
-      if (l3CacheValue == xegpu::CacheReadHint::UNCACHED)
-        cacheHint = 1;
-      else if (l3CacheValue == xegpu::CacheReadHint::CACHED)
-        cacheHint = 2;
-    } else if (l1CacheValue == xegpu::CacheReadHint::CACHED) {
-      if (l3CacheValue == xegpu::CacheReadHint::UNCACHED)
-        cacheHint = 3;
-      else if (l3CacheValue == xegpu::CacheReadHint::CACHED)
-        cacheHint = 4;
-    } else if (l1CacheValue == xegpu::CacheReadHint::STREAMING) {
-      if (l3CacheValue == xegpu::CacheReadHint::UNCACHED)
-        cacheHint = 5;
-      else if (l3CacheValue == xegpu::CacheReadHint::CACHED)
-        cacheHint = 6;
-    } else if (l1CacheValue == xegpu::CacheReadHint::READ_INVALIDATE) {
-      if (l3CacheValue == xegpu::CacheReadHint::CACHED)
-        cacheHint = 7;
-    }
-  } else {
-    auto l1CacheValue =
-        l1hint.has_value() ? l1hint.value() : xegpu::CacheWriteHint::UNCACHED;
-    auto l3CacheValue =
-        l3hint.has_value() ? l3hint.value() : xegpu::CacheWriteHint::UNCACHED;
-    if (l1CacheValue == xegpu::CacheWriteHint::UNCACHED) {
-      if (l3CacheValue == xegpu::CacheWriteHint::UNCACHED)
-        cacheHint = 1;
-      else if (l3CacheValue == xegpu::CacheWriteHint::WRITE_BACK)
-        cacheHint = 2;
-    } else if (l1CacheValue == xegpu::CacheWriteHint::WRITE_THROUGH) {
-      if (l3CacheValue == xegpu::CacheWriteHint::UNCACHED)
-        cacheHint = 3;
-      else if (l3CacheValue == xegpu::CacheWriteHint::WRITE_BACK)
-        cacheHint = 4;
-    } else if (l1CacheValue == xegpu::CacheWriteHint::STREAMING) {
-      if (l3CacheValue == xegpu::CacheWriteHint::UNCACHED)
-        cacheHint = 5;
-      else if (l3CacheValue == xegpu::CacheWriteHint::WRITE_BACK)
-        cacheHint = 6;
-    } else if (l1CacheValue == xegpu::CacheWriteHint::WRITE_BACK) {
-      if (l3CacheValue == xegpu::CacheWriteHint::WRITE_BACK)
-        cacheHint = 7;
-    }
-  }
-  return cacheHint;
-}
-
-unsigned encodeOpcode(xegpu::AtomicRMWKind kind) {
-  unsigned encode = 0;
-  switch (kind) {
-  case xegpu::AtomicRMWKind::addf:
-    encode = 19;
-    break;
-  case xegpu::AtomicRMWKind::addi:
-    encode = 12;
-    break;
-  case xegpu::AtomicRMWKind::assign:
-    encode = 10;
-    break;
-  case xegpu::AtomicRMWKind::maxf:
-    encode = 22;
-    break;
-  case xegpu::AtomicRMWKind::maxs:
-    encode = 15;
-    break;
-  case xegpu::AtomicRMWKind::maxu:
-    encode = 17;
-    break;
-  case xegpu::AtomicRMWKind::minf:
-    encode = 21;
-    break;
-  case xegpu::AtomicRMWKind::mins:
-    encode = 14;
-    break;
-  case xegpu::AtomicRMWKind::minu:
-    encode = 16;
-    break;
-  // case xegpu::AtomicRMWKind::mulf:
-  // case xegpu::AtomicRMWKind::muli:
-  case xegpu::AtomicRMWKind::ori:
-    encode = 25;
-    break;
-  case xegpu::AtomicRMWKind::andi:
-    encode = 24;
-    break;
-  default:
-    assert(0 && "to be supported");
-    break;
-  }
-  return encode;
 }
 
 void lookupOrInsertIntrinsic(ConversionPatternRewriter &rewriter, Operation *op,
