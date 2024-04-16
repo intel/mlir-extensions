@@ -16,13 +16,15 @@
 #ifndef _IMEX_XECOMMON_H_
 #define _IMEX_XECOMMON_H_
 
+#include "imex/Dialect/XeGPU/IR/XeGPU.h"
+#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/OneToNTypeConversion.h>
-
+using namespace imex::xegpu;
 namespace imex {
 
 // It checks each GPUFuncOp in the module to see
@@ -85,7 +87,7 @@ public:
             else if (idx == 2)
               Usage[op] |= (uint)UsageType::DPAS_C;
             else
-              llvm::dbgs() << "unknown usage: " << idx;
+              op->emitOpError() << "unknown usage: " << idx;
           }
 
           if (auto unpack =
@@ -269,6 +271,108 @@ private:
   }
 };
 
+std::pair<std::string, mlir::VectorType>
+encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
+                 mlir::VectorType type, bool use64bitData = false,
+                 bool enforceInteger = false);
+
+unsigned encodeDataum(mlir::Type type);
+
+unsigned encodeOpcode(AtomicRMWKind kind);
+
+// L1 and L3 Cache Policies for Load Operation
+//  L1 Cache Policies: Uncached (UC), Cached (C), Cache Streaming (S),
+//  Invalidate-After-Read (IAR) L3 Cache Policies: Uncached (UC), Cached (C)
+#define L1UC_L3UC 1
+#define L1UC_L3C 2
+#define L1C_L3UC 3
+#define L1C_L3C 4
+#define L1S_L3UC 5
+#define L1S_L3C 6
+#define L1IAR_L3C 7
+
+// L1 and L3 Cache Policies for Store operation
+//  L1 Cache Policies: Uncached (UC), Write-Through (WT), Write-Back (WB),
+//  Streaming (S) L3 Cache Policies: Uncached (UC), Cached (WB)
+#define L1UC_L3WB 2
+#define L1WT_L3UC 3
+#define L1WT_L3WB 4
+#define L1S_L3UC 5
+#define L1S_L3WB 6
+#define L1WB_L3WB 7
+
+template <typename OpType> unsigned encodeCacheHint(OpType op) {
+  auto l1hint = op.getL1Hint();
+  auto l3hint = op.getL3Hint();
+
+  constexpr bool isStore = std::is_same_v<OpType, StoreNDOp> ||
+                           std::is_same_v<OpType, StoreScatterOp>;
+  unsigned cacheHint = L1UC_L3UC;
+
+#define SET_CACHEVALUE(hint, cacheHintVal)                                     \
+  hint.has_value() ? hint.value() : cacheHintVal
+
+  if constexpr (!isStore) {
+
+    auto l1CacheValue = SET_CACHEVALUE(l1hint, CacheReadHint::UNCACHED);
+    auto l3CacheValue = SET_CACHEVALUE(l3hint, CacheReadHint::UNCACHED);
+
+// Setting Cache policy override based on L3 Uncached/Cached value for Load
+// operation
+#define SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, uncachedVal,           \
+                               cachedVal)                                      \
+  if (l3CacheValue == CacheReadHint::UNCACHED)                                 \
+    cacheHint = uncachedVal;                                                   \
+  else if (l3CacheValue == CacheReadHint::CACHED)                              \
+    cacheHint = cachedVal;
+
+    switch (l1CacheValue) {
+    case CacheReadHint::UNCACHED:
+      SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1UC_L3UC, L1UC_L3C);
+      break;
+    case CacheReadHint::CACHED:
+      SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1C_L3UC, L1C_L3C);
+      break;
+    case CacheReadHint::STREAMING:
+      SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1S_L3UC, L1S_L3C);
+      break;
+    case CacheReadHint::READ_INVALIDATE:
+      if (l3CacheValue == CacheReadHint::CACHED)
+        cacheHint = L1IAR_L3C;
+      break;
+    }
+
+  } else {
+    auto l1CacheValue = SET_CACHEVALUE(l1hint, CacheWriteHint::UNCACHED);
+    auto l3CacheValue = SET_CACHEVALUE(l3hint, CacheWriteHint::UNCACHED);
+
+// Setting Cache policy override based on L3 Uncached/Write-Back value for Store
+// operation
+#define SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, uncachedVal,          \
+                                cachedVal)                                     \
+  if (l3CacheValue == CacheWriteHint::UNCACHED)                                \
+    cacheHint = uncachedVal;                                                   \
+  else if (l3CacheValue == CacheWriteHint::WRITE_BACK)                         \
+    cacheHint = cachedVal;
+
+    switch (l1CacheValue) {
+    case CacheWriteHint::UNCACHED:
+      SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1UC_L3UC, L1UC_L3WB);
+      break;
+    case CacheWriteHint::WRITE_THROUGH:
+      SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1WT_L3UC, L1WT_L3WB);
+      break;
+    case CacheWriteHint::STREAMING:
+      SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1S_L3UC, L1S_L3WB);
+      break;
+    case CacheWriteHint::WRITE_BACK:
+      if (l3CacheValue == CacheWriteHint::WRITE_BACK)
+        cacheHint = L1WB_L3WB;
+      break;
+    }
+  }
+  return cacheHint;
+}
 class XeTypeConverter : public mlir::OneToNTypeConverter {
 public:
   // friend class XeConversionPattern;

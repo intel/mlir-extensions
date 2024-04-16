@@ -410,4 +410,36 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
  ];
 }
 
+
+//===----------------------------------------------------------------------===//
+// XeGPUToVC
+//===----------------------------------------------------------------------===//
+
+def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Generate vc-intrinsics functions for xegpu dialect operations";
+  let description = [{
+    Convert XeGPU dialect operations into the Func dialect calls to vc-intrinsics
+    functions.
+    }];
+  let options = [
+    Option<"enableJointMatrix", "enable-joint-matrix","bool", "false",
+          "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
+    Option<"enableGenISAIntrinsic", "enable-genisa-intrinsic","bool", "false",
+           "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
+    Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "true",
+           "Enable XeGPU Ops lowered to intel vc Intrinsics">,
+    Option<"useRawSend", "useRawSend","bool", "true",
+           "Prefer Raw Send API for load/store">
+  ];
+
+  let dependentDialects = ["::imex::xegpu::XeGPUDialect",
+                           "::mlir::vector::VectorDialect",
+                            "::mlir::memref::MemRefDialect",
+                            "::mlir::LLVM::LLVMDialect",
+                            "::mlir::func::FuncDialect",
+                           "::mlir::arith::ArithDialect",
+                            ];
+  let constructor = "imex::createConvertXeGPUToVCPass()";
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

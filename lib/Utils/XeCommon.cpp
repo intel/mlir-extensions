@@ -17,7 +17,6 @@
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeCommon.h"
@@ -64,6 +63,120 @@ mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
   auto castOp = builder.create<mlir::UnrealizedConversionCastOp>(
       loc, resultTypes, inputs);
   return castOp->getResults();
+}
+
+std::pair<std::string, mlir::VectorType>
+encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
+                 mlir::VectorType type, bool use64bitData,
+                 bool enforceInteger) {
+  auto elemType = type.getElementType();
+  auto bitWidth = elemType.getIntOrFloatBitWidth();
+  int size = type.getNumElements() * bitWidth / 32;
+  if (use64bitData) {
+    size /= 2;
+  }
+  std::string str;
+  switch (size) {
+  case 16:
+    str += "v16";
+    break;
+  case 32:
+    str += "v32";
+    break;
+  case 64:
+    str += "v64";
+    break;
+  case 128:
+    str += "v128";
+    break;
+  case 256:
+    str += "v256";
+    break;
+  case 512:
+    str += "v512";
+    break;
+  default:
+    assert(0 && "add more support");
+    break;
+  }
+  if (use64bitData) {
+    str += "i64";
+    elemType = rewriter.getI64Type();
+  } else if (enforceInteger) {
+    str += "i32";
+    elemType = rewriter.getI32Type();
+  } else if (elemType == rewriter.getF32Type())
+    str += "f32";
+  else if (elemType == rewriter.getF16Type()) {
+    str += "i32";
+    elemType = rewriter.getI32Type();
+  } else
+    assert(0 && "add more support");
+  auto newType = mlir::VectorType::get(size, elemType);
+  return std::make_pair(str, newType);
+}
+
+unsigned encodeDataum(mlir::Type type) {
+  switch (type.getIntOrFloatBitWidth()) {
+  case 8:
+    return 1;
+  case 16:
+    return 2;
+  case 32:
+    return 3;
+  case 64:
+    return 4;
+  default:
+    assert(0 && "add more support");
+    return 0;
+  }
+}
+
+unsigned encodeOpcode(xegpu::AtomicRMWKind kind) {
+  unsigned encode = 0;
+  switch (kind) {
+  case xegpu::AtomicRMWKind::addf:
+    encode = 19;
+    break;
+  case xegpu::AtomicRMWKind::addi:
+    encode = 12;
+    break;
+  case xegpu::AtomicRMWKind::assign:
+    encode = 10;
+    break;
+  case xegpu::AtomicRMWKind::maxf:
+    encode = 22;
+    break;
+  case xegpu::AtomicRMWKind::maxs:
+    encode = 15;
+    break;
+  case xegpu::AtomicRMWKind::maxu:
+    encode = 17;
+    break;
+  case xegpu::AtomicRMWKind::minf:
+    encode = 21;
+    break;
+  case xegpu::AtomicRMWKind::mins:
+    encode = 14;
+    break;
+  case xegpu::AtomicRMWKind::minu:
+    encode = 16;
+    break;
+  case xegpu::AtomicRMWKind::ori:
+    encode = 25;
+    break;
+  case xegpu::AtomicRMWKind::andi:
+    encode = 24;
+    break;
+  case xegpu::AtomicRMWKind::mulf:
+  case xegpu::AtomicRMWKind::muli:
+    assert(0 && "Atomic operation not supported!");
+    break;
+  default:
+    assert(0 && "to be supported");
+    break;
+  }
+  return encode;
 }
 
 } // namespace imex
