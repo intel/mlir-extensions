@@ -145,7 +145,7 @@ jobs:
           git clone https://github.com/llvm/llvm-project || exit 1
           export LLVM_SHA=`cat ../frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
           cd llvm-project || exit 1
-          git checkout 49af6502c6dcb4a7f7520178bd14df396f78240c || exit 1
+          git checkout $LLVM_SHA || exit 1
           git apply $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches/* || exit 1
           mkdir _build || exit 1
           cd _build || exit 1
@@ -185,7 +185,6 @@ jobs:
 
           mkdir -p $HOME_DIR/tmpdir
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          git checkout 93d5efd5d97204c682a4e697a8456fd1f7a90161
 
           echo "============Building the app===================="
           cov-build --dir cov_dir python3 build_tools/build_imex.py --working-dir $HOME_DIR/tmpdir --llvm-install $HOME_DIR/llvm-mlir/_mlir_install --external-lit ${external_lit}
