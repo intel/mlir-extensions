@@ -24,6 +24,7 @@
 #include <imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h>
 #include <imex/Conversion/NDArrayToLinalg/NDArrayToLinalg.h>
 #include <imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h>
+#include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 
 namespace imex {
