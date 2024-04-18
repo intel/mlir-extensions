@@ -99,22 +99,28 @@ struct SCFForOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(mlir::scf::ForOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
+    // we need to update the SCF ForOp if the types of its init arg values
+    // do not match the types of the region iter args, or the init arg value
+    // is defined by a TilePackOp. Otherwise we can skip the op.
+    bool changed = false;
     llvm::SmallVector<mlir::Value> newInitArgs;
-    llvm::SmallVector<mlir::DenseI64ArrayAttr> oldBlockSize;
-    llvm::SmallVector<mlir::DenseI64ArrayAttr> newBlockSize;
-    for (auto arg : adaptor.getInitArgs()) {
+    llvm::SmallVector<mlir::DenseI64ArrayAttr> oldBlockSizes;
+    llvm::SmallVector<mlir::DenseI64ArrayAttr> newBlockSizes;
+    for (auto [i, arg] : llvm::enumerate(adaptor.getInitArgs())) {
+      auto blockArg = op.getRegionIterArg(i);
       auto defOp = arg.getDefiningOp<xetile::TilePackOp>();
-      if (auto blockSize = getValue(defOp)) {
-        newBlockSize.push_back(blockSize);
-        oldBlockSize.push_back(defOp.getInnerBlocksAttr());
-        auto repackOp = addUnpackAndPackOps(arg, blockSize, rewriter);
-        newInitArgs.push_back(repackOp);
-      } else {
-        oldBlockSize.push_back({});
-        newBlockSize.push_back({});
-        newInitArgs.push_back(arg);
-      }
+      auto oldSize = defOp ? defOp.getInnerBlocksAttr() : DenseI64ArrayAttr();
+      auto newSize = defOp ? getValue(blockArg) : DenseI64ArrayAttr();
+      auto newArg =
+          defOp && newSize ? addUnpackAndPackOps(arg, newSize, rewriter) : arg;
+      oldBlockSizes.push_back(oldSize);
+      newBlockSizes.push_back(newSize);
+      newInitArgs.push_back(newArg);
+      changed |= (newArg.getType() != blockArg.getType());
     }
+
+    if (!changed)
+      return mlir::failure();
 
     auto newOp = rewriter.create<mlir::scf::ForOp>(
         op.getLoc(), adaptor.getLowerBound(), adaptor.getUpperBound(),
@@ -124,15 +130,19 @@ struct SCFForOpPattern
     mlir::Block *newBlock = newOp.getBody();
     llvm::SmallVector<mlir::Value> newArguments;
     auto numCtrlOprs = newOp.getNumInductionVars();
+    // remove the terminator of the new block
+    if (newBlock->mightHaveTerminator())
+      rewriter.eraseOp(newBlock->getTerminator());
+
     // add UnpackOp and PackOp pairs to the block arguments
     // if the corresponding init arg is repacked, such that
     // the old unpack op using it in the body will be folded
     for (auto [i, arg] : llvm::enumerate(newBlock->getArguments())) {
-      if (i < numCtrlOprs || !oldBlockSize[i - numCtrlOprs]) {
+      if (i < numCtrlOprs || !oldBlockSizes[i - numCtrlOprs]) {
         newArguments.push_back(arg);
       } else {
         auto repackOp =
-            addUnpackAndPackOps(arg, oldBlockSize[i - numCtrlOprs], rewriter);
+            addUnpackAndPackOps(arg, oldBlockSizes[i - numCtrlOprs], rewriter);
         newArguments.push_back(repackOp);
       }
     }
@@ -145,9 +155,9 @@ struct SCFForOpPattern
     mlir::OpBuilder::InsertionGuard g(rewriter);
     rewriter.startOpModification(yieldOp);
     for (auto [i, v] : llvm::enumerate(yieldOp.getResults())) {
-      if (newBlockSize[i]) {
+      if (newBlockSizes[i]) {
         rewriter.setInsertionPointAfter(v.getDefiningOp());
-        auto repack = addUnpackAndPackOps(v, newBlockSize[i], rewriter);
+        auto repack = addUnpackAndPackOps(v, newBlockSizes[i], rewriter);
         yieldOp->setOperand(i, repack);
       }
     }
@@ -157,8 +167,8 @@ struct SCFForOpPattern
     rewriter.setInsertionPointAfter(op);
     llvm::SmallVector<mlir::Value> newValues;
     for (auto [i, result] : llvm::enumerate(newOp->getResults())) {
-      if (newInitArgs[i].getDefiningOp<xetile::TilePackOp>()) {
-        auto unpack = addUnpackAndPackOps(result, oldBlockSize[i], rewriter);
+      if (oldBlockSizes[i]) {
+        auto unpack = addUnpackAndPackOps(result, oldBlockSizes[i], rewriter);
         newValues.push_back(unpack);
       } else {
         newValues.push_back(result);
@@ -247,6 +257,9 @@ struct UpdateTileOffsetOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(xetile::UpdateTileOffsetOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
+    if (adaptor.getTile().getType() == op.getResult().getType())
+      return mlir::failure();
+
     rewriter.replaceOpWithNewOp<xetile::UpdateTileOffsetOp>(
         op, adaptor.getTile().getType(), adaptor.getTile(),
         adaptor.getOffsetX(), adaptor.getOffsetY());
@@ -291,9 +304,9 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
+    config.enableRegionSimplification = false;
     config.useTopDownTraversal = true;
-    config.maxIterations = 2;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     if (failed(
             applyPatternsAndFoldGreedily(mod, std::move(patterns), config))) {
       return signalPassFailure();

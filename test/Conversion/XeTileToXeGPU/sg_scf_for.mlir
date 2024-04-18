@@ -3,10 +3,10 @@
 gpu.module @test_kernel {
   //CHECK: gpu.func @sglevel_tiled_gemm(%[[arg0:.*]]: memref<1024x1024xf16>, %[[arg1:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_tiled_gemm(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>) {
-    //CHECK: %[[c1024:.*]] = arith.constant 1024 : index
-    //CHECK: %[[c64:.*]] = arith.constant 64 : index
-    //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<32x32xf16>
+    //CHECK: %[[c0:.*]] = arith.constant 0 : index
+    //CHECK: %[[c64:.*]] = arith.constant 64 : index
+    //CHECK: %[[c1024:.*]] = arith.constant 1024 : index
     %cst = arith.constant dense<0.0> : vector<32x32xf16>
     %c0 = arith.constant 0 : index
     %c64 = arith.constant 64 : index
