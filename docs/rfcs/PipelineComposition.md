@@ -1,0 +1,73 @@
+# RFC: High Level MLIR Pass Pipeline Composition
+
+Ivan Butygin, Renato Golin
+
+## Motivation
+
+TBD use cases from IREE, TPP
+
+## Proposal
+
+We propose a new API to build a dependencies-based graph of pass pipelines.
+This API also allows a dynamic control flow between pipelines in graph, controlled by passes inside said pipelines.
+
+## New APIs
+
+### PipelineGraph
+```C++
+class PipelineGraph {
+public:
+    void registerPipeline(
+        StringRef name,
+        ArrayRef<StringRef> predecessors,
+        ArrayRef<StringRef> successors,
+        ArrayRef<StringRef> jumpTargets,
+        std::function<void(OpPassManager &)> populateFunc);
+
+    FailureOr<PipelineSchedule> createPipelineSchedule(raw_ostream &errorStream) const;
+};
+```
+`PipelineGraph` is main entry point for this new API.
+User is adding pipelines into graph via `registerPipeline` function, each pipeline have the following properties:
+* `name` - Name of thepipeline
+* `predecessors` - List of names of pipelines which must be run before current pipeline.
+* `successors` - List of the names of pipelines which must be run after current pipeline.
+* `jumpTargets` - List of the names of pipelines to which we can dynamically jump after current pipeline.
+* `populateFunc` - Callback to populate pipeline with passes.
+
+After user populated the graph object they must call `createPipelineSchedule` metdod to compile the resulted graph into runnable schedule.
+`createPipelineSchedule` will build a DAG from pipelines dependencies provided by user, and will try to get linear execution order to satify these dependencies.
+
+If two pipelines doesn't have direct and indirect dependencies, order in which they will be executed is not specified, but stable.
+
+Implicit cycles in graph are not allowed and will result in `createPipelineSchedule` returning error. But cycles via `jumpTargets` are allowed (see later).
+
+Empty pipelines (i.e. pipelines without passes, when `populateFunc` does nothing) are allowed and sometimes desirable.
+
+One usecase is using empty pipelines as anchors for other pipelines. Let's say use wants to split hist entire compiler pipeline into 3 stages: `high`, `middle` and `low`.
+They can create a two empty pipelines `high-to-middle` and `midlle-to-low` with appropriate dependencies and the use those as anchors to specify at which compiler stage insert stages which do actual work.
+
+### PipelineSchedule
+```C++
+class PipelineSchedule {
+public:
+    LogicalResult run(Operation *op);
+};
+```
+`PipelineSchedule` object encapsulates compiled pipeline graph. Main method is `LogicalResult run(Operation *op);` which follows existing MLIR `PassManager::run`.
+
+### Dynamic pipeline control flow
+
+If pipeline has `jumpTargets` populated, it can possibly jump to one of those `jumpTargets` after finishing instead of continuing normally.
+
+Jump is controlled via special MLIR attribute `pipeline.jump_target`, attached to top-level op (usually `builtin.module`).
+```
+builtin.module {pipeline.jump_target="Foo"} {
+...
+}
+```
+
+Passes inside pipeline can set this attribute to indicate they want compilatin flow to jump to the specific point.
+After current pipeline is finished, runtime will check if module object have attribute set and if it does, jump to the selected pipeline and clear the attribute.
+
+Setting attribute to the value, which wasnt in `jumpTargets` for the current pipeline will result in error and abort the compilation flow.
