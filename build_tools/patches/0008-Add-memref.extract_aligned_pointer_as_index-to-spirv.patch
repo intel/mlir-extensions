@@ -1,0 +1,63 @@
+Upstream PR in progress: https://github.com/llvm/llvm-project/pull/86750
+
+diff --git a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
+index 57d8e894a24b..3fc68c65de05 100644
+--- a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
++++ b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
+@@ -306,6 +306,18 @@ public:
+   }
+ };
+
++/// Converts memref.extract_aligned_pointer_as_index to spirv.ConvertPtrToU.
++class ExtractAlignedPointerAsIndexOpPattern
++    : public OpConversionPattern<memref::ExtractAlignedPointerAsIndexOp> {
++public:
++  using OpConversionPattern::OpConversionPattern;
++
++  LogicalResult
++  matchAndRewrite(memref::ExtractAlignedPointerAsIndexOp extractOp,
++                  OpAdaptor adaptor,
++                  ConversionPatternRewriter &rewriter) const override;
++};
++
+ } // namespace
+
+ //===----------------------------------------------------------------------===//
+@@ -905,6 +917,20 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
+   return success();
+ }
+
++//===----------------------------------------------------------------------===//
++// ExtractAlignedPointerAsIndexOp
++//===----------------------------------------------------------------------===//
++
++LogicalResult ExtractAlignedPointerAsIndexOpPattern::matchAndRewrite(
++    memref::ExtractAlignedPointerAsIndexOp extractOp, OpAdaptor adaptor,
++    ConversionPatternRewriter &rewriter) const {
++  auto &typeConverter = *getTypeConverter<SPIRVTypeConverter>();
++  Type indexType = typeConverter.getIndexType();
++  rewriter.replaceOpWithNewOp<spirv::ConvertPtrToUOp>(extractOp, indexType,
++                                                      adaptor.getSource());
++  return success();
++}
++
+ //===----------------------------------------------------------------------===//
+ // Pattern population
+ //===----------------------------------------------------------------------===//
+@@ -912,10 +938,11 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
+ namespace mlir {
+ void populateMemRefToSPIRVPatterns(SPIRVTypeConverter &typeConverter,
+                                    RewritePatternSet &patterns) {
+-  patterns.add<AllocaOpPattern, AllocOpPattern, AtomicRMWOpPattern,
+-               DeallocOpPattern, IntLoadOpPattern, IntStoreOpPattern,
+-               LoadOpPattern, MemorySpaceCastOpPattern, StoreOpPattern,
+-               ReinterpretCastPattern, CastPattern>(typeConverter,
+-                                                    patterns.getContext());
++  patterns
++      .add<AllocaOpPattern, AllocOpPattern, AtomicRMWOpPattern,
++           DeallocOpPattern, IntLoadOpPattern, IntStoreOpPattern, LoadOpPattern,
++           MemorySpaceCastOpPattern, StoreOpPattern, ReinterpretCastPattern,
++           CastPattern, ExtractAlignedPointerAsIndexOpPattern>(
++          typeConverter, patterns.getContext());
+ }
+ } // namespace mlir
