@@ -19,6 +19,8 @@
 #include "imex/Utils/XeArch.h"
 namespace imex {
 
+bool isLegalElementWiseOp(mlir::Operation *op);
+
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis);
