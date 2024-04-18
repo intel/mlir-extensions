@@ -3,7 +3,6 @@
 // Copyright 2024 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -194,6 +193,27 @@ static llvm::SmallVector<mlir::Operation *> getEffectiveUsers(mlir::Value val) {
   return users;
 }
 
+static llvm::SmallVector<unsigned int>
+getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
+           const int CPrecision, const int DPrecision,
+           std::shared_ptr<XeuArchInterface> uArchInterface) {
+  assert(elemTy.isIntOrFloat());
+  auto bits = elemTy.getIntOrFloatBitWidth();
+  imex::DPASConfig dpasParams;
+  llvm::SmallVector<unsigned int> result;
+  switch (bits) {
+  case 16:
+    dpasParams = uArchInterface->getDPASConfig(APrecision, BPrecision,
+                                               CPrecision, DPrecision);
+    result = llvm::SmallVector<unsigned int>(
+        {dpasParams.m, dpasParams.k, dpasParams.n});
+    break;
+  default:
+    result = llvm::SmallVector<unsigned int>({8, 8, 8});
+    break;
+  }
+  return result;
+}
 // it blocks a constant dense value if it is used by XeTile operators,
 // e.g, tile_mma and store_tile. It currently extends a 2D vector into
 // 4D vector with the last 2 dim corresponding to block size.
@@ -221,6 +241,9 @@ struct ArithConstantOpPattern
                   OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
+
+    // TODO: it maybe unstable to determine whether doing blocking or not
+    //  for a constant op simply based on its 2D shape.
     if (!value || value.getType().getRank() != 2)
       return mlir::failure();
 
@@ -237,6 +260,10 @@ struct ArithConstantOpPattern
         {shape[0] / blkSZ[0], shape[1] / blkSZ[1], blkSZ[0], blkSZ[1]},
         value.getElementType());
 
+    // TODO: it is logically incorrect to reshape a dense value to a vector
+    // type.
+    //  it doesnot show the impact of pack effect. It works on some specific
+    //  cases in which all elements has the same value, but not general.
     value = value.reshape(newTy);
     auto newOp = rewriter.create<mlir::arith::ConstantOp>(loc, value);
     auto unpack = addUnpackOp(newOp, rewriter);
@@ -370,8 +397,18 @@ struct SCFForOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(mlir::scf::ForOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
-    // preprocess the init args and add pack op if it is
-    // defined by an unpack op.
+    // we don't need to update the forOp if it has no region
+    // iter args, or the region iter args type are not changed.
+    bool changed = false;
+    for (unsigned i = 0; i < op.getNumRegionIterArgs(); i++)
+      changed |= adaptor.getInitArgs()[i].getType() !=
+                 op.getRegionIterArg(i).getType();
+    if (!changed)
+      return mlir::failure();
+
+    // preprocess the init args and remove the unpackOp by
+    // adding pack op with the same innerblock size, so that
+    // they can be folded (removed).
     llvm::SmallVector<mlir::Value> newInitArgs;
     for (auto arg : adaptor.getInitArgs()) {
       if (auto defOp = arg.getDefiningOp<xetile::TileUnpackOp>()) {
@@ -385,9 +422,12 @@ struct SCFForOpPattern
     auto newOp = rewriter.create<mlir::scf::ForOp>(
         op.getLoc(), adaptor.getLowerBound(), adaptor.getUpperBound(),
         adaptor.getStep(), newInitArgs);
+    mlir::Block *newBlock = newOp.getBody();
+    // remove the terminator of the new block
+    if (newBlock->mightHaveTerminator())
+      rewriter.eraseOp(newBlock->getTerminator());
 
     mlir::Block *block = op.getBody();
-    mlir::Block *newBlock = newOp.getBody();
     rewriter.mergeBlocks(block, newBlock, newBlock->getArguments());
 
     llvm::SmallVector<mlir::Value> newValues;
@@ -431,27 +471,25 @@ struct SCFYieldOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(mlir::scf::YieldOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
-    auto forOp = llvm::dyn_cast_if_present<mlir::scf::ForOp>(op->getParentOp());
+    auto forOp = op->getParentOfType<mlir::scf::ForOp>();
     if (!forOp)
       return mlir::failure();
 
-    llvm::SmallVector<mlir::Value> results;
-    for (auto [i, value] : llvm::enumerate(adaptor.getResults())) {
-      auto valTy = value.getType().dyn_cast<mlir::VectorType>();
-      auto tgtTy =
-          forOp.getRegionIterArg(i).getType().dyn_cast<mlir::VectorType>();
-      if (valTy && tgtTy && valTy.getRank() == 2 && tgtTy.getRank() == 4) {
-        auto innerBlock = tgtTy.getShape().take_back(2);
-        auto pack = addPackOp(value, innerBlock, rewriter);
-        results.push_back(pack);
-      } else {
-        results.push_back(value);
+    bool changed = false;
+    for (auto [i, v] : llvm::enumerate(adaptor.getResults())) {
+      if (auto defOp = v.getDefiningOp<xetile::TileUnpackOp>()) {
+        // get InnerBlock size from the corresponding output type
+        auto ty = forOp->getResult(i).getType().dyn_cast<mlir::VectorType>();
+        assert(ty && ty.getRank() == 4);
+        auto innerBlock = ty.getShape().take_back(2);
+        auto packOp = addPackOp(v, innerBlock, rewriter);
+        rewriter.startOpModification(op);
+        op->setOperand(i, packOp);
+        rewriter.finalizeOpModification(op);
+        changed = true;
       }
     }
-
-    rewriter.replaceOpWithNewOp<mlir::scf::YieldOp>(op, results);
-
-    return mlir::success();
+    return mlir::success(changed);
   }
 };
 
@@ -557,10 +595,9 @@ struct InitTileOpPattern
     auto newTileTy =
         imex::xetile::TileType::get(tileTy.getShape(), elemTy, attr);
 
-    rewriter.replaceOpWithNewOp<xetile::InitTileOp>(
-        op, newTileTy, op.getSource(), op.getOffsets(),
-        op.getStaticOffsetsAttr(), op.getDynamicShape(),
-        op.getDynamicStrides());
+    rewriter.startOpModification(op);
+    op.getTile().setType(newTileTy);
+    rewriter.finalizeOpModification(op);
 
     return mlir::success();
   }
@@ -588,26 +625,27 @@ struct LoadTileOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(xetile::LoadTileOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
     auto tileTy = op.getSource().getType();
     auto shape = tileTy.getShape();
     auto innerBlocks = tileTy.getInnerBlocks();
+    auto rank = op.getValue().getType().getRank();
 
-    if (!innerBlocks)
+    if (!innerBlocks || rank == 4)
       return rewriter.notifyMatchFailure(
-          op, "The InnerBlock attr is required by missing from the tile.\n");
+          op, "Input is not updated or the op has been updated.\n");
 
     auto vecTy = ::mlir::VectorType::get({shape[0] / innerBlocks[0],
                                           shape[1] / innerBlocks[1],
                                           innerBlocks[0], innerBlocks[1]},
                                          tileTy.getElementType());
 
-    auto newOp = rewriter.create<imex::xetile::LoadTileOp>(
-        loc, vecTy, adaptor.getSource(), op.getPaddingAttr());
-
-    auto unpack = addUnpackOp(newOp, rewriter);
-
-    rewriter.replaceOp(op, unpack);
+    rewriter.startOpModification(op);
+    op.getValue().setType(vecTy);
+    rewriter.finalizeOpModification(op);
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointAfter(op);
+    auto unpack = addUnpackOp(op, rewriter);
+    rewriter.replaceAllUsesExcept(op, unpack, unpack);
 
     return mlir::success();
   }
@@ -635,35 +673,18 @@ struct StoreTileOpPattern
   matchAndRewrite(xetile::StoreTileOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
     auto tileTy = llvm::dyn_cast<xetile::TileType>(adaptor.getTile().getType());
-    auto innerBlocks = tileTy.getInnerBlocks().asArrayRef();
-    auto value = addPackOp(adaptor.getValue(), innerBlocks, rewriter);
-    rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
-                                                     adaptor.getTile());
-    return mlir::success();
+    auto innerBlocks = tileTy.getInnerBlocks();
+    auto value = adaptor.getValue();
+    // its inputs has not been updated yet.
+    if (innerBlocks && value.getDefiningOp<xetile::TileUnpackOp>()) {
+      value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
+      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
+                                                       adaptor.getTile());
+      return mlir::success();
+    }
+    return mlir::failure();
   }
 };
-
-llvm::SmallVector<unsigned int>
-getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
-           const int CPrecision, const int DPrecision,
-           std::shared_ptr<XeuArchInterface> uArchInterface) {
-  assert(elemTy.isIntOrFloat());
-  auto bits = elemTy.getIntOrFloatBitWidth();
-  imex::DPASConfig dpasParams;
-  llvm::SmallVector<unsigned int> result;
-  switch (bits) {
-  case 16:
-    dpasParams = uArchInterface->getDPASConfig(APrecision, BPrecision,
-                                               CPrecision, DPrecision);
-    result = llvm::SmallVector<unsigned int>(
-        {dpasParams.m, dpasParams.k, dpasParams.n});
-    break;
-  default:
-    result = llvm::SmallVector<unsigned int>({8, 8, 8});
-    break;
-  }
-  return result;
-}
 
 // It updates tile_mma to reveal effects of innerblock attribute.
 // Values will be reprented as 4D vectors. An unpack op is applied
@@ -686,20 +707,33 @@ struct TileMMAOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
+    auto resultTy = op.getResult().getType();
+    if (resultTy.getRank() != 2)
+      return rewriter.notifyMatchFailure(
+          op, "The result of tile_mma must be 2D vector.\n");
 
     auto a = adaptor.getA();
     auto b = adaptor.getB();
     auto c = adaptor.getC();
 
-    unsigned int CPrecision = 0;
-    if (c) {
-      auto ty = c.getType().dyn_cast<mlir::VectorType>();
-      auto accTy = c ? ty.getElementType() : nullptr;
-      if (accTy)
-        CPrecision = op.getBType().getElementType().getIntOrFloatBitWidth();
-    }
     assert(a && b && "a operand or b operand is (are) missing.\n");
+
+    // expecting a, b, c are either 2D vectors defined by UnpackOp or 4D vectors
+    // when its operands has been processed. Otherwise, inputs has not been
+    // fully processed and it is not the right time to update the tile_mma op.
+    if ((!a.getDefiningOp<xetile::TileUnpackOp>() &&
+         a.getType().cast<VectorType>().getRank() != 4) ||
+        (!b.getDefiningOp<xetile::TileUnpackOp>() &&
+         b.getType().cast<VectorType>().getRank() != 4) ||
+        (c && !c.getDefiningOp<xetile::TileUnpackOp>() &&
+         c.getType().cast<VectorType>().getRank() != 4))
+      return rewriter.notifyMatchFailure(
+          op, "expecting a, b, and c are either 2D vectors defined by "
+              "unpackOps or 4D vectors.\n");
+
+    unsigned int CPrecision = resultTy.getElementType().getIntOrFloatBitWidth();
+    if (c)
+      CPrecision = op.getC().getType().getElementType().getIntOrFloatBitWidth();
 
     auto mmaSize = getMMASize(
         op.getElementType(),
@@ -708,25 +742,32 @@ struct TileMMAOpPattern
         op.getResult().getType().getElementType().getIntOrFloatBitWidth(),
         this->uArchInterface);
 
-    a = addPackOp(a, {mmaSize[0], mmaSize[1]}, rewriter);
-    b = addPackOp(b, {mmaSize[1], mmaSize[2]}, rewriter);
+    // packing a, b, c accordingly to with the expected innerblock size.
+    // if they are defined by unpackOps, packOps are added, if they are
+    // 4D vectors, pairs of unpack and pack ops are added.
+    auto packing = [&](mlir::Value val, llvm::ArrayRef<int64_t> shape,
+                       OpPatternRewriter &rewriter) -> mlir::Value {
+      if (val.getDefiningOp<xetile::TileUnpackOp>())
+        return addPackOp(val, shape, rewriter);
+      return addUnpackAndPackOps(val, shape, rewriter);
+    };
+    a = packing(a, {mmaSize[0], mmaSize[1]}, rewriter);
+    b = packing(b, {mmaSize[1], mmaSize[2]}, rewriter);
+    if (c)
+      c = packing(c, {mmaSize[0], mmaSize[2]}, rewriter);
 
-    if (c) {
-      auto ty = c.getType().dyn_cast<mlir::VectorType>();
-      if (ty.getRank() == 2)
-        c = addPackOp(c, {mmaSize[0], mmaSize[2]}, rewriter);
-      if (ty.getRank() == 4)
-        c = addUnpackAndPackOps(c, {mmaSize[0], mmaSize[2]}, rewriter);
-    }
+    assert(a.getType().dyn_cast<VectorType>().getRank() == 4 &&
+           b.getType().dyn_cast<VectorType>().getRank() == 4 &&
+           (!c || c.getType().dyn_cast<VectorType>().getRank() == 4) &&
+           "a, b and c (if has) should be transformed into 4D vectors.\n");
 
-    auto resultTy = op.getResult().getType();
     auto shape = resultTy.getShape();
     auto vecTy = ::mlir::VectorType::get(
         {shape[0] / mmaSize[0], shape[1] / mmaSize[2], mmaSize[0], mmaSize[2]},
         resultTy.getElementType());
 
     mlir::Value newOp =
-        rewriter.create<imex::xetile::TileMMAOp>(loc, vecTy, a, b, c);
+        rewriter.create<imex::xetile::TileMMAOp>(op.getLoc(), vecTy, a, b, c);
     newOp = addUnpackOp(newOp, rewriter);
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -754,6 +795,9 @@ struct UpdateTileOffsetOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(xetile::UpdateTileOffsetOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
+    if (adaptor.getTile().getType() == op.getResult().getType())
+      return mlir::failure();
+
     rewriter.replaceOpWithNewOp<xetile::UpdateTileOffsetOp>(
         op, adaptor.getTile().getType(), adaptor.getTile(),
         adaptor.getOffsetX(), adaptor.getOffsetY());
@@ -810,10 +854,9 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
+    config.enableRegionSimplification = false;
     config.useTopDownTraversal = true;
-    config.maxIterations = 2;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
-
+    config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     { // initialize the inner block size per op.
       patterns.clear();
       auto &analysis = getAnalysis<TileUsageAnalysis>();

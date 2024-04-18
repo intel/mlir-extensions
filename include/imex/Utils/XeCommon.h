@@ -198,7 +198,7 @@ private:
 // optimizations.
 class PropagateAnalysis {
 private:
-  llvm::DenseMap<mlir::Operation *, mlir::DenseI64ArrayAttr> OpAttrMap;
+  llvm::DenseMap<mlir::Value, mlir::DenseI64ArrayAttr> OpAttrMap;
 
 public:
   PropagateAnalysis(mlir::Operation *op) {
@@ -214,11 +214,25 @@ public:
     });
   }
 
-  bool maybeUpdated(mlir::Operation *op) { return OpAttrMap.count(op); }
+  bool maybeUpdated(mlir::Operation *op) const {
+    assert(op->getNumResults() == 1);
+    auto v = op->getResult(0);
+    return OpAttrMap.count(v);
+  }
 
-  mlir::DenseI64ArrayAttr getValue(mlir::Operation *op) {
-    if (OpAttrMap.count(op))
-      return OpAttrMap[op];
+  mlir::DenseI64ArrayAttr getValue(mlir::Value value) const {
+    auto it = OpAttrMap.find(value);
+    if (it != OpAttrMap.end())
+      return it->second;
+    return {};
+  }
+
+  mlir::DenseI64ArrayAttr getValue(mlir::Operation *op) const {
+    assert(op->getNumResults() == 1);
+    auto v = op->getResult(0);
+    auto it = OpAttrMap.find(v);
+    if (it != OpAttrMap.end())
+      return it->second;
     return {};
   }
 
@@ -256,9 +270,9 @@ private:
 
       // stop when meet a function.
       if (!op || llvm::isa<mlir::FunctionOpInterface>(op))
-        return;
+        continue;
 
-      OpAttrMap[op] = attr;
+      OpAttrMap[value] = attr;
 
       if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(op)) {
         auto opr = getOperandForArg(forOp, value);
@@ -445,6 +459,10 @@ protected:
     if (op)
       return llvm::cast<PropagateAnalysis>(analysis).getValue(op);
     return {};
+  }
+
+  mlir::DenseI64ArrayAttr getValue(mlir::Value value) const {
+    return llvm::cast<PropagateAnalysis>(analysis).getValue(value);
   }
 
   template <typename = typename std::enable_if<
