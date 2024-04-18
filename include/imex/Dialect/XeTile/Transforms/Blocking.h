@@ -74,9 +74,8 @@ public:
         mlir::DenseI64ArrayAttr::get(src.getContext(), innerBlocks));
   }
 
-  xetile::TilePackOp addPackOp(mlir::Value src,
-                               llvm::ArrayRef<int64_t> targetBlkSizes,
-                               OpPatternRewriter &rewriter) const {
+  mlir::Value addPackOp(mlir::Value src, llvm::ArrayRef<int64_t> targetBlkSizes,
+                        OpPatternRewriter &rewriter) const {
     auto srcTy = src.getType().dyn_cast<mlir::VectorType>();
     assert(srcTy && targetBlkSizes.size() == 2);
     auto shape = srcTy.getShape();

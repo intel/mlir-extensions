@@ -26,8 +26,6 @@ gpu.module @test_kernel {
     //CHECK: %[[R3:.*]] = arith.muli %[[R1]], %[[C1]] : index
     %n = arith.muli %block_id_y, %c64 : index
 
-
-
     //CHECK: %[[R4:.*]] = xetile.init_tile %[[C]][%[[R2]], %[[R3]]]
     //CHECK-SAME: memref<1024x1024xf32> -> !xetile.tile<64x64xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
     //CHECK: %[[R5:.*]] = xetile.init_tile %[[C]][%[[R2]], %[[R3]]]
@@ -46,6 +44,7 @@ gpu.module @test_kernel {
     //CHECK-SAME: memref<1024x1024xf16> -> !xetile.tile<64x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
     %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16> -> !xetile.tile<64x64xf16>
 
+    // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
     //CHECK: %[[R9:.*]]:3 = scf.for %[[arg3:.*]] = %[[C0]] to %[[C2]] step %[[C1]]
     //CHECK-SAME: iter_args(%[[arg4:.*]] = %[[R7]], %[[arg5:.*]] = %[[R8]], %[[arg6:.*]] = %[[R6]])
     //CHECK-SAME: !xetile.tile<64x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
