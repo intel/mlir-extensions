@@ -14,12 +14,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
+#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
 #include "imex/Utils/XeArch.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include <mlir/Dialect/Math/IR/Math.h>
 
 namespace imex {
 
@@ -625,6 +627,79 @@ struct SgUpdateTileOffsetOpPattern
   }
 };
 
+bool isLegalElementWiseOp(mlir::Operation *op) {
+  auto res = op->getResult(0);
+  auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+  if (resType.getRank() != 2)
+    return false;
+  return true;
+}
+
+template <typename Op, int numOperands>
+Op createOp(XeGPUOneToNPatterRewriter &rewriter, mlir::Location loc,
+            llvm::SmallVector<llvm::SmallVector<mlir::Value>> operands, int i) {
+  static_assert(numOperands >= 1 && numOperands <= 3,
+                "Unsupported number of operands");
+
+  if constexpr (numOperands == 1) {
+    return rewriter.create<Op>(loc, operands[0][i]);
+  } else if constexpr (numOperands == 2) {
+    return rewriter.create<Op>(loc, operands[0][i], operands[1][i]);
+  } else if constexpr (numOperands == 3) {
+    return rewriter.create<Op>(loc, operands[0][i], operands[1][i],
+                               operands[2][i]);
+  }
+}
+
+template <typename Op, int numOperands>
+struct ElementWiseOpPattern : public SgXeTileToXeGPUConversion<Op> {
+
+  using SgXeTileToXeGPUConversion<Op>::SgXeTileToXeGPUConversion;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OpAdaptor = typename Op::template GenericAdaptor<RangeT>;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+    if (!resType || resType.getRank() != 4) {
+      op.emitOpError() << "type is not 4D vector";
+      return mlir::failure();
+    }
+
+    auto shape = resType.getShape();
+    auto newTy =
+        mlir::VectorType::get({shape[2], shape[3]}, resType.getElementType());
+
+    // Get all the slices of Operands
+    auto operands = adaptor.getOperands();
+
+    llvm::SmallVector<llvm::SmallVector<mlir::Value>> operand;
+    if (numOperands == 1)
+      operand.push_back(operands[0]);
+    else if (numOperands == 2) {
+      operand.push_back(operands[0]);
+      operand.push_back(operands[1]);
+    } else {
+      operand.push_back(operands[0]);
+      operand.push_back(operands[1]);
+      operand.push_back(operands[2]);
+    }
+
+    llvm::SmallVector<mlir::Value> newOps;
+    for (int i = 0; i < shape[0] * shape[1]; i++) {
+      auto newOp = createOp<Op, numOperands>(rewriter, op.getLoc(), operand, i);
+      newOp->getResult(0).setType(newTy);
+      newOps.push_back(newOp);
+    }
+
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
@@ -633,6 +708,26 @@ void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                   SgStoreTileOpPattern, SgTileMMAOpPattern,
                   SgUpdateTileOffsetOpPattern>(patterns.getContext(), converter,
                                                analysis);
+  patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
+                  ElementWiseOpPattern<mlir::math::ExpOp, 1>,
+                  ElementWiseOpPattern<mlir::math::SinOp, 1>,
+                  ElementWiseOpPattern<mlir::math::CosOp, 1>,
+                  ElementWiseOpPattern<mlir::math::SqrtOp, 1>,
+                  ElementWiseOpPattern<mlir::math::TanhOp, 1>,
+                  ElementWiseOpPattern<mlir::math::LogOp, 1>,
+                  ElementWiseOpPattern<mlir::math::RsqrtOp, 1>,
+                  ElementWiseOpPattern<mlir::math::ErfOp, 1>,
+                  ElementWiseOpPattern<mlir::arith::AddFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::RemFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::DivFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MulFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MaximumFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MinimumFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::SubFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::XOrIOp, 2>,
+                  ElementWiseOpPattern<mlir::math::PowFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::SelectOp, 3>>(
+      patterns.getContext(), converter, analysis);
 }
 
 } // namespace imex
