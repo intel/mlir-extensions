@@ -66,7 +66,7 @@ do
     TEST_REPORT=$CODE_VERSION".txt"
     REPORT_PATH=$REPORT_DIR/$TEST_REPORT
     rm -f $REPORT_PATH
-
+    echo $'\nTesting code version:' $CODE_VERSION
     python3 xetile_testgen.py --code_version=$CODE_VERSION --validate=$VALIDATE --print_debug=0 --test_csv=$TEST_CSV --default_tests=$GEN_DEFAULT_CASES
     CUR_TEST_DIR=$TEST_DIR/$CODE_VERSION
     for TEST_CASE in $CUR_TEST_DIR/*
