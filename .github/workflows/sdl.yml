@@ -14,7 +14,8 @@ jobs:
   Bandit:
     uses: intel-innersource/frameworks.ai.infrastructure.code-scan-tools/.github/workflows/Scanner_Bandit.yml@one-ci-cd
     with:
-      repos: ${{ github.event.repository.name }}
+      org: intel-innersource
+      repo: ${{ github.event.repository.name }}
       refs: ${{ github.ref_name }}
 #       excludes: '-x folder_path' # This is optional, write the folders path you want to skip scan.
     secrets:
