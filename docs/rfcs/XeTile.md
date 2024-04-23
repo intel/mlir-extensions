@@ -99,9 +99,9 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
      vector<64x32xb16> to tile<64x32xbf16, #tile_attr>
 ```
 
-`prefetch_tile` prefetches the tile to cache.
+`prefetch_tile` prefetches the tile to cache. Just like memref.preftech, the locality hint ranges from locality<0> (no locality) to locality<3> (extremely local keep in cache).
 ```mlir
-  XeTile.prefetch_tile %coop_tile: tile<8x32xbf16>
+  XeTile.prefetch_tile %coop_tile locality<3>: tile<8x32xbf16>
 ```
 `tile_mma` represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.
 ```mlir
@@ -608,3 +608,86 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
   }
 }
 ```
+
+## Appendix 2.5 Gemm implementation with two cache levels
+```mlir
+#mp_a = #wg_map<sg_layout=[8,4], sg_data=[64,32]>
+#mp_b = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_c = #wg_map<sg_layout=[8,4], sg_data=[64,64]>
+
+#mp_a_copl2 = #wg_map<sg_layout=[32,1], sg_data=[16,128]>  
+#mp_b_copl2 = #wg_map< sg_layout=[16,2], sg_data=[8,128]>  
+
+#mp_a_copl1 = #wg_map<sg_layout=[32,1], sg_data=[16,32]>  
+#mp_b_copl1 = #wg_map< sg_layout=[4, 8], sg_data=[8,32]>  
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+   scf.for %i = %c0 to %c4096 step %c256 {
+     scf.for %j = %c0 to %c4096 step %c256 {
+       %a1_l2 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x128xf16, #mp_a_copl2>
+       %b1_l2 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<128x256xf16, #mp_b_copl2> 
+       %a2_l2 = init_tile %a[%i, %c256] : memref<4096x4096xf16> -> tile<512x128xf16, #mp_a_copl2>
+       %b2_l2 = init_tile %b[%c256, %j] : memref<4096x4096xf16> -> tile<128x256xf16, #mp_b_copl2> 
+
+        prefetch_tile %a1_l2 locality<2>: tile<512x128xf16, #mp_a_copl2> 
+        prefetch_tile %b1_l2 locality<2>: tile<128x256xf16, #mp_b_copl2> 
+		prefetch_tile %a2_l2 locality<2>: tile<512x128xf16, #mp_a_copl2> 
+        prefetch_tile %b2_l2 locality<2>: tile<128x256xf16, #mp_b_copl2> 
+        %a2_l2’ = update_tile_offset   %a2_l2, %c0, %c32 :  tile<512x128xf16, #mp_b_copl2>
+        %b2_l2’ = update_tile_offset   %b2_l2, %c32, %c0 :  tile<128x256xf16, #mp_b_copl2>
+
+       %a1_l1 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+       %b1_l1 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1> 
+       %a2_l1 = init_tile %a[%i, %c32] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+       %b2_l1 = init_tile %b[%c32, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+       %a3_l1 = init_tile %a[%i, %c64] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+       %b3_l1 = init_tile %b[%c64, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+       %a4_l1 = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+       %b4_l1 = init_tile %b[%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+
+        prefetch_tile %a1_l1 locality<3>: tile<512x32xf16, #mp_a_copl1> 
+        prefetch_tile %b1_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a2_l1 locality<3>: tile<512x32xf16, #mp_a_copl1> 
+        prefetch_tile %b2_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a3_l1 locality<3>: tile<512x32xf16, #mp_a_copl1> 
+        prefetch_tile %b3_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a4_l1 locality<3>: tile<512x32xf16, #mp_a_copl1> 
+        prefetch_tile %b4_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        %a4_l1’ = update_tile_offset   % a4_l1, %c0, %c128 :  tile<512x32xf16, #mp_a_copl1>
+        %b4_l1’ = update_tile_offset   % b4_l1, %c128, %c0 :  tile<32x256xf16, #mp_b_copl1>
+
+       %a1_load = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a >
+       %b1_load = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b > 
+
+        %c = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<512x256xf32, #mp_c>           
+
+        scf.for %k= %c0 to %c4096 step %c32 {
+            %a1_r = load_tile %a1_load : tile<256x32xf16  #mp_a > -> vector<512x32xf16>	             
+            %b1_r = load_tile %b1_load  : tile<32x256xf16 #mp_b> -> vector<32x256xf16>                
+          
+            Scf.if (%k %4 == 0) {
+                gpu.barrier
+                prefetch_tile %a2_l2’ locality<2>: tile<512x128xf16, #mp_a_copl2>
+                prefetch_tile %b2_l2’ locality<2>: tile<128x256xf16, #mp_b_copl2> 
+                %a2_l2’ = update_tile_offset   %a2_l2’, %c0, %c128 :  tile<512x128xf16, #mp_a_copl2>
+                %b2_l2’ = update_tile_offset   %b2_l2’, %c128, %c0 :  tile<128x256xf16, #mp_b_copl2>
+            }
+            prefetch_tile %a4_l1’ locality<3>: tile<512x32xf16, #mp_a_copl1> 
+            prefetch_tile %b4_l1’ locality<3>: tile<32x256xf16, #mp_b_copl1>
+            %a4_l1’ = update_tile_offset   %a4_l1’, %c0, %c32 :  tile<512x32xf16, #mp_a_copl1>
+            %b4_l1’ = update_tile_offset   %b4_l1’, %c32, %c0 :  tile<32x256xf16, #mp_b_copl1>
+
+            %a1_load = update_tile_offset   %a1_load, %c0, %c32 :  tile<512x32xf16, #mp_a>
+            %a2_load = update_tile_offset   %b1_load, %c32, %c0 :  tile<32x256xf16, #mp_b>
+
+            %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c %4, %10 : (vector<512x32xf16>, vector<32x256xf16>) -> vector<512x256xf32> 
+        } 
+       store_tile %3, %6: (tile<512x256xf32, #mp_c>, vector<512x256xf32>)                   
+     } 
+   }
+}
+```
+
+
