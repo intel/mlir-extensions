@@ -29,4 +29,3 @@ cmake -G Ninja -B build -S llvm \
    -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=$mlir_dir
 
 cmake --build build --target check-imex
-
