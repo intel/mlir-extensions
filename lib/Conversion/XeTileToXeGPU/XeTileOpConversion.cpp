@@ -379,11 +379,18 @@ struct SgPrefetchTileOpPattern
                   XeGPUOneToNPatterRewriter &rewriter) const override {
     auto tileTy = op.getTile().getType();
     auto tiles = adaptor.getTile();
-    if (tileTy.getRank() != 4)
-      return mlir::failure();
-    auto shape = tileTy.getShape();
+    auto innerBlocks = tileTy.getInnerBlocks();
 
-    if (shape[0] * shape[1] != (int64_t)tiles.size()) {
+    if (tileTy.getRank() != 2)
+      return mlir::failure();
+
+    if (!innerBlocks || innerBlocks.size() != 2)
+      return mlir::failure();
+
+    auto shape = tileTy.getShape();
+    auto expectedNumTensorDescs =
+        (shape[0] / innerBlocks[0]) * (shape[1] / innerBlocks[1]);
+    if (expectedNumTensorDescs != (int64_t)tiles.size()) {
       op.emitOpError("Failed to lower LoadTileOp because shape[0] * shape[1] "
                      "!= sources.size().");
       return mlir::failure();
@@ -396,12 +403,9 @@ struct SgPrefetchTileOpPattern
     auto L3 = xegpu::CacheReadHintAttr::get(op.getContext(),
                                             xegpu::CacheReadHint::CACHED);
 
-    for (int i = 0; i < shape[0]; i++) {
-      for (int j = 0; j < shape[1]; j++) {
-        auto tile = tiles[i * shape[1] + j];
-        rewriter.create<xegpu::PrefetchNDOp>(op.getLoc(), tile, L1, L2, L3,
-                                             imex::xegpu::Mode::VC);
-      }
+    for (auto tile : tiles) {
+      rewriter.create<xegpu::PrefetchNDOp>(op.getLoc(), tile, L1, L2, L3,
+                                           imex::xegpu::Mode::VC);
     }
 
     rewriter.eraseOp(op);
@@ -630,7 +634,7 @@ struct SgUpdateTileOffsetOpPattern
 bool isLegalElementWiseOp(mlir::Operation *op) {
   auto res = op->getResult(0);
   auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-  if (resType.getRank() != 2)
+  if (resType && resType.getRank() != 2)
     return false;
   return true;
 }
