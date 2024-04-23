@@ -267,7 +267,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
 add_definitions(${LLVM_DEFINITIONS})
 
-set(LLVM_LIT_ARGS "-sa" CACHE STRING "lit default options")
+set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 if (IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_L0_RUNTIME)
     set(LLVM_LIT_ARGS "-j 4 ${LLVM_LIT_ARGS}") # do not stress GPU
 endif()
