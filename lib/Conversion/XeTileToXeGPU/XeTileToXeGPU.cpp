@@ -41,7 +41,6 @@ public:
     addIllegalOp<imex::xetile::InitTileOp>();
 
     addLegalOp<mlir::UnrealizedConversionCastOp>();
-
     addLegalOp<mlir::vector::ExtractOp>();
     addLegalOp<mlir::vector::ExtractStridedSliceOp>();
     addLegalOp<mlir::vector::ShuffleOp>();
