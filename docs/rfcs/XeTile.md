@@ -516,3 +516,95 @@ With the optimized mapping, the tile_transpose below could be implemented with i
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>// sg_layout=[32,1], sg_data=[64,32]
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[32,1] ->sg_layout=[8,4]
 ```
+
+## Appendix 2.4 Gemm implementation using cooperative load through shared local memory 
+```mlir
+#mp_a     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+#mp_a_cop = #wg_map<sg_layout=[64,1], sg_data=[4,32]>  
+#mp_b     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+#mp_b_cop = #wg_map<sg_layout=[8,8], sg_data=[4,32]>  
+#mp_c     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %a1_glb = init_tile %a[%i, %c0] : memref<4096x4096xf16 > -> tile<256x32xf16, #mp_a_cop >   // sg_layout=[64,1]
+       %b1_glb = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop >   // sg_layout=[8,8]
+       %a2_glb = init_tile %a[%i, %c32] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b2_glb = init_tile %b [%c32, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a3_glb = init_tile %a[%i, %c64] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b3_glb = init_tile %b [%c64, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a4_glb = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b4_glb = init_tile %b [%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+
+       %a1_slm = init_tile %a[%i, %c0] : memref<4096x4096xf16, slm> -> tile<256x32xf16, #mp_a_cop >   // sg_layout=[64,1]
+       %b1_slm = init_tile %b[%c0, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop >   // sg_layout=[8,8]
+       %a2_slm = init_tile %a[%i, %c32] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b2_slm = init_tile %b [%c32, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a3_slm = init_tile %a[%i, %c64] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b3_slm = init_tile %b [%c64, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a4_slm = init_tile %a[%i, %c96] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b4_slm = init_tile %b [%c96, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+
+       %a1_r  = load_tile %a1_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b1_r = load_tile %b1_glb : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>        
+       %a2_r  = load_tile %a2_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b2_r = load_tile %b2_glb  : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>        
+       %a3_r  = load_tile %a3_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b3_r = load_tile %b3_glb  : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>        
+
+       gpu.barrier 
+       store_tile %a1_r, %a1_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32> 
+       store_tile %b1_r, %b1_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>         
+       store_tile %a2_r, %a2_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32> 
+       store_tile %b2_r, %b2_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>         
+       store_tile %a3_r, %a3_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32> 
+       store_tile %b3_r, %b3_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>         
+
+       gpu.barrier
+       
+       %a1_load = init_tile %a[%i, %c0] : memref<4096x4096xf16, slm> -> tile<256x32xf16, #mp_a >   // sg_layout=[8, 8]
+       %b1_load = init_tile %b[%c0, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b >   // sg_layout=[8,8]
+
+       %c_glb = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<256x256xf32, #mp_c>         // sg_layout=[8, 8]
+         
+       %slm_offset = 0
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           // cooperative load from global
+           %a4_r  = load_tile %a4_glb : tile<256x32xf16#mp_a_cop > -> vector<256x32xf16> // sg_layout=[64,1],sg_data=[4,32]
+           %b4_r = load_tile %b4_glb: tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>  // sg_layout=[8,8], sg_data=[4,32]          
+
+           // load from slm
+           %a1_rr  = load_tile %a1_load : tile<256x32xf16  #mp_a > -> vector<256x32xf16> // sg_layout=[8,8], sg_data=[32,32]
+           %b1_rr = load_tile %b1_load : tile<32x256xf16 #mp_b> -> vector<32x256xf16>  // sg_layout=[8,8], sg_data=[32,32]              
+
+           %slm_offset = add %slm_offset,  %c32
+           %slm_offset = mod %slm_offset,  %c128
+    
+           %a1_load = update_tile_offset  %a1_load, %c0, %slm_offset :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
+           %b1_load = update_tile_offset  %b1_load, %slm_offset, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
+           %a4_glb = update_tile_offset   %a4_glb, %c0, %c32 : tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %b4_glb = update_tile_offset   %b4_glb, %c32, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
+           %a4_slm’ = update_tile_offset  %a4_slm, %c0, %slm_offset: tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %b4_slm’ = update_tile_offset  %b4_slm, %slm_offset, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16,#mp_b_pft>
+
+           %c_r = tile_mma %a1_rr, %b1_rr #mp_a #mp_b #mp_c: 
+                   (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> // sg_layout=[8,8], sg_data=[32,32]
+     
+           gpu.barrier 
+
+           // cooperative save to slm
+	   store_tile %a4_r, %a4_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32> 
+           store_tile %b4_r, %b4_slm: tile<32x256x f16, #mp_b_cop>, vector<256x256xf32> 
+  
+           %a4_slm = %a4_slm’
+           %b4_slm = %b4_slm’
+        } 
+        store_tile %c_r, %c_glb: (tile<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 8]
+    } 
+  }
+}
+```
