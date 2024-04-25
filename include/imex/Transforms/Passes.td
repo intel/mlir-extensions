@@ -47,6 +47,14 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
   ];
 }
 
+def InsertGPUCopy : Pass<"insert-gpu-copy", "::mlir::func::FuncOp"> {
+  let summary = "Converts memref.copy op to gpu.memcpy if within an env region.";
+  let constructor = "imex::createInsertGPUCopyPass()";
+  let dependentDialects = ["::mlir::memref::MemRefDialect",
+                           "::mlir::gpu::GPUDialect",
+                           "::mlir::arith::ArithDialect"];
+}
+
 def SetSPIRVCapabilities : Pass<"set-spirv-capabilities"> {
   let summary = "Sets Spirv capabilities";
   let constructor = "imex::createSetSPIRVCapabilitiesPass()";

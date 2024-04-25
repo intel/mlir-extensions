@@ -4,6 +4,7 @@ add_mlir_library(IMEXTransforms
   CastIndex.cpp
   EmulateNonNativeBF16.cpp
   InsertGPUAllocs.cpp
+  InsertGPUCopy.cpp
   LowerMemRefCopy.cpp
   RemoveSingleElemVector.cpp
   RemoveTemporaries.cpp
