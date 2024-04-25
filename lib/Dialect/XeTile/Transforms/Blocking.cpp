@@ -58,7 +58,7 @@ populateXeTileBlockAligningPatterns(imex::XeTypeConverter &converter,
                                     mlir::RewritePatternSet &patterns,
                                     PropagateAnalysis &analysis);
 
-enum OpType { Prefetch, Load, Store, Elementwise };
+enum OpType { Prefetch, Load, Store, Elementwise, Transpose };
 
 // Find the maximum divisible number between minHeight/Width and maxHeight/Width
 // and use that as the inner block sizes.
@@ -170,8 +170,26 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     // TODO: get from uArch?
     int64_t subgroupSize = 16;
 
-    return {1, subgroupSize};
+    maxHeight = 1;
+    minHeight = 1;
+    maxWidth = subgroupSize;
+    minWidth = 1;
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
   }
+
+  if (op == OpType::Transpose) {
+    // TODO: get from uArch?
+    maxHeight = 16;
+    minHeight = 1;
+    maxWidth = 16;
+    minWidth = 1;
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
+  }
+
   llvm_unreachable("Unsupported.");
   return {};
 }
@@ -374,6 +392,70 @@ struct VectorizableOpPattern
         loc, resType, res, mlir::DenseI64ArrayAttr::get(getContext(), blocks));
 
     rewriter.replaceAllUsesExcept(res, unpack.getResult(), unpack);
+    return mlir::success();
+  }
+};
+
+struct TransposeOpPattern
+    : public XeTileConversion<mlir::vector::TransposeOp, TileUsageAnalysis> {
+
+  using XeTileConversion::XeTileConversion;
+
+  TransposeOpPattern(mlir::MLIRContext *context,
+                     imex::XeTypeConverter &converter,
+                     TileUsageAnalysis &analysis,
+                     std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::TransposeOp op, OpAdaptor adaptor,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = mlir::cast<mlir::VectorType>(res.getType());
+    if (resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    auto permutation = op.getPermutation();
+    if (permutation != mlir::ArrayRef<int64_t>({1, 0}))
+      return rewriter.notifyMatchFailure(op, "Unsupported permutation");
+
+    auto shape = resType.getShape();
+    auto blocks = getInnerBlockSizes<Transpose>(
+        op, resType.getElementType(), shape[0], shape[1], this->uArchInterface);
+
+    if (blocks.size() != 2)
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
+
+    int64_t inBlocks[2] = {blocks[1], blocks[0]};
+
+    auto newSrcTy = mlir::VectorType::get(
+        {shape[1] / blocks[1], shape[0] / blocks[0], blocks[1], blocks[0]},
+        resType.getElementType());
+
+    auto newDstTy = mlir::VectorType::get(
+        {shape[0] / blocks[0], shape[1] / blocks[1], blocks[0], blocks[1]},
+        resType.getElementType());
+
+    mlir::Value arg = adaptor.getVector();
+    Location loc = op->getLoc();
+    mlir::Value pack = rewriter.create<xetile::TilePackOp>(
+        loc, newSrcTy, arg,
+        mlir::DenseI64ArrayAttr::get(getContext(), inBlocks));
+
+    int64_t newPermutation[4] = {1, 0, 3, 2};
+    mlir::Value transpose = rewriter.create<mlir::vector::TransposeOp>(
+        loc, newDstTy, pack, newPermutation);
+
+    mlir::Value unpack = rewriter.create<xetile::TileUnpackOp>(
+        loc, resType, transpose,
+        mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+
+    rewriter.replaceOp(op, unpack);
+
     return mlir::success();
   }
 };
@@ -883,11 +965,12 @@ struct UpdateTileOffsetOpPattern
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
-  patterns.insert<ArithConstantOpPattern, VectorizableOpPattern,
-                  SCFForOpPattern, SCFYieldOpPattern, InitTileOpPattern,
-                  LoadTileOpPattern, StoreTileOpPattern, TileMMAOpPattern,
-                  UpdateTileOffsetOpPattern, VectorMultiDimReductionOpPattern>(
-      patterns.getContext(), converter, analysis, ptruArch);
+  patterns
+      .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
+              SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
+              StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern,
+              TransposeOpPattern, VectorMultiDimReductionOpPattern>(
+          patterns.getContext(), converter, analysis, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector

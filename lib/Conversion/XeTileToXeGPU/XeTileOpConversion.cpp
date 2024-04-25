@@ -715,6 +715,48 @@ struct SgUpdateTileOffsetOpPattern
   }
 };
 
+struct SgTransposeOpPattern
+    : public SgXeTileToXeGPUConversion<mlir::vector::TransposeOp> {
+  using SgXeTileToXeGPUConversion::SgXeTileToXeGPUConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::TransposeOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto resType = op.getResult().getType();
+    if (resType.getRank() != 4)
+      return ((mlir::PatternRewriter &)rewriter)
+          .notifyMatchFailure(op, "Expected a 4D vector");
+
+    auto srcVectors = adaptor.getVector();
+    auto shape = resType.getShape();
+    if (shape[0] * shape[1] != static_cast<int64_t>(srcVectors.size()))
+      return ((mlir::PatternRewriter &)rewriter)
+          .notifyMatchFailure(op, "Invalid shape");
+
+    auto permutation = op.getPermutation();
+    auto outerPerm = permutation.take_front(2);
+    int64_t innerPerm[2] = {permutation[2] - 2, permutation[3] - 2};
+
+    auto newResType =
+        mlir::VectorType::get(shape.take_back(2), resType.getElementType());
+
+    mlir::Location loc = op.getLoc();
+    llvm::SmallVector<mlir::Value> results;
+    for (auto i : llvm::seq<size_t>(0, shape[0])) {
+      for (auto j : llvm::seq<size_t>(0, shape[1])) {
+        size_t ij[2] = {i, j};
+        auto idx = ij[outerPerm[1]] + shape[outerPerm[1]] * ij[outerPerm[0]];
+        mlir::Value arg = srcVectors[idx];
+        mlir::Value res = rewriter.create<mlir::vector::TransposeOp>(
+            loc, newResType, arg, innerPerm);
+        results.emplace_back(res);
+      }
+    }
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
 bool isLegalElementWiseOp(mlir::Operation *op) {
   auto res = op->getResult(0);
   auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
@@ -798,8 +840,8 @@ void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
   patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
                   SgTileUnpackOpPattern, SgTilePackOpPattern,
                   SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
-                  SgUpdateTileOffsetOpPattern>(patterns.getContext(), converter,
-                                               analysis);
+                  SgUpdateTileOffsetOpPattern, SgTransposeOpPattern>(
+      patterns.getContext(), converter, analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,
