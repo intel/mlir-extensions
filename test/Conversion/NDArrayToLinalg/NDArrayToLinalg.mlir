@@ -365,7 +365,7 @@ func.func @test_copy(%a: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi64> {
 // CHECK-NEXT: tensor.dim
 // CHECK-NEXT: memref.alloc
 // CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: region.env_region "protect_copy_op"
+// CHECK-NEXT: region.env_region "gpu_copy_op"
 // CHECK-NEXT: memref.copy
 // CHECK-NEXT: }
 // CHECK-NEXT: bufferization.to_tensor
@@ -373,7 +373,7 @@ func.func @test_copy(%a: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi64> {
 // CHECK-NEXT: tensor.dim
 // CHECK-NEXT: memref.alloc
 // CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: region.env_region "protect_copy_op"
+// CHECK-NEXT: region.env_region "gpu_copy_op"
 // CHECK-NEXT: memref.copy
 // CHECK-NEXT: }
 // CHECK-NEXT: bufferization.to_tensor
