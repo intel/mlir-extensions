@@ -74,6 +74,16 @@ jobs:
           set -o pipefail
           cmake --build build --target check-imex | tee build/tests.txt
 
+      - name: Run SG-level XeTile generated cases
+        run: |
+          rm -rf $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen/GEMM_reports
+          rm -rf $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen/Generated_GEMM
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen
+          pip install pandas
+          pip install argparse
+          pip install openpyxl
+          ./run_tests.sh --gen_default_cases=1 --validate=1 --verbose=1 --llvm_build_dir=../../build
+
           # /home/gta/anaconda3/envs/imex-dev/bin/python $HOME_DIR/mlir-extensions/build/bin/imex-runner.py -i $HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg_addf.mlir -e main --pass-pipeline-file=$HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg-to-gpux-opencl.pp -entry-point-result=void --shared-libs=$HOME_DIR/llvm-mlir/_mlir_install/lib/libmlir_runner_utils.so,$HOME_DIR/mlir-extensions/build/lib/liblevel-zero-runtime.so
       #- name: Run perf script
       #  run: |
