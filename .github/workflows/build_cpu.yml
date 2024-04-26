@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: [self-hosted, pvc, glados]
+    runs-on: [self-hosted, icx, glados]
     timeout-minutes: 450
 
     env:
