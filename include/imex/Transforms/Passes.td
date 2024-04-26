@@ -41,7 +41,9 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
     Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for inserting gpu allocs">,
     Option<"inRegions", "in-regions", "bool", "false",
-           "Add gpu allocs only for memref.AllocOps within GPU regions">
+           "Add gpu allocs only for memref.AllocOps within GPU regions">,
+    Option<"hostShared", "host-shared", "bool", "true",
+           "If set, allocate shared memory accessible both on both host and device.">
   ];
 }
 
