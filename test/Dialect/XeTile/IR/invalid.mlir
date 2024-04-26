@@ -1,12 +1,61 @@
 // RUN: imex-opt -allow-unregistered-dialect %s -split-input-file -verify-diagnostics
 
-
 // -----
 func.func @init_tile_with_invalid_offsets(%source : memref<64x64xf32>, %offset : index) {
     // the offsets of the init_tile must be 2D
     // expected-error@+1 {{number of offsets must be 2}}
     %1 = xetile.init_tile %source[%offset, %offset, %offset]
         : memref<64x64xf32> -> !xetile.tile<8x8xf32>
+}
+
+// -----
+func.func @test_init_tile_invalid_order(%src: memref<1024x1024xf16>) {
+   // Memref is row major but tile is column major
+   // expected-error@+1 {{memref operand is expected to have a column-major layout}}
+  %1 = xetile.init_tile %src[8, 16] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16, #xetile.tile_attr<order = [0, 1]>>
+  return
+}
+
+// -----
+func.func @test_init_tile_with_invalid_order(%a: memref<1024x1024xf16, affine_map<(d0, d1) -> (d1, d0)>>) {
+   // Memref is column major but tile is row major
+   // expected-error@+1 {{memref operand is expected to have a row-major layout}}
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, affine_map<(d0, d1) -> (d1, d0)>> -> !xetile.tile<32x64xf16>
+  return
+}
+
+// -----
+func.func @test_init_tile_with_invalid_strided_layout(%a: memref<512x1024xf16, strided<[1, 256], offset: ?>>) {
+   // Memref is column major but tile is row major
+   // expected-error@+1 {{memref operand is expected to have a row-major layout}}
+  %1 = xetile.init_tile %a[8, 16] : memref<512x1024xf16, strided<[1, 256], offset: ?>> -> !xetile.tile<32x64xf16>
+  return
+}
+
+// -----
+func.func @test_init_tile_invalid_order_using_address(%src : i64) {
+   // Expected row major access
+  %c1 = arith.constant 1 : index
+  %c64 = arith.constant 64 : index
+  %c256 = arith.constant 512 : index
+  %c1024 = arith.constant 1024 : index
+  // expected-error@+1 {{memref operand is expected to have a row-major layout}}
+  %1 = xetile.init_tile %src[%c256, %c64], [%c1024, %c1024], [%c1, %c1024] : i64 -> !xetile.tile<32x64xf16, #xetile.tile_attr<order = [1, 0]>>
+  return
+}
+
+// -----
+func.func @test_init_tile_using_address(%src : i64) {
+   // Expected column major access
+  %c1 = arith.constant 1 : index
+  %c2 = arith.constant 1 : index
+  %c64 = arith.constant 64 : index
+  %c256 = arith.constant 256 : index
+  %c512 = arith.constant 512 : index
+  %c1024 = arith.constant 1024 : index
+  // expected-error@+1 {{memref operand is expected to have a column-major layout}}
+  %1 = xetile.init_tile %src[%c256, %c64], [%c512, %c1024], [%c1024, %c1] : i64 -> !xetile.tile<32x64xf16, #xetile.tile_attr<order = [0, 1]>>
+  return
 }
 
 // -----

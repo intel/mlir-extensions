@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -95,6 +96,30 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
   return mlir::success();
 }
 
+static bool isColumnMajor(mlir::AffineMap layoutMap) {
+  if (layoutMap.getNumDims() != 2 || layoutMap.getNumResults() != 2) {
+    return false;
+  }
+
+  auto results = layoutMap.getResults();
+  if (mlir::isa<mlir::AffineDimExpr>(results[0]) &&
+      mlir::isa<mlir::AffineDimExpr>(results[1])) {
+    auto dimExpr0 = mlir::cast<mlir::AffineDimExpr>(results[0]);
+    auto dimExpr1 = mlir::cast<mlir::AffineDimExpr>(results[1]);
+    return dimExpr0.getPosition() == 1 && dimExpr1.getPosition() == 0;
+  }
+  return false;
+}
+
+static bool isConstantIndex(mlir::Value value) {
+  return value.getDefiningOp<mlir::arith::ConstantOp>() != nullptr;
+}
+
+static int64_t getConstantValue(mlir::Value value) {
+  auto constOp = value.getDefiningOp<mlir::arith::ConstantOp>();
+  return constOp.getValue().cast<mlir::IntegerAttr>().getInt();
+}
+
 mlir::LogicalResult InitTileOp::verify() {
 
   // number of offsets must be 2 because init_tile creates 2D tiles
@@ -133,6 +158,88 @@ mlir::LogicalResult InitTileOp::verify() {
   if (isSourceInteger() && getDynamicStrides().size() != 2)
     return emitOpError("address is used as source but dynamic strides argument "
                        "is missing or it is not 2D");
+
+  // Check for order attribute
+  bool row_major = true;
+  bool col_major = false;
+  auto tileTy = getType();
+  auto order = tileTy.getOrder();
+  if (order[0] == 0 && order[1] == 1) {
+    col_major = true;
+    row_major = false;
+  }
+
+  if (isSourceMemRef() && sourceMemRefHasStaticShape()) {
+    auto memrefType = getSourceType().dyn_cast<mlir::MemRefType>();
+
+    // Checks for memrefs with format: memref<[shape], strided<[strides],
+    // offsets:[offset]>>
+    llvm::SmallVector<int64_t, 4> strides;
+    auto shape = getSourceMemrefStaticShape();
+    int64_t offset;
+    if (mlir::succeeded(
+            mlir::getStridesAndOffset(memrefType, strides, offset))) {
+      if (row_major && !((strides[0] == shape[1]) && (strides[1] == 1)))
+        return emitOpError(
+            "memref operand is expected to have a row-major layout");
+
+      if (col_major && !((strides[0] == 1) && (strides[1] == shape[0])))
+        return emitOpError(
+            "memref operand is expected to have a column-major layout");
+      return mlir::success();
+    }
+
+    // Checks for memrefs with affine maps : memref<[shape], affine_map<(d0, d1)
+    // -> (d1, d0)>>
+    if (row_major && !(memrefType.getLayout().isIdentity())) {
+      // No affine map means it's using the default row-major layout
+      return emitOpError(
+          "memref operand is expected to have a row-major layout");
+    }
+
+    if (col_major) {
+      auto layoutAttr = memrefType.getLayout().dyn_cast<mlir::AffineMapAttr>();
+      if (!layoutAttr) {
+        return emitOpError("expected a valid affine map in the layout");
+      }
+      mlir::AffineMap layoutMap = layoutAttr.getValue();
+
+      if (!isColumnMajor(layoutMap)) {
+        return emitOpError(
+            "memref operand is expected to have a column-major layout");
+      }
+    }
+  } else if (isSourceInteger()) {
+    auto dynamicShape = getDynamicShape();
+    auto dynamicStrides = getDynamicStrides();
+
+    if (dynamicShape.size() == 0 || dynamicStrides.size() == 0) {
+      return emitOpError("dynamic shape and strides must not be empty");
+    }
+
+    // Check if all shape and stride values are constant.
+    if (!llvm::all_of(dynamicShape, isConstantIndex) ||
+        !llvm::all_of(dynamicStrides, isConstantIndex)) {
+      llvm::dbgs() << "Assuming user has verified the layout\n";
+      return mlir::success();
+    }
+
+    auto shapeDim1 = getConstantValue(dynamicShape[1]);
+    auto strideDim0 = getConstantValue(dynamicStrides[0]);
+    auto strideDim1 = getConstantValue(dynamicStrides[1]);
+
+    // checks for layouts where source is not memref and just an address
+    if (row_major && (strideDim0 == 1 && strideDim1 == shapeDim1)) {
+      return emitOpError(
+          "memref operand is expected to have a row-major layout");
+    }
+
+    if (col_major && !(strideDim0 == 1 && strideDim1 == shapeDim1)) {
+      return emitOpError(
+          "memref operand is expected to have a column-major layout");
+    }
+  } else if (isSourceMemRef() && !sourceMemRefHasStaticShape())
+    llvm::dbgs() << "Assuming user has verified the layout\n";
 
   return mlir::success();
 }
