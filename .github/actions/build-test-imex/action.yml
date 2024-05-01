@@ -57,7 +57,7 @@ runs:
           git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
           git checkout ${LLVM_SHA}
-          git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch
+          git apply $GITHUB_WORKSPACE/build_tools/patches/*.patch
           cmake -G Ninja -B build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \

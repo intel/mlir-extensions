@@ -29,6 +29,6 @@ jobs:
       - uses: ./.github/actions/build-test-imex
 
       - name: Build doxygen
-        shell: bash -el {0}
+        shell: bash -elo pipefail {0}
         run: |
           cmake --build build --target doc_doxygen
