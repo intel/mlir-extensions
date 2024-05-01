@@ -70,7 +70,7 @@ runs:
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
           cmake --build build --target install
         fi
- 
+
     - name: Build IMEX and run lit tests
       shell: bash -elo pipefail {0}
       run: |
@@ -89,4 +89,3 @@ runs:
       with:
         name: tests.log
         path: tests.log
-
