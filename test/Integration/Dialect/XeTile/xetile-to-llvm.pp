@@ -4,6 +4,7 @@ builtin.module(
         xetile-blocking
         convert-xetile-to-xegpu)
     cse
+    imex-vector-linearize
     imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
     cse
     spirv.module(spirv-lower-abi-attrs
