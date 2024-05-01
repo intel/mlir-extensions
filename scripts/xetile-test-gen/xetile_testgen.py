@@ -245,7 +245,8 @@ class GPUCode:
             %B_sg_init_tile = xetile.init_tile %B[%B_global_start_x, %C_sg_tile_offset_y] : memref<{self.params.B.memref()}> -> !xetile.tile<{self.params.SG.B_tile.memref()}>
 
             %c_sg_tile = xetile.init_tile %C[%C_sg_tile_offset_x_global, %C_sg_tile_offset_y] : memref<{self.params.C.memref()}> -> !xetile.tile<{self.params.SG.C_tile.memref()}>
-            %c_init_val = xetile.load_tile %c_sg_tile : !xetile.tile<{self.params.SG.C_tile.memref()}> -> vector<{self.params.SG.C_tile.memref()}>
+            // %c_init_val = xetile.load_tile %c_sg_tile : !xetile.tile<{self.params.SG.C_tile.memref()}> -> vector<{self.params.SG.C_tile.memref()}>
+            %c_init_val = arith.constant dense<0.0> : vector<{self.params.SG.C_tile.memref()}>
 """
         if self.params.test_args.code_version == "prefetch":
             dpas_shape = Grid(x=8, y=16)
