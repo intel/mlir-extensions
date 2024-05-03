@@ -35,7 +35,7 @@ User is adding pipelines into graph via `registerPipeline` function, each pipeli
 * `jumpTargets` - List of the names of pipelines to which we can dynamically jump after current pipeline.
 * `populateFunc` - Callback to populate pipeline with passes.
 
-After user populated the graph object they must call `createPipelineSchedule` metdod to compile the resulted graph into runnable schedule.
+After user populated the graph object they must call `createPipelineSchedule` method to compile the resulted graph into runnable schedule.
 `createPipelineSchedule` will build a DAG from pipelines dependencies provided by user, and will try to get linear execution order to satify these dependencies.
 
 If two pipelines doesn't have direct and indirect dependencies, order in which they will be executed is not specified, but stable.
