@@ -31,6 +31,8 @@ using mlir::vector::ShapeCastOp;
 using mlir::vector::ShuffleOp;
 
 using VectorTypedValue = mlir::TypedValue<mlir::VectorType>;
+using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
+                                mlir::PatternRewriter &);
 
 // Combine vectors vertically while keeping the logical data layout.
 // As an example, given two vectors (2x4xf16) p and q, it will merge
@@ -56,19 +58,26 @@ static VectorTypedValue stack(mlir::Value v1, mlir::Value v2,
 }
 
 // generate linearized shuffle mask for concat.
-static llvm::SmallVector<int64_t> getMask(llvm::ArrayRef<int64_t> shape1,
-                                          llvm::ArrayRef<int64_t> shape2) {
-  assert(shape1.size() == 2 && shape2.size() == 2 && shape1[0] == shape2[0] &&
-         "shapes should be 2D and have the same size in dim 0.");
-  int64_t size1 = shape1[0] * shape1[1];
-  int64_t size2 = shape2[0] * shape2[1];
+static llvm::SmallVector<int64_t>
+getShuffleMask(llvm::ArrayRef<int64_t> shape1, llvm::ArrayRef<int64_t> shape2) {
+  assert(shape1.size() == shape2.size() && shape1.size() <= 2 &&
+         "only 1D/2D shape are supported.");
+  assert(shape1.drop_back() == shape2.drop_back() &&
+         "the row dim of the shapes should match.");
+  int64_t size1 = std::accumulate(shape1.begin(), shape1.end(), 1,
+                                  std::multiplies<int64_t>());
+  int64_t size2 = std::accumulate(shape2.begin(), shape2.end(), 1,
+                                  std::multiplies<int64_t>());
   llvm::SmallVector<int64_t> mask(size1 + size2);
-  for (int64_t i = 0; i < shape1[0]; i++) {
-    int64_t s = i * (shape1[1] + shape2[1]);
-    int64_t m = s + shape1[1];
-    int64_t e = m + shape2[1];
-    int64_t v1 = i * shape1[1];
-    int64_t v2 = size1 + i * shape2[1];
+  auto rows = shape1.size() == 1 ? 1 : shape1[0];
+  auto cols1 = shape1.size() == 1 ? shape1[0] : shape1[1];
+  auto cols2 = shape2.size() == 1 ? shape2[0] : shape2[1];
+  for (int64_t i = 0; i < rows; i++) {
+    int64_t s = i * (cols1 + cols2);
+    int64_t m = s + cols1;
+    int64_t e = m + cols2;
+    int64_t v1 = i * cols1;
+    int64_t v2 = size1 + i * cols2;
     std::iota(mask.begin() + s, mask.begin() + m, v1);
     std::iota(mask.begin() + m, mask.begin() + e, v2);
   }
@@ -83,26 +92,155 @@ static llvm::SmallVector<int64_t> getMask(llvm::ArrayRef<int64_t> shape1,
 // cost of complex shuffle masks. the mask for the above one
 // will be like this: 0 1 2 3  8  9 10
 //                    4 5 6 7 11 12 13
-static VectorTypedValue concat(mlir::Value v1, mlir::Value v2,
-                               mlir::Location loc,
-                               mlir::PatternRewriter &rewriter) {
+VectorTypedValue concat(mlir::Value v1, mlir::Value v2, mlir::Location loc,
+                        mlir::PatternRewriter &rewriter) {
   // LLVM requires operands of shuffle op has the same type
   auto vecTy = llvm::cast<mlir::VectorType>(v1.getType());
   assert(v1.getType() == v2.getType() &&
          "Operands doesn't have the same type!");
-  assert(vecTy.getRank() == 2 && "Currently concat only works on 2D vector.");
+  assert(vecTy.getRank() <= 2 &&
+         "Currently concat only works on 1D/2D vector.");
   auto size = vecTy.getNumElements();
   auto shape = vecTy.getShape();
+  auto newShape = vecTy.getRank() == 1
+                      ? llvm::SmallVector<int64_t>({size * 2})
+                      : llvm::SmallVector<int64_t>({shape[0], shape[1] * 2});
   auto elemTy = vecTy.getElementType();
   auto flatTy = mlir::VectorType::get({size}, elemTy);
   auto cast1 = rewriter.create<ShapeCastOp>(loc, flatTy, v1);
   auto cast2 = rewriter.create<ShapeCastOp>(loc, flatTy, v2);
-  auto mask = getMask(shape, shape);
+  auto mask = getShuffleMask(shape, shape);
   auto shuffleOp = rewriter.create<ShuffleOp>(loc, cast1, cast2, mask);
-  auto targetTy =
-      mlir::VectorType::get({shape[0], shape[1] + shape[1]}, elemTy);
+  auto targetTy = mlir::VectorType::get(newShape, elemTy);
   auto newOp = rewriter.create<ShapeCastOp>(loc, targetTy, shuffleOp);
   return newOp;
+}
+
+// A wrapper function to merge small vectors into a big one. It takes a
+// range of mlir::Value objects with mlir::VectorType, and merge them
+// into a big vector using the provided transformation function.
+mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
+                                std::function<funcTy> transFunc,
+                                mlir::Location loc,
+                                XeGPUOneToNPatterRewriter &rewriter) {
+  llvm::SmallVector<mlir::Value> shuffleOps(ins.begin(), ins.end());
+  while (shuffleOps.size() > 1) {
+    auto curr = shuffleOps;
+    assert(curr.size() % 2 == 0 && "The size should be divisible by 2.");
+    shuffleOps.clear();
+    for (size_t i = 0; i + 1 < curr.size(); i += 2) {
+      auto newOp = transFunc(curr[i], curr[i + 1], loc, rewriter);
+      shuffleOps.push_back(newOp);
+    }
+  }
+  return shuffleOps[0];
+};
+
+// a unified function lowering Unpack and Pack ops.
+static llvm::SmallVector<mlir::Value>
+lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
+                  mlir::ValueRange inputs, mlir::DenseI64ArrayAttr inBlkSizes,
+                  mlir::DenseI64ArrayAttr outBlkSizes,
+                  llvm::ArrayRef<int64_t> inGrids,
+                  llvm::ArrayRef<int64_t> outGrids, bool isVnniFormat = false,
+                  bool isForDPASB = false) {
+  // handle based on the dim0, and save results into intermediates
+  llvm::SmallVector<mlir::Value> intermediates;
+  if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
+    intermediates = inputs;
+  } else if (inBlkSizes[0] < outBlkSizes[0]) { // stack on dim 0
+    // `nums` small vectors will be stacked into one big vector
+    auto nums = inGrids[0] / outGrids[0];
+    llvm::SmallVector<mlir::Value> valSet;
+    for (auto j = 0; j < inGrids[1]; j++) {
+      for (auto i = 0; i < inGrids[0]; i++) {
+        auto idx = i * inGrids[1] + j;
+        valSet.push_back(inputs[idx]);
+        if (valSet.size() == (size_t)nums) {
+          auto newOp =
+              mergeVectorsWrapper(valSet, stack, op->getLoc(), rewriter);
+          intermediates.push_back(newOp);
+          valSet.clear();
+        }
+      }
+    }
+  } else { // do extract on dim0 using vector::ExtractStridedSliceOp
+    intermediates.resize(outGrids[0] * inGrids[1]);
+    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], inBlkSizes[1]});
+    // if the vnni transform applied, vector shape
+    // and offset need to be adjusted accordingly.
+    if (isVnniFormat) {
+      auto vnniAxis = isForDPASB ? 0 : 1;
+      auto factor =
+          inputs.front().getType().cast<mlir::VectorType>().getShape().back();
+      blkSizes[vnniAxis] /= factor;
+    }
+    // each vector will be horizonally cut into `nums` subvectors
+    auto nums = outGrids[0] / inGrids[0];
+    llvm::SmallVector<int64_t> strides({1, 1});
+    for (auto i = 0; i < inGrids[0]; i++) {
+      for (auto j = 0; j < inGrids[1]; j++) {
+        auto startPos = i * nums * inGrids[1] + j;
+        auto v = inputs[i * inGrids[1] + j];
+        for (auto k = 0; k < nums; k++) {
+          llvm::SmallVector<int64_t> offsets({k * blkSizes[0], 0});
+          auto newOp = rewriter.create<ExtractStridedSliceOp>(
+              op->getLoc(), v, offsets, blkSizes, strides);
+          auto idx = startPos + k * inGrids[1];
+          intermediates[idx] = newOp;
+        }
+      }
+    }
+  }
+
+  // handle intermediates based on the dim1, and save results into newOps
+  llvm::SmallVector<mlir::Value> newOps;
+  llvm::SmallVector<int64_t> interGrids = {outGrids[0], inGrids[1]};
+  if (inBlkSizes[1] == outBlkSizes[1]) {
+    // do nothing since they have the same size
+    newOps = intermediates;
+  } else if (inBlkSizes[1] < outBlkSizes[1]) {
+    // doing concat since blkSZ of input vector is smaller
+    // `nums` of small vectors will be concated into a big one
+    size_t nums = inGrids[1] / outGrids[1];
+    llvm::SmallVector<mlir::Value> valSet;
+    for (auto i = 0; i < interGrids[0]; i++) {
+      for (auto j = 0; j < interGrids[1]; j++) {
+        valSet.push_back(intermediates[i * interGrids[1] + j]);
+        if (valSet.size() == nums) {
+          auto newOp =
+              mergeVectorsWrapper(valSet, concat, op->getLoc(), rewriter);
+          newOps.push_back(newOp);
+          valSet.clear();
+        }
+      }
+    }
+  } else { // doing extract on dim 1
+    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], outBlkSizes[1]});
+    // if vnni transform applied, vector shape
+    // and offset needs to adjusted accordingly.
+    if (isVnniFormat) {
+      auto vnniAxis = isForDPASB ? 0 : 1;
+      auto factor =
+          inputs.front().getType().cast<mlir::VectorType>().getShape().back();
+      blkSizes[vnniAxis] /= factor;
+    }
+    llvm::SmallVector<int64_t> strides({1, 1});
+    auto nums = outGrids[1] / interGrids[1];
+    for (auto i = 0; i < interGrids[0]; i++) {
+      for (auto j = 0; j < interGrids[1]; j++) {
+        auto v = intermediates[i * interGrids[1] + j];
+        for (int64_t k = 0; k < nums; k++) {
+          llvm::SmallVector<int64_t> offsets({0, k * blkSizes[1]});
+          auto newOp = rewriter.create<ExtractStridedSliceOp>(
+              op->getLoc(), v, offsets, blkSizes, strides);
+          newOps.push_back(newOp);
+        }
+      }
+    }
+  }
+
+  return newOps;
 }
 
 // It lowers a pair of Unpack and Pack operators at a time.
@@ -111,7 +249,7 @@ static VectorTypedValue concat(mlir::Value v1, mlir::Value v2,
 // looking at the target block size (innerBlock from TilePackOp)
 // directly. It requires 1-1 mapping of UnpackOp and PackOp, which
 // should be enforced by a separate pass.
-class SgTileUnpackPackOpPattern
+class SgTileUnpackOpPattern
     : public SgXeTileToXeGPUConversion<xetile::TileUnpackOp> {
   using SgXeTileToXeGPUConversion<
       xetile::TileUnpackOp>::SgXeTileToXeGPUConversion;
@@ -119,149 +257,87 @@ class SgTileUnpackPackOpPattern
   mlir::LogicalResult
   matchAndRewrite(xetile::TileUnpackOp op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
-    using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
-                                    mlir::PatternRewriter &);
 
-    auto transform = [&](mlir::ValueRange ins, std::function<funcTy> merge) {
-      llvm::SmallVector<mlir::Value> shuffleOps(ins.begin(), ins.end());
-      while (shuffleOps.size() > 1) {
-        auto curr = shuffleOps;
-        assert(curr.size() % 2 == 0 && "The size should be divisible by 2.");
-        shuffleOps.clear();
-        for (size_t i = 0; i + 1 < curr.size(); i += 2) {
-          auto newOp = merge(curr[i], curr[i + 1], op.getLoc(), rewriter);
-          shuffleOps.push_back(newOp);
-        }
-      }
-      return shuffleOps[0];
-    };
-
-    auto packOp = llvm::dyn_cast<xetile::TilePackOp>(*(op->user_begin()));
-    if (!op->hasOneUse() || !packOp)
-      return op->emitOpError("[Uexpected Code Pattern]: ")
-             << "Upack/Pack should appear as pairs. "
-             << "And unpack can be only used by pack. "
-             << "Duplicate unpack if necessarry.\n";
-
-    auto inTy = op.getInVec().getType();
-    auto outTy = packOp.getOutVec().getType();
-    auto inGrids = inTy.getShape().take_front(2);
-    auto outGrids = outTy.getShape().take_front(2);
-    auto inBlkSizes = op.getInnerBlocksAttr();
-    auto outBlkSizes = packOp.getInnerBlocksAttr();
     auto inputs = adaptor.getInVec();
+    auto inTy = op.getInVec().getType();
+    auto inGrids = inTy.getShape().take_front(2);
+    auto inBlkSizes = op.getInnerBlocksAttr();
 
     // specific attention needed for vectors in vnni format,
     // which is applied to load for dpas.
     auto loadOp = op.getInVec().getDefiningOp<xetile::LoadTileOp>();
-    bool isVnniFormat = loadOp && (isForDPASA(loadOp) || isForDPASB(loadOp));
+    bool isDpasA = loadOp && isForDPASA(loadOp);
+    bool isDpasB = loadOp && isForDPASB(loadOp);
+    bool isVnniFormat = isDpasA || isDpasB;
+
+    llvm::ArrayRef<int64_t> outGrids;
+    mlir::DenseI64ArrayAttr outBlkSizes;
+    auto packOp = llvm::dyn_cast<xetile::TilePackOp>(*(op->user_begin()));
+    if (op->hasOneUse() && packOp) { // lower the Unpack and Pack pair
+      auto outTy = packOp.getOutVec().getType();
+      outGrids = outTy.getShape().take_front(2);
+      outBlkSizes = packOp.getInnerBlocksAttr();
+    } else { // lower the Unpack only
+      auto outTy = op.getOutVec().getType();
+      outGrids = llvm::ArrayRef<int64_t>({1, 1});
+      auto ctx = op.getContext();
+      outBlkSizes = mlir::DenseI64ArrayAttr::get(ctx, outTy.getShape());
+    }
+
+    // TODO: logically it is to do concat, but the data is in vnni format
+    // which breaks the concat logic, it transforms concat into stack.
+    if (isVnniFormat && (inBlkSizes[1] < outBlkSizes[1])) {
+      return op->emitOpError("[Unexpected rare case]: ")
+             << "It rarly happens that we need to do concat on vnni "
+             << "transformed vectors (which is 3D instead of 2D). "
+             << "It is essentially a stack on the 2nd dim, and is "
+             << "not implemented yet.\n";
+    }
 
     rewriter.setInsertionPoint(op);
+    auto newOps =
+        lowerUnpackOrPack(rewriter, op, inputs, inBlkSizes, outBlkSizes,
+                          inGrids, outGrids, isVnniFormat, isDpasB);
 
-    // handle based on the dim0, and save results into intermediates
-    llvm::SmallVector<mlir::Value> intermediates;
-    if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
-      intermediates = inputs;
-    } else if (inBlkSizes[0] < outBlkSizes[0]) { // stack on dim 0
-      // `nums` small vectors will be stacked into one big vector
-      auto nums = inGrids[0] / outGrids[0];
-      llvm::SmallVector<mlir::Value> valSet;
-      for (auto j = 0; j < inGrids[1]; j++) {
-        for (auto i = 0; i < inGrids[0]; i++) {
-          auto idx = i * inGrids[1] + j;
-          valSet.push_back(inputs[idx]);
-          if (valSet.size() == (size_t)nums) {
-            auto newOp = transform(valSet, stack);
-            intermediates.push_back(newOp);
-            valSet.clear();
-          }
-        }
-      }
-    } else { // do extract on dim0 using vector::ExtractStridedSliceOp
-      intermediates.resize(outGrids[0] * inGrids[1]);
-      llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], inBlkSizes[1]});
-      // if the vnni transform applied, vector shape
-      // and offset need to be adjusted accordingly.
-      if (isVnniFormat) {
-        auto vnniAxis = isForDPASB(loadOp) ? 0 : 1;
-        auto factor =
-            inputs.front().getType().cast<mlir::VectorType>().getShape().back();
-        blkSizes[vnniAxis] /= factor;
-      }
-      // each vector will be horizonally cut into `nums` subvectors
-      auto nums = outGrids[0] / inGrids[0];
-      llvm::SmallVector<int64_t> strides({1, 1});
-      for (auto i = 0; i < inGrids[0]; i++) {
-        for (auto j = 0; j < inGrids[1]; j++) {
-          auto startPos = i * nums * inGrids[1] + j;
-          auto v = inputs[i * inGrids[1] + j];
-          for (auto k = 0; k < nums; k++) {
-            llvm::SmallVector<int64_t> offsets({k * blkSizes[0], 0});
-            auto newOp = rewriter.create<ExtractStridedSliceOp>(
-                op.getLoc(), v, offsets, blkSizes, strides);
-            auto idx = startPos + k * inGrids[1];
-            intermediates[idx] = newOp;
-          }
-        }
-      }
+    if (op->hasOneUse() && packOp) { // lowered Unpack and Pack as pair
+      rewriter.replaceOp(packOp, newOps);
+      rewriter.eraseOp(op);
+    } else { // lowering unpack only
+      rewriter.replaceOp(op, newOps);
     }
+    return mlir::success();
+  }
+};
 
-    // handle intermediates based on the dim1, and save results into newOps
-    llvm::SmallVector<mlir::Value> newOps;
-    llvm::SmallVector<int64_t> interGrids = {outGrids[0], inGrids[1]};
+class SgTilePackOpPattern
+    : public SgXeTileToXeGPUConversion<xetile::TilePackOp> {
+  using SgXeTileToXeGPUConversion<
+      xetile::TilePackOp>::SgXeTileToXeGPUConversion;
 
-    if (inBlkSizes[1] == outBlkSizes[1]) {
-      // do nothing since they have the same size
-      newOps = intermediates;
-    } else if (inBlkSizes[1] < outBlkSizes[1]) {
-      // doing concat since blkSZ of input vector is smaller
-      if (loadOp && (isForDPASA(loadOp) || isForDPASB(loadOp))) {
-        return op->emitOpError("[Unexpected rare case]: ")
-               << "It rarly happens that we need to do concat on vnni "
-               << "transformed vectors (which is 3D instead of 2D). "
-               << "It is essentially a stack on the 2nd dim, but it is "
-               << "not implemented yet.\n";
-      }
-      // `nums` of small vectors will be concated into a big one
-      size_t nums = inGrids[1] / outGrids[1];
-      llvm::SmallVector<mlir::Value> valSet;
-      for (auto i = 0; i < interGrids[0]; i++) {
-        for (auto j = 0; j < interGrids[1]; j++) {
-          valSet.push_back(intermediates[i * interGrids[1] + j]);
-          if (valSet.size() == nums) {
-            auto newOp = transform(valSet, concat);
-            newOps.push_back(newOp);
-            valSet.clear();
-          }
-        }
-      }
-    } else { // doing extract on dim 1
-      llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], outBlkSizes[1]});
-      // if vnni transform applied, vector shape
-      // and offset needs to adjusted accordingly.
-      if (isVnniFormat) {
-        auto vnniAxis = isForDPASB(loadOp) ? 0 : 1;
-        auto factor =
-            inputs.front().getType().cast<mlir::VectorType>().getShape().back();
-        blkSizes[vnniAxis] /= factor;
-      }
-      llvm::SmallVector<int64_t> strides({1, 1});
-      auto nums = outGrids[1] / interGrids[1];
-      for (auto i = 0; i < interGrids[0]; i++) {
-        for (auto j = 0; j < interGrids[1]; j++) {
-          auto v = intermediates[i * interGrids[1] + j];
-          for (int64_t k = 0; k < nums; k++) {
-            llvm::SmallVector<int64_t> offsets({0, k * blkSizes[1]});
-            auto newOp = rewriter.create<ExtractStridedSliceOp>(
-                op.getLoc(), v, offsets, blkSizes, strides);
-            newOps.push_back(newOp);
-          }
-        }
-      }
-    }
+  mlir::LogicalResult
+  matchAndRewrite(xetile::TilePackOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto input = op.getInVec();
+    auto defOp = input.getDefiningOp<xetile::TileUnpackOp>();
+    // Unpack and Pack appeared as a pair, it should be handled
+    // by UnpackOpPattern in this case.
+    if (defOp && defOp->hasOneUse())
+      return mlir::failure();
 
-    rewriter.replaceOp(packOp, newOps);
-    rewriter.eraseOp(op);
+    auto inTy = op.getInVec().getType();
+    auto inGrids = llvm::SmallVector<int64_t>({1, 1});
+    auto inBlkSizes =
+        mlir::DenseI64ArrayAttr::get(op.getContext(), inTy.getShape());
+
+    auto outTy = op.getOutVec().getType();
+    auto outGrids = outTy.getShape().take_front(2);
+    auto outBlkSizes = op.getInnerBlocksAttr();
+
+    auto newOps = lowerUnpackOrPack(rewriter, op, {input}, inBlkSizes,
+                                    outBlkSizes, inGrids, outGrids);
+
+    // it is simple one-to-one mapping
+    rewriter.replaceOp(op, newOps);
     return mlir::success();
   }
 };
@@ -634,7 +710,7 @@ struct SgUpdateTileOffsetOpPattern
 bool isLegalElementWiseOp(mlir::Operation *op) {
   auto res = op->getResult(0);
   auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-  if (resType && resType.getRank() != 2)
+  if (resType && resType.getRank() > 2)
     return false;
   return true;
 }
@@ -665,10 +741,14 @@ struct ElementWiseOpPattern : public SgXeTileToXeGPUConversion<Op> {
   mlir::LogicalResult
   matchAndRewrite(Op op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
-
     auto res = op.getResult();
     auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-    if (!resType || resType.getRank() != 4) {
+    // non-vector ops, or 1D/2D vector ops generated during lowering.
+    if (!resType || resType.getRank() <= 2)
+      return mlir::failure();
+
+    // For non 2D vector ops, we expect 4D vector ops only
+    if (resType.getRank() != 4) {
       op.emitOpError() << "type is not 4D vector";
       return mlir::failure();
     }
@@ -708,8 +788,8 @@ void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
   patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
-                  SgTileUnpackPackOpPattern, SgLoadTileOpPattern,
-                  SgStoreTileOpPattern, SgTileMMAOpPattern,
+                  SgTileUnpackOpPattern, SgTilePackOpPattern,
+                  SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
                   SgUpdateTileOffsetOpPattern>(patterns.getContext(), converter,
                                                analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
