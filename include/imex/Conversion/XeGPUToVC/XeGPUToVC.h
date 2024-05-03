@@ -15,8 +15,8 @@
 #ifndef IMEX_CONVERSION_XEGPUTOVC_H
 #define IMEX_CONVERSION_XEGPUTOVC_H
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/XeCommon.h"
 

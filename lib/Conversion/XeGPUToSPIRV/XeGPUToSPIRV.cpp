@@ -13,10 +13,10 @@
 ///
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h"
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
 #include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
+#include "mlir/Dialect/XeGPU/IR/XeGPU.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -49,8 +49,8 @@
 #include <type_traits>
 
 using namespace imex;
-using namespace imex::xegpu;
 using namespace mlir;
+using namespace mlir::xegpu;
 
 namespace {
 /// @brief
@@ -146,13 +146,13 @@ public:
         // compute surface width
         auto bytesPerElem = createIntConstant(i32Type, bitWidth / 8);
         auto one = createIntConstant(i32Type, 1);
-        surfaceW = rewriter.create<spirv::UConvertOp>(
-            loc, i32Type, adaptor.getDynamicShape()[1]);
+        surfaceW = rewriter.create<spirv::UConvertOp>(loc, i32Type,
+                                                      adaptor.getShape()[1]);
         surfaceW = rewriter.create<spirv::IMulOp>(loc, surfaceW, bytesPerElem);
         surfaceW = rewriter.create<spirv::ISubOp>(loc, surfaceW, one);
         // compute surface height
-        surfaceH = rewriter.create<spirv::UConvertOp>(
-            loc, i32Type, adaptor.getDynamicShape()[0]);
+        surfaceH = rewriter.create<spirv::UConvertOp>(loc, i32Type,
+                                                      adaptor.getShape()[0]);
         surfaceH = rewriter.create<spirv::ISubOp>(loc, surfaceH, one);
         // fixme: pitch = width for now
         surfaceP = surfaceW;
@@ -166,7 +166,7 @@ public:
                                                               surfaceP, idx4);
       auto createOffset = [&](unsigned idx) -> Value {
         Value val;
-        OpFoldResult ofr = op.getOffsets()[idx];
+        OpFoldResult ofr = op.getMixedOffsets()[idx];
         auto v = llvm::dyn_cast_if_present<Value>(ofr);
         if (v) {
           val = ofr.get<Value>();
@@ -183,7 +183,7 @@ public:
                                                               offsetX, idx5);
       payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
                                                               offsetY, idx6);
-      int array_length = op.getTensorDescType().getArrayLength();
+      int array_length = op.getType().getArrayLength();
       unsigned blockVal = (array_length - 1) << 16;
       blockVal |= ((blockHeight - 1) << 8) | (blockWidth - 1);
       auto blockInfo = createIntConstant(i32Type, blockVal);
@@ -195,11 +195,11 @@ public:
   }
 };
 
-class UpdateNDOffsetToVCPattern : public OpConversionPattern<UpdateNDOffsetOp> {
+class UpdateNDOffsetToVCPattern : public OpConversionPattern<UpdateNdOffsetOp> {
 public:
-  using OpConversionPattern<UpdateNDOffsetOp>::OpConversionPattern;
+  using OpConversionPattern<UpdateNdOffsetOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(UpdateNDOffsetOp op, OpAdaptor adaptor,
+  matchAndRewrite(UpdateNdOffsetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto i32Type = rewriter.getI32Type();
@@ -265,8 +265,8 @@ public:
     auto loc = op.getLoc();
     ::mlir::VectorType vecType;
     std::string funcName;
-    constexpr bool isLoad = std::is_same_v<OpType, LoadNDOp>;
-    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNDOp>;
+    constexpr bool isLoad = std::is_same_v<OpType, LoadNdOp>;
+    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNdOp>;
     if constexpr (isLoad) {
       vecType = cast<VectorType>(op.getResult().getType());
       funcName = rank == 2 ? "llvm_genx_lsc_load2d_stateless_"
@@ -430,7 +430,7 @@ std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   if (auto op = val.getDefiningOp()) {
     if (auto descOp = dyn_cast<xegpu::CreateNdDescOp>(op)) {
       return descOp;
-    } else if (auto update = dyn_cast<xegpu::UpdateNDOffsetOp>(op)) {
+    } else if (auto update = dyn_cast<xegpu::UpdateNdOffsetOp>(op)) {
       return findDescOp(update.getTensorDesc());
     }
   } else if (auto arg = dyn_cast<BlockArgument>(val)) {
@@ -454,8 +454,8 @@ public:
     auto rank = tileType.getRank();
     assert(rank <= 2 && "only support 1d/2d load/store/prefetch for now");
     auto loc = op->getLoc();
-    constexpr bool isLoad = std::is_same_v<OpType, LoadNDOp>;
-    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNDOp>;
+    constexpr bool isLoad = std::is_same_v<OpType, LoadNdOp>;
+    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNdOp>;
     auto createIntConstant = [&](Type type, unsigned value) {
       auto attr = rewriter.getIntegerAttr(type, value);
       return rewriter.create<spirv::ConstantOp>(loc, type, attr);
@@ -522,7 +522,7 @@ public:
     // an architecture feature, and 32 works on PVC but may
     // be not FS. To support other bits, we cannot hardcode
     // with i32Type, and need to generalize the logic.
-    auto loadOp = llvm::dyn_cast<LoadNDOp>(op.getOperation());
+    auto loadOp = llvm::dyn_cast<LoadNdOp>(op.getOperation());
     if (loadOp && transpose && loadOp.getTransposeBitWidth() == 32) {
       // in raw_send msg set vnni effect to false and update data size of
       // payload item to 32 bits
@@ -643,9 +643,9 @@ public:
   matchAndRewrite(DpasOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = op.getLhs().getType().cast<VectorType>();
-    auto rhsType = op.getRhs().getType().cast<VectorType>();
-    auto resultType = op.getResultType().cast<VectorType>();
+    auto lhsType = mlir::cast<VectorType>(op.getLhs().getType());
+    auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
+    auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
     uint8_t sd = lhsType.getShape()[1];
     // refer to IGC/visa/Common_ISA_util.cpp#87
@@ -960,26 +960,28 @@ public:
     rewriter.setInsertionPointAfter(func);
     rewriter.create<spirv::ExecutionModeOp>(
         op.getLoc(), func, spirv::ExecutionMode::NamedBarrierCountINTEL,
-        op.getNbarrierCount());
+        op.getNbarrierNum());
     rewriter.eraseOp(op);
     return success();
   }
 };
 
-class CreateNbarrierToVCPattern : public OpConversionPattern<CreateNbarrierOp> {
+class InitNbarrierToVCPattern : public OpConversionPattern<InitNbarrierOp> {
 public:
-  using OpConversionPattern<CreateNbarrierOp>::OpConversionPattern;
+  using OpConversionPattern<InitNbarrierOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(CreateNbarrierOp op, OpAdaptor adaptor,
+  matchAndRewrite(InitNbarrierOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto nbarrier_id = op.getNbarrierId();
-    auto nbarrier_role = op.getNbarrierRole();
-    auto num_producers = op.getNumProducers();
-    auto num_consumers = op.getNumConsumers();
-
     auto i32Type = rewriter.getIntegerType(32);
     auto v8i32Type = mlir::VectorType::get(8, i32Type);
+
+    auto loc = op.getLoc();
+    auto nbarrier_id = op.getNbarrierId();
+
+    // a participant is both a producer or a consumer (0)
+    auto nbarrier_role = rewriter.create<arith::ConstantOp>(
+        loc, i32Type, rewriter.getI32IntegerAttr(0));
+    auto num_participants = zext(i32Type, op.getParticipantThreadNum());
 
     DenseElementsAttr constantData = DenseElementsAttr::get(
         v8i32Type, ArrayRef<int>(std::vector<int>(1, 0)));
@@ -989,15 +991,15 @@ public:
     Value payload = zext(i32Type, nbarrier_id);
 
     Value payload_nbarrier_role =
-        logic_shl(i32Type, zext(i32Type, nbarrier_role), i32_val(14));
+        logic_shl(i32Type, nbarrier_role, i32_val(14));
     payload = bitwise_or(i32Type, payload, payload_nbarrier_role);
 
     Value payload_num_producers =
-        logic_shl(i32Type, i32_val(num_producers), i32_val(16));
+        logic_shl(i32Type, num_participants, i32_val(16));
     payload = bitwise_or(i32Type, payload, payload_num_producers);
 
     Value payload_num_consumers =
-        logic_shl(i32Type, i32_val(num_consumers), i32_val(24));
+        logic_shl(i32Type, num_participants, i32_val(24));
     payload = bitwise_or(i32Type, payload, payload_num_consumers);
 
     nbarrier_src = rewriter.create<spirv::VectorInsertDynamicOp>(
@@ -1015,7 +1017,7 @@ public:
   matchAndRewrite(NbarrierArriveOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = adaptor.getPayload();
+    auto payload = adaptor.getNbarrier();
 
     std::string funcName = "llvm_genx_raw_send2_noresult_i1_v8i32";
 
@@ -1049,7 +1051,7 @@ public:
   matchAndRewrite(NbarrierWaitOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = adaptor.getPayload();
+    auto payload = adaptor.getNbarrier();
 
     auto i8Type = rewriter.getIntegerType(8);
     auto i32Type = rewriter.getIntegerType(32);
@@ -1075,7 +1077,7 @@ public:
   }
 };
 
-class CompilerHintToVCPattern : public OpConversionPattern<CompileHintOp> {
+class CompileHintToVCPattern : public OpConversionPattern<CompileHintOp> {
 public:
   using OpConversionPattern<CompileHintOp>::OpConversionPattern;
   LogicalResult
@@ -1097,46 +1099,60 @@ public:
   }
 };
 
-class MfenceToVCPattern : public OpConversionPattern<MfenceOp> {
+class FenceToVCPattern : public OpConversionPattern<FenceOp> {
 public:
-  using OpConversionPattern<MfenceOp>::OpConversionPattern;
+  using OpConversionPattern<FenceOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(MfenceOp op, OpAdaptor adaptor,
+  matchAndRewrite(FenceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto pred = i1_val(1);
-    auto fence_op_attr = op.getFenceOpAttr().str();
-    auto fence_scope_attr = op.getFenceScopeAttr().str();
-    auto memory_kind_attr = op.getMemoryKindAttr().str();
-
-    std::vector<std::string> lscFenceOp{"none",    "evict", "invalidate",
-                                        "discard", "clean", "flushl3"};
-    std::vector<std::string> lscFenceScope{"group", "local",  "tile",  "gpu",
-                                           "gpus",  "system", "sysacq"};
-    std::vector<std::string> lscSFID{"ugm", "ugml", "tgm", "slm"};
-
     uint8_t fence_op, fence_scope, sfid;
 
-    auto it = std::find(lscFenceOp.begin(), lscFenceOp.end(), fence_op_attr);
-    if (it != lscFenceOp.end()) {
-      fence_op = std::distance(lscFenceOp.begin(), it);
-    } else {
-      llvm_unreachable("unsupported value for lsc_fence_op attribute");
-    }
+    enum lscFenceOp {
+      NONE = 0,
+      EVICT = 1,
+      INVALIDATE = 2,
+      DISCARD = 3,
+      CLEAN = 4,
+      FLUSHL3 = 5
+    };
+    enum lscFenceScope {
+      GROUP = 0,
+      LOCAL = 1,
+      TILE = 2,
+      GPU = 3,
+      GPUS = 4,
+      SYSTEM = 5,
+      SYSACQ = 6
+    };
+    enum lscSFID { UGM = 0, UGML = 1, TGM = 3, SLM = 4 };
 
-    it =
-        std::find(lscFenceScope.begin(), lscFenceScope.end(), fence_scope_attr);
-    if (it != lscFenceScope.end()) {
-      fence_scope = std::distance(lscFenceScope.begin(), it);
-    } else {
-      llvm_unreachable("unsupported value for lsc_fence_scope attribute");
-    }
+    // the design limits the fence_op to NONE
+    fence_op = lscFenceOp::NONE;
 
-    it = std::find(lscSFID.begin(), lscSFID.end(), memory_kind_attr);
-    if (it != lscSFID.end()) {
-      sfid = std::distance(lscSFID.begin(), it);
-    } else {
+    switch (op.getMemoryKind()) {
+    case mlir::xegpu::MemoryScope::Global:
+      sfid = lscSFID::UGM;
+      break;
+    case mlir::xegpu::MemoryScope::SLM:
+      sfid = lscSFID::TGM;
+      break;
+    default:
       llvm_unreachable("unsupported value for memory_kind attribute");
+      break;
+    }
+
+    switch (op.getFenceScope()) {
+    case mlir::xegpu::FenceScope::Workgroup:
+      fence_scope = lscFenceScope::GROUP;
+      break;
+    case mlir::xegpu::FenceScope::GPU:
+      fence_scope = lscFenceScope::GPU;
+      break;
+    default:
+      llvm_unreachable("unsupported value for fence_scope attribute");
+      break;
     }
 
     SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
@@ -1252,7 +1268,7 @@ struct VectorExtractStridedSlice final
     auto sizes = extractOp.getSizes().getValue();
     auto strides = extractOp.getStrides().getValue();
 
-    if (strides[0].cast<IntegerAttr>().getInt() != 1)
+    if (mlir::cast<IntegerAttr>(strides[0]).getInt() != 1)
       return rewriter.notifyMatchFailure(
           extractOp, "Strided slice with stride != 1 is not supported.");
 
@@ -1284,7 +1300,7 @@ struct VectorExtractStridedSlice final
     // get total number of extracted slices
     int64_t nExtractedSlices = 1;
     for (auto size : sizes) {
-      nExtractedSlices *= size.cast<IntegerAttr>().getInt();
+      nExtractedSlices *= mlir::cast<IntegerAttr>(size).getInt();
     }
 
     // compute the strides of the source vector considering first k dimensions
@@ -1299,8 +1315,8 @@ struct VectorExtractStridedSlice final
     SmallVector<int32_t, 4> extractedStrides(k, 1);
     // compute extractedStrides
     for (int i = k - 2; i >= 0; --i) {
-      extractedStrides[i] =
-          extractedStrides[i + 1] * sizes[i + 1].cast<IntegerAttr>().getInt();
+      extractedStrides[i] = extractedStrides[i + 1] *
+                            mlir::cast<IntegerAttr>(sizes[i + 1]).getInt();
     }
     // iterate over all extracted slices from 0 to nExtractedElems-1
     // and compute the multi-dimensional index and the corresponding linearized
@@ -1318,7 +1334,7 @@ struct VectorExtractStridedSlice final
       int64_t linearizedIndex = 0;
       for (int64_t j = 0; j < k; ++j) {
         linearizedIndex +=
-            (offsets[j].cast<IntegerAttr>().getInt() + multiDimIndex[j]) *
+            (mlir::cast<IntegerAttr>(offsets[j]).getInt() + multiDimIndex[j]) *
             sourceStrides[j];
       }
       // fill the indices array form linearizedIndex to linearizedIndex +
@@ -1423,7 +1439,7 @@ struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
         !imex::isGenericVectorTy(dstType) &&
         "Vector size is considered generic and op does not require lowering to "
         "VC intrinsic. Consider marking this op + vector length as legal.");
-    auto vecSize = dstType.template dyn_cast<VectorType>().getNumElements();
+    auto vecSize = mlir::dyn_cast<VectorType>(dstType).getNumElements();
     // for larger vector lengths, "llvm.genx.exp" returns the base 2
     // exponentiation of the input. To get the base e exponentiation, we need to
     // scale the input by log2(e)
@@ -1448,8 +1464,7 @@ struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
       operandTypes.push_back(operand.getType());
     auto funcType = rewriter.getFunctionType(operandTypes, {dstType});
     funcName +=
-        encodeVectorType(rewriter, dstType.template dyn_cast<VectorType>())
-            .first;
+        encodeVectorType(rewriter, mlir::dyn_cast<VectorType>(dstType)).first;
     lookupOrInsertIntrinsic(rewriter, op, funcName, funcType);
 
     rewriter.replaceOpWithNewOp<spirv::FunctionCallOp>(op, dstType, funcName,
@@ -1462,7 +1477,7 @@ struct SPIRVElementwiseToVC : public OpConversionPattern<SPIRVOp> {
 bool imex::isGenericVectorTy(mlir::Type type) {
   if (isa<spirv::ScalarType>(type))
     return true;
-  auto vecSize = type.dyn_cast<VectorType>().getNumElements();
+  auto vecSize = mlir::dyn_cast<VectorType>(type).getNumElements();
   return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
          vecSize == 16;
 }
@@ -1470,9 +1485,9 @@ bool imex::isGenericVectorTy(mlir::Type type) {
 void imex::populateXeGPUToVCIntrinsicsPatterns(
     SPIRVTypeConverter &typeConverter, RewritePatternSet &patterns) {
   patterns.add<CreateNdDescToSPIRV, CreateDescToVCPattern, DpasToVCPattern,
-               AllocNbarrierToVCPattern, CreateNbarrierToVCPattern,
+               AllocNbarrierToVCPattern, InitNbarrierToVCPattern,
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
-               CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
+               CompileHintToVCPattern, FenceToVCPattern, VectorShapeCast,
                VectorExtract, VectorExtractStridedSlice, VectorShuffle,
                SPIRVElementwiseToVC<spirv::CLFMaxOp>,
                SPIRVElementwiseToVC<spirv::CLExpOp>,
@@ -1480,14 +1495,14 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
   if (getenv("IMEX_NOT_PREFER_RAWSEND"))
-    patterns.add<LoadStorePrefetchNdToLsc<LoadNDOp>,
-                 LoadStorePrefetchNdToLsc<StoreNDOp>,
-                 LoadStorePrefetchNdToLsc<PrefetchNDOp>>(typeConverter,
+    patterns.add<LoadStorePrefetchNdToLsc<LoadNdOp>,
+                 LoadStorePrefetchNdToLsc<StoreNdOp>,
+                 LoadStorePrefetchNdToLsc<PrefetchNdOp>>(typeConverter,
                                                          patterns.getContext());
   else
-    patterns.add<LoadStorePrefetchNdToRawSend<LoadNDOp>,
-                 LoadStorePrefetchNdToRawSend<StoreNDOp>,
-                 LoadStorePrefetchNdToRawSend<PrefetchNDOp>>(
+    patterns.add<LoadStorePrefetchNdToRawSend<LoadNdOp>,
+                 LoadStorePrefetchNdToRawSend<StoreNdOp>,
+                 LoadStorePrefetchNdToRawSend<PrefetchNdOp>>(
         typeConverter, patterns.getContext());
 }
 
@@ -1532,8 +1547,8 @@ public:
     auto loc = op.getLoc();
     ::mlir::VectorType vecType;
     std::string funcName;
-    constexpr bool isLoad = std::is_same_v<OpType, LoadNDOp>;
-    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNDOp>;
+    constexpr bool isLoad = std::is_same_v<OpType, LoadNdOp>;
+    constexpr bool isPrefetch = std::is_same_v<OpType, PrefetchNdOp>;
     if constexpr (isLoad) {
       vecType = cast<VectorType>(op.getResult().getType());
       funcName = rank == 2 ? "llvm.genx.GenISA.LSC2DBlockRead."
@@ -1664,9 +1679,9 @@ public:
         return 0;
       }
     };
-    auto lType = op.getLhs().getType().cast<VectorType>();
-    auto rType = op.getRhs().getType().cast<VectorType>();
-    auto resultType = op.getResultType().cast<VectorType>();
+    auto lType = mlir::cast<VectorType>(op.getLhs().getType());
+    auto rType = mlir::cast<VectorType>(op.getRhs().getType());
+    auto resultType = mlir::cast<VectorType>(op.getResultType());
     auto [lhsStr, lhsType] = encodeGenISAVectorType(rewriter, lType, false);
     auto [rhsStr, rhsType] = encodeGenISAVectorType(rewriter, rType, false);
     auto [newStr, newType] = encodeGenISAVectorType(rewriter, resultType);
@@ -1707,523 +1722,8 @@ public:
 void imex::populateXeGPUToGenISAPatterns(SPIRVTypeConverter &typeConverter,
                                          RewritePatternSet &patterns) {
   patterns.add<CreateNdDescToSPIRV, DpasToGenISA,
-               LoadStorePrefetchNdToGenISA<LoadNDOp>,
-               LoadStorePrefetchNdToGenISA<StoreNDOp>,
-               LoadStorePrefetchNdToGenISA<PrefetchNDOp>>(
+               LoadStorePrefetchNdToGenISA<LoadNdOp>,
+               LoadStorePrefetchNdToGenISA<StoreNdOp>,
+               LoadStorePrefetchNdToGenISA<PrefetchNdOp>>(
       typeConverter, patterns.getContext());
-}
-
-namespace {
-// PVC-specific subgroup size for JointMatrix
-constexpr uint64_t jointMatrixSubGroupSize = 16;
-// Calculate flattened offsets
-// Calculate flattened offsets based on dims and offsets(indices)
-Value linearizeOffset(OpBuilder builder, Location loc,
-                      SmallVectorImpl<Value> &offsets,
-                      SmallVectorImpl<Value> &dims) {
-  assert(offsets.size() == dims.size() &&
-         "number of offsets & dimensions must be same");
-  auto createIntConstant = [&](Type type, unsigned value) {
-    auto attr = builder.getIntegerAttr(type, value);
-    return builder.create<spirv::ConstantOp>(loc, type, attr);
-  };
-
-  auto i64Type = builder.getI64Type();
-  auto rank = dims.size();
-  Value linearizedOffset = createIntConstant(i64Type, 0);
-  for (unsigned i = 0; i < rank; i++) {
-    Value perDimstrideMultiplier = createIntConstant(i64Type, 1);
-    for (unsigned j = i + 1; j < rank; j++) {
-      perDimstrideMultiplier = builder.create<spirv::IMulOp>(
-          loc, i64Type, perDimstrideMultiplier, dims[j]);
-    }
-    perDimstrideMultiplier = builder.create<spirv::IMulOp>(
-        loc, i64Type, perDimstrideMultiplier, offsets[i]);
-
-    linearizedOffset = builder.create<spirv::IAddOp>(
-        loc, i64Type, linearizedOffset, perDimstrideMultiplier);
-  }
-  return linearizedOffset;
-}
-
-unsigned getElementPerWI(imex::xegpu::TensorDescType tDescType) {
-  imex::xegpu::SubGroupMapAttr sgMap;
-  auto mapping = tDescType.getMapping();
-
-  sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(mapping);
-
-  auto blockSize = tDescType.getShape();
-  auto wiLayout = sgMap.getWiLayout();
-  auto wiData = sgMap.getWiData();
-  unsigned elemPerWI = 1;
-  for (int64_t i = 0; i < wiData.size(); i++) {
-    if (wiData[i] != 1)
-      llvm_unreachable("wi_data must be 1 for all dimension for "
-                       "JointMatrix lowering");
-    elemPerWI *= (blockSize[i] / wiLayout[i]);
-  }
-  return elemPerWI;
-}
-
-class CreateNdDescToJointMatrix : public OpConversionPattern<CreateNdDescOp> {
-public:
-  using OpConversionPattern<CreateNdDescOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(CreateNdDescOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    assert(op.getTensorDescType().getBoundaryCheck() == false &&
-           "for xegpu to joint matrix lowering boundary_check attribute must "
-           "be false");
-    auto loc = op.getLoc();
-    auto tileType = op.getTensorDesc().getType();
-    auto rank = tileType.getRank();
-
-    // Set the SPIR-V Struct to represent the Tensor Descriptor
-    // The create_nd_tdesc returns a spirv.struct
-    // The elements in the struct contains the following elements
-    // element 0 = base address pointer : spirv.ptr
-    // element 1 = 1D offset : i64
-    // element 2 = X Dim Size : i64
-    // element 3 = Y Dim Size : i64
-    // [SPIR-V lowering uses 1D flattened addresses passed as kernel parameters]
-    SmallVector<Type, 4> memberTypes;
-    auto i64Type = rewriter.getI64Type();
-    // Default storage class is spirv::StorageClass::CrossWorkgroup
-    auto spirvStorageClass = spirv::StorageClass::CrossWorkgroup;
-    // For memref use memref spirv storage attribute if available
-    auto srcType = op.getSourceType();
-    if (llvm::isa<mlir::MemRefType>(srcType)) {
-      auto sc = dyn_cast_or_null<spirv::StorageClassAttr>(
-          llvm::cast<mlir::MemRefType>(srcType).getMemorySpace());
-      if (sc)
-        spirvStorageClass = sc.getValue();
-    }
-    auto spirvBaseAddressType =
-        spirv::PointerType::get(op.getElementType(), spirvStorageClass);
-
-    memberTypes.push_back(spirvBaseAddressType);
-    memberTypes.push_back(i64Type);
-    // For nD descriptor, dimesion=rank, so we need dimSize for all the
-    // dimensions
-    for (int i = 0; i < rank; i++) {
-      memberTypes.push_back(i64Type);
-    }
-
-    auto ndDescStruct = spirv::StructType::get(memberTypes);
-
-    Value payLoad = rewriter.create<spirv::UndefOp>(loc, ndDescStruct);
-    auto createIntConstant = [&](Type type, unsigned value) {
-      auto attr = rewriter.getIntegerAttr(type, value);
-      return rewriter.create<spirv::ConstantOp>(loc, type, attr);
-    };
-
-    // Insert the base address to the ndDescStruct struct
-    Value genericBasePtr;
-    // If the base type is memref, add a bitcast op
-    // If the base type is not memref type, add a ConvertUToPtr op
-    if (llvm::isa<mlir::MemRefType>(srcType)) {
-      genericBasePtr = rewriter.create<spirv::BitcastOp>(
-          loc, spirvBaseAddressType, adaptor.getSource());
-    } else {
-      genericBasePtr = rewriter.create<spirv::ConvertUToPtrOp>(
-          loc, spirvBaseAddressType, adaptor.getSource());
-    }
-
-    payLoad = rewriter.create<spirv::CompositeInsertOp>(
-        loc, genericBasePtr, payLoad, llvm::ArrayRef(0));
-
-    // TODO: We should be able to use op.getOffsets() directly with index cast
-    // But we need support from XeGPU dialect definition to return i64_t
-
-    auto createOffset = [&](unsigned idx) -> Value {
-      Value val;
-      OpFoldResult ofr = op.getOffsets()[idx];
-      auto v = llvm::dyn_cast_if_present<Value>(ofr);
-      if (v) {
-        val = ofr.get<Value>();
-        // Cast index type to i64
-        val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
-      } else {
-        int off = llvm::cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
-        val = createIntConstant(i64Type, off);
-      }
-      return val;
-    };
-
-    // TODO: We should be able to use op.getShape() directly with index cast
-    // But we need support from XeGPU dialect definition to return i64_t
-
-    auto createShape = [&](unsigned idx) -> Value {
-      Value val;
-      OpFoldResult ofr = op.getShape()[idx];
-      auto v = llvm::dyn_cast_if_present<Value>(ofr);
-      if (v) {
-        val = ofr.get<Value>();
-        // Cast index type to i64
-        val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
-      } else {
-        int dim = llvm::cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
-        val = createIntConstant(i64Type, dim);
-      }
-      return val;
-    };
-
-    SmallVector<Value, 4> nDOffsets;
-    SmallVector<Value, 4> nDDims;
-    for (unsigned i = 0; i < rank; i++) {
-      nDOffsets.push_back(createOffset(i));
-    }
-
-    for (unsigned i = 0; i < rank; i++) {
-      nDDims.push_back(createShape(i));
-    }
-
-    // Calculate the 1-D offset, since the memrefs are flattened when
-    // passed to SPIR-V
-    Value linearizedOffset = linearizeOffset(rewriter, loc, nDOffsets, nDDims);
-    // Insert the flattened (1D) offset to the ndDescStruct struct
-
-    payLoad = rewriter.create<spirv::CompositeInsertOp>(
-        loc, linearizedOffset, payLoad, llvm::ArrayRef(1));
-    for (int i = 0; i < rank; i++) {
-      payLoad = rewriter.create<spirv::CompositeInsertOp>(loc, nDDims[i],
-                                                          payLoad, (i + 2));
-    }
-    rewriter.replaceOp(op, payLoad);
-    return success();
-  }
-};
-
-class UpdateNDOffsetJointMatrix : public OpConversionPattern<UpdateNDOffsetOp> {
-public:
-  using OpConversionPattern<UpdateNDOffsetOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(UpdateNDOffsetOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto desc = adaptor.getTensorDesc();
-    const int dimStartIdx = 2;
-    auto i64Type = rewriter.getI64Type();
-    auto createIntConstant = [&](Type type, unsigned value) {
-      auto attr = rewriter.getIntegerAttr(type, value);
-      return rewriter.create<spirv::ConstantOp>(loc, type, attr);
-    };
-    // Calculate the 1-D offset, since the memrefs are flattened when
-    // passed to SPIR-V
-    Value offset1D;
-    offset1D = createIntConstant(i64Type, 0);
-    auto offsets = adaptor.getOffsets();
-    auto rank = op.getTensorDesc().getType().getRank();
-    // number of offsets & tensorDescriptor rank must be same
-    assert(offsets.size() == (size_t)op.getTensorDesc().getType().getRank() &&
-           "number of offsets & tensorDescriptor rank must be same");
-    for (unsigned i = 0; i < rank; i++) {
-      Value perDimstrideMultiplier;
-      perDimstrideMultiplier = createIntConstant(i64Type, 1);
-      for (unsigned j = i + 1; j < rank; j++) {
-        Value dimSize = rewriter.create<spirv::CompositeExtractOp>(
-            loc, desc, (j + dimStartIdx));
-        perDimstrideMultiplier = rewriter.create<spirv::IMulOp>(
-            loc, i64Type, perDimstrideMultiplier, dimSize);
-      }
-      // Cast index type to i64
-      Value offsetVal =
-          rewriter.create<arith::IndexCastOp>(loc, i64Type, offsets[i]);
-      perDimstrideMultiplier = rewriter.create<spirv::IMulOp>(
-          loc, i64Type, perDimstrideMultiplier, offsetVal);
-
-      offset1D = rewriter.create<spirv::IAddOp>(loc, i64Type, offset1D,
-                                                perDimstrideMultiplier);
-    }
-
-    // Add the newOffset to previous offset
-    Value prev1DOffset = rewriter.create<spirv::CompositeExtractOp>(
-        loc, desc, llvm::ArrayRef(1));
-    offset1D =
-        rewriter.create<spirv::IAddOp>(loc, i64Type, offset1D, prev1DOffset);
-    // Update the descriptor with the new offset
-    desc = rewriter.create<spirv::CompositeInsertOp>(loc, offset1D, desc,
-                                                     llvm::ArrayRef(1));
-    rewriter.replaceOp(op, desc);
-    return success();
-  }
-};
-
-class LoadNDJointMatrix : public OpConversionPattern<LoadNDOp> {
-public:
-  using OpConversionPattern<LoadNDOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(LoadNDOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (op.getTranspose())
-      op.emitError("transpose is not currently supported for XeGPU to "
-                   "JointMatrix lowering");
-    auto loc = op.getLoc();
-    auto tDesc = adaptor.getTensorDesc();
-    auto tDescType = op.getTensorDesc().getType();
-    int rank = tDescType.getRank();
-    assert(rank == 2 && "only support 2d load for now");
-
-    // Get the base address
-    Value baseAddress = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(0));
-    // Get the offset
-    Value offset = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(1));
-
-    SmallVector<Value, 2> linearizedIndices;
-    // Get the load address
-    Value loadAddress = rewriter.create<spirv::InBoundsPtrAccessChainOp>(
-        loc, baseAddress, offset, linearizedIndices);
-
-    // Stride for jointMatrixLoad = Y Dim size
-    // TODO: what do we do for transpose case?
-    Value stride = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(3));
-
-    // Figure out the Matrix Use type (MatrixA, MatrixB, Accumulator)
-    uint32_t matrixUse;
-    // Don't expect vnni axis to be set for the Accumulator
-
-    if (auto vnniAxis = adaptor.getVnniAxis())
-      // vnniAxis 0 -> MatrixB -> matrixUse = 1
-      // vnniAxis 1 -> MatrixA -> matrixUse = 0
-      matrixUse = (*vnniAxis + 1) % 2;
-    else
-      // vnniAxis empty -> Accumulator -> matrixUse = 2
-      matrixUse = 2;
-
-    // TODO: Need to discuss how to handle transpose, load then transpose or
-    // transposed load?
-    auto jointMatrixtype = spirv::JointMatrixINTELType::get(
-        tDescType.getElementType(), spirv::Scope::Subgroup,
-        tDescType.getDimSize(0), tDescType.getDimSize(1),
-        spirv::MatrixLayout::RowMajor, *spirv::symbolizeMatrixUse(matrixUse));
-
-    auto jointMatrixLoaded = rewriter.create<spirv::INTELJointMatrixLoadOp>(
-        loc, jointMatrixtype, loadAddress, stride,
-        ::mlir::spirv::MatrixLayout::RowMajor, ::mlir::spirv::Scope::Subgroup,
-        nullptr, nullptr);
-
-    // TODO: Once architecture-spcific info are in place, add subgroup_size
-    // restriction verification
-    unsigned elemPerWI = getElementPerWI(tDescType);
-    auto elemType = tDescType.getElementType();
-    auto perWIVectorType = VectorType::get(elemPerWI, elemType);
-    Value payLoad = rewriter.create<spirv::UndefOp>(loc, perWIVectorType);
-    llvm::SmallVector<Value, 8> extractedVal;
-    for (unsigned i = 0; i < elemPerWI; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedVal.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
-          loc, jointMatrixLoaded, idx));
-    }
-
-    // Putting all the extract and insert operations together, may make it
-    // easier for compiler (IGC) to reason about
-    for (unsigned i = 0; i < elemPerWI; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, payLoad, extractedVal[i], idx);
-    }
-    rewriter.replaceOp(op, payLoad);
-    return success();
-  }
-};
-
-class StoreNDJointMatrix : public OpConversionPattern<StoreNDOp> {
-public:
-  using OpConversionPattern<StoreNDOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(StoreNDOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto tDesc = adaptor.getTensorDesc();
-    auto tDescType = op.getTensorDesc().getType();
-    int rank = tDescType.getRank();
-    assert(rank == 2 && "only support 2d load for now");
-
-    // Get the base address
-    Value baseAddress = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(0));
-    // Get the offset
-    Value offset = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(1));
-
-    SmallVector<Value, 2> linearizedIndices;
-    // Get the load address
-    Value loadAddress = rewriter.create<spirv::InBoundsPtrAccessChainOp>(
-        loc, baseAddress, offset, linearizedIndices);
-
-    // Stride for jointMatrixLoad = Y Dim size
-    // TODO: what do we do for transpose case?
-    Value stride = rewriter.create<spirv::CompositeExtractOp>(
-        loc, tDesc, llvm::ArrayRef(3));
-
-    // For Store, we only allow Accumulator type matrix to store.
-    // TODO: We need to Add option on the xegpu.store_nd to support storing B
-    // matrix for that we need to add vnni_axis attribute to store_nd op as
-    // well.
-    uint32_t matrixUse = 2;
-    // Don't expect vnni axis to be set for the Accumulator
-    auto jointMatrixtype = spirv::JointMatrixINTELType::get(
-        tDescType.getElementType(), spirv::Scope::Subgroup,
-        tDescType.getDimSize(0), tDescType.getDimSize(1),
-        spirv::MatrixLayout::RowMajor, *spirv::symbolizeMatrixUse(matrixUse));
-    Value matrix = rewriter.create<spirv::UndefOp>(loc, jointMatrixtype);
-
-    // TODO: Once architecture-spcific info are in place, add subgroup_size
-    // restriction verification
-    unsigned elemPerWI = getElementPerWI(tDescType);
-    // auto elemType = tDescType.getElementType();
-    // Get the 2D vector
-    auto perWIVector = adaptor.getValue();
-    llvm::SmallVector<Value, 8> extractedVal;
-    for (unsigned i = 0; i < elemPerWI; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedVal.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
-          loc, perWIVector, idx));
-    }
-
-    // Putting all the extract and insert operations together, may make it
-    // easier for compiler (IGC) to reason about
-    for (unsigned i = 0; i < elemPerWI; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      matrix = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, matrix, extractedVal[i], idx);
-    }
-    auto payLoad = rewriter.create<spirv::INTELJointMatrixStoreOp>(
-        loc, loadAddress, matrix, stride, ::mlir::spirv::MatrixLayout::RowMajor,
-        ::mlir::spirv::Scope::Subgroup, nullptr, nullptr);
-    rewriter.replaceOp(op, payLoad);
-    return success();
-  }
-};
-
-class DpasJointMatrix : public OpConversionPattern<DpasOp> {
-public:
-  using OpConversionPattern<DpasOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(DpasOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto vectorA = op.getLhs();
-    auto vectorB = op.getRhs();
-    auto vectorC = op.getAcc();
-    {
-      OpBuilder::InsertionGuard guard(rewriter);
-      auto func = op->getParentOfType<spirv::FuncOp>();
-      rewriter.setInsertionPointAfter(func);
-      rewriter.create<spirv::ExecutionModeOp>(
-          op.getLoc(), func, spirv::ExecutionMode::SubgroupSize,
-          int(jointMatrixSubGroupSize));
-    }
-    // Matrix row = 1st dim of input vector
-    // Matrix colomn = 2nd dim of input vector * jointMatrixSubGroupSize
-    auto matrixAType = spirv::JointMatrixINTELType::get(
-        vectorA.getType().getElementType(), spirv::Scope::Subgroup,
-        vectorA.getType().getShape()[0],
-        vectorA.getType().getShape()[1] * jointMatrixSubGroupSize,
-        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::MatrixA);
-
-    // B matrix vector is passed VNNI-transformed, so row = dim0 *dim3
-    auto matrixBType = spirv::JointMatrixINTELType::get(
-        vectorB.getType().getElementType(), spirv::Scope::Subgroup,
-        vectorB.getType().getShape()[0] * vectorB.getType().getShape()[2],
-        vectorB.getType().getShape()[1] * jointMatrixSubGroupSize,
-        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::MatrixB);
-
-    auto matrixCType = spirv::JointMatrixINTELType::get(
-        vectorC.getType().getElementType(), spirv::Scope::Subgroup,
-        vectorC.getType().getShape()[0],
-        vectorC.getType().getShape()[1] * jointMatrixSubGroupSize,
-        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::Accumulator);
-
-    Value matrixA = rewriter.create<spirv::UndefOp>(loc, matrixAType);
-    Value matrixB = rewriter.create<spirv::UndefOp>(loc, matrixBType);
-    Value matrixC = rewriter.create<spirv::UndefOp>(loc, matrixCType);
-    // Create Matrices from the vectors
-    // Get the flattened vectors through the adaptor, since SPIRV only allows 1D
-    // vector
-    auto perWIVectorA = adaptor.getLhs();
-    auto perWIVectorB = adaptor.getRhs();
-    auto perWIVectorC = adaptor.getAcc();
-
-    llvm::SmallVector<Value, 8> extractedValA;
-    auto perWIelemsA =
-        llvm::cast<mlir::VectorType>(perWIVectorA.getType()).getNumElements();
-    for (unsigned i = 0; i < perWIelemsA; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedValA.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
-          loc, perWIVectorA, idx));
-    }
-    // Putting all the extract and insert operations together, may make it
-    // easier for compiler (IGC) to reason about
-    for (unsigned i = 0; i < perWIelemsA; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      matrixA = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, matrixA, extractedValA[i], idx);
-    }
-
-    llvm::SmallVector<Value, 8> extractedValB;
-    auto perWIelemsB =
-        llvm::cast<mlir::VectorType>(perWIVectorB.getType()).getNumElements();
-    for (unsigned i = 0; i < perWIelemsB; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedValB.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
-          loc, perWIVectorB, idx));
-    }
-    // Putting all the extract and insert operations together, may make it
-    // easier for compiler (IGC) to reason about
-    for (unsigned i = 0; i < perWIelemsB; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      matrixB = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, matrixB, extractedValB[i], idx);
-    }
-
-    llvm::SmallVector<Value, 8> extractedValC;
-    auto perWIelemsC =
-        llvm::cast<mlir::VectorType>(perWIVectorC.getType()).getNumElements();
-    for (unsigned i = 0; i < perWIelemsC; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedValC.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
-          loc, perWIVectorC, idx));
-    }
-    // Putting all the extract and insert operations together, may make it
-    // easier for compiler (IGC) to reason about
-    for (unsigned i = 0; i < perWIelemsC; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      matrixC = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, matrixC, extractedValC[i], idx);
-    }
-
-    Value result = rewriter.create<spirv::INTELJointMatrixMadOp>(
-        loc, matrixA, matrixB, matrixC, spirv::Scope::Subgroup);
-
-    Value payLoad =
-        rewriter.create<spirv::UndefOp>(loc, perWIVectorC.getType());
-    llvm::SmallVector<Value, 8> extractedValResult;
-    auto perWIelemsResult = perWIelemsC;
-    for (unsigned i = 0; i < perWIelemsResult; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      extractedValResult.push_back(
-          rewriter.create<spirv::VectorExtractDynamicOp>(loc, result, idx));
-    }
-    for (unsigned i = 0; i < perWIelemsResult; i++) {
-      auto idx = createConstantI32(loc, rewriter, i);
-      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(
-          loc, payLoad, extractedValResult[i], idx);
-    }
-    rewriter.replaceOp(op, payLoad);
-    return success();
-  }
-};
-
-} // namespace
-
-void imex::populateXeGPUToJointMatrixPatterns(SPIRVTypeConverter &typeConverter,
-                                              RewritePatternSet &patterns) {
-  patterns.add<CreateNdDescToJointMatrix, UpdateNDOffsetJointMatrix,
-               LoadNDJointMatrix, StoreNDJointMatrix, DpasJointMatrix,
-               VectorShapeCast, VectorExtract, VectorExtractStridedSlice,
-               VectorShuffle>(typeConverter, patterns.getContext());
 }

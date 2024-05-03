@@ -2,18 +2,6 @@
 module @gemm attributes {gpu.container_module} {
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
 
-
-
-
-
-
-
-
-
-
-
-
-
     //CHECK: gpu.func @test_kernel(%[[arg0:.*]]: memref<4096x4096xf16>, %[[arg1:.*]]: memref<4096x4096xf16>, %[[arg2:.*]]: memref<4096x4096xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       //CHECK: %[[c0_i8:.*]] = arith.constant 0 : i8
@@ -132,8 +120,8 @@ module @gemm attributes {gpu.container_module} {
 
         %nbarrier_id = arith.constant 1 : i8
         %nbarrier_role = arith.constant 0 : i8
-        //CHECK: %[[R31:.*]] = xegpu.create_nbarrier %[[c1_i8]], %[[c0_i8]] {num_consumers = 32 : i8, num_producers = 32 : i8} : (i8, i8) -> !xegpu.nbarrier
-        %nbarrier = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 : i8, num_consumers = 32 : i8} : (i8, i8) -> !xegpu.nbarrier
+        //CHECK: %[[R31:.*]] = xegpu.init_nbarrier %[[c1_i8]], %[[c0_i8]] : i8, i8 -> !xegpu.nbarrier
+        %nbarrier = xegpu.init_nbarrier %nbarrier_id, %nbarrier_role : i8, i8 -> !xegpu.nbarrier
         //CHECK: %[[R32:.*]]:5 = scf.for %[[arg4:.*]] = %[[c0]] to %[[c4096]] step %[[c32]] iter_args(%[[arg5:.*]] = %[[R29]], %[[arg6:.*]] = %[[R30]], %[[arg7:.*]] = %[[cst]], %[[arg8:.*]] = %[[R17]], %[[arg9:.*]] = %[[R28]]) -> (!xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, vector<4x4x8x16xf32>, !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>) {
         %k_loop_result:5 = scf.for %k = %c0 to %c4096 step %c32 iter_args (
             %A_tile = %A_sg_init_tile,

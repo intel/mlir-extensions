@@ -8,39 +8,37 @@
 // CHECK-LABEL: func @test_create_tdesc_vc({{.*}}) {
 func.func @test_create_tdesc_vc(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc %arg0, %arg1
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 1}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<memory_scope = global, array_length = 1, boundary_check = true, #xegpu.scattered>>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc}: ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true>>
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true>>
   return
 }
 
 // CHECK-LABEL: func @test_create_tdesc_vc_2({{.*}}) {
 func.func @test_create_tdesc_vc_2(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc %arg0, %arg1
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 1}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<memory_scope = slm, array_length = 1, boundary_check = true, #xegpu.scattered>>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc} : ui64, vector<16 x index>
-                            -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<memory_scope = slm, #xegpu.scattered>>
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<memory_scope =  slm, scattered = true>>
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index>
+                            -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<memory_scope = slm, scattered = true>>
   return
 }
 
 // CHECK-LABEL: func @test_create_tdesc_vc_3({{.*}}) {
 func.func @test_create_tdesc_vc_3(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc %arg0, %arg1
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 8}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<memory_scope = global, array_length = 1, boundary_check = true, #xegpu.scattered>>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 8}
-                                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scattered>
+  // CHECK-SAME: {chunk_size = 8 : i64}
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>
+  %1 = xegpu.create_tdesc %src, %offsets {chunk_size = 8}
+                                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>
   return
 }
 
 // CHECK-LABEL: func @test_create_tdesc_vc_4({{.*}}) {
 func.func @test_create_tdesc_vc_4(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc %arg0, %arg1
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 2}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, array_length = 1, boundary_check = true, #xegpu.scattered>>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}
-                        : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, #xegpu.scattered>>
+  // CHECK-SAME: {chunk_size = 2 : i64}
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope =  slm, scattered = true>>
+  %1 = xegpu.create_tdesc %src, %offsets {chunk_size = 2}
+                        : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, scattered = true>>
   return
 }
 
@@ -48,9 +46,9 @@ func.func @test_create_tdesc_vc_4(%src: ui64, %offsets : vector<16 x index>) {
 // CHECK-LABEL: func @test_create_tdesc_vc_5({{.*}}) {
 func.func @test_create_tdesc_vc_5(%src: memref<?xf32>, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 2}
-  // CHECK-SAME: memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, array_length = 1, boundary_check = true, #xegpu.scattered>>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}
-              : memref<?xf32>, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, #xegpu.scattered>>
+  // CHECK-SAME: {chunk_size = 2 : i64}
+  // CHECK-SAME: memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope =  slm, scattered = true>>
+  %1 = xegpu.create_tdesc %src, %offsets {chunk_size = 2}
+              : memref<?xf32>, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, scattered = true>>
   return
 }

@@ -55,7 +55,7 @@ static mlir::LogicalResult parseXeTileType(mlir::AsmParser &parser,
                        "be a `::imex::xetile::XeTileAttr`");
       return mlir::failure();
     }
-    tile_attr = std::move(_result_tile_attr->dyn_cast<mlir::Attribute>());
+    tile_attr = std::move(mlir::dyn_cast<mlir::Attribute>(*_result_tile_attr));
   }
 
   return mlir::success();

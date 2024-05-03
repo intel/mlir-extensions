@@ -19,18 +19,18 @@ module @gemm attributes {gpu.container_module} {
       //LSC: spirv.FunctionCall @llvm_genx_lsc_load2d_stateless_v128i32_i1_i64
       //LSC: spirv.FunctionCall @llvm_genx_lsc_store2d_stateless_i1_i64_v128f32
       //LSC: spirv.FunctionCall @llvm_genx_lsc_store2d_stateless_i1_i64_v128f32
-      %0 = xegpu.create_nd_tdesc %arg0[0, 0] {mode = vc} : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>>
-      %1 = xegpu.create_nd_tdesc %arg1[0, 0] {mode = vc} : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %2 = xegpu.create_nd_tdesc %arg1[0, 16] {mode = vc} : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %3 = xegpu.load_nd %0  {vnni_axis = 1, l1_hint = cached, l2_hint = cached, mode = vc} : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x8x2xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+      %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %2 = xegpu.create_nd_tdesc %arg1[0, 16] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %3 = xegpu.load_nd %0  {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x8x2xf16>
       %4 = vector.extract %3[0]: vector<8x8x2xf16> from vector<2x8x8x2xf16>
       %5 = vector.extract %3[1]: vector<8x8x2xf16> from vector<2x8x8x2xf16>
       %6 = vector.shape_cast %4: vector<8x8x2xf16> to vector<8x16xf16>
       %7 = vector.shape_cast %5: vector<8x8x2xf16> to vector<8x16xf16>
       %8 = arith.extf %6: vector<8x16xf16> to vector<8x16xf32>
       %9 = arith.extf %7: vector<8x16xf16> to vector<8x16xf32>
-      xegpu.store_nd %8, %1 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %9, %2 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %8, %1 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %9, %2 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

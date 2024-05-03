@@ -16,13 +16,13 @@
 #ifndef _IMEX_XEARCH_H_
 #define _IMEX_XEARCH_H_
 
-#include "mlir/Support/LLVM.h"
-#include "mlir/Support/LogicalResult.h"
-#include "llvm/ADT/StringRef.h"
+#include <llvm/ADT/StringRef.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
+#include <mlir/Support/LLVM.h>
+#include <mlir/Support/LogicalResult.h>
 
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeCommon.h"

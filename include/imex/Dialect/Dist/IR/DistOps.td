@@ -190,7 +190,7 @@ def LocalOffsetsOfOp : Dist_Op<"local_offsets_of", [Pure]> {
   let builders = [
     // autodeduce return type from from operands
     OpBuilder<(ins "::mlir::Value":$array), [{
-      auto rank = array.getType().cast<::imex::ndarray::NDArrayType>().getRank();
+      auto rank = mlir::cast<::imex::ndarray::NDArrayType>(array.getType()).getRank();
       auto IndexType = $_builder.getIndexType();
       ::imex::TypVec rt(rank, IndexType);
         build($_builder, $_state, ::mlir::TypeRange(rt), array);
@@ -343,7 +343,7 @@ def LocalCoreOp : Dist_Op<"local_core", [AttrSizedOperandSegments, SameVariadicR
                     "::mlir::ValueRange":$toffs, "::mlir::ValueRange":$tsizes,
                     "::mlir::ValueRange":$soffs, "::mlir::ValueRange":$ssizes ,"::mlir::ValueRange":$sstrides,
                     "::mlir::ValueRange":$coffs, "::mlir::ValueRange":$csizes), [{
-      size_t rank = array.getType().cast<::imex::ndarray::NDArrayType>().getRank();
+      size_t rank = mlir::cast<::imex::ndarray::NDArrayType>(array.getType()).getRank();
       ::imex::TypVec rt(rank + rank, $_builder.getIndexType());
       build($_builder, $_state, ::mlir::TypeRange(rt), array, toffs, tsizes, soffs, ssizes, sstrides, coffs, csizes);
     }]>,

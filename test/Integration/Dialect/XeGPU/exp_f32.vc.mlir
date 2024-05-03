@@ -27,18 +27,18 @@ module @gemm attributes {gpu.container_module} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       // load A tile
-      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] { mode = vc } : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %val0 = xegpu.load_nd %a_tile0 { mode = vc, vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %val0 = xegpu.load_nd %a_tile0 { vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
       // load B tile
-      %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] { mode = vc } : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %val2 = xegpu.load_nd %b_tile0 { mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %val2 = xegpu.load_nd %b_tile0 { vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       // do DPAS
       %val4 = xegpu.dpas %val0, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // take exp
       %t6 = math.exp %val4 : vector<8x16xf32>
       // store
-      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] { mode = vc } : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %t6, %out_tile { mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %t6, %out_tile  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }
@@ -47,11 +47,11 @@ module @gemm attributes {gpu.container_module} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       // load A tile
-      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] { mode = vc } : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %val0 = xegpu.load_nd %a_tile0 { mode = vc, vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %val0 = xegpu.load_nd %a_tile0 { vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
       // load B tile
-      %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] { mode = vc } : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %val2 = xegpu.load_nd %b_tile0 { mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %val2 = xegpu.load_nd %b_tile0 { vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       // do DPAS
       %val4 = xegpu.dpas %val0, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // extract dpas out into 16xf32 vectors
@@ -90,8 +90,8 @@ module @gemm attributes {gpu.container_module} {
       %t5 = vector.shuffle %t2, %t3 [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
       %t6 = vector.shuffle %t4, %t5 [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x16xf32>, vector<4x16xf32>
       // store
-      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] { mode = vc } : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %t6, %out_tile { mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %t6, %out_tile  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

@@ -1,7 +1,7 @@
-From c49e484cae0c62f771ec353bc6fa3113d7b13490 Mon Sep 17 00:00:00 2001
+From dc1e914409a9d4c02c21a292227754fa4ac0cea7 Mon Sep 17 00:00:00 2001
 From: Dimple Prajapati <dimpalben.r.prajapati@intel.com>
-Date: Fri, 22 Dec 2023 21:03:10 +0000
-Subject: [PATCH 2/6] change spirv.CL.printf op assembly format
+Date: Fri, 26 Apr 2024 20:30:34 +0000
+Subject: [PATCH 2/7] change-spirv.CL.printf-op-assembly-format
 
 ---
  mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td | 4 ++--
@@ -31,7 +31,7 @@ index c7c2fe8bc742..b5ca27d7d753 100644
 
    let hasVerifier = 0;
 diff --git a/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
-index 2dbebb2db98e..a7d5f24be296 100644
+index 7a29abd44b34..b15ffdbbb767 100644
 --- a/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 @@ -275,8 +275,8 @@ func.func @rintvec(%arg0 : vector<3xf16>) -> () {
@@ -40,7 +40,7 @@ index 2dbebb2db98e..a7d5f24be296 100644
  func.func @printf(%arg0 : !spirv.ptr<i8, UniformConstant>, %arg1 : i32, %arg2 : i32) -> i32 {
 -  // CHECK: spirv.CL.printf {{%.*}}, {{%.*}}, {{%.*}} : (!spirv.ptr<i8, UniformConstant>, (i32, i32)) -> i32
 -  %0 = spirv.CL.printf %arg0, %arg1, %arg2 : (!spirv.ptr<i8, UniformConstant>, (i32, i32)) -> i32
-+  // CHECK: spirv.CL.printf {{%.*}} : !spirv.ptr<i8, UniformConstant>({{%.*}}, {{%.*}} : (i32, i32)) -> i32
++  // CHECK: spirv.CL.printf {{%.*}} : !spirv.ptr<i8, UniformConstant>({{%.*}}, {{%.*}} : i32, i32) -> i32
 +  %0 = spirv.CL.printf %arg0 : !spirv.ptr<i8, UniformConstant>(%arg1, %arg2 : i32, i32) -> i32
    return %0 : i32
  }

@@ -143,12 +143,12 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         /// this method will fail if the source is  not a memeref
         mlir::Type getSourceMemrefElemType() {
             assert(isSourceMemRef() && "The source is not a memref.");
-            return getSourceType().cast<mlir::MemRefType>().getElementType();
+            return mlir::cast<mlir::MemRefType>(getSourceType()).getElementType();
         }
 
         /// The result of an init_tile is always a Tile of TileType.
         TileType getType() {
-            return getTile().getType().cast<TileType>();
+            return mlir::cast<TileType>(getTile().getType());
         }
 
         /// Return the element type of the tile
@@ -175,14 +175,14 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         /// this method will fail if the source is not a memref
         bool sourceMemRefHasStaticShape() {
             assert(isSourceMemRef() && "source is not a memref.");
-            return getSourceType().cast<mlir::MemRefType>().hasStaticShape();
+            return mlir::cast<mlir::MemRefType>(getSourceType()).hasStaticShape();
         }
 
         /// get the static shape of the source memref
         /// this method will fail if the source is not a memref or has static shape
         llvm::ArrayRef<int64_t> getSourceMemrefStaticShape() {
             assert(sourceMemRefHasStaticShape() && "The source memref does not have static shape.");
-            return getSourceType().cast<mlir::MemRefType>().getShape();
+            return mlir::cast<mlir::MemRefType>(getSourceType()).getShape();
         }
 
         /// check if dynamic shape arguments are present

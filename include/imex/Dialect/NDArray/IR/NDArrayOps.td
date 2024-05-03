@@ -207,7 +207,7 @@ def ToTensorOp : NDArray_Op<"to_tensor", [Pure]> {
   let builders = [
       // auto-deduce return type
       OpBuilder<(ins "::mlir::Value":$tnsr), [{
-          auto mrtyp = tnsr.getType().dyn_cast<::imex::ndarray::NDArrayType>().getTensorType();
+          auto mrtyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(tnsr.getType()).getTensorType();
           assert(mrtyp);
           build($_builder, $_state, mrtyp, tnsr);
       }]>,
@@ -372,7 +372,7 @@ def SubviewOp : NDArray_OpWithOffsetSizesAndStrides<"subview", [
 
     /// The result of an subview is always a tensor.
     NDArrayType getType() {
-      return getResult().getType().cast<NDArrayType>();
+      return mlir::cast<NDArrayType>(getResult().getType());
     }
 
     /// Compute the rank-reduction mask that can be applied to map the source
@@ -529,14 +529,13 @@ def ExtractSliceOp : NDArray_OpWithOffsetSizesAndStrides<"extract_slice", [
   let extraClassDeclaration = extraBaseClassDeclaration # [{
     /// Returns the source type
     NDArrayType getSourceType() {
-      auto sourceType =
-          getSource().getType().cast<NDArrayType>();
+      auto sourceType = mlir::cast<NDArrayType>(getSource().getType());
       return sourceType;
     }
 
     /// The result is always a tensor.
     NDArrayType getType() {
-      return getResult().getType().cast<NDArrayType>();
+      return mlir::cast<NDArrayType>(getResult().getType());
     }
 
     /// Return the expected rank of each of the`static_offsets`, `static_sizes`
@@ -624,15 +623,13 @@ def InsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"insert_slice", [
   let extraClassDeclaration = extraBaseClassDeclaration # [{
     /// Returns the source type
     NDArrayType getSourceType() {
-      auto sourceType =
-          getSource().getType().cast<NDArrayType>();
+      auto sourceType = mlir::cast<NDArrayType>(getSource().getType());
       return sourceType;
     }
 
     /// Returns the destination type
     NDArrayType getDestinationType() {
-      auto dstType =
-          getDestination().getType().cast<NDArrayType>();
+      auto dstType = mlir::cast<NDArrayType>(getDestination().getType());
       return dstType;
     }
 
@@ -720,14 +717,13 @@ def ImmutableInsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"immutable_inse
     /// Returns the source type
     NDArrayType getSourceType() {
       auto sourceType =
-          getSource().getType().dyn_cast<NDArrayType>();
+          mlir::dyn_cast<NDArrayType>(getSource().getType());
       return sourceType;
     }
 
     /// Returns the destination type
     NDArrayType getDestinationType() {
-      auto dstType =
-          getDestination().getType().cast<NDArrayType>();
+      auto dstType = mlir::cast<NDArrayType>(getDestination().getType());
       return dstType;
     }
 
@@ -750,7 +746,7 @@ def ImmutableInsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"immutable_inse
 def LoadOp : NDArray_Op<"load",
      [TypesMatchWith<"result type matches element type of 'array'",
                      "array", "result",
-                     "$_self.cast<NDArrayType>().getElementType()">]> {
+                     "mlir::cast<NDArrayType>($_self).getElementType()">]> {
   let summary = "array element load operation";
   let description = [{
     The `load` op reads an element from an array specified by an index list. The
@@ -769,7 +765,7 @@ def LoadOp : NDArray_Op<"load",
 
   let builders = [
     OpBuilder<(ins "::mlir::Value":$array, CArg<"::mlir::ValueRange", "{}">:$indices), [{
-      auto arrayType = array.getType().cast<NDArrayType>();
+      auto arrayType = mlir::cast<NDArrayType>(array.getType());
       $_state.addOperands(array);
       $_state.addOperands(indices);
       $_state.types.push_back(arrayType.getElementType());

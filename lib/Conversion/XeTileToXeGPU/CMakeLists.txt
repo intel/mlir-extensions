@@ -12,5 +12,5 @@ add_imex_conversion_library(IMEXXeTileToXeGPU
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  IMEXXeGPUDialect
+  MLIRXeGPUDialect
 )

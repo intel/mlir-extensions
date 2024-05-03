@@ -69,7 +69,7 @@ struct LinSpaceOpConverter
                   ::imex::ndarray::LinSpaceOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto retArType = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto retArType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     if (!retArType)
       return ::mlir::failure();
     auto dEnv = getDistEnv(retArType);
@@ -148,7 +148,7 @@ struct CreateOpConverter
                   ::imex::ndarray::CreateOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto retArType = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto retArType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     if (!retArType)
       return ::mlir::failure();
     auto dEnv = getDistEnv(retArType);
@@ -191,9 +191,10 @@ struct CopyOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto src = op.getSource();
-    auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcDistType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto resDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     // return failure if wrong ops or not distributed
     if (!srcDistType || !isDist(srcDistType) || !resDistType ||
         !isDist(resDistType)) {
@@ -243,7 +244,8 @@ struct DeleteOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto src = op.getInput();
-    auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcDistType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     // return failure if wrong ops or not distributed
     if (!srcDistType || !isDist(srcDistType)) {
       return ::mlir::failure();
@@ -267,7 +269,7 @@ struct DeleteOpConverter
 inline ::imex::distruntime::AllReduceOp
 createAllReduce(::mlir::Location &loc, ::mlir::OpBuilder &builder,
                 ::mlir::Attribute op, ::mlir::Value ndArray) {
-  auto arType = ndArray.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+  auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(ndArray.getType());
   assert(arType);
   auto lArray = builder.create<::imex::ndarray::ToTensorOp>(loc, ndArray);
   auto lMRef = createToMemRef(loc, builder, lArray, arType.getMemRefType());
@@ -293,7 +295,8 @@ struct ReductionOpConverter
     // FIXME reduction over individual dimensions is not supported
     auto loc = op.getLoc();
     auto inp = op.getInput();
-    auto inpDistTyp = inp.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto inpDistTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(inp.getType());
     // nothing to do if not distributed
     if (!inpDistTyp || !isDist(inpDistTyp))
       return ::mlir::failure();
@@ -331,7 +334,7 @@ struct ToTensorOpConverter
     auto loc = op.getLoc();
     // get input
     auto inpArTyp =
-        op.getInput().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getInput().getType());
     if (!inpArTyp || !isDist(inpArTyp)) {
       return ::mlir::failure();
     }
@@ -364,9 +367,10 @@ struct SubviewOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // get input and type
     auto src = op.getSource();
-    auto inpDistTyp = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto inpDistTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto resDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     if (!inpDistTyp || !isDist(inpDistTyp) || !resDistType ||
         !isDist(resDistType)) {
       return ::mlir::failure();
@@ -447,8 +451,7 @@ struct SubviewOpConverter
       // create local view
       lViews.emplace_back(rewriter.create<::imex::ndarray::SubviewOp>(
           loc,
-          lPart.getType()
-              .dyn_cast<::imex::ndarray::NDArrayType>()
+          mlir::dyn_cast<::imex::ndarray::NDArrayType>(lPart.getType())
               .cloneWithDynDims(),
           lPart, pOffs, pSizes, pStrides));
 
@@ -478,10 +481,10 @@ struct InsertSliceOpConverter
                   ::imex::ndarray::InsertSliceOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
-    auto destArType =
-        op.getDestination().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto destArType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(
+        op.getDestination().getType());
     auto srcArType =
-        op.getSource().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getSource().getType());
     if (!destArType || !isDist(destArType) || !srcArType ||
         !isDist(srcArType)) {
       return ::mlir::failure();
@@ -531,7 +534,7 @@ struct InsertSliceOpConverter
 
     if (srcRank) {
       for (auto srcPart : srcParts) {
-        auto ary = srcPart.getType().cast<::imex::ndarray::NDArrayType>();
+        auto ary = mlir::cast<::imex::ndarray::NDArrayType>(srcPart.getType());
         if (ary.hasZeroSize()) {
           continue;
         }
@@ -592,9 +595,10 @@ struct ReshapeOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto src = op.getSource();
-    auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcDistType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto retDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     if (!(srcDistType && isDist(srcDistType) && retDistType &&
           isDist(retDistType))) {
       return ::mlir::failure();
@@ -681,7 +685,8 @@ struct EWBinOpConverter
         builder.create<::mlir::cf::AssertOp>(
             loc, createInt(loc, builder, 0, 1),
             "could not determine overlap of loop bounds and view");
-        auto arType = resView.getType().cast<::imex::ndarray::NDArrayType>();
+        auto arType =
+            mlir::cast<::imex::ndarray::NDArrayType>(resView.getType());
         static int dbg = 47110000;
         auto x = createIndex(loc, builder, ++dbg);
         return builder
@@ -694,7 +699,7 @@ struct EWBinOpConverter
     // create a nested if-else-block returning a view with given args if
     // condition cond is met, and returning orig resView otherwise (accepted
     // as reference!)
-    auto ary = parts[i].getType().template cast<::imex::ndarray::NDArrayType>();
+    auto ary = mlir::cast<::imex::ndarray::NDArrayType>(parts[i].getType());
     if (!(ary.hasUnitSize() || ary.hasZeroSize())) {
       auto overlaps = slcOff.sge(pOff).land(slcOff.slt(pEnd));
       resView =
@@ -727,11 +732,11 @@ struct EWBinOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto lhsDistType =
-        op.getLhs().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getLhs().getType());
     auto rhsDistType =
-        op.getRhs().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getRhs().getType());
     auto resDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     // return failure if wrong ops or not distributed
     if (!(lhsDistType && isDist(lhsDistType) && rhsDistType &&
           isDist(rhsDistType) && resDistType && isDist(resDistType))) {
@@ -759,9 +764,7 @@ struct EWBinOpConverter
       auto tmp = createPartsOf(loc, rewriter, lhs);
       lhsOwnIdx = tmp.size() == 1 ? 0 : 1;
       for (int i = 0; i < (int)tmp.size(); ++i) {
-        if (tmp[i]
-                .getType()
-                .cast<::imex::ndarray::NDArrayType>()
+        if (mlir::cast<::imex::ndarray::NDArrayType>(tmp[i].getType())
                 .hasZeroSize()) {
           if (i <= lhsOwnIdx)
             --lhsOwnIdx;
@@ -772,9 +775,7 @@ struct EWBinOpConverter
       tmp = createPartsOf(loc, rewriter, rhs);
       rhsOwnIdx = tmp.size() == 1 ? 0 : 1;
       for (int i = 0; i < (int)tmp.size(); ++i) {
-        if (tmp[i]
-                .getType()
-                .cast<::imex::ndarray::NDArrayType>()
+        if (mlir::cast<::imex::ndarray::NDArrayType>(tmp[i].getType())
                 .hasZeroSize()) {
           if (i <= rhsOwnIdx)
             --rhsOwnIdx;
@@ -918,8 +919,8 @@ struct EWBinOpConverter
                 [&builder,
                  &loc](const ::mlir::ValueRange &parts) -> ::mlir::Value {
               auto one = easyIdx(loc, builder, 1);
-              auto arType =
-                  parts.front().getType().cast<::imex::ndarray::NDArrayType>();
+              auto arType = mlir::cast<::imex::ndarray::NDArrayType>(
+                  parts.front().getType());
               auto rtyp = arType.cloneWith(
                   ::mlir::SmallVector<int64_t>(arType.getRank(), 1),
                   arType.getElementType());
@@ -1032,9 +1033,10 @@ struct EWUnyOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto src = op.getSrc();
-    auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcDistType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto resDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     // return failure if wrong ops or not distributed
     if (!srcDistType || !isDist(srcDistType) || !resDistType ||
         !isDist(resDistType)) {
@@ -1077,9 +1079,10 @@ struct CastElemTypeOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto src = op.getInput();
-    auto srcDistType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcDistType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto resDistType =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     // return failure if wrong ops or not distributed
     if (!srcDistType || !isDist(srcDistType) || !resDistType ||
         !isDist(resDistType)) {
@@ -1094,7 +1097,8 @@ struct CastElemTypeOpConverter
     // go through all parts and apply cast
     for (auto part : lParts) {
       // infer result type: non-dist, same shape, modified elem type
-      auto partType = part.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+      auto partType =
+          mlir::dyn_cast<::imex::ndarray::NDArrayType>(part.getType());
       auto resArType = cloneAsNonDist(partType).cloneWith(
           std::nullopt, resDistType.getElementType());
       auto castOp = rewriter.create<::imex::ndarray::CastElemTypeOp>(
@@ -1130,7 +1134,7 @@ struct InitDistArrayOpConverter
                   ::imex::dist::InitDistArrayOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto distType =
-        op.getResult().getType().cast<::imex::ndarray::NDArrayType>();
+        mlir::cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     if (!distType) {
       return ::mlir::failure();
     }
@@ -1154,9 +1158,8 @@ struct PartsOfOpConverter
                   typename ::imex::dist::PartsOfOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto base = adaptor.getArray();
-    auto distType = op.getArray()
-                        .getType()
-                        .template dyn_cast<::imex::ndarray::NDArrayType>();
+    auto distType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getArray().getType());
     if (!distType || !isDist(distType)) {
       return ::mlir::failure();
     }
@@ -1191,9 +1194,8 @@ struct LocalOffsetsOfOpConverter
                   typename ::imex::dist::LocalOffsetsOfOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto base = adaptor.getArray();
-    auto distType = op.getArray()
-                        .getType()
-                        .template dyn_cast<::imex::ndarray::NDArrayType>();
+    auto distType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getArray().getType());
     if (!distType || !isDist(distType)) {
       return ::mlir::failure();
     }
@@ -1286,7 +1288,7 @@ struct LocalTargetOfSliceOpConverter
                   ::imex::dist::LocalTargetOfSliceOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto distType =
-        op.getArray().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getArray().getType());
     if (!(distType && isDist(distType)))
       return ::mlir::failure();
 
@@ -1412,7 +1414,7 @@ struct LocalCoreOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto src = op.getArray();
 
-    auto distType = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto distType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     if (!distType || !isDist(distType))
       return ::mlir::failure();
 
@@ -1502,7 +1504,8 @@ struct RePartitionOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto base = op.getArray();
 
-    auto distType = base.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto distType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(base.getType());
     if (!distType || !isDist(distType))
       return ::mlir::failure();
 
@@ -1645,7 +1648,7 @@ struct ConvertDistToStandardPass
       assert(inputs.size() == 1);
       auto input = inputs[0];
       auto itype = input.getType();
-      auto ary = itype.dyn_cast<::imex::ndarray::NDArrayType>();
+      auto ary = mlir::dyn_cast<::imex::ndarray::NDArrayType>(itype);
       if (type != itype && ary) {
         if (isDist(ary)) {
           assert(ary.getRank() == 0);

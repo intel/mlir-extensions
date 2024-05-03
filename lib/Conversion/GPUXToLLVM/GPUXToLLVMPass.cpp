@@ -410,7 +410,8 @@ private:
         mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
 
     auto getKernelParamType = [&](unsigned i) -> mlir::Type {
-      if (launchOp.getKernelOperands()[i].getType().isa<mlir::MemRefType>()) {
+      if (mlir::isa<mlir::MemRefType>(
+              launchOp.getKernelOperands()[i].getType())) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
         return desc.getElementPtrType();
       }
@@ -441,9 +442,8 @@ private:
 
     auto getKernelParam =
         [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
-      auto memrefType = launchOp.getKernelOperands()[i]
-                            .getType()
-                            .dyn_cast<mlir::MemRefType>();
+      auto memrefType = mlir::dyn_cast<mlir::MemRefType>(
+          launchOp.getKernelOperands()[i].getType());
       auto paramType = paramsStorage[i].getType();
       if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);

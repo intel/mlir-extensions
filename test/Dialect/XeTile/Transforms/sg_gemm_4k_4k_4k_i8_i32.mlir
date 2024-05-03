@@ -11,8 +11,8 @@ gpu.module @test_kernel {
     //CHECK: %[[c4096:.*]] = arith.constant 4096 : index
     //CHECK: %[[R0:.*]] = gpu.block_id  x
     //CHECK: %[[R1:.*]] = gpu.block_id  y
-    //CHECK: %[[R2:.*]] = arith.muli %0, %c128 : index
-    //CHECK: %[[R3:.*]] = arith.muli %1, %c256 : index
+    //CHECK: %[[R2:.*]] = arith.muli %[[R0]], %[[c128]] : index
+    //CHECK: %[[R3:.*]] = arith.muli %[[R1]], %[[c256]] : index
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c128 = arith.constant 128 : index

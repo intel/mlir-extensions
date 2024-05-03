@@ -16,7 +16,7 @@
 
 unsigned imex::ndarray::InsertSliceOp::getDestinationRank() {
   auto dstType = getDestination().getType();
-  return dstType.dyn_cast<imex::ndarray::NDArrayType>().getRank();
+  return mlir::dyn_cast<imex::ndarray::NDArrayType>(dstType).getRank();
 }
 
 // Build an InsertSliceOp with mixed static and dynamic entries.

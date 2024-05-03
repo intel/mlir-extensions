@@ -117,7 +117,7 @@ static bool isConstantIndex(mlir::Value value) {
 
 static int64_t getConstantValue(mlir::Value value) {
   auto constOp = value.getDefiningOp<mlir::arith::ConstantOp>();
-  return constOp.getValue().cast<mlir::IntegerAttr>().getInt();
+  return mlir::cast<mlir::IntegerAttr>(constOp.getValue()).getInt();
 }
 
 mlir::LogicalResult InitTileOp::verify() {
@@ -198,7 +198,8 @@ mlir::LogicalResult InitTileOp::verify() {
     }
 
     if (col_major) {
-      auto layoutAttr = memrefType.getLayout().dyn_cast<mlir::AffineMapAttr>();
+      auto layoutAttr =
+          mlir::dyn_cast<mlir::AffineMapAttr>(memrefType.getLayout());
       if (!layoutAttr) {
         return emitOpError("expected a valid affine map in the layout");
       }
@@ -461,7 +462,7 @@ mlir::LogicalResult LoadTileOp::verify() {
   if (!encoding)
     return mlir::success();
 
-  auto tileAttr = encoding.dyn_cast<xetile::XeTileAttr>();
+  auto tileAttr = mlir::dyn_cast<xetile::XeTileAttr>(encoding);
   auto innerBlocks = tileAttr.getInnerBlocks();
 
   // if inner_blocks is not present in the tile_attr, the output of the load
@@ -496,7 +497,7 @@ mlir::LogicalResult StoreTileOp::verify() {
   if (!encoding)
     return mlir::success();
 
-  auto tileAttr = encoding.dyn_cast<xetile::XeTileAttr>();
+  auto tileAttr = mlir::dyn_cast<xetile::XeTileAttr>(encoding);
   auto innerBlocks = tileAttr.getInnerBlocks();
   auto tileShape = getTile().getType().getShape();
 

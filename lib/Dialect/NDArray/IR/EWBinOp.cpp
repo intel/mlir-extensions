@@ -48,11 +48,11 @@ public:
                   ::mlir::PatternRewriter &rewriter) const override {
 
     auto lhs = op.getLhs();
-    auto lPtTyp = lhs.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto lPtTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lhs.getType());
     auto rhs = op.getRhs();
-    auto rPtTyp = rhs.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto rPtTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(rhs.getType());
     auto resPtTyp =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     if (!(lPtTyp && rPtTyp && resPtTyp && lPtTyp.hasStaticShape() &&
           rPtTyp.hasStaticShape() && !resPtTyp.hasStaticShape())) {
       return mlir::failure();

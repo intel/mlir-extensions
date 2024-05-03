@@ -76,7 +76,7 @@ public:
 
   mlir::Value addPackOp(mlir::Value src, llvm::ArrayRef<int64_t> targetBlkSizes,
                         OpPatternRewriter &rewriter) const {
-    auto srcTy = src.getType().dyn_cast<mlir::VectorType>();
+    auto srcTy = mlir::dyn_cast<mlir::VectorType>(src.getType());
     assert(srcTy && targetBlkSizes.size() == 2);
     auto shape = srcTy.getShape();
     llvm::SmallVector<int64_t> packShape(

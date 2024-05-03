@@ -29,7 +29,7 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[A_p5:.*]] = vector.insert %{{.*}}, %[[A_p4]] [5] : i32 into vector<8xi32>
       // CHECK: %[[A_p6:.*]] = vector.insert %{{.*}}, %[[A_p5]] [6] : i32 into vector<8xi32>
       // CHECK: %[[A_PAYLOAD:.*]] = vector.insert %{{.*}}, %[[A_p6]] [7] : i32 into vector<8xi32>
-      %0 = xegpu.create_nd_tdesc %arg0[0, 0] {mode = vc} : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
 
 
       // CHECK: %[[B_STRUCT:.*]] = arith.constant dense<0> : vector<4xi64>
@@ -43,7 +43,7 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[B_p5:.*]] = vector.insert %{{.*}}, %[[B_p4]] [5] : i32 into vector<8xi32>
       // CHECK: %[[B_p6:.*]] = vector.insert %{{.*}}, %[[B_p5]] [6] : i32 into vector<8xi32>
       // CHECK: %[[B_PAYLOAD:.*]] = vector.insert %{{.*}}, %[[B_p6]] [7] : i32 into vector<8xi32>
-      %1 = xegpu.create_nd_tdesc %arg1[0, 0] {mode = vc} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
 
 
       // CHECK: %[[C_STRUCT:.*]] = arith.constant dense<0> : vector<4xi64>
@@ -57,7 +57,7 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[C_p5:.*]] = vector.insert %{{.*}}, %[[C_p4]] [5] : i32 into vector<8xi32>
       // CHECK: %[[C_p6:.*]] = vector.insert %{{.*}}, %[[C_p5]] [6] : i32 into vector<8xi32>
       // CHECK: %[[C_PAYLOAD:.*]] = vector.insert %{{.*}}, %[[C_p6]] [7] : i32 into vector<8xi32>
-      %2 = xegpu.create_nd_tdesc %arg2[0, 0] {mode = vc} : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %2 = xegpu.create_nd_tdesc %arg2[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
 
       // RAW: func.call @llvm.genx.raw.send2.noresult.i1.v8i32({{.*}}, %[[A_PAYLOAD]]) : ({{.*}}, vector<8xi32>) -> ()
 
@@ -66,7 +66,7 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[A_OFFSETX:.*]] = vector.extract %[[A_PAYLOAD]][5] : i32 from vector<8xi32>
       // LSC: %[[A_OFFSETY:.*]] = vector.extract %[[A_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: func.call @llvm.genx.lsc.prefetch2d.stateless.i1.i64({{.*}}, %[[BASE_A]], {{.*}}, %[[A_OFFSETX]], %[[A_OFFSETY]]) : ({{.*}}) -> ()
-      xegpu.prefetch_nd %0 {mode = vc} : !xegpu.tensor_desc<8x16xf16>
+      xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
 
       // RAW: func.call @llvm.genx.raw.send2.noresult.i1.v8i32({{.*}}, %[[B_PAYLOAD]]) : ({{.*}}, vector<8xi32>) -> ()
 
@@ -75,7 +75,7 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[B_OFFSETX:.*]] = vector.extract %[[B_PAYLOAD]][5] : i32 from vector<8xi32>
       // LSC: %[[B_OFFSETY:.*]] = vector.extract %[[B_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: func.call @llvm.genx.lsc.prefetch2d.stateless.i1.i64({{.*}}, %[[BASE_B]], {{.*}}, %[[B_OFFSETX]], %[[B_OFFSETY]]) : ({{.*}}) -> ()
-      xegpu.prefetch_nd %1 {mode = vc} : !xegpu.tensor_desc<16x16xf16>
+      xegpu.prefetch_nd %1 : !xegpu.tensor_desc<16x16xf16>
 
       // RAW: %[[cst_32:.*]] = arith.constant dense<0> : vector<64xi32>
       // RAW: %[[LOAD2D_A_v64i32:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v8i32({{.*}}, %[[A_PAYLOAD]], %[[cst_32]]) : ({{.*}}, vector<8xi32>, vector<64xi32>) -> vector<64xi32>
@@ -85,7 +85,7 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[LOAD2D_A_OFFSETX:.*]] = vector.extract %[[A_PAYLOAD]][5] : i32 from vector<8xi32>
       // LSC: %[[LOAD2D_A_OFFSETY:.*]] = vector.extract %[[A_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: %[[LOAD2D_A_v64i32:.*]] = func.call @llvm.genx.lsc.load2d.stateless.v64i32.i1.i64({{.*}}, %[[LOAD2D_BASE_A]], {{.*}}, %[[LOAD2D_A_OFFSETX]], %[[LOAD2D_A_OFFSETY]]) : ({{.*}}) -> vector<64xi32>
-       %3 = xegpu.load_nd %0  {mode = vc, vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+       %3 = xegpu.load_nd %0  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
 
       // RAW: %[[cst_39:.*]] = arith.constant dense<0> : vector<128xi32>
       // RAW: %[[LOAD2D_B_v128i32:.*]] = func.call @llvm.genx.raw.send2.v128i32.i1.v8i32({{.*}}, %[[B_PAYLOAD]], %[[cst_39]]) : ({{.*}}, vector<8xi32>, vector<128xi32>) -> vector<128xi32>
@@ -95,10 +95,10 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[LOAD2D_B_OFFSETX:.*]] = vector.extract %[[B_PAYLOAD]][5] : i32 from vector<8xi32>
       // LSC: %[[LOAD2D_B_OFFSETY:.*]] = vector.extract %[[B_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: %[[LOAD2D_B_v128i32:.*]] = func.call @llvm.genx.lsc.load2d.stateless.v128i32.i1.i64({{.*}}, %[[LOAD2D_BASE_B]], {{.*}}, %[[LOAD2D_B_OFFSETX]], %[[LOAD2D_B_OFFSETY]]) : ({{.*}}) -> vector<128xi32>
-       %4 = xegpu.load_nd %1  {mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+       %4 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
       // CHECK: %[[C_ACC_v128f32:.*]] = func.call @llvm.genx.dpas.nosrc0.v128f32.v128i32.v64i32(%[[LOAD2D_B_v128i32]], %[[LOAD2D_A_v64i32]], %{{.*}}) : (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
-      %5 = xegpu.dpas %3, %4 {mode = vc} : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %5 = xegpu.dpas %3, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 
       // RAW:  func.call @llvm.genx.raw.sends2.noresult.i1.v8i32.v128f32({{.*}}, %[[C_PAYLOAD]], %[[C_ACC_v128f32]]) : ({{.*}}, vector<8xi32>, vector<128xf32>) -> ()
 
@@ -107,7 +107,7 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[C_RES_OFFSETX:.*]] = vector.extract %[[C_PAYLOAD]][5] : i32 from vector<8xi32>
       // LSC: %[[C_RES_OFFSETY:.*]] = vector.extract %[[C_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: func.call @llvm.genx.lsc.store2d.stateless.i1.i64.v128f32({{.*}}, %[[C_RES_BASE]], {{.*}}, %[[C_RES_OFFSETX]], %[[C_RES_OFFSETY]], %[[C_ACC_v128f32]]) : ({{.*}}, vector<128xf32>) -> ()
-      xegpu.store_nd %5, %2 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %5, %2 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
 

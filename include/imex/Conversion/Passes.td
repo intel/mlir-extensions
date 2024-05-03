@@ -274,8 +274,8 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
   let options = [
-    Option<"enableJointMatrix", "enable-joint-matrix","bool", "false",
-           "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
+    // Option<"enableJointMatrix", "enable-joint-matrix","bool", "false",
+    //        "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
     Option<"enableGenISAIntrinsic", "enable-genisa-intrinsic","bool", "false",
            "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
     Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "false",
@@ -386,18 +386,18 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
     func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
       %c0 = arith.constant 0 : index
       %c64 = arith.constant 64 : index
-      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c64] {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c64] {boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
       %c8 = arith.constant 8 : index
       %c64_0 = arith.constant 64 : index
-      %1 = xegpu.create_nd_tdesc %arg0[%c8, %c64_0] {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %2 = xegpu.load_nd %0 {mode = vc, l1_hint = uncached, l2_hint = uncached, l3_hint = uncached} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-      %3 = xegpu.load_nd %1 {mode = vc, l1_hint = uncached, l2_hint = uncached, l3_hint = uncached} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %1 = xegpu.create_nd_tdesc %arg0[%c8, %c64_0] {boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %2 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<uncached>, l3_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %3 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<uncached>, l3_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 	    return
     }
   }];
 
   let constructor = "::imex::createConvertXeTileToXeGPUPass()";
-  let dependentDialects = ["::imex::xegpu::XeGPUDialect",
+  let dependentDialects = ["::mlir::xegpu::XeGPUDialect",
                            "::imex::xetile::XeTileDialect",
                            "::mlir::gpu::GPUDialect",
                            "::mlir::vector::VectorDialect",
@@ -422,8 +422,6 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
     functions.
     }];
   let options = [
-    Option<"enableJointMatrix", "enable-joint-matrix","bool", "false",
-          "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
     Option<"enableGenISAIntrinsic", "enable-genisa-intrinsic","bool", "false",
            "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
     Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "true",
@@ -432,7 +430,7 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
            "Prefer Raw Send API for load/store">
   ];
 
-  let dependentDialects = ["::imex::xegpu::XeGPUDialect",
+  let dependentDialects = ["::mlir::xegpu::XeGPUDialect",
                            "::mlir::vector::VectorDialect",
                             "::mlir::memref::MemRefDialect",
                             "::mlir::LLVM::LLVMDialect",

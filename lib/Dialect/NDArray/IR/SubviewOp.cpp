@@ -30,8 +30,8 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
   assert(staticOffsets.size() == rank && "staticOffsets length mismatch");
   assert(staticSizes.size() == rank && "staticSizes length mismatch");
   assert(staticStrides.size() == rank && "staticStrides length mismatch");
-  return sourceType.cloneWith(staticSizes, sourceType.getElementType())
-      .cast<imex::ndarray::NDArrayType>();
+  return mlir::cast<imex::ndarray::NDArrayType>(
+      sourceType.cloneWith(staticSizes, sourceType.getElementType()));
 }
 
 imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
@@ -62,8 +62,8 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
              .has_value() &&
          "invalid rank reduction");
 
-  return sourceType.cloneWith(resultShape, sourceType.getElementType())
-      .cast<imex::ndarray::NDArrayType>();
+  return mlir::cast<imex::ndarray::NDArrayType>(
+      sourceType.cloneWith(resultShape, sourceType.getElementType()));
 }
 
 imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
@@ -82,7 +82,7 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
 
 /// Returns the type of the base tensor operand.
 ::mlir::ShapedType imex::ndarray::SubviewOp::getSourceType() {
-  return getSource().getType().dyn_cast<::mlir::ShapedType>();
+  return mlir::dyn_cast<::mlir::ShapedType>(getSource().getType());
 }
 
 // Build a SubViewOp with mixed static and dynamic entries and custom result
@@ -99,7 +99,7 @@ void imex::ndarray::SubviewOp::build(
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
-  auto sourceType = source.getType().cast<imex::ndarray::NDArrayType>();
+  auto sourceType = mlir::cast<imex::ndarray::NDArrayType>(source.getType());
   // Structuring implementation this way avoids duplication between builders.
   if (!resultType) {
     resultType = imex::ndarray::SubviewOp::inferResultType(
@@ -211,7 +211,7 @@ void imex::ndarray::ExtractSliceOp::build(
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
-  auto sourceType = source.getType().cast<imex::ndarray::NDArrayType>();
+  auto sourceType = mlir::cast<imex::ndarray::NDArrayType>(source.getType());
   // Structuring implementation this way avoids duplication between builders.
   if (!resultType) {
     resultType = imex::ndarray::SubviewOp::inferResultType(
@@ -333,10 +333,10 @@ mlir::LogicalResult imex::ndarray::SubviewOp::reifyResultShapes(
   for (const auto &size : enumerate(mixedSizes)) {
     if (droppedDims.test(size.index()))
       continue;
-    if (auto attr = size.value().dyn_cast<mlir::Attribute>()) {
+    if (auto attr = mlir::dyn_cast<mlir::Attribute>(size.value())) {
       reifiedReturnShapes[0].push_back(
           builder.createOrFold<mlir::arith::ConstantIndexOp>(
-              loc, attr.cast<mlir::IntegerAttr>().getInt()));
+              loc, mlir::cast<mlir::IntegerAttr>(attr).getInt()));
       continue;
     }
     reifiedReturnShapes[0].push_back(size.value().get<mlir::Value>());
@@ -457,7 +457,8 @@ public:
       return mlir::failure();
     }
 
-    size_t rank = src.getType().cast<::imex::ndarray::NDArrayType>().getRank();
+    size_t rank =
+        mlir::cast<::imex::ndarray::NDArrayType>(src.getType()).getRank();
     auto myOffs = op.getStaticOffsets();
     auto mySizes = op.getStaticSizes();
     auto myStrides = op.getStaticStrides();

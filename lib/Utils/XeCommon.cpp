@@ -22,7 +22,6 @@
 #include "imex/Utils/XeCommon.h"
 
 namespace imex {
-
 int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
   for (auto [i, value] : llvm::enumerate(op->getOperands())) {
     if (operand == value)
@@ -132,44 +131,44 @@ unsigned encodeDataum(mlir::Type type) {
   }
 }
 
-unsigned encodeOpcode(xegpu::AtomicRMWKind kind) {
+unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind) {
   unsigned encode = 0;
   switch (kind) {
-  case xegpu::AtomicRMWKind::addf:
+  case mlir::arith::AtomicRMWKind::addf:
     encode = 19;
     break;
-  case xegpu::AtomicRMWKind::addi:
+  case mlir::arith::AtomicRMWKind::addi:
     encode = 12;
     break;
-  case xegpu::AtomicRMWKind::assign:
+  case mlir::arith::AtomicRMWKind::assign:
     encode = 10;
     break;
-  case xegpu::AtomicRMWKind::maxf:
-    encode = 22;
-    break;
-  case xegpu::AtomicRMWKind::maxs:
+  // case mlir::arith::AtomicRMWKind::maxf:
+  //   encode = 22;
+  //   break;
+  case mlir::arith::AtomicRMWKind::maxs:
     encode = 15;
     break;
-  case xegpu::AtomicRMWKind::maxu:
+  case mlir::arith::AtomicRMWKind::maxu:
     encode = 17;
     break;
-  case xegpu::AtomicRMWKind::minf:
-    encode = 21;
-    break;
-  case xegpu::AtomicRMWKind::mins:
+  // case mlir::arith::AtomicRMWKind::minf:
+  //   encode = 21;
+  //   break;
+  case mlir::arith::AtomicRMWKind::mins:
     encode = 14;
     break;
-  case xegpu::AtomicRMWKind::minu:
+  case mlir::arith::AtomicRMWKind::minu:
     encode = 16;
     break;
-  case xegpu::AtomicRMWKind::ori:
+  case mlir::arith::AtomicRMWKind::ori:
     encode = 25;
     break;
-  case xegpu::AtomicRMWKind::andi:
+  case mlir::arith::AtomicRMWKind::andi:
     encode = 24;
     break;
-  case xegpu::AtomicRMWKind::mulf:
-  case xegpu::AtomicRMWKind::muli:
+  case mlir::arith::AtomicRMWKind::mulf:
+  case mlir::arith::AtomicRMWKind::muli:
     assert(0 && "Atomic operation not supported!");
     break;
   default:

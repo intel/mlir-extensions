@@ -132,7 +132,7 @@ struct ChainedNDArrayCast
       return mlir::failure();
 
     auto sourcePTType =
-        op.getSource().getType().dyn_cast<imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<imex::ndarray::NDArrayType>(op.getSource().getType());
     auto resultPTType = sourcePTType.cloneWith(resultType.getShape(),
                                                resultType.getElementType());
     ;
@@ -164,14 +164,14 @@ public:
     };
 
     auto src = op.getInput();
-    auto srcNDTyp = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcNDTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto defOp = src.getDefiningOp<::imex::ndarray::CastOp>();
     if (!srcNDTyp || srcNDTyp.hasStaticShape() || !defOp) {
       return mlir::failure();
     }
     auto defOpSrc = defOp.getSource();
     auto defSrcNDTyp =
-        defOpSrc.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(defOpSrc.getType());
     if (!defSrcNDTyp || !defSrcNDTyp.hasStaticShape()) {
       return mlir::failure();
     }
@@ -193,9 +193,9 @@ public:
                   ::mlir::PatternRewriter &rewriter) const override {
 
     auto src = op.getInput();
-    auto srcNDTyp = src.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcNDTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
     auto resNDTyp =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     if (!(srcNDTyp && resNDTyp && srcNDTyp.hasStaticShape() &&
           !resNDTyp.hasStaticShape())) {
       return mlir::failure();

@@ -15,7 +15,6 @@
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h"
 #include "imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h"
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
 
@@ -35,6 +34,7 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVTypes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Matchers.h>
 #include <mlir/Support/LLVM.h>
@@ -211,8 +211,6 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::RewritePatternSet patterns(context);
     mlir::SPIRVConversionOptions options;
     options.use64bitIndex = true;
-    // FIXME: activate fast math per operator basis.
-    options.enableFastMathMode = true;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
 
@@ -270,88 +268,49 @@ void GPUXToSPIRVPass::runOnOperation() {
     for (auto eraseOp : eraseOps) {
       eraseOp->erase();
     }
-    target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
+    target->addIllegalDialect<mlir::xegpu::XeGPUDialect>();
     // Only one of the following options should be enabled.
-    if ((this->enableVCIntrinsic && this->enableGenISAIntrinsic) ||
-        (this->enableVCIntrinsic && this->enableJointMatrix) ||
-        (this->enableGenISAIntrinsic && this->enableJointMatrix))
+    if (this->enableVCIntrinsic && this->enableGenISAIntrinsic)
       return signalPassFailure();
-    if (this->enableJointMatrix) {
-      // Tensor descriptor conversion pattern for SIMT JointMatrix
-      typeConverter.addConversion(
-          [&](xegpu::TensorDescType type) -> ::mlir::spirv::StructType {
-            llvm::SmallVector<::mlir::Type, 4> memberTypes;
-            auto i64Type = ::mlir::IntegerType::get(context, 64);
-            // Default storage class is spirv::StorageClass::CrossWorkgroup
-            auto spirvStorageClass =
-                ::mlir::spirv::StorageClass::CrossWorkgroup;
-            if (type.getMemoryScope() == xegpu::MemoryScope::SLM)
-              spirvStorageClass = ::mlir::spirv::StorageClass::Workgroup;
-            auto baseAddressType = ::mlir::spirv::PointerType::get(
-                type.getElementType(), spirvStorageClass);
-            memberTypes.push_back(baseAddressType);
-            memberTypes.push_back(i64Type);
 
-            for (int i = 0; i < type.getRank(); i++) {
-              memberTypes.push_back(i64Type);
-            }
-            return ::mlir::spirv::StructType::get(memberTypes);
-          });
-      typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
-        unsigned rank = type.getRank();
-        auto elemType = type.getElementType();
-        if (rank < 1)
-          return type;
-        else {
-          unsigned sum = 1;
-          for (unsigned i = 0; i < rank; i++) {
-            sum *= type.getShape()[i];
-          }
-          if (llvm::isa<mlir::IndexType>(elemType))
-            elemType = ::mlir::IntegerType::get(context, 64);
-          return ::mlir::VectorType::get(sum, elemType);
-        }
-      });
-    } else {
-      typeConverter.addConversion(
-          [&](xegpu::TensorDescType type) -> ::mlir::Type {
-            auto i32Type = ::mlir::IntegerType::get(context, 32);
-            return ::mlir::VectorType::get(8, i32Type);
-          });
-      typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
-        // TODO: it looks like needs some improvement for matching upstream
-        // passes
-        unsigned rank = type.getRank();
-        auto elemType = type.getElementType();
+    typeConverter.addConversion(
+        [&](mlir::xegpu::TensorDescType type) -> ::mlir::Type {
+          auto i32Type = ::mlir::IntegerType::get(context, 32);
+          return ::mlir::VectorType::get(8, i32Type);
+        });
+    typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
+      // TODO: it looks like needs some improvement for matching upstream
+      // passes
+      unsigned rank = type.getRank();
+      auto elemType = type.getElementType();
 
-        if (llvm::isa<mlir::IndexType>(elemType))
-          elemType = mlir::IntegerType::get(context, 64);
+      if (llvm::isa<mlir::IndexType>(elemType))
+        elemType = mlir::IntegerType::get(context, 64);
 
-        auto scalarType =
-            llvm::dyn_cast_or_null<mlir::spirv::ScalarType>(elemType);
-        if (!scalarType) {
-          llvm::dbgs() << type
-                       << " illegal: cannot convert non-scalar element type\n";
-          return nullptr;
-        }
+      auto scalarType =
+          llvm::dyn_cast_or_null<mlir::spirv::ScalarType>(elemType);
+      if (!scalarType) {
+        llvm::dbgs() << type
+                     << " illegal: cannot convert non-scalar element type\n";
+        return nullptr;
+      }
 
-        if (rank < 1 || type.getNumElements() == 1)
-          return elemType;
+      if (rank < 1 || type.getNumElements() == 1)
+        return elemType;
 
-        unsigned sum = 1;
-        for (unsigned i = 0; i < rank; i++) {
-          sum *= type.getShape()[i];
-        }
+      unsigned sum = 1;
+      for (unsigned i = 0; i < rank; i++) {
+        sum *= type.getShape()[i];
+      }
 
-        return ::mlir::VectorType::get(sum, elemType);
-      });
+      return ::mlir::VectorType::get(sum, elemType);
+    });
 
-      typeConverter.addConversion(
-          [&](xegpu::NbarrierType type) -> ::mlir::Type {
-            auto i32Type = ::mlir::IntegerType::get(context, 32);
-            return mlir::VectorType::get(8, i32Type);
-          });
-    }
+    typeConverter.addConversion(
+        [&](mlir::xegpu::NbarrierType type) -> ::mlir::Type {
+          auto i32Type = ::mlir::IntegerType::get(context, 32);
+          return mlir::VectorType::get(8, i32Type);
+        });
 
     // SPIR-V elementwise arith/math ops require special handling if the operate
     // on large vectors. We dynamically legalize these ops based on the vector
@@ -384,8 +343,6 @@ void GPUXToSPIRVPass::runOnOperation() {
 
     if (this->enableVCIntrinsic)
       imex::populateXeGPUToVCIntrinsicsPatterns(typeConverter, patterns);
-    else if (this->enableJointMatrix)
-      imex::populateXeGPUToJointMatrixPatterns(typeConverter, patterns);
     else if (this->enableGenISAIntrinsic)
       imex::populateXeGPUToGenISAPatterns(typeConverter, patterns);
     else

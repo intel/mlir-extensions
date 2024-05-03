@@ -1,7 +1,7 @@
-From ab730702ec16bceff41621360172197a73413021 Mon Sep 17 00:00:00 2001
+From 1994f9d400c5d768636a89ecf0f78b83431ce609 Mon Sep 17 00:00:00 2001
 From: Md Abdullah Shahneous Bari <md.abdullah.shahneous.bari@intel.com>
-Date: Mon, 24 Jul 2023 18:25:05 +0000
-Subject: [PATCH 4/6] Add serialization and de-serialization support for
+Date: Fri, 26 Apr 2024 20:33:41 +0000
+Subject: [PATCH 4/7] Add serialization and de-serialization support for
  several decorations.
 
 Added decorations:
@@ -18,10 +18,10 @@ Added decorations:
  2 files changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index ba3ecc5344bc..072672b106f3 100644
+index cfe3121bbe95..bc0ca11f4e16 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -250,8 +250,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -251,8 +251,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
          symbol, FPFastMathModeAttr::get(opBuilder.getContext(),
                                          static_cast<FPFastMathMode>(words[2])));
      break;
@@ -32,10 +32,10 @@ index ba3ecc5344bc..072672b106f3 100644
      if (words.size() != 3) {
        return emitError(unknownLoc, "OpDecorate with ")
               << decorationName << " needs a single integer literal";
-@@ -310,6 +311,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   case spirv::Decoration::RelaxedPrecision:
+@@ -312,6 +313,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::Restrict:
    case spirv::Decoration::RestrictPointer:
+   case spirv::Decoration::NoContraction:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
@@ -43,7 +43,7 @@ index ba3ecc5344bc..072672b106f3 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -320,6 +325,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -322,6 +327,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      // it is needed for many validation rules.
      decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
      break;
@@ -52,10 +52,10 @@ index ba3ecc5344bc..072672b106f3 100644
    case spirv::Decoration::SpecId:
      if (words.size() != 3) {
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 518facc41e28..9830a0c818e9 100644
+index a7d195d7fcb0..34427458d6c1 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -239,8 +239,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -243,8 +243,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
      }
      return emitError(loc, "expected FPFastMathModeAttr attribute for ")
             << stringifyDecoration(decoration);
@@ -66,10 +66,10 @@ index 518facc41e28..9830a0c818e9 100644
    case spirv::Decoration::Location:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -273,6 +275,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
-   case spirv::Decoration::RelaxedPrecision:
+@@ -278,6 +280,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::Restrict:
    case spirv::Decoration::RestrictPointer:
+   case spirv::Decoration::NoContraction:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:

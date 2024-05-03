@@ -102,7 +102,7 @@ inline ::mlir::Value createDType(::mlir::Location &loc,
 template <typename T = ::imex::ValVec>
 auto createShapeOf(::mlir::Location loc, ::mlir::OpBuilder &builder,
                    ::mlir::Value lPTnsr) {
-  auto arType = lPTnsr.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+  auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lPTnsr.getType());
   assert(arType);
   auto rank = arType.getRank();
   T dims;
@@ -118,7 +118,7 @@ auto createShapeOf(::mlir::Location loc, ::mlir::OpBuilder &builder,
 // convert an unranked memref from a NDArray
 inline ::mlir::Value mkURMemRef(::mlir::Location loc,
                                 ::mlir::OpBuilder &builder, ::mlir::Value src) {
-  auto srcArType = src.getType().cast<::imex::ndarray::NDArrayType>();
+  auto srcArType = mlir::cast<::imex::ndarray::NDArrayType>(src.getType());
   auto bMRTyp = srcArType.getMemRefType();
   auto bTensor = builder.create<::imex::ndarray::ToTensorOp>(loc, src);
   auto bMRef = createToMemRef(loc, builder, bTensor, bMRTyp);
