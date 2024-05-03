@@ -378,6 +378,71 @@ struct VectorizableOpPattern
   }
 };
 
+struct VectorMultiDimReductionOpPattern
+    : public XeTileConversion<mlir::vector::MultiDimReductionOp,
+                              TileUsageAnalysis> {
+  using XeTileConversion<mlir::vector::MultiDimReductionOp,
+                         TileUsageAnalysis>::XeTileConversion;
+
+  VectorMultiDimReductionOpPattern(mlir::MLIRContext *context,
+                                   imex::XeTypeConverter &converter,
+                                   TileUsageAnalysis &analysis,
+                                   std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::MultiDimReductionOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto reductionDims = op.getReductionDims();
+    auto srcTy = op.getSource().getType();
+    auto shape = srcTy.getShape();
+
+    if (srcTy.getRank() != 2 || reductionDims.size() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "source type is not 2D vector or reduction dims are not 1");
+
+    auto blkSizes = getInnerBlockSizes<Elementwise>(
+        op, srcTy.getElementType(), shape[0], shape[1], this->uArchInterface);
+
+    if (blkSizes.empty())
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
+
+    // reduction on one dim becomes reduction on two dims after blocking.
+    // For example:
+    // multi_reduction<add>, %e, %a[1]: vector<16x32xf16> to vector<16xf16>
+    // will be transformed to
+    // multi_reduction<add>, %e, %a[1, 3]: vector<16x2x1x16xf16> to
+    // vector<16x1xf16>
+    auto dim = reductionDims[0].cast<mlir::IntegerAttr>().getInt();
+    auto newReductionDims = rewriter.getI64ArrayAttr({dim, dim + 2});
+
+    auto newDestShape =
+        (dim == 0)
+            ? llvm::SmallVector<int64_t>({shape[1] / blkSizes[1], blkSizes[1]})
+            : llvm::SmallVector<int64_t>({shape[0] / blkSizes[0], blkSizes[0]});
+    auto newDestType =
+        mlir::VectorType::get(newDestShape, srcTy.getElementType());
+
+    auto newSource =
+        addPackOp(adaptor.getSource(), {blkSizes[0], blkSizes[1]}, rewriter);
+    auto newAcc = rewriter.create<mlir::vector::ShapeCastOp>(loc, newDestType,
+                                                             adaptor.getAcc());
+    auto newOp = rewriter.create<mlir::vector::MultiDimReductionOp>(
+        loc, newDestType, op.getKindAttr(), newSource, newAcc,
+        newReductionDims);
+    auto castOp = rewriter.create<mlir::vector::ShapeCastOp>(
+        loc, op.getDest().getType(), newOp);
+    rewriter.replaceOp(op, castOp.getResult());
+
+    return mlir::success();
+  }
+};
+
 // It rewrites the SCF forOp, it mainly updates the arguments of its
 // region block. unpack ops are added for VectorType operands if needed.
 struct SCFForOpPattern
@@ -682,6 +747,15 @@ struct StoreTileOpPattern
                                                        adaptor.getTile());
       return mlir::success();
     }
+
+    // TODO: Blocking is not applied on shapecast yet, so it needs special
+    // attention.
+    if (innerBlocks && value.getDefiningOp<mlir::vector::ShapeCastOp>()) {
+      value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
+      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
+                                                       adaptor.getTile());
+      return mlir::success();
+    }
     return mlir::failure();
   }
 };
@@ -808,11 +882,11 @@ struct UpdateTileOffsetOpPattern
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
-  patterns
-      .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
-              SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
-              StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern>(
-          patterns.getContext(), converter, analysis, ptruArch);
+  patterns.insert<ArithConstantOpPattern, VectorizableOpPattern,
+                  SCFForOpPattern, SCFYieldOpPattern, InitTileOpPattern,
+                  LoadTileOpPattern, StoreTileOpPattern, TileMMAOpPattern,
+                  UpdateTileOffsetOpPattern, VectorMultiDimReductionOpPattern>(
+      patterns.getContext(), converter, analysis, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector

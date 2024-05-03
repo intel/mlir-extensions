@@ -17,6 +17,267 @@
 
 namespace imex {
 
+using VectorTypedValue = mlir::TypedValue<mlir::VectorType>;
+using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
+                                mlir::PatternRewriter &);
+
+// see its description in XeTileOpConversion.cpp
+extern VectorTypedValue concat(mlir::Value v1, mlir::Value v2,
+                               mlir::Location loc,
+                               mlir::PatternRewriter &rewriter);
+
+// see its description in XeTileOpConversion.cpp
+extern mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
+                                       std::function<funcTy> transFunc,
+                                       mlir::Location loc,
+                                       XeGPUOneToNPatterRewriter &rewriter);
+
+static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
+                               mlir::Value lhs, mlir::Value rhs,
+                               mlir::Type elemTy, mlir::Location &loc,
+                               XeGPUOneToNPatterRewriter &rewriter) {
+
+  // ADD and MUL are defined for both Integers and Floats,
+  // need to generate code based on element data type.
+  if (kind == mlir::vector::CombiningKind::ADD) {
+    if (elemTy.isa<mlir::FloatType>()) {
+      return rewriter.create<mlir::arith::AddFOp>(loc, lhs, rhs);
+    }
+    if (elemTy.isa<mlir::IntegerType>()) {
+      return rewriter.create<mlir::arith::AddIOp>(loc, lhs, rhs);
+    }
+  }
+
+  if (kind == mlir::vector::CombiningKind::MUL) {
+    if (elemTy.isa<mlir::FloatType>()) {
+      return rewriter.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+    }
+    if (elemTy.isa<mlir::IntegerType>()) {
+      return rewriter.create<mlir::arith::MulIOp>(loc, lhs, rhs);
+    }
+  }
+
+  switch (kind) {
+  // the following are for ints only
+  case mlir::vector::CombiningKind::MINUI:
+    return rewriter.create<mlir::arith::MinUIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MINSI:
+    return rewriter.create<mlir::arith::MinSIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MAXUI:
+    return rewriter.create<mlir::arith::MaxUIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MAXSI:
+    return rewriter.create<mlir::arith::MaxSIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::AND:
+    return rewriter.create<mlir::arith::AndIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::OR:
+    return rewriter.create<mlir::arith::OrIOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::XOR:
+    return rewriter.create<mlir::arith::XOrIOp>(loc, lhs, rhs);
+  // the following are for floats only
+  case mlir::vector::CombiningKind::MINNUMF:
+    return rewriter.create<mlir::arith::MinNumFOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MAXNUMF:
+    return rewriter.create<mlir::arith::MaxNumFOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MINIMUMF:
+    return rewriter.create<mlir::arith::MinimumFOp>(loc, lhs, rhs);
+  case mlir::vector::CombiningKind::MAXIMUMF:
+    return rewriter.create<mlir::arith::MaximumFOp>(loc, lhs, rhs);
+  default:
+    llvm_unreachable("Unexpected CombiningKind.");
+    return lhs;
+  }
+}
+
+llvm::SmallVector<mlir::Value>
+lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
+                    mlir::vector::CombiningKind kind, mlir::Location loc,
+                    mlir::Type elemTy, XeGPUOneToNPatterRewriter &rewriter) {
+  assert(shape.size() == 4 && "shape should be 4D.");
+  llvm::SmallVector<mlir::Value> intermediates;
+  for (auto j = 0; j < shape[1]; j++) {
+    auto combiningVal = sources[j];
+    for (auto i = 1; i < shape[0]; i++) {
+      combiningVal = createBinOp(kind, combiningVal, sources[i * shape[1] + j],
+                                 elemTy, loc, rewriter);
+    }
+    {
+      // TODO: After blocking If the first dimension of the small block is not
+      // 1, the combiningVal is now in shape as, e.g., vector<4x16xf16> instead
+      // of vector<1x16xf16> then more reductions are needed in dim0, to make it
+      // as vector<1x16xf16>. Currently, this is not implemented, since we are
+      // now restricted blocking pass to set it as 1 now. It may cannot achieve
+      // peak performance in some cases.
+      assert(shape[2] == 1 &&
+             "more reductions is needed in dim0, but not supported.");
+    }
+    intermediates.push_back(combiningVal);
+  }
+  return intermediates;
+}
+
+// expected input is type of vector<ixjx1xnxf16>, where i and n is power of 2
+// and the third dim is always 1, which should be set by the blocking pass.
+llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
+    mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
+    mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
+    XeGPUOneToNPatterRewriter &rewriter) {
+
+  assert(shape.size() == 4 && "shape should be 4D.");
+
+  auto isPowerOfTwo = [](auto n) { return (n & (n - 1)) == 0; };
+
+  // make sure the dim0 of the block is 1 in blocking pass
+  // different from outer reduction, this is strictly required
+  // for this method.
+  assert(shape[2] == 1 && "dim0 of the block has to be 1.");
+  assert(isPowerOfTwo(shape[0]) && isPowerOfTwo(shape[3]) &&
+         "sizes of dim1 and dim4 should be power of 2.");
+
+  auto genShuffleMasks = [&](int blkSize, int vecSize) {
+    llvm::SmallVector<int64_t> mask1;
+    llvm::SmallVector<int64_t> mask2;
+    auto s1 = 0, s2 = blkSize;
+    for (auto i = 0; i < vecSize; i++) {
+      if (i && i % blkSize == 0) {
+        s1 += blkSize;
+        s2 += blkSize;
+      }
+
+      mask1.push_back(s1);
+      mask2.push_back(s2);
+      s1++;
+      s2++;
+    }
+    return std::make_pair(mask1, mask2);
+  };
+
+  // Stage 1: vector<ixjx1xnxf16> equals to a grid of ixj of vector<1xnxf16>
+  // after lowering to xegpu. This stage performs j-1 reduction operations on
+  // j dim of the grid, the result is a vector of vector<mxnxf16> with size i.
+  llvm::SmallVector<mlir::Value> intermediates(shape[0]);
+  for (auto i = 0; i < shape[0]; i++) {
+    auto combiningVal = sources[i * shape[1]];
+    for (auto j = 1; j < shape[1]; j++) {
+      combiningVal = createBinOp(kind, combiningVal, sources[i * shape[1] + j],
+                                 elemTy, loc, rewriter);
+    }
+    // cast the result of e.g., vector<1x16xf16> into vector<16xf16>
+    auto targetTy = mlir::VectorType::get({shape[3]}, elemTy);
+    combiningVal =
+        rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy, combiningVal);
+    intermediates[i] = combiningVal;
+  }
+
+  // Stage 2: doing intra vector reduction with shuffle Ops.
+  // Each vector in the result of stage 1 can be viewed as a row
+  // each row has e.g., 32 elements:
+  // v1 = [a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ... a31]
+  // v2 = [b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ... b31]
+  // ...
+  // vn = [p0 p1 p2 p3 p4 p5 p6 p7 p8 p9 ... p31]
+  // it will repeately doing shuffle between two consecutive vectors
+  // v1 and v2, v3 and v4, ..., vn-1 and vn with a block size. Such
+  // that we can get two new vectors. The block size is typically
+  // starts with half of the vector size. For example, for v1 and v2,
+  // it is 16, and we can get:
+  //    nv1 = [a0, .., a15, b0, .., b15]
+  //    nv2 = [a16, .., a31, b16, .., b31]
+  // and we then performs nv1 + nv2 (if reduction op is add)
+  // such that the left half of the vector contains the partial reduction
+  // of v1, and the right half contains the partial reduction of v2.
+  // and the the number of vectors is reduced by half after one iteration.
+  // and we reduce the block size by half, and repeat the process until
+  // the block size is 1.
+  // The intermediate result of this stage is an array of vectors with
+  // type, e.g., vector<nxf16>, array size is `i/n`. And these vectors
+  // will be merged into a single vector with type vector<ixf16>.
+  auto blkSize = shape[3] / 2;
+  while (blkSize) {
+    auto workList = intermediates;
+    intermediates.clear();
+    assert(workList.size() % 2 == 0 && "The size should be divisible by 2.");
+    auto masks = genShuffleMasks(blkSize, shape[3]);
+    for (size_t i = 0; i < workList.size(); i += 2) {
+      auto v1 = workList[i];
+      auto v2 = workList[i + 1];
+      auto shuffleOp1 =
+          rewriter.create<mlir::vector::ShuffleOp>(loc, v1, v2, masks.first);
+      auto shuffleOp2 =
+          rewriter.create<mlir::vector::ShuffleOp>(loc, v1, v2, masks.second);
+      auto reductionVal =
+          createBinOp(kind, shuffleOp1, shuffleOp2, elemTy, loc, rewriter);
+      intermediates.push_back(reductionVal);
+    }
+    blkSize /= 2;
+  }
+  return intermediates;
+}
+
+class SgVectorMultiDimReductionOpPattern
+    : public SgXeTileToXeGPUConversion<mlir::vector::MultiDimReductionOp> {
+  using SgXeTileToXeGPUConversion<
+      mlir::vector::MultiDimReductionOp>::SgXeTileToXeGPUConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::MultiDimReductionOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto srcTy = op.getSource().getType();
+    auto elemTy = srcTy.getElementType();
+    auto dims = op.getReductionDims();
+    // its input should be a 4D vector, and has 2 reduction dims,
+    // otherwise run the blocking pass first.
+    if (dims.size() != 2 || srcTy.getRank() != 4)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto shape = srcTy.getShape();
+    auto sources = adaptor.getSource();
+
+    rewriter.setInsertionPoint(op);
+    // doing reduction on outer dimension
+    if (mlir::isConstantIntValue(dims[0], 0) &&
+        mlir::isConstantIntValue(dims[1], 2)) {
+      auto intermediates = lowerOuterReduction(sources, shape, op.getKind(),
+                                               loc, elemTy, rewriter);
+      {
+        // TODO: need a better way to represent the result (align with
+        // unpack/pack logic). currently we just shuffle them and cast it to the
+        // type/shape in xetile program.
+        auto reducedVal =
+            mergeVectorsWrapper(intermediates, concat, loc, rewriter);
+        auto targetTy = mlir::VectorType::get({shape[1], shape[3]}, elemTy);
+        auto newOp = rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy,
+                                                                reducedVal);
+        rewriter.replaceOp(op, newOp);
+      }
+      return mlir::success();
+    }
+
+    // doing reduction on inner dimension
+    if (mlir::isConstantIntValue(dims[0], 1) &&
+        mlir::isConstantIntValue(dims[1], 3)) {
+      auto intermediates = lowerInnerReductionWithIntraVectorShuffles(
+          sources, shape, op.getKind(), loc, elemTy, rewriter);
+
+      { // TODO: need a better way to represent the result (align with
+        // unpack/pack logic).
+        // currently we just shuffle them and cast it to the type/shape in
+        // xetile program.
+        auto reductionVal =
+            mergeVectorsWrapper(intermediates, concat, loc, rewriter);
+        auto targetTy = mlir::VectorType::get({shape[0], shape[2]}, elemTy);
+        auto newOp = rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy,
+                                                                reductionVal);
+        rewriter.replaceOp(op, newOp);
+      }
+      return mlir::success();
+    }
+
+    // something is wrong
+    return op.emitError("unsupported reduction operation.");
+  }
+};
+
 class SgArithConstantOpPattern
     : public SgXeTileToXeGPUConversion<mlir::arith::ConstantOp> {
   using SgXeTileToXeGPUConversion<
@@ -26,8 +287,7 @@ class SgArithConstantOpPattern
   matchAndRewrite(mlir::arith::ConstantOp op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto value =
-        llvm::dyn_cast_if_present<mlir::DenseElementsAttr>(op.getValue());
+    auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
 
     // We only interesting 4D vectors
     if (!value || value.getType().getRank() != 4)
@@ -38,8 +298,8 @@ class SgArithConstantOpPattern
         value.value_end<mlir::Attribute>());
 
     auto shape = value.getType().getShape();
-    auto vecTy =
-        mlir::VectorType::get({shape[2], shape[3]}, value.getElementType());
+    auto elemTy = value.getElementType();
+    auto vecTy = mlir::VectorType::get({shape[2], shape[3]}, elemTy);
 
     // slice a block of (shape[2], shape[3]) from elems.
     auto slice = [&](int i, int j) {
@@ -83,8 +343,8 @@ bool isLegalArithOp(mlir::Operation *op) {
 void populateArithOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                        mlir::RewritePatternSet &patterns,
                                        TileUsageAnalysis &analysis) {
-  patterns.add<SgArithConstantOpPattern>(patterns.getContext(), converter,
-                                         analysis);
+  patterns.add<SgArithConstantOpPattern, SgVectorMultiDimReductionOpPattern>(
+      patterns.getContext(), converter, analysis);
 }
 
 } // namespace imex
