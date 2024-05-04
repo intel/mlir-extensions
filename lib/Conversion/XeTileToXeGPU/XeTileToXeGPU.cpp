@@ -46,7 +46,7 @@ public:
     addLegalOp<mlir::vector::ShuffleOp>();
     addLegalOp<mlir::vector::ShapeCastOp>();
 
-    addLegalDialect<imex::xegpu::XeGPUDialect>();
+    addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
     addDynamicallyLegalDialect<mlir::arith::ArithDialect>(
         [&](mlir::Operation *op) { return isLegalArithOp(op); });
@@ -54,25 +54,25 @@ public:
     addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
         [&](mlir::Operation *op) { return isLegalSCFOp(op); });
 
-    addDynamicallyLegalOp<imex::xegpu::DpasOp>(
+    addDynamicallyLegalOp<mlir::xegpu::DpasOp>(
         [&](mlir::Operation *op) -> bool {
           return (uArchInterface &&
                   mlir::succeeded(uArchInterface->isLegalDpasOp(op)));
         });
 
-    addDynamicallyLegalOp<imex::xegpu::LoadNDOp>(
+    addDynamicallyLegalOp<mlir::xegpu::LoadNdOp>(
         [&](mlir::Operation *op) -> bool {
           return (uArchInterface &&
                   mlir::succeeded(uArchInterface->isLegalLoad2dOp(op)));
         });
 
-    addDynamicallyLegalOp<imex::xegpu::StoreNDOp>(
+    addDynamicallyLegalOp<mlir::xegpu::StoreNdOp>(
         [&](mlir::Operation *op) -> bool {
           return (uArchInterface &&
                   mlir::succeeded(uArchInterface->isLegalStore2dOp(op)));
         });
 
-    addDynamicallyLegalOp<imex::xegpu::PrefetchNDOp>(
+    addDynamicallyLegalOp<mlir::xegpu::PrefetchNdOp>(
         [&](mlir::Operation *op) -> bool {
           return (uArchInterface &&
                   mlir::succeeded(uArchInterface->isLegalPrefetch2dOp(op)));

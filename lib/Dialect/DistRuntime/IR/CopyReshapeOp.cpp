@@ -42,7 +42,8 @@ public:
 
     // check input type
     auto nlArray = op.getNlArray();
-    auto nlType = nlArray.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto nlType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(nlArray.getType());
     if (!nlType) {
       return ::mlir::failure();
     }

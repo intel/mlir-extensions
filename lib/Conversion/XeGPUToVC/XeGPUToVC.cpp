@@ -86,8 +86,8 @@ static func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
 }
 
 struct CreateNdDescPattern
-    : public OpConversionPattern<::imex::xegpu::CreateNdDescOp> {
-  using OpConversionPattern<::imex::xegpu::CreateNdDescOp>::OpConversionPattern;
+    : public OpConversionPattern<::mlir::xegpu::CreateNdDescOp> {
+  using OpConversionPattern<::mlir::xegpu::CreateNdDescOp>::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(xegpu::CreateNdDescOp op, OpAdaptor adaptor,
@@ -155,13 +155,13 @@ struct CreateNdDescPattern
         // compute surface width
         auto bytesPerElem = createIntConstant(bitWidth / 8);
         auto one = createIntConstant(1);
-        surfaceW = rewriter.create<arith::ExtUIOp>(
-            loc, i32Type, adaptor.getDynamicShape()[1]);
+        surfaceW = rewriter.create<arith::ExtUIOp>(loc, i32Type,
+                                                   adaptor.getShape()[1]);
         surfaceW = rewriter.create<arith::MulIOp>(loc, surfaceW, bytesPerElem);
         surfaceW = rewriter.create<arith::SubIOp>(loc, surfaceW, one);
         // compute surface height
-        surfaceH = rewriter.create<arith::ExtUIOp>(
-            loc, i32Type, adaptor.getDynamicShape()[0]);
+        surfaceH = rewriter.create<arith::ExtUIOp>(loc, i32Type,
+                                                   adaptor.getShape()[0]);
         surfaceH = rewriter.create<arith::SubIOp>(loc, surfaceH, one);
         // fixme: pitch = width for now
         surfaceP = surfaceW;
@@ -172,7 +172,7 @@ struct CreateNdDescPattern
       payLoad = rewriter.create<vector::InsertOp>(loc, surfaceP, payLoad, 4);
       auto createOffset = [&](unsigned idx) -> Value {
         Value val;
-        OpFoldResult ofr = op.getOffsets()[idx];
+        OpFoldResult ofr = op.getMixedOffsets()[idx];
         auto v = llvm::dyn_cast_if_present<Value>(ofr);
         if (v) {
           val = ofr.get<Value>();
@@ -188,7 +188,7 @@ struct CreateNdDescPattern
       auto offsetY = createOffset(0);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetX, payLoad, 5);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetY, payLoad, 6);
-      int array_length = op.getTensorDescType().getArrayLength();
+      int array_length = op.getType().getArrayLength();
       unsigned blockVal = (array_length - 1) << 16;
       blockVal |= ((blockHeight - 1) << 8) | (blockWidth - 1);
       auto blockInfo = createIntConstant(blockVal);
@@ -200,12 +200,12 @@ struct CreateNdDescPattern
 };
 
 class UpdateNDOffsetToVCPattern
-    : public OpConversionPattern<::imex::xegpu::UpdateNDOffsetOp> {
+    : public OpConversionPattern<::mlir::xegpu::UpdateNdOffsetOp> {
 public:
   using OpConversionPattern<
-      ::imex::xegpu::UpdateNDOffsetOp>::OpConversionPattern;
+      ::mlir::xegpu::UpdateNdOffsetOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(imex::xegpu::UpdateNDOffsetOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::xegpu::UpdateNdOffsetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto loc = op.getLoc();
@@ -239,11 +239,11 @@ public:
 };
 
 class CreateDescToVCPattern
-    : public OpConversionPattern<::imex::xegpu::CreateDescOp> {
+    : public OpConversionPattern<::mlir::xegpu::CreateDescOp> {
 public:
-  using OpConversionPattern<::imex::xegpu::CreateDescOp>::OpConversionPattern;
+  using OpConversionPattern<::mlir::xegpu::CreateDescOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(::imex::xegpu::CreateDescOp op, OpAdaptor adaptor,
+  matchAndRewrite(::mlir::xegpu::CreateDescOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto loc = op.getLoc();
@@ -280,8 +280,8 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
     auto loc = op.getLoc();
     ::mlir::VectorType vecType;
     std::string funcName;
-    constexpr bool isLoad = std::is_same_v<OpType, xegpu::LoadNDOp>;
-    constexpr bool isPrefetch = std::is_same_v<OpType, xegpu::PrefetchNDOp>;
+    constexpr bool isLoad = std::is_same_v<OpType, xegpu::LoadNdOp>;
+    constexpr bool isPrefetch = std::is_same_v<OpType, xegpu::PrefetchNdOp>;
     if constexpr (isLoad) {
       vecType = cast<VectorType>(op.getResult().getType());
       funcName = rank == 2 ? "llvm.genx.lsc.load2d.stateless."
@@ -431,8 +431,8 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
     auto rank = tileType.getRank();
     assert(rank <= 2 && "only support 1d/2d load/store/prefetch for now");
     auto loc = op.getLoc();
-    constexpr bool isLoad = std::is_same_v<OpType, xegpu::LoadNDOp>;
-    constexpr bool isPrefetch = std::is_same_v<OpType, xegpu::PrefetchNDOp>;
+    constexpr bool isLoad = std::is_same_v<OpType, xegpu::LoadNdOp>;
+    constexpr bool isPrefetch = std::is_same_v<OpType, xegpu::PrefetchNdOp>;
     auto createIntConstant = [&](Type type, unsigned value) {
       auto attr = rewriter.getIntegerAttr(type, value);
       return rewriter.create<arith::ConstantOp>(loc, type, attr);
@@ -499,7 +499,7 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
     // an architecture feature, and 32 works on PVC.
     // To support other bits, we cannot hardcode
     // with i32Type, and need to generalize the logic.
-    auto loadOp = llvm::dyn_cast<xegpu::LoadNDOp>(op.getOperation());
+    auto loadOp = llvm::dyn_cast<xegpu::LoadNdOp>(op.getOperation());
     if (loadOp && transpose && loadOp.getTransposeBitWidth() == 32) {
       // in raw_send msg set vnni effect to false and update data size of
       // payload item to 32 bits
@@ -599,17 +599,17 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
   }
 };
 
-struct DpasPattern : public OpConversionPattern<::imex::xegpu::DpasOp> {
-  using OpConversionPattern<::imex::xegpu::DpasOp>::OpConversionPattern;
+struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
+  using OpConversionPattern<::mlir::xegpu::DpasOp>::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(xegpu::DpasOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto loc = op.getLoc();
-    auto lhsType = op.getLhs().getType().cast<VectorType>();
-    auto rhsType = op.getRhs().getType().cast<VectorType>();
-    auto resultType = op.getResultType().cast<VectorType>();
+    auto lhsType = mlir::cast<VectorType>(op.getLhs().getType());
+    auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
+    auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
     uint8_t sd = lhsType.getShape()[1];
     auto encodePrecision = [&](Type type) -> uint8_t {
@@ -780,9 +780,9 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
   }
 };
 
-class AtomicToLsc : public OpConversionPattern<::imex::xegpu::AtomicRMWOp> {
+class AtomicToLsc : public OpConversionPattern<::mlir::xegpu::AtomicRMWOp> {
 public:
-  using OpConversionPattern<::imex::xegpu::AtomicRMWOp>::OpConversionPattern;
+  using OpConversionPattern<::mlir::xegpu::AtomicRMWOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(xegpu::AtomicRMWOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -843,8 +843,7 @@ public:
     SmallVector<int64_t, 16> indices(16, 0);
     payLoad = rewriter.create<mlir::vector::ShuffleOp>(
         loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
-    auto createDescOp =
-        op.getTensorDesc().template getDefiningOp<xegpu::CreateDescOp>();
+    auto createDescOp = op.getTensorDesc().getDefiningOp<xegpu::CreateDescOp>();
     auto offsets = rewriter.getRemappedValue(createDescOp.getOffsets());
     payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
     // src
@@ -891,7 +890,7 @@ public:
 //     rewriter.setInsertionPointAfter(func);
 //     rewriter.create<spirv::ExecutionModeOp>(
 //         op.getLoc(), func, spirv::ExecutionMode::NamedBarrierCountINTEL,
-//         op.getNbarrierCount());
+//         op.getNbarrierNum());
 //     rewriter.eraseOp(op);
 //     return success();
 //   }
@@ -916,22 +915,23 @@ static Value createConstantI32(Location loc, PatternRewriter &rewriter,
   rewriter.create<arith::ConstantOp>(loc, rewriter.getI1Type(),                \
                                      rewriter.getBoolAttr(value))
 
-class CreateNbarrierToVCPattern
-    : public OpConversionPattern<::imex::xegpu::CreateNbarrierOp> {
+class InitNbarrierToVCPattern
+    : public OpConversionPattern<::mlir::xegpu::InitNbarrierOp> {
 public:
-  using OpConversionPattern<
-      ::imex::xegpu::CreateNbarrierOp>::OpConversionPattern;
+  using OpConversionPattern<::mlir::xegpu::InitNbarrierOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(xegpu::CreateNbarrierOp op, OpAdaptor adaptor,
+  matchAndRewrite(xegpu::InitNbarrierOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto nbarrier_id = op.getNbarrierId();
-    auto nbarrier_role = op.getNbarrierRole();
-    auto num_producers = op.getNumProducers();
-    auto num_consumers = op.getNumConsumers();
-
     auto i32Type = rewriter.getIntegerType(32);
     auto v8i32Type = mlir::VectorType::get(8, i32Type);
+
+    auto loc = op.getLoc();
+    auto nbarrier_id = op.getNbarrierId();
+
+    // a participant is both a producer or a consumer (0)
+    auto nbarrier_role = rewriter.create<arith::ConstantOp>(
+        loc, i32Type, rewriter.getI32IntegerAttr(0));
+    auto num_participants = zext(i32Type, op.getParticipantThreadNum());
 
     DenseElementsAttr constantData = DenseElementsAttr::get(
         v8i32Type, ArrayRef<int>(std::vector<int>(1, 0)));
@@ -941,15 +941,15 @@ public:
     Value payload = zext(i32Type, nbarrier_id);
 
     Value payload_nbarrier_role =
-        logic_shl(i32Type, zext(i32Type, nbarrier_role), i32_val(14));
+        logic_shl(i32Type, nbarrier_role, i32_val(14));
     payload = bitwise_or(i32Type, payload, payload_nbarrier_role);
 
     Value payload_num_producers =
-        logic_shl(i32Type, i32_val(num_producers), i32_val(16));
+        logic_shl(i32Type, num_participants, i32_val(16));
     payload = bitwise_or(i32Type, payload, payload_num_producers);
 
     Value payload_num_consumers =
-        logic_shl(i32Type, i32_val(num_consumers), i32_val(24));
+        logic_shl(i32Type, num_participants, i32_val(24));
     payload = bitwise_or(i32Type, payload, payload_num_consumers);
 
     nbarrier_src =
@@ -959,16 +959,17 @@ public:
     return success();
   }
 };
+
 class NbarrierArriveToVCPattern
-    : public OpConversionPattern<::imex::xegpu::NbarrierArriveOp> {
+    : public OpConversionPattern<::mlir::xegpu::NbarrierArriveOp> {
 public:
   using OpConversionPattern<
-      ::imex::xegpu::NbarrierArriveOp>::OpConversionPattern;
+      ::mlir::xegpu::NbarrierArriveOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(xegpu::NbarrierArriveOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = adaptor.getPayload();
+    auto payload = adaptor.getNbarrier();
 
     std::string funcName = "llvm.genx.raw.send2.noresult.i1.v8i32";
 
@@ -992,14 +993,14 @@ public:
 };
 
 class NbarrierWaitToVCPattern
-    : public OpConversionPattern<::imex::xegpu::NbarrierWaitOp> {
+    : public OpConversionPattern<::mlir::xegpu::NbarrierWaitOp> {
 public:
-  using OpConversionPattern<::imex::xegpu::NbarrierWaitOp>::OpConversionPattern;
+  using OpConversionPattern<::mlir::xegpu::NbarrierWaitOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(xegpu::NbarrierWaitOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = adaptor.getPayload();
+    auto payload = adaptor.getNbarrier();
 
     auto i8Type = rewriter.getIntegerType(8);
     auto i32Type = rewriter.getIntegerType(32);
@@ -1020,11 +1021,11 @@ public:
 };
 
 class CompilerHintToVCPattern
-    : public OpConversionPattern<::imex::xegpu::CompileHintOp> {
+    : public OpConversionPattern<mlir::xegpu::CompileHintOp> {
 public:
-  using OpConversionPattern<::imex::xegpu::CompileHintOp>::OpConversionPattern;
+  using OpConversionPattern<mlir::xegpu::CompileHintOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(xegpu::CompileHintOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::xegpu::CompileHintOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
 
@@ -1038,46 +1039,60 @@ public:
   }
 };
 
-class MfenceToVCPattern : public OpConversionPattern<::imex::xegpu::MfenceOp> {
+class FenceToVCPattern : public OpConversionPattern<::mlir::xegpu::FenceOp> {
 public:
-  using OpConversionPattern<::imex::xegpu::MfenceOp>::OpConversionPattern;
+  using OpConversionPattern<::mlir::xegpu::FenceOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(xegpu::MfenceOp op, OpAdaptor adaptor,
+  matchAndRewrite(xegpu::FenceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto pred = i1_val(1);
-    auto fence_op_attr = op.getFenceOpAttr().str();
-    auto fence_scope_attr = op.getFenceScopeAttr().str();
-    auto memory_kind_attr = op.getMemoryKindAttr().str();
+    uint8_t fence_op, sfid, fence_scope;
 
-    std::vector<std::string> lscFenceOp{"none",    "evict", "invalidate",
-                                        "discard", "clean", "flushl3"};
-    std::vector<std::string> lscFenceScope{"group", "local",  "tile",  "gpu",
-                                           "gpus",  "system", "sysacq"};
-    std::vector<std::string> lscSFID{"ugm", "ugml", "tgm", "slm"};
+    enum lscFenceOp {
+      NONE = 0,
+      EVICT = 1,
+      INVALIDATE = 2,
+      DISCARD = 3,
+      CLEAN = 4,
+      FLUSHL3 = 5
+    };
+    enum lscFenceScope {
+      GROUP = 0,
+      LOCAL = 1,
+      TILE = 2,
+      GPU = 3,
+      GPUS = 4,
+      SYSTEM = 5,
+      SYSACQ = 6
+    };
+    enum lscSFID { UGM = 0, UGML = 1, TGM = 3, SLM = 4 };
 
-    uint8_t fence_op, fence_scope, sfid;
+    // the design limits the fence_op to NONE
+    fence_op = lscFenceOp::NONE;
 
-    auto it = std::find(lscFenceOp.begin(), lscFenceOp.end(), fence_op_attr);
-    if (it != lscFenceOp.end()) {
-      fence_op = std::distance(lscFenceOp.begin(), it);
-    } else {
-      llvm_unreachable("unsupported value for lsc_fence_op attribute");
-    }
-
-    it =
-        std::find(lscFenceScope.begin(), lscFenceScope.end(), fence_scope_attr);
-    if (it != lscFenceScope.end()) {
-      fence_scope = std::distance(lscFenceScope.begin(), it);
-    } else {
-      llvm_unreachable("unsupported value for lsc_fence_scope attribute");
-    }
-
-    it = std::find(lscSFID.begin(), lscSFID.end(), memory_kind_attr);
-    if (it != lscSFID.end()) {
-      sfid = std::distance(lscSFID.begin(), it);
-    } else {
+    switch (op.getMemoryKind()) {
+    case mlir::xegpu::MemoryScope::Global:
+      sfid = lscSFID::UGM;
+      break;
+    case mlir::xegpu::MemoryScope::SLM:
+      sfid = lscSFID::TGM;
+      break;
+    default:
       llvm_unreachable("unsupported value for memory_kind attribute");
+      break;
+    }
+
+    switch (op.getFenceScope()) {
+    case mlir::xegpu::FenceScope::Workgroup:
+      fence_scope = lscFenceScope::GROUP;
+      break;
+    case mlir::xegpu::FenceScope::GPU:
+      fence_scope = lscFenceScope::GPU;
+      break;
+    default:
+      llvm_unreachable("unsupported value for fence_scope attribute");
+      break;
     }
 
     SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
@@ -1200,7 +1215,7 @@ struct VectorExtractStridedSlice final
     auto sizes = extractOp.getSizes().getValue();
     auto strides = extractOp.getStrides().getValue();
 
-    if (strides[0].cast<IntegerAttr>().getInt() != 1)
+    if (mlir::cast<IntegerAttr>(strides[0]).getInt() != 1)
       return rewriter.notifyMatchFailure(
           extractOp, "Strided slice with stride != 1 is not supported.");
 
@@ -1232,7 +1247,7 @@ struct VectorExtractStridedSlice final
     // get total number of extracted slices
     int64_t nExtractedSlices = 1;
     for (auto size : sizes) {
-      nExtractedSlices *= size.cast<IntegerAttr>().getInt();
+      nExtractedSlices *= mlir::cast<IntegerAttr>(size).getInt();
     }
 
     // compute the strides of the source vector considering first k dimensions
@@ -1247,8 +1262,8 @@ struct VectorExtractStridedSlice final
     SmallVector<int32_t, 4> extractedStrides(k, 1);
     // compute extractedStrides
     for (int i = k - 2; i >= 0; --i) {
-      extractedStrides[i] =
-          extractedStrides[i + 1] * sizes[i + 1].cast<IntegerAttr>().getInt();
+      extractedStrides[i] = extractedStrides[i + 1] *
+                            mlir::cast<IntegerAttr>(sizes[i + 1]).getInt();
     }
     // iterate over all extracted slices from 0 to nExtractedElems-1
     // and compute the multi-dimensional index and the corresponding linearized
@@ -1266,7 +1281,7 @@ struct VectorExtractStridedSlice final
       int64_t linearizedIndex = 0;
       for (int64_t j = 0; j < k; ++j) {
         linearizedIndex +=
-            (offsets[j].cast<IntegerAttr>().getInt() + multiDimIndex[j]) *
+            (mlir::cast<IntegerAttr>(offsets[j]).getInt() + multiDimIndex[j]) *
             sourceStrides[j];
       }
       // fill the indices array form linearizedIndex to linearizedIndex +
@@ -1403,8 +1418,8 @@ bool isLegalXeGPUSCFOp(mlir::Operation *op) {
     auto forOp = llvm::cast<mlir::scf::ForOp>(op);
     for (const auto &arg : forOp.getInitArgs()) {
       auto type = arg.getType();
-      if (type.isa<mlir::VectorType>())
-        result &= (type.cast<mlir::VectorType>().getRank() == 1);
+      if (mlir::isa<mlir::VectorType>(type))
+        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
     }
   }
 
@@ -1413,8 +1428,8 @@ bool isLegalXeGPUSCFOp(mlir::Operation *op) {
     for (const auto &arg : yieldOp.getResults()) {
       auto type = arg.getType();
 
-      if (type.isa<mlir::VectorType>())
-        result &= (type.cast<mlir::VectorType>().getRank() == 1);
+      if (mlir::isa<mlir::VectorType>(type))
+        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
     }
   }
 
@@ -1433,7 +1448,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addLegalDialect<
         ::mlir::func::FuncDialect, ::mlir::arith::ArithDialect,
         ::mlir::memref::MemRefDialect, ::mlir::vector::VectorDialect>();
-    // target.addIllegalDialect<imex::xegpu::XeGPUDialect>();
+    // target.addIllegalDialect<mlir::xegpu::XeGPUDialect>();
 
     target.addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
         [&](mlir::Operation *op) { return isLegalXeGPUSCFOp(op); });
@@ -1487,9 +1502,9 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     // TODO: Add AllocNbarrierToVCPattern patterns
     patterns.add<CreateNdDescPattern, CreateDescToVCPattern, DpasPattern,
-                 /*AllocNbarrierToVCPattern, */ CreateNbarrierToVCPattern,
+                 /*AllocNbarrierToVCPattern, */ InitNbarrierToVCPattern,
                  NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
-                 CompilerHintToVCPattern, MfenceToVCPattern,
+                 CompilerHintToVCPattern, FenceToVCPattern,
                  UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern>(
         patterns.getContext());
     patterns.add<GatherScatterToRawSend<xegpu::LoadGatherOp>,
@@ -1499,14 +1514,14 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                                                         patterns.getContext());
 
     if (this->useRawSend) {
-      patterns.add<LoadStorePrefetchNdToRawSendPattern<xegpu::LoadNDOp>,
-                   LoadStorePrefetchNdToRawSendPattern<xegpu::StoreNDOp>,
-                   LoadStorePrefetchNdToRawSendPattern<xegpu::PrefetchNDOp>>(
+      patterns.add<LoadStorePrefetchNdToRawSendPattern<xegpu::LoadNdOp>,
+                   LoadStorePrefetchNdToRawSendPattern<xegpu::StoreNdOp>,
+                   LoadStorePrefetchNdToRawSendPattern<xegpu::PrefetchNdOp>>(
           patterns.getContext());
     } else {
-      patterns.add<LoadStorePrefetchNdToLscPattern<xegpu::LoadNDOp>,
-                   LoadStorePrefetchNdToLscPattern<xegpu::StoreNDOp>,
-                   LoadStorePrefetchNdToLscPattern<xegpu::PrefetchNDOp>>(
+      patterns.add<LoadStorePrefetchNdToLscPattern<xegpu::LoadNdOp>,
+                   LoadStorePrefetchNdToLscPattern<xegpu::StoreNdOp>,
+                   LoadStorePrefetchNdToLscPattern<xegpu::PrefetchNdOp>>(
           patterns.getContext());
     }
 

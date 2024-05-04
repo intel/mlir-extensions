@@ -20,8 +20,9 @@
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
 #include "imex/Utils/XeArch.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include <mlir/Dialect/Math/IR/Math.h>
+#include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/BuiltinTypeInterfaces.h>
 
 namespace imex {
 
@@ -171,8 +172,9 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
     // and offset need to be adjusted accordingly.
     if (isVnniFormat) {
       auto vnniAxis = isForDPASB ? 0 : 1;
-      auto factor =
-          inputs.front().getType().cast<mlir::VectorType>().getShape().back();
+      auto factor = mlir::cast<mlir::VectorType>(inputs.front().getType())
+                        .getShape()
+                        .back();
       blkSizes[vnniAxis] /= factor;
     }
     // each vector will be horizonally cut into `nums` subvectors
@@ -221,8 +223,9 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
     // and offset needs to adjusted accordingly.
     if (isVnniFormat) {
       auto vnniAxis = isForDPASB ? 0 : 1;
-      auto factor =
-          inputs.front().getType().cast<mlir::VectorType>().getShape().back();
+      auto factor = mlir::cast<mlir::VectorType>(inputs.front().getType())
+                        .getShape()
+                        .back();
       blkSizes[vnniAxis] /= factor;
     }
     llvm::SmallVector<int64_t> strides({1, 1});
@@ -346,7 +349,7 @@ int getBlockArrayLength(mlir::Type elemTy, int block_width) {
   return 64 * 8 / elemTy.getIntOrFloatBitWidth() / block_width;
 }
 
-// It rewrites a XeTile::init_tile into one or more XeGPU::create_nd_desc
+// It rewrites a XeTile::init_tile into one or more mlir::xegpu::create_nd_desc
 // It is one of start points of generating 1:N values.
 class SgInitTileOpPattern
     : public SgXeTileToXeGPUConversion<xetile::InitTileOp> {
@@ -403,10 +406,9 @@ class SgInitTileOpPattern
     auto offsetsX = offsets[0];
     auto offsetsY = offsets[1];
 
-    auto tDescTy = xegpu::TensorDescType::get(
-        innerBlk, tileTy.getElementType(), xegpu::MemoryScope::GLOBAL,
-        array_length, true /*boundary_check*/, {} /*scattered*/,
-        {} /*mapping*/);
+    auto tDescTy = mlir::xegpu::TensorDescType::get(
+        innerBlk, tileTy.getElementType(), false /*scattered*/, array_length,
+        mlir::xegpu::MemoryScope::Global, true /*boundary_check*/);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
@@ -429,11 +431,15 @@ class SgInitTileOpPattern
 
         // TODO: this needs improvement, it assumes the source is static
         // memeref.
-        auto createNdOp = rewriter.create<xegpu::CreateNdDescOp>(
-            op.getLoc(), tDescTy /*resultTy*/, source /*source*/,
-            tDescOffsets /*offsets*/, imex::xegpu::Mode::VC /*mode*/);
-
-        xegpuOps.push_back(createNdOp);
+        if (auto MemRefTypedSource =
+                mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
+          auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+              op.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
+              tDescOffsets /*offsets*/);
+          xegpuOps.push_back(createNdOp);
+        } else {
+          return mlir::failure();
+        }
       }
     }
 
@@ -442,7 +448,7 @@ class SgInitTileOpPattern
   }
 };
 
-// It lowers a XeTile::prefetch_tile into one or more XeGPU::prefetch_2d.
+// It lowers a XeTile::prefetch_tile into one or more mlir::xegpu::prefetch_2d.
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile.
 struct SgPrefetchTileOpPattern
@@ -472,16 +478,15 @@ struct SgPrefetchTileOpPattern
       return mlir::failure();
     }
 
-    auto L1 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::CACHED);
-    auto L2 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::CACHED);
-    auto L3 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::CACHED);
+    auto L1 = mlir::xegpu::CachePolicyAttr::get(
+        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
+    auto L2 = mlir::xegpu::CachePolicyAttr::get(
+        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
+    auto L3 = mlir::xegpu::CachePolicyAttr::get(
+        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
 
     for (auto tile : tiles) {
-      rewriter.create<xegpu::PrefetchNDOp>(op.getLoc(), tile, L1, L2, L3,
-                                           imex::xegpu::Mode::VC);
+      rewriter.create<mlir::xegpu::PrefetchNdOp>(op.getLoc(), tile, L1, L2, L3);
     }
 
     rewriter.eraseOp(op);
@@ -490,7 +495,7 @@ struct SgPrefetchTileOpPattern
   }
 };
 
-// It lowers XeTile::load_tile into one or more XeGPU::load_2d
+// It lowers XeTile::load_tile into one or more mlir::xegpu::load_2d
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile.
 struct SgLoadTileOpPattern
@@ -512,9 +517,12 @@ struct SgLoadTileOpPattern
     auto sources = adaptor.getSource();
 
     auto ctx = op.getContext();
-    auto L1 = xegpu::CacheReadHintAttr::get(ctx, xegpu::CacheReadHint::CACHED);
-    auto L2 = xegpu::CacheReadHintAttr::get(ctx, xegpu::CacheReadHint::CACHED);
-    auto L3 = xegpu::CacheReadHintAttr::get(ctx, xegpu::CacheReadHint::CACHED);
+    auto L1 = mlir::xegpu::CachePolicyAttr::get(
+        ctx, mlir::xegpu::CachePolicy::CACHED);
+    auto L2 = mlir::xegpu::CachePolicyAttr::get(
+        ctx, mlir::xegpu::CachePolicy::CACHED);
+    auto L3 = mlir::xegpu::CachePolicyAttr::get(
+        ctx, mlir::xegpu::CachePolicy::CACHED);
 
     mlir::IntegerAttr vnniAttr;
     mlir::IntegerAttr transposeBitWidthAttr;
@@ -524,7 +532,7 @@ struct SgLoadTileOpPattern
     if ((isForDPASA(op) || isForDPASB(op)) && factor > 1) {
       // vnni transform needed if they are used in mma and elemTy bits < 32
       int axis = isForDPASB(op) ? 0 : 1;
-      vnniAttr = rewriter.getI32IntegerAttr(axis);
+      vnniAttr = rewriter.getI64IntegerAttr(axis);
     }
 
     mlir::DenseI64ArrayAttr transposeAttr;
@@ -551,7 +559,7 @@ struct SgLoadTileOpPattern
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<::mlir::Value> xegpuOps;
     for (auto src : sources) {
-      auto tdescTy = llvm::dyn_cast<xegpu::TensorDescType>(src.getType());
+      auto tdescTy = llvm::dyn_cast<mlir::xegpu::TensorDescType>(src.getType());
       assert(tdescTy && "Expecting a TensorDescType value for load_tile.");
       auto shape = tdescTy.getShape().vec();
       auto array_length = tdescTy.getArrayLength();
@@ -573,9 +581,9 @@ struct SgLoadTileOpPattern
         shape.insert(shape.begin(), array_length);
 
       auto vectorTy = mlir::VectorType::get(shape, tileTy.getElementType());
-      auto ldOp = rewriter.create<xegpu::LoadNDOp>(
+      auto ldOp = rewriter.create<mlir::xegpu::LoadNdOp>(
           op.getLoc(), vectorTy, src, vnniAttr, transposeAttr,
-          transposeBitWidthAttr, L1, L2, L3, imex::xegpu::Mode::VC);
+          transposeBitWidthAttr, L1, L2, L3);
       if (array_length == 1) {
         xegpuOps.push_back(ldOp);
       } else {
@@ -591,7 +599,7 @@ struct SgLoadTileOpPattern
   }
 };
 
-// It lowers a XeTile::store_tile into one or more XeGPU::store_2d
+// It lowers a XeTile::store_tile into one or more mlir::xegpu::store_2d
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile, and similar to its input vector value.
 struct SgStoreTileOpPattern
@@ -613,20 +621,20 @@ struct SgStoreTileOpPattern
     }
 
     auto context = op.getContext();
-    auto WRITE_BACK = xegpu::CacheWriteHint::WRITE_BACK;
-    auto L1 = xegpu::CacheWriteHintAttr::get(context, WRITE_BACK);
-    auto L2 = xegpu::CacheWriteHintAttr::get(context, WRITE_BACK);
-    auto L3 = xegpu::CacheWriteHintAttr::get(context, WRITE_BACK);
+    auto WRITE_BACK = mlir::xegpu::CachePolicy::WRITE_BACK;
+    auto L1 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
+    auto L2 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
+    auto L3 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
     for (size_t i = 0; i < tiles.size(); i++)
-      rewriter.create<xegpu::StoreNDOp>(op.getLoc(), tiles[i], values[i], L1,
-                                        L2, L3, imex::xegpu::Mode::VC);
+      rewriter.create<mlir::xegpu::StoreNdOp>(op.getLoc(), values[i], tiles[i],
+                                              L1, L2, L3);
 
     rewriter.eraseOp(op);
     return ::mlir::success();
   }
 };
 
-// It lowers a XeTile::tile_mma into one or more XeGPU::dpas
+// It lowers a XeTile::tile_mma into one or more mlir::xegpu::dpas
 // The adaptor provides new inputs for each old input.
 struct SgTileMMAOpPattern
     : public SgXeTileToXeGPUConversion<xetile::TileMMAOp> {
@@ -671,9 +679,8 @@ struct SgTileMMAOpPattern
         for (uint64_t k = 0; k < K; k++) {
           auto aVec = AValues[i * K + k];
           auto bVec = BValues[k * N + j];
-          tmpC = rewriter.create<xegpu::DpasOp>(
-              loc, subCTy /*result*/, aVec /*lhs*/, bVec /*rhs*/, tmpC /*acc*/,
-              imex::xegpu::Mode::VC);
+          tmpC = rewriter.create<mlir::xegpu::DpasOp>(
+              loc, subCTy /*result*/, aVec /*lhs*/, bVec /*rhs*/, tmpC /*acc*/);
         }
         xegpuOps.push_back(tmpC);
       }
@@ -697,9 +704,10 @@ struct SgUpdateTileOffsetOpPattern
 
     llvm::SmallVector<mlir::Value> newOps;
     for (const auto &tile : tiles) {
-      auto xegpuTile = rewriter.create<xegpu::UpdateNDOffsetOp>(
+      auto xegpuTile = rewriter.create<mlir::xegpu::UpdateNdOffsetOp>(
           op.getLoc(), tile.getType(), tile, mlir::ValueRange{offsetX, offsetY},
-          imex::xegpu::Mode::VC);
+          llvm::ArrayRef<int64_t>(
+              {mlir::ShapedType::kDynamic, mlir::ShapedType::kDynamic}));
       newOps.push_back(xegpuTile);
     }
     rewriter.replaceOp(op, newOps);

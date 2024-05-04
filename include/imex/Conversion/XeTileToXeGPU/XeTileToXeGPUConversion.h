@@ -23,12 +23,12 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/OneToNTypeConversion.h>
 
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/PassWrapper.h"
@@ -95,6 +95,8 @@ public:
   void replaceOp(mlir::Operation *op, mlir::ValueRange newValues) override;
 
   void eraseOp(mlir::Operation *op) override { rewriter.eraseOp(op); }
+
+  void eraseBlock(mlir::Block *block) override { rewriter.eraseBlock(block); }
 
   template <typename CallableT>
   void modifyOpInPlace(mlir::Operation *root, CallableT &&callable) {

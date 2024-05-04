@@ -34,12 +34,15 @@ public:
   explicit SetSPIRVCapabilitiesPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
 
-  mlir::LogicalResult initializeOptions(mlir::StringRef options) override {
-    if (failed(Pass::initializeOptions(options)))
+  mlir::LogicalResult
+  initializeOptions(mlir::StringRef options,
+                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                        errorHandler) override {
+    if (mlir::failed(Pass::initializeOptions(options, errorHandler)))
       return mlir::failure();
 
     if (clientAPI != "vulkan" && clientAPI != "opencl")
-      return mlir::failure();
+      return errorHandler(llvm::Twine("Invalid clienAPI: ") + clientAPI);
     m_clientAPI = clientAPI;
 
     return mlir::success();

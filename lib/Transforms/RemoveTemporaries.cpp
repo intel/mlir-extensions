@@ -242,8 +242,8 @@ inferSubviewChainResultType(mlir::MemRefType srcType,
     auto off = svOp.getStaticOffsets();
     auto size = svOp.getStaticSizes();
     auto stride = svOp.getStaticStrides();
-    newType = svOp.inferResultType(newType, off, size, stride)
-                  .cast<::mlir::MemRefType>();
+    newType = mlir::cast<::mlir::MemRefType>(
+        svOp.inferResultType(newType, off, size, stride));
   }
   return newType;
 }
@@ -262,8 +262,8 @@ bool opHasRAWConflict(mlir::Operation *op, mlir::Value writeVal,
       ::mlir::SmallVector<::mlir::Operation *> newSVOps, readSVOps;
       auto newRoot = findSubviewRootValue(newVal, newSVOps);
       auto readRoot = findSubviewRootValue(readVal, readSVOps);
-      auto readType = readVal.getType().dyn_cast<::mlir::MemRefType>();
-      auto newType = newVal.getType().dyn_cast<::mlir::MemRefType>();
+      auto readType = mlir::dyn_cast<::mlir::MemRefType>(readVal.getType());
+      auto newType = mlir::dyn_cast<::mlir::MemRefType>(newVal.getType());
       if (newRoot == readRoot && readType && newType) {
         // check memref types of write and read operands
         // 1) infer static-layout memref type for readVal by applying subviews

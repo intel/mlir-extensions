@@ -79,6 +79,11 @@ class GPUDialect;
 namespace vector {
 class VectorDialect;
 }
+
+namespace xegpu {
+class XeGPUDialect;
+}
+
 } // namespace mlir
 
 namespace imex {
@@ -101,10 +106,6 @@ class RegionDialect;
 namespace gpux {
 class GPUXDialect;
 } // namespace gpux
-
-namespace xegpu {
-class XeGPUDialect;
-}
 
 namespace xetile {
 class XeTileDialect;

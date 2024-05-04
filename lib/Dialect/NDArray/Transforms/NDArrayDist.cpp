@@ -58,9 +58,8 @@ struct DistOpRWP : public ::mlir::OpRewritePattern<FROM> {
   ::mlir::LogicalResult match(FROM op) const override {
     DistEnvAttr dEnv;
     if (op->getNumResults() > 0) {
-      auto outDisTTyp = op->getResultTypes()
-                            .front()
-                            .template dyn_cast<::imex::ndarray::NDArrayType>();
+      auto outDisTTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(
+          op->getResultTypes().front());
       if (!outDisTTyp || !isDist(outDisTTyp)) {
         return ::mlir::failure();
       } else if (outDisTTyp) {
@@ -70,8 +69,7 @@ struct DistOpRWP : public ::mlir::OpRewritePattern<FROM> {
     }
 
     for (auto r : op->getOperands()) {
-      auto opType =
-          r.getType().template dyn_cast<::imex::ndarray::NDArrayType>();
+      auto opType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(r.getType());
       if (opType) {
         auto dEnv2 = getDistEnv(opType);
         if (!dEnv2) {
@@ -120,7 +118,7 @@ struct DistInsertSliceOpRWP : public DistOpRWP<::imex::ndarray::InsertSliceOp> {
   matchAndRewrite(::imex::ndarray::InsertSliceOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto src = op.getSource();
-    auto srcType = src.getType().cast<::imex::ndarray::NDArrayType>();
+    auto srcType = mlir::cast<::imex::ndarray::NDArrayType>(src.getType());
     if (srcType.getRank() == 0 ||
         src.getDefiningOp<::imex::dist::RePartitionOp>() ||
         ::mlir::failed(match(op))) {
@@ -162,9 +160,12 @@ struct DistEWBinOpRWP : public DistOpRWP<::imex::ndarray::EWBinOp> {
     auto loc = op.getLoc();
     auto lhs = op.getLhs();
     auto rhs = op.getRhs();
-    auto lhsDistTyp = lhs.getType().dyn_cast<::imex::ndarray::NDArrayType>();
-    auto rhsDistTyp = rhs.getType().dyn_cast<::imex::ndarray::NDArrayType>();
-    auto outDistTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto lhsDistTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(lhs.getType());
+    auto rhsDistTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(rhs.getType());
+    auto outDistTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
 
     // Repartition if necessary
     // FIXME: this breaks with dim-sizes==1, even if statically known

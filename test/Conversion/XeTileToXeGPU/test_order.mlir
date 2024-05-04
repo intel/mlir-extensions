@@ -4,18 +4,18 @@
 // CHECK-SAME: (%[[A:.*]]: memref<128x64xf16>, %[[B:.*]]: memref<64x128xf16, strided<[1, 64]>>)
 // CHECK-DAG: %[[C0:.*]] = arith.constant 0 : index
 // CHECK-DAG: %[[C16:.*]] = arith.constant 16 : index
-// CHECK: %[[D0:.*]] = xegpu.create_nd_tdesc %[[A]][%[[C0]], %[[C0]]] {mode = vc} : memref<128x64xf16> -> !xegpu.tensor_desc<32x16xf16>
-// CHECK: %[[D1:.*]] = xegpu.create_nd_tdesc %[[B]][%[[C0]], %[[C0]]] {mode = vc} : memref<64x128xf16, strided<[1, 64]>> -> !xegpu.tensor_desc<16x16xf16>
-// CHECK: %[[D2:.*]] = xegpu.create_nd_tdesc %[[B]][%[[C16]], %[[C0]]] {mode = vc} : memref<64x128xf16, strided<[1, 64]>> -> !xegpu.tensor_desc<16x16xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D0]] {mode = vc, vnni_axis = 1, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<32x16xf16> -> vector<32x8x2xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D1]] {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D2]] {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-// CHECK: %[[D3:.*]] = xegpu.update_nd_offset %[[D0]], [%[[C0]], %[[C16]]] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-// CHECK: %[[D4:.*]] = xegpu.update_nd_offset %[[D1]], [%[[C16]], %[[C0]]] {mode = vc} : !xegpu.tensor_desc<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-// CHECK: %[[D5:.*]] = xegpu.update_nd_offset %[[D2]], [%[[C16]], %[[C0]]] {mode = vc} : !xegpu.tensor_desc<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D3]] {mode = vc, vnni_axis = 1, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<32x16xf16> -> vector<32x8x2xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D4]] {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-// CHECK: %{{.*}} = xegpu.load_nd %[[D5]] {mode = vc, transpose = [1, 0], transpose_bit_width = 32, l1_hint = cached, l2_hint = cached, l3_hint = cached} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+// CHECK: %[[D0:.*]] = xegpu.create_nd_tdesc %[[A]][%[[C0]], %[[C0]]] : memref<128x64xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %[[D1:.*]] = xegpu.create_nd_tdesc %[[B]][%[[C0]], %[[C0]]] : memref<64x128xf16, strided<[1, 64]>> -> !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %[[D2:.*]] = xegpu.create_nd_tdesc %[[B]][%[[C16]], %[[C0]]] : memref<64x128xf16, strided<[1, 64]>> -> !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<32x8x2xf16>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D1]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, transpose = array<i64: 1, 0>, transpose_bit_width = 32 : i32}> : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x16x2xf16>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D2]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, transpose = array<i64: 1, 0>, transpose_bit_width = 32 : i32}> : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x16x2xf16>
+// CHECK: %[[D3:.*]] = xegpu.update_nd_offset %[[D0]], [%[[C0]], %[[C16]]] : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %[[D4:.*]] = xegpu.update_nd_offset %[[D1]], [%[[C16]], %[[C0]]] : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %[[D5:.*]] = xegpu.update_nd_offset %[[D2]], [%[[C16]], %[[C0]]] : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D3]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<32x8x2xf16>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, transpose = array<i64: 1, 0>, transpose_bit_width = 32 : i32}> : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x16x2xf16>
+// CHECK: %{{.*}} = xegpu.load_nd %[[D5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, transpose = array<i64: 1, 0>, transpose_bit_width = 32 : i32}> : !xegpu.tensor_desc<16x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x16x2xf16>
 gpu.module @test_kernel {
 func.func @test_func(%A : memref<128x64xf16>, %B : memref<64x128xf16, strided<[1, 64], offset: 0>>) {
   %c0 = arith.constant 0 : index

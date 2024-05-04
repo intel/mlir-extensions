@@ -194,7 +194,7 @@ def GPUX_AllocOp
                  Optional<GPU_AsyncToken>:$asyncToken);
 
   let extraClassDeclaration = [{
-    ::mlir::MemRefType getType() { return getMemref().getType().cast<::mlir::MemRefType>(); }
+    ::mlir::MemRefType getType() { return mlir::cast<::mlir::MemRefType>(getMemref().getType()); }
   }];
 }
 

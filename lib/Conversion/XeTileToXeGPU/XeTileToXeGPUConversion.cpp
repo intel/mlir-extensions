@@ -17,7 +17,6 @@
 ///
 //===----------------------------------------------------------------------===//
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
-#include <imex/Dialect/XeGPU/IR/XeGPU.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 #include <imex/Utils/DebugUtils.h>
 #include <imex/Utils/PassWrapper.h>
@@ -26,6 +25,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 
@@ -114,7 +114,7 @@ std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertTileType(
     xetile::TileType tileTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
   llvm::dbgs()
       << "convertTileType is disabled, since there is no unique "
-      << "way to convert an XeTile::TileType into XeGPU::TensorDescType "
+      << "way to convert an XeTile::TileType into mlir::xegpu::TensorDescType "
       << "becasue of array_length selection.\n";
   return std::nullopt;
 }
@@ -181,7 +181,8 @@ XeGPUTypeConverter::computeTypeMapping(mlir::ValueRange original,
     }
 
     if (auto tileTy = llvm::dyn_cast<xetile::TileType>(originalTypes[i])) {
-      auto tdescTy = llvm::dyn_cast<xegpu::TensorDescType>(convertedTypes[j]);
+      auto tdescTy =
+          llvm::dyn_cast<mlir::xegpu::TensorDescType>(convertedTypes[j]);
       if (!tdescTy)
         return mlir::failure();
       auto shape = tileTy.getShape();

@@ -5,7 +5,7 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK: spirv.VectorInsertDynamic
   gpu.func @create_nd_tdesc(%src: memref<64x64xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     %c32 = arith.constant 16 : index
-    %0 = xegpu.create_nd_tdesc %src[%c32, 0] {mode = vc} : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
+    %0 = xegpu.create_nd_tdesc %src[%c32, 0] : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
     gpu.return
   }
 
@@ -21,8 +21,8 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK:  %{{.*}} = spirv.FunctionCall @llvm_genx_raw_send2_v128i32_i1_v8i32
 
   gpu.func @load_nd(%src : memref<64x64xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-    %1 = xegpu.create_nd_tdesc %src[0, 0] { mode = vc} : memref<64x64xf16> ->  !xegpu.tensor_desc<16x16xf16>
-    %3 = xegpu.load_nd %1  {vnni_axis = 0, mode = vc} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+    %1 = xegpu.create_nd_tdesc %src[0, 0] : memref<64x64xf16> ->  !xegpu.tensor_desc<16x16xf16>
+    %3 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
     gpu.return
   }
 
@@ -38,7 +38,7 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK: (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
   gpu.func @dpas(%A : vector<8x8x2xf16>, %B : vector<8x16x2xf16>)
     kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-    %C = xegpu.dpas %A, %B { mode = vc }: vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+    %C = xegpu.dpas %A, %B : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
     gpu.return
   }
 
@@ -51,8 +51,8 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK: spirv.FunctionCall @llvm_genx_raw_sends2_noresult_i1_v8i32_v128f32
   gpu.func @store_nd(%value : vector<8x16xf32>, %dest : memref<64x64xf32>)
     kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-    %1 = xegpu.create_nd_tdesc %dest[0, 0] { mode = vc } : memref<64x64xf32> -> !xegpu.tensor_desc<8x16xf32>
-    xegpu.store_nd %value, %1 { mode = vc } : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+    %1 = xegpu.create_nd_tdesc %dest[0, 0]  : memref<64x64xf32> -> !xegpu.tensor_desc<8x16xf32>
+    xegpu.store_nd %value, %1 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
     gpu.return
   }
   // CHECK: (i8, i8, i1, i8, i8, i32, i32, vector<8xi32>)
@@ -64,8 +64,8 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
   // CHECK: spirv.FunctionCall @llvm_genx_raw_send2_noresult_i1_v8i32
   gpu.func @prefetch(%src : memref<64x64xf16>)
     kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-      %0 = xegpu.create_nd_tdesc %src[0, 0] { mode = vc } : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
-      xegpu.prefetch_nd %0 { mode = vc } : !xegpu.tensor_desc<8x16xf16>
+      %0 = xegpu.create_nd_tdesc %src[0, 0] : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
+      xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
       gpu.return
   }
 

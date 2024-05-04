@@ -56,7 +56,7 @@ namespace imex {
 
 /// @return type without a sign
 static mlir::Type makeSignlessType(mlir::Type type) {
-  if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
+  if (auto intType = mlir::dyn_cast<mlir::IntegerType>(type)) {
     if (!intType.isSignless())
       return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
   }
@@ -110,9 +110,9 @@ struct CastLowering
     assert(converter && "Type converter is not set");
     auto src = adaptor.getSource();
     auto inTyp =
-        adaptor.getSource().getType().dyn_cast<::mlir::RankedTensorType>();
-    auto outTyp = converter->convertType(op.getType())
-                      .dyn_cast<::mlir::RankedTensorType>();
+        mlir::dyn_cast<::mlir::RankedTensorType>(adaptor.getSource().getType());
+    auto outTyp = mlir::dyn_cast<::mlir::RankedTensorType>(
+        converter->convertType(op.getType()));
 
     if (!inTyp || !outTyp) {
       return ::mlir::failure();
@@ -175,9 +175,8 @@ struct SubviewLowering
     auto loc = op->getLoc();
 
     // convert src array to memref
-    auto srcArType = op.getSource()
-                         .getType()
-                         .dyn_cast_or_null<::imex::ndarray::NDArrayType>();
+    auto srcArType = mlir::dyn_cast_or_null<::imex::ndarray::NDArrayType>(
+        op.getSource().getType());
     if (!srcArType)
       return mlir::failure();
     auto srcMRType = srcArType.getMemRefType(srcTnsr);
@@ -185,8 +184,8 @@ struct SubviewLowering
 
     auto *converter = getTypeConverter();
     assert(converter && "Type converter is not set");
-    auto dstTnsrType = converter->convertType(op.getType())
-                           .dyn_cast_or_null<::mlir::TensorType>();
+    auto dstTnsrType = mlir::dyn_cast_or_null<::mlir::TensorType>(
+        converter->convertType(op.getType()));
     if (!dstTnsrType)
       return mlir::failure();
 
@@ -197,10 +196,9 @@ struct SubviewLowering
     auto strides = ::mlir::getMixedValues(adaptor.getStaticStrides(),
                                           adaptor.getStrides(), rewriter);
 
-    auto resType =
+    auto resType = mlir::cast<::mlir::MemRefType>(
         ::mlir::memref::SubViewOp::inferRankReducedResultType(
-            dstTnsrType.getShape(), srcMRType, offsets, sizes, strides)
-            .cast<::mlir::MemRefType>();
+            dstTnsrType.getShape(), srcMRType, offsets, sizes, strides));
 
     auto sw = rewriter.create<::mlir::memref::SubViewOp>(
         loc, resType, srcMR, offsets, sizes, strides);
@@ -253,7 +251,7 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ndarray::DimOp> {
                   imex::ndarray::DimOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto srcTnsr = adaptor.getSource();
-    auto srcType = srcTnsr.getType().dyn_cast<::mlir::TensorType>();
+    auto srcType = mlir::dyn_cast<::mlir::TensorType>(srcTnsr.getType());
     if (!srcType)
       return mlir::failure();
 
@@ -273,9 +271,10 @@ struct LoadOpLowering
   matchAndRewrite(imex::ndarray::LoadOp op,
                   imex::ndarray::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto srcArType = op.getArray().getType().cast<imex::ndarray::NDArrayType>();
+    auto srcArType =
+        mlir::cast<imex::ndarray::NDArrayType>(op.getArray().getType());
     auto srcTnsr = adaptor.getArray();
-    if (!srcTnsr.getType().isa<mlir::TensorType>())
+    if (!mlir::isa<mlir::TensorType>(srcTnsr.getType()))
       return mlir::failure();
 
     auto *converter = getTypeConverter();
@@ -305,15 +304,15 @@ struct InsertSliceLowering
     // get operators
     auto src = adaptor.getSource();
     auto dst = adaptor.getDestination();
-    auto srcTyp = src.getType().dyn_cast<::mlir::TensorType>();
-    auto dstTyp = dst.getType().dyn_cast<::mlir::TensorType>();
+    auto srcTyp = mlir::dyn_cast<::mlir::TensorType>(src.getType());
+    auto dstTyp = mlir::dyn_cast<::mlir::TensorType>(dst.getType());
     if (!dstTyp || !srcTyp)
       return ::mlir::failure();
 
     auto srcArType =
-        op.getSource().getType().cast<imex::ndarray::NDArrayType>();
+        mlir::cast<imex::ndarray::NDArrayType>(op.getSource().getType());
     auto dstArType =
-        op.getDestination().getType().cast<imex::ndarray::NDArrayType>();
+        mlir::cast<imex::ndarray::NDArrayType>(op.getDestination().getType());
 
     auto srcMRTyp = srcArType.getMemRefType(src);
     auto dstMRTyp = dstArType.getMemRefType(dst);
@@ -404,7 +403,7 @@ struct LinSpaceLowering
     auto stop = adaptor.getStop();
     auto count = adaptor.getNum();
     bool endpoint = adaptor.getEndpoint();
-    auto retArTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto retArTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     auto rank = retArTyp.getRank();
     auto elTyp = retArTyp.getElementType();
 
@@ -464,7 +463,7 @@ struct CreateLowering
     auto loc = op.getLoc();
 
     // check output type and get operands
-    auto retArTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto retArTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     if (!retArTyp)
       return ::mlir::failure();
     auto value = adaptor.getValue();
@@ -500,8 +499,8 @@ struct CopyLowering
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // check output type and get operands
     auto srcArTyp =
-        op.getSource().getType().dyn_cast<::imex::ndarray::NDArrayType>();
-    auto retArTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getSource().getType());
+    auto retArTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     if (!(srcArTyp && retArTyp)) {
       return ::mlir::failure();
     }
@@ -512,7 +511,7 @@ struct CopyLowering
     ::imex::ValVec dynDims;
 
     // get dynamic shape
-    auto tTyp = src.getType().cast<::mlir::TensorType>();
+    auto tTyp = mlir::cast<::mlir::TensorType>(src.getType());
     for (int64_t i = 0; i < rank; ++i) {
       if (tTyp.isDynamicDim(i)) {
         dynDims.emplace_back(
@@ -557,7 +556,7 @@ struct DeleteLowering
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // check output type and get operands
     auto inpArType =
-        op.getInput().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getInput().getType());
     if (!inpArType) {
       return ::mlir::failure();
     }
@@ -583,8 +582,8 @@ struct CastElemTypeLowering
     auto loc = op.getLoc();
     auto src = adaptor.getInput();
     auto srcArType =
-        op.getInput().getType().dyn_cast<::imex::ndarray::NDArrayType>();
-    auto dstArType = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getInput().getType());
+    auto dstArType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     if (!(srcArType && dstArType)) {
       return ::mlir::failure();
     }
@@ -644,16 +643,16 @@ struct ReshapeLowering
                   ::imex::ndarray::ReshapeOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // check output type and get operands
-    auto retArTyp = op.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto retArTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getType());
     auto srcArTyp =
-        op.getSource().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getSource().getType());
     if (!(retArTyp && srcArTyp)) {
       return ::mlir::failure();
     }
 
     auto loc = op.getLoc();
     auto src = adaptor.getSource();
-    auto srcTnsr = src.getType().cast<::mlir::TensorType>();
+    auto srcTnsr = mlir::cast<::mlir::TensorType>(src.getType());
     auto shape = adaptor.getShape();
     auto elTyp = srcTnsr.getElementType();
     auto outTyp = retArTyp.getTensorType();
@@ -874,25 +873,24 @@ struct EWBinOpLowering
     auto loc = op.getLoc();
     // We expect to lower NDArrays
     auto lhsArTyp =
-        op.getLhs().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getLhs().getType());
     auto rhsArTyp =
-        op.getRhs().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getRhs().getType());
     if (!lhsArTyp || !rhsArTyp) {
       return ::mlir::failure();
     }
 
-    auto resType = op->getResult(0)
-                       .getType()
-                       .cast<::imex::ndarray::NDArrayType>()
-                       .getTensorType();
+    auto resType =
+        mlir::cast<::imex::ndarray::NDArrayType>(op->getResult(0).getType())
+            .getTensorType();
     // we assume the result type has been correctly promoted
     auto elTyp = resType.getElementType();
 
     // get the input as tensors
     auto lhs = adaptor.getLhs();
     auto rhs = adaptor.getRhs();
-    auto lhsTnsr = lhs.getType().cast<::mlir::TensorType>();
-    auto rhsTnsr = rhs.getType().cast<::mlir::TensorType>();
+    auto lhsTnsr = mlir::cast<::mlir::TensorType>(lhs.getType());
+    auto rhsTnsr = mlir::cast<::mlir::TensorType>(rhs.getType());
 
     // we expect tensor types on operands
     auto lhsRank = lhsTnsr.getRank();
@@ -901,8 +899,8 @@ struct EWBinOpLowering
     auto rank = static_cast<unsigned>(std::max(lhsRank, rhsRank));
 
     const ::imex::ndarray::EWBinOpId binOpId =
-        (::imex::ndarray::EWBinOpId)adaptor.getOp()
-            .cast<::mlir::IntegerAttr>()
+        (::imex::ndarray::EWBinOpId)mlir::cast<::mlir::IntegerAttr>(
+            adaptor.getOp())
             .getInt();
 
     ::mlir::Value newOp =
@@ -1064,15 +1062,16 @@ struct EWUnyOpLowering
     auto loc = op.getLoc();
     auto arSrc = op.getSrc();
     // We expect to lower NDArrays
-    auto srcArTyp = arSrc.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto srcArTyp =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(arSrc.getType());
     if (!srcArTyp) {
       // FIXME type casting
       return ::mlir::failure();
     }
 
     const ::imex::ndarray::EWUnyOpId unyOpId =
-        (::imex::ndarray::EWUnyOpId)adaptor.getOp()
-            .cast<::mlir::IntegerAttr>()
+        (::imex::ndarray::EWUnyOpId)mlir::cast<::mlir::IntegerAttr>(
+            adaptor.getOp())
             .getInt();
     if (unyOpId == ::imex::ndarray::POSITIVE) {
       // positive unary op is a no-op, remove it
@@ -1082,7 +1081,7 @@ struct EWUnyOpLowering
     }
 
     auto resArType =
-        op->getResult(0).getType().cast<::imex::ndarray::NDArrayType>();
+        mlir::cast<::imex::ndarray::NDArrayType>(op->getResult(0).getType());
 
     // generic lowering of non-MLIR-native ops
     ::mlir::Value newOp =
@@ -1091,7 +1090,7 @@ struct EWUnyOpLowering
     if (!newOp) { // not lowered yet
       // get the input/output tensor types
       auto src = adaptor.getSrc();
-      auto srcTnsr = src.getType().cast<::mlir::TensorType>();
+      auto srcTnsr = mlir::cast<::mlir::TensorType>(src.getType());
       auto resType = resArType.getTensorType();
 
       // we expect tensor types on operands
@@ -1167,7 +1166,7 @@ struct ReductionOpLowering
     auto loc = op.getLoc();
     // We expect to lower NDArrays
     auto inpArTyp =
-        op.getInput().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getInput().getType());
     if (!inpArTyp) {
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
@@ -1175,14 +1174,14 @@ struct ReductionOpLowering
 
     // we expect tensorType as operands
     auto inpTnsr = adaptor.getInput();
-    auto inpTnsrTyp = inpTnsr.getType().cast<::mlir::TensorType>();
+    auto inpTnsrTyp = mlir::cast<::mlir::TensorType>(inpTnsr.getType());
 
     // Get signless operands into vec
     ::mlir::SmallVector<mlir::Value, 1> oprnds = {inpTnsr};
 
     // determine resulting element type from converted op-type
     auto retArTyp =
-        op.getResult().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getResult().getType());
     assert(retArTyp);
     auto retTyp = retArTyp.getTensorType();
     auto elTyp = retTyp.getElementType();
@@ -1212,8 +1211,8 @@ struct ReductionOpLowering
 
     // create reduction op as linalg::generic
     const ::imex::ndarray::ReduceOpId ropid =
-        (::imex::ndarray::ReduceOpId)adaptor.getOp()
-            .cast<::mlir::IntegerAttr>()
+        (::imex::ndarray::ReduceOpId)mlir::cast<::mlir::IntegerAttr>(
+            adaptor.getOp())
             .getInt();
     auto bodyBuilder = getBodyBuilder(ropid, sElTyp);
     auto resTnsr = rewriter.create<::mlir::linalg::GenericOp>(
@@ -1256,17 +1255,17 @@ struct ConvertNDArrayToLinalgPass
       if (inputs.size() == 1) {
         auto input = inputs[0];
         auto itype = input.getType();
-        if (type.isa<::mlir::TensorType>() and
-            itype.isa<::mlir::TensorType>()) {
+        if (mlir::isa<::mlir::TensorType>(type) and
+            mlir::isa<::mlir::TensorType>(itype)) {
           return builder.create<::mlir::tensor::CastOp>(loc, type, inputs)
               .getResult();
         }
-        auto ttype = itype.dyn_cast<::mlir::RankedTensorType>();
-        if (ttype && type.isa<::mlir::MemRefType>()) {
+        auto ttype = mlir::dyn_cast<::mlir::RankedTensorType>(itype);
+        if (ttype && mlir::isa<::mlir::MemRefType>(type)) {
           return createToMemRef(loc, builder, input, type);
         }
-        auto mrtype = itype.dyn_cast<::mlir::MemRefType>();
-        if (mrtype && type.isa<::mlir::RankedTensorType>()) {
+        auto mrtype = mlir::dyn_cast<::mlir::MemRefType>(itype);
+        if (mrtype && mlir::isa<::mlir::RankedTensorType>(type)) {
           return builder
               .create<::mlir::bufferization::ToTensorOp>(loc, type, input)
               .getResult();

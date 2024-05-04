@@ -40,19 +40,19 @@ static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
   // ADD and MUL are defined for both Integers and Floats,
   // need to generate code based on element data type.
   if (kind == mlir::vector::CombiningKind::ADD) {
-    if (elemTy.isa<mlir::FloatType>()) {
+    if (mlir::isa<mlir::FloatType>(elemTy)) {
       return rewriter.create<mlir::arith::AddFOp>(loc, lhs, rhs);
     }
-    if (elemTy.isa<mlir::IntegerType>()) {
+    if (mlir::isa<mlir::IntegerType>(elemTy)) {
       return rewriter.create<mlir::arith::AddIOp>(loc, lhs, rhs);
     }
   }
 
   if (kind == mlir::vector::CombiningKind::MUL) {
-    if (elemTy.isa<mlir::FloatType>()) {
+    if (mlir::isa<mlir::FloatType>(elemTy)) {
       return rewriter.create<mlir::arith::MulFOp>(loc, lhs, rhs);
     }
-    if (elemTy.isa<mlir::IntegerType>()) {
+    if (mlir::isa<mlir::IntegerType>(elemTy)) {
       return rewriter.create<mlir::arith::MulIOp>(loc, lhs, rhs);
     }
   }
@@ -333,8 +333,8 @@ bool isLegalArithOp(mlir::Operation *op) {
   if (llvm::isa<mlir::arith::ConstantOp>(op)) {
     auto constOp = llvm::cast<mlir::arith::ConstantOp>(op);
     auto resultTy = constOp.getResult().getType();
-    if (resultTy.isa<mlir::VectorType>() &&
-        resultTy.cast<mlir::VectorType>().getRank() == 4)
+    if (mlir::isa<mlir::VectorType>(resultTy) &&
+        mlir::cast<mlir::VectorType>(resultTy).getRank() == 4)
       return false;
   }
   return true;

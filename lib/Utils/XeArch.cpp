@@ -194,7 +194,7 @@ XePVCuArch::get2DStoreConfig(int element_data_size) {
 
 mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
 
-  if (auto dpasOp = llvm::dyn_cast<xegpu::DpasOp>(op)) {
+  if (auto dpasOp = llvm::dyn_cast<mlir::xegpu::DpasOp>(op)) {
     auto lhsTy = dpasOp.getLhsType();
     auto rhsTy = dpasOp.getRhsType();
     auto accTy = dpasOp.getAcc() ? dpasOp.getAccType() : nullptr;
@@ -301,7 +301,7 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
 
   //  TODO: do we need to check cache hint?
 
-  if (auto loadOp = llvm::dyn_cast<xegpu::LoadNDOp>(op)) {
+  if (auto loadOp = llvm::dyn_cast<mlir::xegpu::LoadNdOp>(op)) {
     auto tdescTy = loadOp.getTensorDescType();
 
     int elementSize = loadOp.getTensorDescType().getElementTypeBitWidth();
@@ -339,10 +339,9 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
 
 mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
 
-  if (auto storeOp = llvm::dyn_cast<xegpu::StoreNDOp>(op)) {
+  if (auto storeOp = llvm::dyn_cast<mlir::xegpu::StoreNdOp>(op)) {
     auto tdescTy = storeOp.getTensorDescType();
-
-    int elementSize = storeOp.getTensorDescType().getElementTypeBitWidth();
+    int elementSize = tdescTy.getElementTypeBitWidth();
 
     LoadStore2DConfig storeParams;
     bool vnni = false;
@@ -373,7 +372,7 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
 
 mlir::LogicalResult XeuArchInterface::isLegalPrefetch2dOp(mlir::Operation *op) {
 
-  if (auto prefetchOp = llvm::dyn_cast<xegpu::PrefetchNDOp>(op)) {
+  if (auto prefetchOp = llvm::dyn_cast<mlir::xegpu::PrefetchNdOp>(op)) {
     auto tdescTy = prefetchOp.getTensorDescType();
 
     int elementSize = prefetchOp.getTensorDescType().getElementTypeBitWidth();

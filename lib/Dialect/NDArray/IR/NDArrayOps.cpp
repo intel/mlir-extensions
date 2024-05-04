@@ -77,10 +77,9 @@ NDArrayType NDArrayType::get(::llvm::ArrayRef<int64_t> shape,
   if (val) {
     auto defOp = val.getDefiningOp<::mlir::bufferization::ToTensorOp>();
     if (defOp) {
-      return defOp.getMemref()
-          .getType()
-          .cloneWith(getShape(), getElementType())
-          .cast<::mlir::MemRefType>();
+      auto ty =
+          defOp.getMemref().getType().cloneWith(getShape(), getElementType());
+      return mlir::cast<::mlir::MemRefType>(ty);
     }
   }
   return ::imex::getMemRefType(getContext(), getShape(), getElementType());
@@ -92,7 +91,7 @@ NDArrayType NDArrayType::get(::llvm::ArrayRef<int64_t> shape,
 
 NDArrayType NDArrayType::cloneWithDynDims() const {
   if (hasZeroSize() || hasUnitSize()) {
-    return cloneWith(getShape(), getElementType()).cast<NDArrayType>();
+    return mlir::cast<NDArrayType>(cloneWith(getShape(), getElementType()));
   }
   return NDArrayType::get(
       ::mlir::SmallVector<int64_t>(getRank(), ::mlir::ShapedType::kDynamic),
@@ -105,19 +104,19 @@ NDArrayType NDArrayType::cloneWithDynDims() const {
 bool imex::ndarray::NDArrayBase::hasRank() const { return true; }
 
 llvm::ArrayRef<int64_t> imex::ndarray::NDArrayBase::getShape() const {
-  return cast<NDArrayType>().getShape();
+  return mlir::cast<NDArrayType>(*this).getShape();
 }
 
 imex::ndarray::NDArrayBase imex::ndarray::NDArrayBase::cloneWith(
     std::optional<llvm::ArrayRef<int64_t>> shape, Type elementType) const {
-  auto t = cast<NDArrayType>();
+  auto t = mlir::cast<NDArrayType>(*this);
   return NDArrayType::get(shape.value_or(getShape()), elementType,
                           t.getEnvironments(), t.getLayout());
 }
 
 imex::ndarray::NDArrayBase
 imex::ndarray::NDArrayBase::cloneWithEnv(::mlir::Attribute env) const {
-  auto t = cast<NDArrayType>();
+  auto t = mlir::cast<NDArrayType>(*this);
   ::mlir::SmallVector<::mlir::Attribute> envs(t.getEnvironments());
   envs.emplace_back(env);
   return NDArrayType::get(t.getShape(), t.getElementType(), envs,

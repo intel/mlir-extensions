@@ -20,12 +20,12 @@
 template <typename OpType>
 bool replaceOperandInplaceWithCast(::mlir::PatternRewriter &rewriter,
                                    unsigned idx, ::mlir::Value arg, OpType op) {
-  auto ptTyp = arg.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+  auto ptTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(arg.getType());
   if (ptTyp && !ptTyp.hasStaticShape()) {
     auto defOp = arg.getDefiningOp<::imex::ndarray::CastOp>();
     if (defOp) {
       auto src = defOp.getSource();
-      auto srcPtTyp = src.getType().cast<::imex::ndarray::NDArrayType>();
+      auto srcPtTyp = mlir::cast<::imex::ndarray::NDArrayType>(src.getType());
       if (srcPtTyp.hasStaticShape()) {
         rewriter.modifyOpInPlace(op, [&]() { op->setOperand(idx, src); });
         return true;

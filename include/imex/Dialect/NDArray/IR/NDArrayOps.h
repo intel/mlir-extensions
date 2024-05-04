@@ -60,7 +60,9 @@ public:
   static bool classof(Type type);
 
   /// Allow implicit conversion to ShapedType.
-  operator mlir::ShapedType() const { return cast<mlir::ShapedType>(); }
+  operator mlir::ShapedType() const {
+    return mlir::cast<mlir::ShapedType>(*this);
+  }
 };
 
 } // namespace ndarray
@@ -88,13 +90,13 @@ template <typename T> bool hasEnv(const ::imex::ndarray::NDArrayType &t) {
 }
 
 inline bool hasGPUEnv(const ::mlir::Type &t) {
-  auto ptType = t.dyn_cast<::imex::ndarray::NDArrayType>();
+  auto ptType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(t);
   return ptType ? ::imex::ndarray::hasEnv<::imex::region::GPUEnvAttr>(ptType)
                 : false;
 }
 
 inline ::imex::region::GPUEnvAttr getGPUEnv(const ::mlir::Type &t) {
-  auto ptType = t.dyn_cast<::imex::ndarray::NDArrayType>();
+  auto ptType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(t);
   if (ptType) {
     for (auto a : ptType.getEnvironments()) {
       if (auto g = ::mlir::dyn_cast<::imex::region::GPUEnvAttr>(a)) {

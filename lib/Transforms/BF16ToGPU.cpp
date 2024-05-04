@@ -42,7 +42,7 @@ public:
       ArrayRef<Type> inputTypes;
       ArrayRef<Type> resultTypes;
       for (Type t : oftype.getInputs()) {
-        MemRefType m = t.dyn_cast<MemRefType>();
+        MemRefType m = mlir::dyn_cast<MemRefType>(t);
         if (m) {
           Type et = m.getElementType();
           if (et.isBF16()) {
@@ -200,7 +200,7 @@ public:
           auto zero = builder.create<arith::ConstantIndexOp>(alloc.getLoc(), 0);
           // get shape of kernel operand and construct a same shape
           // type with i16
-          MemRefType m = kop.getType().dyn_cast<MemRefType>();
+          MemRefType m = mlir::dyn_cast<MemRefType>(kop.getType());
           llvm::ArrayRef<int64_t> s = m.getShape();
           auto itype = MemRefType::get(s, builder.getI16Type());
           ValueRange sizes;

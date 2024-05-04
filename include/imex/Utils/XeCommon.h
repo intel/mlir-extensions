@@ -16,15 +16,15 @@
 #ifndef _IMEX_XECOMMON_H_
 #define _IMEX_XECOMMON_H_
 
-#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/OneToNTypeConversion.h>
-using namespace imex::xegpu;
+using namespace mlir::xegpu;
 namespace imex {
 
 // It checks each GPUFuncOp in the module to see
@@ -292,7 +292,7 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
 
 unsigned encodeDataum(mlir::Type type);
 
-unsigned encodeOpcode(AtomicRMWKind kind);
+unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind);
 
 // L1 and L3 Cache Policies for Load Operation
 //  L1 Cache Policies: Uncached (UC), Cached (C), Cache Streaming (S),
@@ -319,7 +319,7 @@ template <typename OpType> unsigned encodeCacheHint(OpType op) {
   auto l1hint = op.getL1Hint();
   auto l3hint = op.getL3Hint();
 
-  constexpr bool isStore = std::is_same_v<OpType, StoreNDOp> ||
+  constexpr bool isStore = std::is_same_v<OpType, mlir::xegpu::StoreNdOp> ||
                            std::is_same_v<OpType, StoreScatterOp>;
   unsigned cacheHint = L1UC_L3UC;
 
@@ -328,61 +328,65 @@ template <typename OpType> unsigned encodeCacheHint(OpType op) {
 
   if constexpr (!isStore) {
 
-    auto l1CacheValue = SET_CACHEVALUE(l1hint, CacheReadHint::UNCACHED);
-    auto l3CacheValue = SET_CACHEVALUE(l3hint, CacheReadHint::UNCACHED);
+    auto l1CacheValue = SET_CACHEVALUE(l1hint, CachePolicy::UNCACHED);
+    auto l3CacheValue = SET_CACHEVALUE(l3hint, CachePolicy::UNCACHED);
 
 // Setting Cache policy override based on L3 Uncached/Cached value for Load
 // operation
 #define SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, uncachedVal,           \
                                cachedVal)                                      \
-  if (l3CacheValue == CacheReadHint::UNCACHED)                                 \
+  if (l3CacheValue == CachePolicy::UNCACHED)                                   \
     cacheHint = uncachedVal;                                                   \
-  else if (l3CacheValue == CacheReadHint::CACHED)                              \
+  else if (l3CacheValue == CachePolicy::CACHED)                                \
     cacheHint = cachedVal;
 
     switch (l1CacheValue) {
-    case CacheReadHint::UNCACHED:
+    case CachePolicy::UNCACHED:
       SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1UC_L3UC, L1UC_L3C);
       break;
-    case CacheReadHint::CACHED:
+    case CachePolicy::CACHED:
       SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1C_L3UC, L1C_L3C);
       break;
-    case CacheReadHint::STREAMING:
+    case CachePolicy::STREAMING:
       SET_L1L3_CACHEREADHINT(cacheHint, l3CacheValue, L1S_L3UC, L1S_L3C);
       break;
-    case CacheReadHint::READ_INVALIDATE:
-      if (l3CacheValue == CacheReadHint::CACHED)
+    case CachePolicy::READ_INVALIDATE:
+      if (l3CacheValue == CachePolicy::CACHED)
         cacheHint = L1IAR_L3C;
       break;
+    default:
+      llvm_unreachable("Invalid Cache Policy for Read.\n");
     }
 
   } else {
-    auto l1CacheValue = SET_CACHEVALUE(l1hint, CacheWriteHint::UNCACHED);
-    auto l3CacheValue = SET_CACHEVALUE(l3hint, CacheWriteHint::UNCACHED);
+    auto l1CacheValue = SET_CACHEVALUE(l1hint, CachePolicy::UNCACHED);
+    auto l3CacheValue = SET_CACHEVALUE(l3hint, CachePolicy::UNCACHED);
 
 // Setting Cache policy override based on L3 Uncached/Write-Back value for Store
 // operation
 #define SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, uncachedVal,          \
                                 cachedVal)                                     \
-  if (l3CacheValue == CacheWriteHint::UNCACHED)                                \
+  if (l3CacheValue == CachePolicy::UNCACHED)                                   \
     cacheHint = uncachedVal;                                                   \
-  else if (l3CacheValue == CacheWriteHint::WRITE_BACK)                         \
+  else if (l3CacheValue == CachePolicy::WRITE_BACK)                            \
     cacheHint = cachedVal;
 
     switch (l1CacheValue) {
-    case CacheWriteHint::UNCACHED:
+    case CachePolicy::UNCACHED:
       SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1UC_L3UC, L1UC_L3WB);
       break;
-    case CacheWriteHint::WRITE_THROUGH:
+    case CachePolicy::WRITE_THROUGH:
       SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1WT_L3UC, L1WT_L3WB);
       break;
-    case CacheWriteHint::STREAMING:
+    case CachePolicy::STREAMING:
       SET_L1L3_CACHEWRITEHINT(cacheHint, l3CacheValue, L1S_L3UC, L1S_L3WB);
       break;
-    case CacheWriteHint::WRITE_BACK:
-      if (l3CacheValue == CacheWriteHint::WRITE_BACK)
+    case CachePolicy::WRITE_BACK:
+      if (l3CacheValue == CachePolicy::WRITE_BACK)
         cacheHint = L1WB_L3WB;
       break;
+    default:
+      llvm_unreachable("Invalid Cache Policy for Write.\n");
     }
   }
   return cacheHint;
