@@ -11,15 +11,13 @@ func.func @alloc_nbarrier() {
   return
 }
 
-// CHECK-LABEL: func @create_nbarrier({{.*}}) {
-func.func @create_nbarrier() {
+// CHECK-LABEL: func @init_nbarrier({{.*}}) {
+func.func @init_nbarrier() {
   %nbarrier_id = arith.constant 1 : i8
   %nbarrier_role = arith.constant 0 : i8
-  // CHECK: xegpu.create_nbarrier
-  // CHECK-SAME: {num_consumers = 32 : i8, num_producers = 32 : i8}
-  // CHECK-SAME: (i8, i8) -> !xegpu.nbarrier
-  %nbarrier = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 :i8 , num_consumers = 32 : i8}
-    : (i8, i8) -> !xegpu.nbarrier
+  // CHECK: xegpu.init_nbarrier
+  // CHECK-SAME: i8, i8 -> !xegpu.nbarrier
+  %nbarrier = xegpu.init_nbarrier %nbarrier_id, %nbarrier_role : i8, i8 -> !xegpu.nbarrier
   return
 }
 
@@ -39,16 +37,9 @@ func.func @nbarrier_wait(%nbarrier : !xegpu.nbarrier) {
   return
 }
 
-// CHECK-LABEL: func @compile_hint({{.*}}) {
-func.func @compile_hint() {
-  // CHECK: xegpu.compile_hint
-  xegpu.compile_hint
-  return
-}
-
-// CHECK-LABEL: func @mfence({{.*}}) {
-func.func @mfence() {
-  // CHECK: xegpu.mfence {fence_op = "none", fence_scope = "local", memory_kind = "ugm"}
-  xegpu.mfence {memory_kind = "ugm" , fence_op = "none", fence_scope = "local"}
+// CHECK-LABEL: func @fence({{.*}}) {
+func.func @fence() {
+  // CHECK: xegpu.fence memory_kind = global, fence_scope = workgroup
+  xegpu.fence memory_kind = global, fence_scope = workgroup
   return
 }

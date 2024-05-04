@@ -23,7 +23,6 @@
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
-#include <imex/Dialect/XeGPU/IR/XeGPU.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 
 namespace imex {
@@ -36,8 +35,7 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
                     ::imex::ndarray::NDArrayDialect,
                     ::imex::region::RegionDialect,
                     ::imex::xetile::XeTileDialect,
-                    ::imex::gpux::GPUXDialect,
-                    ::imex::xegpu::XeGPUDialect>();
+                    ::imex::gpux::GPUXDialect>();
   // clang-format on
 }
 

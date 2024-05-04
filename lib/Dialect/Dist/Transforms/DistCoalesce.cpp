@@ -165,7 +165,7 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
           }
           assert(tOffs.size() == tSizes.size());
           auto dynPtType = cloneWithDynEnv(
-              val.getType().cast<::imex::ndarray::NDArrayType>());
+              mlir::cast<::imex::ndarray::NDArrayType>(val.getType()));
           return builder.create<::imex::dist::RePartitionOp>(
               op->getLoc(), dynPtType, val, tOffs, tSizes);
         }
@@ -174,10 +174,9 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
     } else {
       const int32_t rank = static_cast<int32_t>(tOffs.size());
       const int32_t svRank = op.getStaticSizes().size();
-      const bool hasUnitSize = op.getResult()
-                                   .getType()
-                                   .cast<::imex::ndarray::NDArrayType>()
-                                   .hasUnitSize();
+      const bool hasUnitSize =
+          mlir::cast<::imex::ndarray::NDArrayType>(op.getResult().getType())
+              .hasUnitSize();
 
       if (svRank == rank || hasUnitSize) {
         if (hasUnitSize) {
@@ -479,8 +478,8 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
         auto &dom = this->getAnalysis<::mlir::DominanceInfo>();
 
         builder.setInsertionPointAfter(base);
-        auto dEnv = getDistEnv(
-            base->getResult(0).getType().cast<::imex::ndarray::NDArrayType>());
+        auto dEnv = getDistEnv(mlir::cast<::imex::ndarray::NDArrayType>(
+            base->getResult(0).getType()));
         auto team = dEnv.getTeam();
         auto nProcs = createNProcs(base->getLoc(), builder, team);
         auto pRank = createPRank(base->getLoc(), builder, team);
@@ -589,9 +588,8 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
                           assert(dom.dominates(o.getDefiningOp(), bbIPnt));
                         }
                         auto dynPtType = cloneWithDynEnv(
-                            base->getResult(0)
-                                .getType()
-                                .cast<::imex::ndarray::NDArrayType>());
+                            mlir::cast<::imex::ndarray::NDArrayType>(
+                                base->getResult(0).getType()));
                         combined = builder.create<::imex::dist::RePartitionOp>(
                             loc, dynPtType, base->getResult(0), bbOffs,
                             bbSizes);

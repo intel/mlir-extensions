@@ -23,13 +23,13 @@ module @gemm attributes {gpu.container_module} {
       %c1 = arith.constant 1 : index
       %c8 = arith.constant 8 : index
       %c16 = arith.constant 16 : index
-      %1 = xegpu.create_nd_tdesc %arg0[0, 0], [%c8, %c16], [%c16, %c1] {mode = vc} : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %2 = xegpu.load_nd %1 {vnni_axis = 1, l1_hint = cached, l2_hint = cached, mode = vc}  : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %1 = xegpu.create_nd_tdesc %arg0[0, 0], [%c8, %c16], [%c16, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %2 = xegpu.load_nd %1 {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}  : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
       %3 = vector.shape_cast %2 : vector<8x8x2xf16> to vector<128xf16>
       %5 = arith.extf %3 : vector<128xf16> to vector<128xf32>
       %4 = vector.shape_cast %5 : vector<128xf32> to vector<8x16xf32>
-      %6 = xegpu.create_nd_tdesc %arg1[0, 0], [%c8, %c16], [%c16, %c1] { mode = vc } : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %4, %6 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %6 = xegpu.create_nd_tdesc %arg1[0, 0], [%c8, %c16], [%c16, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %4, %6 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

@@ -122,7 +122,7 @@ struct TeamSizeOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(::imex::distruntime::TeamSizeOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
-    auto team = op.getTeam().cast<::mlir::IntegerAttr>().getInt();
+    auto team = mlir::cast<::mlir::IntegerAttr>(op.getTeam()).getInt();
     auto loc = op.getLoc();
 
     rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
@@ -142,7 +142,7 @@ struct TeamMemberOpPattern
   ::mlir::LogicalResult
   matchAndRewrite(::imex::distruntime::TeamMemberOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
-    auto team = op.getTeam().cast<::mlir::IntegerAttr>().getInt();
+    auto team = mlir::cast<::mlir::IntegerAttr>(op.getTeam()).getInt();
     auto loc = op.getLoc();
 
     rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
@@ -162,9 +162,10 @@ struct CopyReshapeOpPattern
   matchAndRewrite(::imex::distruntime::CopyReshapeOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto lArray = op.getLArray();
-    auto arType = lArray.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto arType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(lArray.getType());
     auto resType =
-        op.getNlArray().getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getNlArray().getType());
     if (!arType || !resType) {
       return ::mlir::failure();
     }
@@ -185,7 +186,7 @@ struct CopyReshapeOpPattern
 
     auto idxType = rewriter.getIndexType();
     auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
-        loc, team.cast<::mlir::IntegerAttr>());
+        loc, mlir::cast<::mlir::IntegerAttr>(team));
     auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
     auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
     auto lArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lArray);
@@ -221,7 +222,7 @@ struct GetHaloOpPattern
     auto loc = op.getLoc();
 
     auto lData = op.getLocal();
-    auto arTyp = lData.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto arTyp = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lData.getType());
     if (!arTyp)
       return ::mlir::failure();
 
@@ -320,7 +321,7 @@ struct AllReduceOpPattern
     // get guid and rank and call runtime function
     auto loc = op.getLoc();
     auto mRef = op.getData();
-    auto mRefType = mRef.getType().dyn_cast<::mlir::MemRefType>();
+    auto mRefType = mlir::dyn_cast<::mlir::MemRefType>(mRef.getType());
     if (!mRefType)
       return ::mlir::failure();
 
@@ -401,7 +402,7 @@ static auto DNDA_PRANK = getenv("DNDA_PRANK");
   }
   if (_idtr_nprocs != NULL) {
     ::mlir::Builder builder(getContext());
-    auto team = adaptor.getTeam().cast<::mlir::IntegerAttr>().getInt();
+    auto team = mlir::cast<::mlir::IntegerAttr>(adaptor.getTeam()).getInt();
     auto np = _idtr_nprocs(reinterpret_cast<void *>(team));
     return builder.getIndexAttr(np);
   }
@@ -417,7 +418,7 @@ static auto DNDA_PRANK = getenv("DNDA_PRANK");
   }
   if (_idtr_prank != NULL) {
     ::mlir::Builder builder(getContext());
-    auto team = adaptor.getTeam().cast<::mlir::IntegerAttr>().getInt();
+    auto team = mlir::cast<::mlir::IntegerAttr>(adaptor.getTeam()).getInt();
     auto np = _idtr_prank(reinterpret_cast<void *>(team));
     return builder.getIndexAttr(np);
   }

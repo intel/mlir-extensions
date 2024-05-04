@@ -72,19 +72,19 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[DPAS_RES:.*]] = spirv.FunctionCall @llvm_genx_dpas_nosrc0_v128f32_v128i32_v64i32(%[[B_back_i32]], %[[A_back_i32]], %{{.*}})
 
       // CHECK: spirv.FunctionCall @llvm_genx_raw_sends2_noresult_i1_v8i32_v128f32(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[C_tile_payload_idx7]], %[[DPAS_RES]])
-      %A_tdesc = xegpu.create_nd_tdesc %A[0, 0] {mode = vc} : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %B_tdesc = xegpu.create_nd_tdesc %B[0, 0] {mode = vc} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %C_tdesc = xegpu.create_nd_tdesc %C[0, 0] {mode = vc} : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.prefetch_nd %A_tdesc {mode = vc} : !xegpu.tensor_desc<8x16xf16>
-      xegpu.prefetch_nd %B_tdesc {mode = vc} : !xegpu.tensor_desc<16x16xf16>
+      %A_tdesc = xegpu.create_nd_tdesc %A[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %B_tdesc = xegpu.create_nd_tdesc %B[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %C_tdesc = xegpu.create_nd_tdesc %C[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.prefetch_nd %A_tdesc : !xegpu.tensor_desc<8x16xf16>
+      xegpu.prefetch_nd %B_tdesc : !xegpu.tensor_desc<16x16xf16>
       %A_increment = arith.constant dense<1.0> : vector<128xf16>
       %A_increment_ = vector.shape_cast %A_increment : vector<128xf16> to vector<8x8x2xf16>
 
-      %A_tensor = xegpu.load_nd %A_tdesc  {mode = vc, vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %A_tensor = xegpu.load_nd %A_tdesc  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
       %A_tensor_incremented = arith.addf %A_tensor, %A_increment_ : vector<8x8x2xf16>
-      %B_tensor = xegpu.load_nd %B_tdesc  {mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %dpas_result = xegpu.dpas %A_tensor_incremented, %B_tensor {mode = vc} : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-      xegpu.store_nd %dpas_result, %C_tdesc {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %B_tensor = xegpu.load_nd %B_tdesc  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %dpas_result = xegpu.dpas %A_tensor_incremented, %B_tensor : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      xegpu.store_nd %dpas_result, %C_tdesc : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

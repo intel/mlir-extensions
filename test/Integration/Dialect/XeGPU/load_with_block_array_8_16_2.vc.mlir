@@ -19,18 +19,18 @@ module @gemm attributes {gpu.container_module} {
   }
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
     gpu.func @test_kernel(%arg0: memref<8x32xf16>, %arg1: memref<8x32xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-      %0 = xegpu.create_nd_tdesc %arg0[0, 0] {mode = vc} : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>>
-      %1 = xegpu.create_nd_tdesc %arg1[0, 0] {mode = vc} : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %2 = xegpu.create_nd_tdesc %arg1[0, 16] {mode = vc} : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %3 = xegpu.load_nd %0  {vnni_axis = 1, l1_hint = cached, l2_hint = cached, mode = vc} : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x8x2xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+      %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %2 = xegpu.create_nd_tdesc %arg1[0, 16] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %3 = xegpu.load_nd %0  {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x8x2xf16>
       %4 = vector.extract %3[0]: vector<8x8x2xf16> from vector<2x8x8x2xf16>
       %5 = vector.extract %3[1]: vector<8x8x2xf16> from vector<2x8x8x2xf16>
       %6 = vector.shape_cast %4: vector<8x8x2xf16> to vector<8x16xf16>
       %7 = vector.shape_cast %5: vector<8x8x2xf16> to vector<8x16xf16>
       %8 = arith.extf %6: vector<8x16xf16> to vector<8x16xf32>
       %9 = arith.extf %7: vector<8x16xf16> to vector<8x16xf32>
-      xegpu.store_nd %8, %1 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %9, %2 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %8, %1 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %9, %2 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

@@ -274,7 +274,7 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
   // - static sizes > 1 overwrite other static sizes
   // - static sizes == 1 remain only if all operands agree
   for (auto arg : operands) {
-    auto shapedTy = arg.getType().cast<::mlir::ShapedType>();
+    auto shapedTy = mlir::cast<::mlir::ShapedType>(arg.getType());
     for (int i = 0; i < shapedTy.getRank(); i++) {
       if (shapedTy.isDynamicDim(i)) {
         auto dimOp = builder.create<::mlir::tensor::DimOp>(loc, arg, i);
@@ -363,7 +363,7 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
 /// Create a cast op from ranked to unranked memref
 ::mlir::Value createUnrankedMemRefCast(::mlir::OpBuilder &builder,
                                        ::mlir::Location loc, ::mlir::Value mr) {
-  auto elType = mr.getType().cast<::mlir::MemRefType>().getElementType();
+  auto elType = mlir::cast<::mlir::MemRefType>(mr.getType()).getElementType();
   auto umrType = ::mlir::UnrankedMemRefType::get(elType, {});
   auto umr = builder.create<::mlir::memref::CastOp>(loc, umrType, mr);
   return umr;
@@ -381,7 +381,7 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
 /// @return members of given 1d memref as individual values
 ::imex::ValVec createValuesFromMemRef(::mlir::OpBuilder &builder,
                                       ::mlir::Location loc, ::mlir::Value mr) {
-  auto mrTyp = mr.getType().dyn_cast<::mlir::MemRefType>();
+  auto mrTyp = mlir::dyn_cast<::mlir::MemRefType>(mr.getType());
   assert(mrTyp && mrTyp.getShape().size() == 1);
   auto rank = mrTyp.getShape()[0];
   ::imex::ValVec vals(rank);
@@ -474,9 +474,10 @@ void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
 // If this memref has a different shape than mrTyp, also creates a memref.cast
 ::mlir::Value createToMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
                              ::mlir::Value input, ::mlir::Type toTyp) {
-  auto iTyp = input.getType().cast<::mlir::RankedTensorType>();
-  auto mrTyp = toTyp.cast<::mlir::MemRefType>();
-  auto shapedMrTyp = mrTyp.cast<::mlir::ShapedType>().clone(iTyp.getShape());
+  auto iTyp = mlir::cast<::mlir::RankedTensorType>(input.getType());
+  auto mrTyp = mlir::cast<::mlir::MemRefType>(toTyp);
+  auto shapedMrTyp =
+      mlir::cast<::mlir::ShapedType>(mrTyp).clone(iTyp.getShape());
   auto shapedMr = builder.create<::mlir::bufferization::ToMemrefOp>(
       loc, shapedMrTyp, input);
   return shapedMrTyp == toTyp

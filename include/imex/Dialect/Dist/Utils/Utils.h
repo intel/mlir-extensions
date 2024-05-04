@@ -43,13 +43,13 @@ inline bool isDist(const ::imex::ndarray::NDArrayType &t) {
 
 /// @return true if type has a DistEnvAttr
 inline bool isDist(const ::mlir::Type &t) {
-  auto arType = t.dyn_cast<::imex::ndarray::NDArrayType>();
+  auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(t);
   return arType ? isDist(arType) : false;
 }
 
 /// @return true if value is a DistEnvAttr
 inline bool isDist(const ::mlir::Value &v) {
-  auto arType = v.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+  auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(v.getType());
   return arType ? isDist(arType) : false;
 }
 
@@ -154,7 +154,7 @@ createDistArray(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                 ::mlir::ArrayRef<int64_t> sOffs = {}) {
   assert(parts.size() == 1 || parts.size() == 3);
   ::imex::ValVec nParts;
-  auto p = parts.front().getType().cast<::imex::ndarray::NDArrayType>();
+  auto p = mlir::cast<::imex::ndarray::NDArrayType>(parts.front().getType());
   auto envs = p.getEnvironments();
   auto rank = p.getRank();
   assert(rank || parts.size() == 1);
@@ -191,7 +191,8 @@ createDistArray(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
 inline ::imex::ValVec createGlobalShapeOf(const ::mlir::Location &loc,
                                           ::mlir::OpBuilder &builder,
                                           ::mlir::Value ary) {
-  auto gshp = ary.getType().cast<::imex::ndarray::NDArrayType>().getShape();
+  auto gshp =
+      mlir::cast<::imex::ndarray::NDArrayType>(ary.getType()).getShape();
   ::imex::ValVec res;
   for (auto d : gshp) {
     res.emplace_back(createIndex(loc, builder, d));
@@ -231,8 +232,8 @@ inline ::mlir::Value createRePartition(const ::mlir::Location &loc,
                                        ::mlir::Value ary,
                                        const ::mlir::ValueRange &tOffs = {},
                                        const ::mlir::ValueRange &tSzs = {}) {
-  auto retTyp =
-      ary.getType().cast<::imex::ndarray::NDArrayType>().cloneWithDynDims();
+  auto retTyp = mlir::cast<::imex::ndarray::NDArrayType>(ary.getType())
+                    .cloneWithDynDims();
   return builder.create<::imex::dist::RePartitionOp>(loc, retTyp, ary, tOffs,
                                                      tSzs);
 }

@@ -18,16 +18,14 @@ module @gemm attributes {gpu.container_module} {
     gpu.func @test_kernel(%arg0: memref<8x16xf16>, %arg1: memref<16x16xf16>, %arg2: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       // CHECK: spirv.FunctionCall @llvm_genx_raw_send2_noresult_i1_v8i32
       // CHECK: spirv.FunctionCall @llvm.genx.lsc.fence.i1
-      // CHECK: spirv.FunctionCall @llvm_genx_fence
       // CHECK: spirv.FunctionCall @llvm_genx_nbarrier
       // CHECK: spirv.ExecutionMode @test_kernel "NamedBarrierCountINTEL", 16
       xegpu.alloc_nbarrier 16
       %nbarrier_id = arith.constant 1 : i8
       %nbarrier_role = arith.constant 0 : i8
-      %payload = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 : i8, num_consumers = 32 : i8} : (i8, i8) -> !xegpu.nbarrier
+      %payload = xegpu.init_nbarrier %nbarrier_id, %nbarrier_role : i8, i8 -> !xegpu.nbarrier
       xegpu.nbarrier_arrive %payload : !xegpu.nbarrier
-      xegpu.mfence {memory_kind = "ugm" , fence_op = "none", fence_scope = "local"}
-      xegpu.compile_hint
+      xegpu.fence memory_kind = global, fence_scope = workgroup
       xegpu.nbarrier_wait %payload : !xegpu.nbarrier
       gpu.return
     }

@@ -35,18 +35,16 @@ module attributes {
       %0 = gpu.block_id x
       %1 = gpu.block_id y
       %2 = gpu.thread_id x
-            // CHECK: %[[INDEX1:.*]] = spirv.IAdd %[[ARG3]], %[[WORKGROUPIDX]]
 
+      // CHECK: %[[INDEX1:.*]] = spirv.IAdd %[[ARG3]], %[[WORKGROUPIDX]]
       %12 = arith.addi %arg3, %0 : index
       // CHECK: %[[INDEX2:.*]] = spirv.IAdd %[[ARG4]], %[[LOCALINVOCATIONIDX]]
       %13 = arith.addi %arg4, %2 : index
       // CHECK: %[[OFFSET1_0:.*]] = spirv.Constant 0 : i64
       // CHECK: %[[STRIDE1_1:.*]] = spirv.Constant 5 : i64
-      // CHECK: %[[UPDATE1_1:.*]] = spirv.IMul %[[STRIDE1_1]], %[[INDEX1]] : i64
-      // CHECK: %[[OFFSET1_1:.*]] = spirv.IAdd %[[OFFSET1_0]], %[[UPDATE1_1]] : i64
+      // CHECK: %[[UPDATE1_1:.*]] = spirv.IMul %[[INDEX1]], %[[STRIDE1_1]] : i64
       // CHECK: %[[STRIDE1_2:.*]] = spirv.Constant 1 : i64
-      // CHECK: %[[UPDATE1_2:.*]] = spirv.IMul %[[STRIDE1_2]], %[[INDEX2]] : i64
-      // CHECK: %[[OFFSET1_2:.*]] = spirv.IAdd %[[OFFSET1_1]], %[[UPDATE1_2]] : i64
+      // CHECK: %[[OFFSET1_2:.*]] = spirv.IAdd %[[INDEX2]], %[[UPDATE1_1]] : i64
       // CHECK: %[[PTR1:.*]] = spirv.AccessChain %[[ARG0]]{{\[}}
       // CHECK-NEXT: %[[VAL1:.*]] = spirv.Load "CrossWorkgroup" %[[PTR1]]
       %14 = memref.load %arg0[%12, %13] : memref<2x5xf32>

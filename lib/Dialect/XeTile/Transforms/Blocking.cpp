@@ -270,8 +270,8 @@ struct ArithConstantOpPattern
 
     // TODO: we may can replace it with standard replaceOp method when
     // we have full support for other non-xetile operators.
-    rewriter.replaceOpWithIf(
-        op, unpack->getResults(), [&](mlir::OpOperand &op) {
+    rewriter.replaceUsesWithIf(
+        op->getResults(), unpack->getResults(), [&](mlir::OpOperand &op) {
           auto *owner = op.getOwner();
 
           // the direct user is an xetile operator
@@ -418,7 +418,7 @@ struct VectorMultiDimReductionOpPattern
     // will be transformed to
     // multi_reduction<add>, %e, %a[1, 3]: vector<16x2x1x16xf16> to
     // vector<16x1xf16>
-    auto dim = reductionDims[0].cast<mlir::IntegerAttr>().getInt();
+    auto dim = mlir::cast<mlir::IntegerAttr>(reductionDims[0]).getInt();
     auto newReductionDims = rewriter.getI64ArrayAttr({dim, dim + 2});
 
     auto newDestShape =
@@ -544,7 +544,8 @@ struct SCFYieldOpPattern
     for (auto [i, v] : llvm::enumerate(adaptor.getResults())) {
       if (auto defOp = v.getDefiningOp<xetile::TileUnpackOp>()) {
         // get InnerBlock size from the corresponding output type
-        auto ty = forOp->getResult(i).getType().dyn_cast<mlir::VectorType>();
+        auto ty =
+            mlir::dyn_cast<mlir::VectorType>(forOp->getResult(i).getType());
         assert(ty && ty.getRank() == 4);
         auto innerBlock = ty.getShape().take_back(2);
         auto packOp = addPackOp(v, innerBlock, rewriter);
@@ -796,11 +797,11 @@ struct TileMMAOpPattern
     // when its operands has been processed. Otherwise, inputs has not been
     // fully processed and it is not the right time to update the tile_mma op.
     if ((!a.getDefiningOp<xetile::TileUnpackOp>() &&
-         a.getType().cast<VectorType>().getRank() != 4) ||
+         mlir::cast<VectorType>(a.getType()).getRank() != 4) ||
         (!b.getDefiningOp<xetile::TileUnpackOp>() &&
-         b.getType().cast<VectorType>().getRank() != 4) ||
+         mlir::cast<VectorType>(b.getType()).getRank() != 4) ||
         (c && !c.getDefiningOp<xetile::TileUnpackOp>() &&
-         c.getType().cast<VectorType>().getRank() != 4))
+         mlir::cast<VectorType>(c.getType()).getRank() != 4))
       return rewriter.notifyMatchFailure(
           op, "expecting a, b, and c are either 2D vectors defined by "
               "unpackOps or 4D vectors.\n");
@@ -830,9 +831,9 @@ struct TileMMAOpPattern
     if (c)
       c = packing(c, {mmaSize[0], mmaSize[2]}, rewriter);
 
-    assert(a.getType().dyn_cast<VectorType>().getRank() == 4 &&
-           b.getType().dyn_cast<VectorType>().getRank() == 4 &&
-           (!c || c.getType().dyn_cast<VectorType>().getRank() == 4) &&
+    assert(mlir::dyn_cast<VectorType>(a.getType()).getRank() == 4 &&
+           mlir::dyn_cast<VectorType>(b.getType()).getRank() == 4 &&
+           (!c || mlir::dyn_cast<VectorType>(c.getType()).getRank() == 4) &&
            "a, b and c (if has) should be transformed into 4D vectors.\n");
 
     auto shape = resultTy.getShape();

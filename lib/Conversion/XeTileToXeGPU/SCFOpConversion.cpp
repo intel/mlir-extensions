@@ -61,9 +61,11 @@ struct SgSCFForOpBlockPattern
     // UnrealizedConversionCastOp will be inserted by typeConverter
     rewriter.applySignatureConversion(&op.getRegion(), argumentMapping);
 
-    newOp.getBody()->erase();
+    if (newOp.getBody())
+      rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());
+
     rewriter.replaceOp(op, newOp.getResults());
     return mlir::success();
   }
@@ -95,10 +97,10 @@ bool isLegalSCFOp(mlir::Operation *op) {
     auto forOp = llvm::cast<mlir::scf::ForOp>(op);
     for (const auto &arg : forOp.getInitArgs()) {
       auto type = arg.getType();
-      result &= !type.isa<imex::xetile::TileType>();
+      result &= !mlir::isa<imex::xetile::TileType>(type);
 
-      if (type.isa<mlir::VectorType>())
-        result &= (type.cast<mlir::VectorType>().getRank() != 4);
+      if (mlir::isa<mlir::VectorType>(type))
+        result &= (mlir::cast<mlir::VectorType>(type).getRank() != 4);
     }
   }
 
@@ -106,9 +108,9 @@ bool isLegalSCFOp(mlir::Operation *op) {
     auto yieldOp = llvm::cast<mlir::scf::YieldOp>(op);
     for (const auto &arg : yieldOp.getResults()) {
       auto type = arg.getType();
-      result &= !type.isa<imex::xetile::TileType>();
-      if (type.isa<mlir::VectorType>())
-        result &= (type.cast<mlir::VectorType>().getRank() != 4);
+      result &= !mlir::isa<imex::xetile::TileType>(type);
+      if (mlir::isa<mlir::VectorType>(type))
+        result &= (mlir::cast<mlir::VectorType>(type).getRank() != 4);
     }
   }
   return result;

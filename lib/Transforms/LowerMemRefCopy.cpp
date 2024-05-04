@@ -44,8 +44,8 @@ struct LowerMemRefCopy
       auto src = op.getSource();
       auto dst = op.getTarget();
       // supposed to work on same memref type
-      auto srcType = src.getType().cast<MemRefType>();
-      auto dstType = dst.getType().cast<MemRefType>();
+      auto srcType = mlir::cast<MemRefType>(src.getType());
+      auto dstType = mlir::cast<MemRefType>(dst.getType());
       if (srcType != dstType)
         return WalkResult::skip();
       // supposed to work on memref.alloc

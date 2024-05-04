@@ -50,7 +50,7 @@ struct VectorExtractStridedSliceConversion final
       return rewriter.notifyMatchFailure(loc, "cannot convert type.");
 
     if (extractOp.getVector().getType().isScalable() ||
-        dstType.cast<mlir::VectorType>().isScalable())
+        mlir::cast<mlir::VectorType>(dstType).isScalable())
       return rewriter.notifyMatchFailure(loc,
                                          "scalable vectors are not supported.");
 
@@ -82,7 +82,7 @@ struct VectorExtractStridedSliceConversion final
     // get total number of extracted slices
     int64_t nExtractedSlices = 1;
     for (auto size : sizes) {
-      nExtractedSlices *= size.cast<mlir::IntegerAttr>().getInt();
+      nExtractedSlices *= mlir::cast<mlir::IntegerAttr>(size).getInt();
     }
 
     // compute the strides of the source vector considering first k dimensions
@@ -97,8 +97,9 @@ struct VectorExtractStridedSliceConversion final
     llvm::SmallVector<int64_t, 4> extractedStrides(k, 1);
     // compute extractedStrides
     for (int i = k - 2; i >= 0; --i) {
-      extractedStrides[i] = extractedStrides[i + 1] *
-                            sizes[i + 1].cast<mlir::IntegerAttr>().getInt();
+      extractedStrides[i] =
+          extractedStrides[i + 1] *
+          mlir::cast<mlir::IntegerAttr>(sizes[i + 1]).getInt();
     }
     // iterate over all extracted slices from 0 to nExtractedElems-1
     // and compute the multi-dimensional index and the corresponding linearized
@@ -115,9 +116,9 @@ struct VectorExtractStridedSliceConversion final
       // i.e. shift the multiDimIndex by the offsets
       int64_t linearizedIndex = 0;
       for (int64_t j = 0; j < k; ++j) {
-        linearizedIndex +=
-            (offsets[j].cast<mlir::IntegerAttr>().getInt() + multiDimIndex[j]) *
-            sourceStrides[j];
+        linearizedIndex += (mlir::cast<mlir::IntegerAttr>(offsets[j]).getInt() +
+                            multiDimIndex[j]) *
+                           sourceStrides[j];
       }
       // fill the indices array form linearizedIndex to linearizedIndex +
       // sliceLen
@@ -231,10 +232,11 @@ struct VectorLinearizePass final
 
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    target.addDynamicallyLegalOp<mlir::vector::ShuffleOp>([&](mlir::Operation
-                                                                  *op) {
-      return op->getResult(0).getType().cast<mlir::VectorType>().getRank() == 1;
-    });
+    target.addDynamicallyLegalOp<mlir::vector::ShuffleOp>(
+        [&](mlir::Operation *op) {
+          return mlir::cast<mlir::VectorType>(op->getResult(0).getType())
+                     .getRank() == 1;
+        });
 
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
@@ -246,8 +248,9 @@ struct VectorLinearizePass final
         patterns,
         mlir::vector::VectorTransformsOptions().setVectorTransposeLowering(
             mlir::vector::VectorTransposeLowering::Shuffle1D));
+    unsigned targetVectBitWidth = std::numeric_limits<unsigned>::max();
     mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
-        typeConverter, patterns, target);
+        typeConverter, patterns, target, targetVectBitWidth);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       return signalPassFailure();

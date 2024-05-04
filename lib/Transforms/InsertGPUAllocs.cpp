@@ -45,8 +45,11 @@ public:
   explicit InsertGPUAllocsPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
 
-  mlir::LogicalResult initializeOptions(mlir::StringRef options) override {
-    if (failed(Pass::initializeOptions(options)))
+  mlir::LogicalResult
+  initializeOptions(mlir::StringRef options,
+                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                        errorHandler) override {
+    if (mlir::failed(Pass::initializeOptions(options, errorHandler)))
       return mlir::failure();
 
     if (clientAPI == "opencl") {
@@ -54,7 +57,7 @@ public:
     }
 
     if (clientAPI != "vulkan" && clientAPI != "opencl")
-      return mlir::failure();
+      return errorHandler(llvm::Twine("Invalid clientAPI: ") + clientAPI);
 
     if (clientAPI.getValue() != "opencl" && inRegions.getValue())
       return mlir::failure();
@@ -146,7 +149,7 @@ public:
       else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
         for (mlir::Value arg : call.getOperands()) {
-          if (arg.getType().isa<mlir::MemRefType>())
+          if (mlir::isa<mlir::MemRefType>(arg.getType()))
             ret.emplace_back(arg);
         }
         return std::move(ret);
@@ -171,7 +174,7 @@ public:
       }
       if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         for (const auto &arg : call.getOperands()) {
-          if (arg.getType().isa<mlir::MemRefType>())
+          if (mlir::isa<mlir::MemRefType>(arg.getType()))
             return true;
         }
       }
@@ -329,7 +332,7 @@ public:
                                 AccessType access, auto term) {
       llvm::SmallVector<mlir::Value> dims;
       llvm::SmallPtrSet<mlir::Operation *, 8> filter;
-      auto memrefType = op.getType().cast<mlir::MemRefType>();
+      auto memrefType = mlir::cast<mlir::MemRefType>(op.getType());
       auto loc = op.getLoc();
       auto rank = static_cast<unsigned>(memrefType.getRank());
       filter.clear();

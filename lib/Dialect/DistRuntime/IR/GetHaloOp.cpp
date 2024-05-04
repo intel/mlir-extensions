@@ -27,7 +27,7 @@ void GetHaloOp::build(::mlir::OpBuilder &odsBuilder,
                       ::mlir::Attribute team, int64_t key) {
   auto lShp = getShapeFromValues(lHSizes);
   auto rShp = getShapeFromValues(rHSizes);
-  auto arType = local.getType().cast<::imex::ndarray::NDArrayType>();
+  auto arType = mlir::cast<::imex::ndarray::NDArrayType>(local.getType());
   auto elType = arType.getElementType();
   build(odsBuilder, odsState,
         ::imex::distruntime::AsyncHandleType::get(elType.getContext()),
@@ -62,27 +62,29 @@ public:
 
     // check input type
     auto lData = op.getLocal();
-    auto lType = lData.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto lType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lData.getType());
     auto rank = lType.getRank();
     if (!lType || rank == 0)
       return ::mlir::failure();
 
     // local data type
-    auto arType = lData.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+    auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lData.getType());
     auto lSizes = arType.getShape();
 
     // if dyn type, check if this came from a CastOp
     if (::mlir::ShapedType::isDynamicShape(lSizes)) {
       if (auto defOp = lData.getDefiningOp<::imex::ndarray::CastOp>()) {
         lData = defOp.getSource();
-        arType = lData.getType().dyn_cast<::imex::ndarray::NDArrayType>();
+        arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lData.getType());
         lSizes = arType.getShape();
       }
     }
 
     // Get current halos types and shapes
-    auto lHType = op.getLHalo().getType().cast<::imex::ndarray::NDArrayType>();
-    auto rHType = op.getRHalo().getType().cast<::imex::ndarray::NDArrayType>();
+    auto lHType =
+        mlir::cast<::imex::ndarray::NDArrayType>(op.getLHalo().getType());
+    auto rHType =
+        mlir::cast<::imex::ndarray::NDArrayType>(op.getRHalo().getType());
     auto lResSzs = lHType.getShape();
     auto rResSzs = rHType.getShape();
     auto lDyn = ::mlir::ShapedType::isDynamicShape(lResSzs);

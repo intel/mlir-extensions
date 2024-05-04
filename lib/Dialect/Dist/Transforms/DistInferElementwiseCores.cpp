@@ -147,8 +147,8 @@ struct DistInferEWCoresPass
     // find all ewops
     root->walk([&](::mlir::Operation *op) {
       if (auto typedOp = ::mlir::dyn_cast<::imex::dist::RePartitionOp>(op)) {
-        auto arTyp =
-            typedOp.getResult().getType().cast<::imex::ndarray::NDArrayType>();
+        auto arTyp = mlir::cast<::imex::ndarray::NDArrayType>(
+            typedOp.getResult().getType());
         if (!arTyp.hasUnitSize() && !arTyp.hasZeroSize()) {
           rpOps.emplace_back(op);
         }
@@ -177,8 +177,8 @@ struct DistInferEWCoresPass
       auto base = ::mlir::cast<::imex::dist::RePartitionOp>(rpOp).getArray();
       for (auto user : users) {
         if (auto svOp = ::mlir::dyn_cast<::imex::dist::SubviewOp>(user)) {
-          auto arTyp =
-              svOp.getResult().getType().cast<::imex::ndarray::NDArrayType>();
+          auto arTyp = mlir::cast<::imex::ndarray::NDArrayType>(
+              svOp.getResult().getType());
 
           if (!arTyp.hasUnitSize() && !arTyp.hasZeroSize()) {
             ::imex::dist::LocalCoreOp nlcOp;

@@ -1,7 +1,7 @@
-From 5a8746dbc8a0853f8bbb7570ed360105970b8894 Mon Sep 17 00:00:00 2001
+From 85635423ba70290147e674672854b90bbb81f555 Mon Sep 17 00:00:00 2001
 From: "Prajapati, Dimple" <dimpalben.r.prajapati@intel.com>
-Date: Fri, 12 Jan 2024 09:12:03 -0800
-Subject: [PATCH 3/6] Add Constant attribute in ParseDecoration
+Date: Fri, 26 Apr 2024 20:32:04 +0000
+Subject: [PATCH 3/7] Add-Constant-attribute-in-ParseDecoration
 
 ---
  mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 1 +
@@ -9,10 +9,10 @@ Subject: [PATCH 3/6] Add Constant attribute in ParseDecoration
  2 files changed, 2 insertions(+)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 02d03b3a0fae..ba3ecc5344bc 100644
+index faaa42023a80..cfe3121bbe95 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -296,6 +296,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -297,6 +297,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      decorations[words[0]].set(symbol, llvm::dyn_cast<Attribute>(linkageAttr));
      break;
    }
@@ -21,10 +21,10 @@ index 02d03b3a0fae..ba3ecc5344bc 100644
    case spirv::Decoration::AliasedPointer:
    case spirv::Decoration::Block:
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 40337e007bbf..518facc41e28 100644
+index 200abdf993ce..a7d195d7fcb0 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -263,6 +263,7 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -267,6 +267,7 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
             << stringifyDecoration(decoration);
    case spirv::Decoration::Aliased:
    case spirv::Decoration::AliasedPointer:

@@ -22,7 +22,7 @@ namespace imex {
 namespace region {
 
 inline bool isGpuRegion(::imex::region::EnvironmentRegionOp op) {
-  return op && op.getEnvironment().isa<::imex::region::GPUEnvAttr>();
+  return op && mlir::isa<::imex::region::GPUEnvAttr>(op.getEnvironment());
 }
 
 inline bool isInGpuRegion(::mlir::Operation *op) {

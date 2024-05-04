@@ -28,13 +28,9 @@ module attributes {
         // CHECK:      ^[[BODY]]:
         // CHECK:        %[[OFFSET1:.*]] = spirv.Constant 0 : i64
         // CHECK:        %[[STRIDE1:.*]] = spirv.Constant 1 : i64
-        // CHECK:        %[[UPDATE1:.*]] = spirv.IMul %[[STRIDE1]], %[[INDVAR]] : i64
-        // CHECK:        %[[INDEX1:.*]] = spirv.IAdd %[[OFFSET1]], %[[UPDATE1]] : i64
         // CHECK:        spirv.AccessChain {{%.*}}
         // CHECK:        %[[OFFSET2:.*]] = spirv.Constant 0 : i64
         // CHECK:        %[[STRIDE2:.*]] = spirv.Constant 1 : i64
-        // CHECK:        %[[UPDATE2:.*]] = spirv.IMul %[[STRIDE2]], %[[INDVAR]] : i64
-        // CHECK:        %[[INDEX2:.*]] = spirv.IAdd %[[OFFSET2]], %[[UPDATE2]] : i64
         // CHECK:        spirv.AccessChain {{%.*}}
         // CHECK:        %[[INCREMENT:.*]] = spirv.IAdd %[[INDVAR]], %[[STEP]] : i64
         // CHECK:        spirv.Branch ^[[HEADER]](%[[INCREMENT]] : i64)
