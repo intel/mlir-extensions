@@ -16,6 +16,9 @@
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
+#include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
@@ -155,14 +158,17 @@ struct CreateNdDescPattern
         // compute surface width
         auto bytesPerElem = createIntConstant(bitWidth / 8);
         auto one = createIntConstant(1);
-        surfaceW = rewriter.create<arith::ExtUIOp>(loc, i32Type,
-                                                   adaptor.getShape()[1]);
-        surfaceW = rewriter.create<arith::MulIOp>(loc, surfaceW, bytesPerElem);
+        auto surfaceWCast = rewriter.create<arith::IndexCastUIOp>(
+            loc, i32Type, adaptor.getShape()[1]);
+
+        surfaceW =
+            rewriter.create<arith::MulIOp>(loc, surfaceWCast, bytesPerElem);
         surfaceW = rewriter.create<arith::SubIOp>(loc, surfaceW, one);
         // compute surface height
-        surfaceH = rewriter.create<arith::ExtUIOp>(loc, i32Type,
-                                                   adaptor.getShape()[0]);
-        surfaceH = rewriter.create<arith::SubIOp>(loc, surfaceH, one);
+
+        auto surfaceHCast = rewriter.create<arith::IndexCastUIOp>(
+            loc, i32Type, adaptor.getShape()[0]);
+        surfaceH = rewriter.create<arith::SubIOp>(loc, surfaceHCast, one);
         // fixme: pitch = width for now
         surfaceP = surfaceW;
       }
@@ -210,15 +216,15 @@ public:
 
     auto loc = op.getLoc();
     auto i32Type = rewriter.getI32Type();
-    auto offsets = adaptor.getOffsets();
+    auto offsets = op.getOffsets();
 
     // Get Payload
     auto desc = adaptor.getTensorDesc();
-
     for (size_t i = 0; i < offsets.size(); i++) {
       auto offset = offsets[i];
-      if (auto cst = dyn_cast<arith::ConstantOp>(offset.getDefiningOp()))
-        if (auto attr = dyn_cast<mlir::IntegerAttr>(cst.getValue());
+      if (auto cst =
+              dyn_cast_if_present<arith::ConstantOp>(offset.getDefiningOp()))
+        if (auto attr = dyn_cast_if_present<mlir::IntegerAttr>(cst.getValue());
             attr && attr.getInt() == 0)
           continue;
 
@@ -227,7 +233,8 @@ public:
       // offset.
       int32_t idx = i == 0 ? 6 : 5;
       auto oldOffset = rewriter.create<vector::ExtractOp>(loc, desc, idx);
-      offset = rewriter.create<arith::TruncIOp>(loc, i32Type, offset);
+      offset = rewriter.create<arith::IndexCastUIOp>(loc, i32Type, offset);
+
       auto newOffset = rewriter.create<arith::AddIOp>(loc, oldOffset, offset);
 
       // Update new 2D Block OffsetX/OffsetY in Payload descriptor.
@@ -630,6 +637,7 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
     auto infoAttr = rewriter.getIntegerAttr(rewriter.getI32Type(), infoVal);
     auto info = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(),
                                                    infoAttr);
+
     auto newResultType = encodeVectorType(rewriter, resultType).second;
     SmallVector<Value, 4> args{adaptor.getRhs(), adaptor.getLhs(), info};
     std::string funcName = "llvm.genx.dpas.nosrc0.";
@@ -1106,7 +1114,7 @@ public:
   }
 };
 
-struct VectorShapeCast final
+struct VectorShapeCastVC final
     : public OpConversionPattern<mlir::vector::ShapeCastOp> {
   using OpConversionPattern<mlir::vector::ShapeCastOp>::OpConversionPattern;
 
@@ -1130,7 +1138,7 @@ struct VectorShapeCast final
   }
 };
 
-struct VectorExtract final
+struct VectorExtractVC final
     : public OpConversionPattern<mlir::vector::ExtractOp> {
   using OpConversionPattern<mlir::vector::ExtractOp>::OpConversionPattern;
 
@@ -1139,6 +1147,7 @@ struct VectorExtract final
                   ConversionPatternRewriter &rewriter) const override {
 
     auto *converter = getTypeConverter();
+
     auto dstTy = converter->convertType(extractOp.getType());
     if (!dstTy)
       return failure();
@@ -1200,7 +1209,7 @@ static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
 };
 
-struct VectorExtractStridedSlice final
+struct VectorExtractStridedSliceVC final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {
   using OpConversionPattern<vector::ExtractStridedSliceOp>::OpConversionPattern;
   LogicalResult
@@ -1298,7 +1307,7 @@ struct VectorExtractStridedSlice final
   }
 };
 
-struct VectorShuffle final
+struct VectorShuffleVC final
     : public OpConversionPattern<mlir::vector::ShuffleOp> {
   using OpConversionPattern<mlir::vector::ShuffleOp>::OpConversionPattern;
 
@@ -1387,7 +1396,7 @@ struct SCFForOpBlockVCPattern final
 
     rewriter.applySignatureConversion(&op.getRegion(), signatureConverter);
 
-    newOp.getBody()->erase();
+    rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());
     rewriter.replaceOp(op, newOp.getResults());
@@ -1453,8 +1462,8 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
         [&](mlir::Operation *op) { return isLegalXeGPUSCFOp(op); });
 
-    target.addIllegalOp<::mlir::vector::ShapeCastOp>();
-    target.addIllegalOp<::mlir::vector::ExtractStridedSliceOp>();
+    target.addIllegalOp<::mlir::vector::ShapeCastOp,
+                        ::mlir::vector::ExtractStridedSliceOp>();
 
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
@@ -1507,11 +1516,12 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                  CompilerHintToVCPattern, FenceToVCPattern,
                  UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern>(
         patterns.getContext());
-    patterns.add<GatherScatterToRawSend<xegpu::LoadGatherOp>,
-                 GatherScatterToRawSend<xegpu::StoreScatterOp>, AtomicToLsc,
-                 VectorShapeCast, VectorExtract, VectorExtractStridedSlice,
-                 VectorShuffle, SCFForOpBlockVCPattern>(typeConverter,
-                                                        patterns.getContext());
+    patterns
+        .add<GatherScatterToRawSend<xegpu::LoadGatherOp>,
+             GatherScatterToRawSend<xegpu::StoreScatterOp>, AtomicToLsc,
+             VectorShapeCastVC, VectorExtractVC, VectorExtractStridedSliceVC,
+             VectorShuffleVC, SCFForOpBlockVCPattern>(typeConverter,
+                                                      patterns.getContext());
 
     if (this->useRawSend) {
       patterns.add<LoadStorePrefetchNdToRawSendPattern<xegpu::LoadNdOp>,

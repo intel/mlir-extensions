@@ -268,9 +268,6 @@ message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
 add_definitions(${LLVM_DEFINITIONS})
 
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
-if (IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_L0_RUNTIME)
-    set(LLVM_LIT_ARGS "-j 4 ${LLVM_LIT_ARGS}") # do not stress GPU
-endif()
 
 set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
