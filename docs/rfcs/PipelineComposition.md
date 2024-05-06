@@ -2,13 +2,25 @@
 
 Ivan Butygin, Renato Golin
 
+## Summary
+
+We propose a new API to build a dependencies-based graph of pass pipelines.
+
 ## Motivation
 
-TBD use cases from IREE, TPP
+At this point MLIR pass infrastruture only allows to define a linear sequence of passes. While this approach works
+for simple cases, more complex compiler pipelines may require more control over passes execution order.
+
+Two main usecases we are considering:
+* Extensibility. We want to have the abilty for users to extend existing pipeline by inserting theirs custom passes
+into various places while reusing most of the exiting pipeline. With current approach the most common way way to achieve this is
+for pipeline developer to add a fixed 'extension point' during initial pipeline design.
+* Dynamic pipeline control flow. It's often required to have an ability select specific sequence of passes based on some info which
+is only becomes available durin compilation process. It can be either branching to some separate sequnces of passes based on selected codegen path
+or running sequence of passes in the loop until some runtime condition is reached.
 
 ## Proposal
 
-We propose a new API to build a dependencies-based graph of pass pipelines.
 This API also allows a dynamic control flow between pipelines in graph, controlled by passes inside said pipelines.
 
 ## New APIs
