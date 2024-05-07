@@ -91,6 +91,8 @@ Here is some examples where non-trivial pipeline dependencies are needed.
 
 #### Numba-mlir
 
+https://github.com/numba/numba-mlir
+
 ```
           frontend
               |
@@ -140,4 +142,29 @@ lower-to-llvm: [optimization], [], []
 
 #### TPP
 
-TBD
+https://github.com/plaidml/tpp-mlir
+```
+          frontend
+          /       \
+         V         V
+  gpu-pipeline  default-pipeline
+         \         /
+          V       V
+        bufferization
+              |
+              V
+       linalg-lowering
+              |
+              V
+        lower-to-llvm
+```
+
+Pipeline will looks like:
+```
+frontend: [], [], []
+gpu-pipeline: [frontend], [bufferization], []
+default-pipeline: [frontend], [bufferization], []
+bufferization: [], [linalg-lowering], []
+linalg-lowering: [], [lower-to-llvm], []
+lower-to-llvm: [], [], []
+```
