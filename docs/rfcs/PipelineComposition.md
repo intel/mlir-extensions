@@ -83,3 +83,57 @@ Passes inside pipeline can set this attribute to indicate they want compilatin f
 After current pipeline is finished, runtime will check if module object have attribute set and if it does, jump to the selected pipeline and clear the attribute.
 
 Setting attribute to the value, which wasnt in `jumpTargets` for the current pipeline will result in error and abort the compilation flow.
+
+
+### Pipeline examples
+
+Here is some examples where non-trivial pipeline dependencies are needed.
+
+#### Numba-mlir
+
+```
+          frontend
+              |
+              V
+          cfg-to-scf
+            /    ^
+           /      \
+          V        \
+     python-to-std  |
+          \        /
+           \      /
+            V    /
+      numpy-to-linalg
+              |
+              V
+        bufferization
+              |
+              V
+        optimization
+           /      \
+          /        \
+         V          \
+    lower-to-gpu     |
+         \          /
+          \        /
+           V      V
+         lower-to-llvm
+```
+In this pipeline we are lowering scalar python ops in `python-to-std` stage and
+numpy ops in `numpy-to-linalg` and we may need to jump backwards to `cfg-to-scf`/`python-to-std`
+multiple times to lower generated `linalg.generic` body, which are represented as
+normal python function in our numpy->linalg conversion.
+
+Pipeline description for this will looks like (pseudocode):
+```
+# pipeline format:
+# name: [predecessors], [successors], [jumps]
+frontend: [], [], []
+cfg-to-scf: [frontend], [optimization], []
+python-to-std: [cfg-to-scf], [optimization], []
+numpy-to-linalg: [python-to-std], [bufferization, optimization], [cfg-to-scf]
+bufferization: [], [optimization], []
+optimization: [], [], []
+lower-to-gpu: [optimization], [lower-to-llvm], []
+lower-to-llvm: [optimization], [], []
+```
