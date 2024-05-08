@@ -77,11 +77,14 @@ do
             CMD="python3 $LLVM/bin/imex-runner.py --requires=l0-runtime -i $TEST_CASE  \
                 --pass-pipeline-file=../../test/Integration/Dialect/XeTile/xetile-to-llvm.pp \
                 --runner imex-cpu-runner -e main --entry-point-result=void \
-                --shared-libs=$LLVM/lib/libimex_runner_utils.so,$LLVM/lib/libmlir_runner_utils.so,$LLVM/lib/libmlir_c_runner_utils.so,$LLVM/lib/liblevel-zero-runtime.so"
+                --shared-libs=$LLVM/lib/libimex_runner_utils.so,$LLVM/lib/libmlir_runner_utils.so,$LLVM/lib/libmlir_c_runner_utils.so,$LLVM/lib/liblevel-zero-runtime.so; return_value=$?"
             if [ $VERBOSE -eq 1 ]; then
                 echo $CMD | tee -a $REPORT_PATH
             fi
             eval $CMD |& tee -a $REPORT_PATH
+            echo $return_value
+            if [return_value -ne 0]
+                exit 1
             echo "" | tee -a $REPORT_PATH # new line
         fi
     done
