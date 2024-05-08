@@ -254,8 +254,8 @@ class GPUCode:
             template += f"""
             xegpu.alloc_nbarrier {number_of_dpas_c_tile}
             %nbarrier_id = arith.constant 1 : i8
-            %nbarrier_role = arith.constant 0 : i8
-            %nbarrier = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {{num_producers = {self.params.SG.layout.num_elements()} : i8, num_consumers = {self.params.SG.layout.num_elements()} : i8}} : (i8, i8) -> !xegpu.nbarrier
+            %nthreads = arith.constant {self.params.SG.layout.num_elements()} : i8
+            %nbarrier = xegpu.init_nbarrier %nbarrier_id, %nthreads : i8, i8 -> !xegpu.nbarrier
             """
         return template
 
