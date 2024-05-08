@@ -170,7 +170,7 @@ mlir::LogicalResult InitTileOp::verify() {
   }
 
   if (isSourceMemRef() && sourceMemRefHasStaticShape()) {
-    auto memrefType = getSourceType().dyn_cast<mlir::MemRefType>();
+    auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
 
     // Checks for memrefs with format: memref<[shape], strided<[strides],
     // offsets:[offset]>>
