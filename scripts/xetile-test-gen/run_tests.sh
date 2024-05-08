@@ -85,6 +85,7 @@ do
             echo $return_value
             if [return_value -ne 0]
                 exit 1
+            fi
             echo "" | tee -a $REPORT_PATH # new line
         fi
     done
