@@ -147,6 +147,7 @@ struct GPUSYCLQUEUE {
 
 }; // end of GPUSYCLQUEUE
 
+#if 0
 static std::string getDeviceID(GPUSYCLQUEUE *queue) {
   auto syclDevice = queue->syclDevice_;
 
@@ -171,6 +172,7 @@ static std::string getDeviceID(GPUSYCLQUEUE *queue) {
   }
   return deviceName;
 }
+#endif
 
 static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
                                size_t alignment, bool isShared) {
