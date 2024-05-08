@@ -69,6 +69,7 @@ do
     echo $'\nTesting code version:' $CODE_VERSION
     python3 xetile_testgen.py --code_version=$CODE_VERSION --validate=$VALIDATE --print_debug=0 --test_csv=$TEST_CSV --default_tests=$GEN_DEFAULT_CASES
     CUR_TEST_DIR=$TEST_DIR/$CODE_VERSION
+    return_value=0
     for TEST_CASE in $CUR_TEST_DIR/*
     do
         if [ -f "$TEST_CASE" ]
@@ -83,7 +84,7 @@ do
             fi
             eval $CMD |& tee -a $REPORT_PATH
             echo $return_value
-            if [return_value -ne 0]; then
+            if [$return_value -ne 0]; then
                 exit 1
             fi
             echo "" | tee -a $REPORT_PATH # new line
