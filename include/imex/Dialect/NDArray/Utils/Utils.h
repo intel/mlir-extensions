@@ -55,7 +55,7 @@ inline ::mlir::Type toMLIR(::mlir::OpBuilder &b, DType dt) {
   case I1:
     return b.getI1Type();
   default:
-    assert(!"Cannot handle unknown DType");
+    assert(false && "Cannot handle unknown DType");
   };
   return {};
 }
@@ -83,7 +83,7 @@ inline DType fromMLIR(const ::mlir::Type &typ) {
       return I1;
     };
   }
-  assert(!"Type not supported by NDArray");
+  assert(false && "Type not supported by NDArray");
 }
 
 inline ::mlir::Value createDType(::mlir::Location &loc,
