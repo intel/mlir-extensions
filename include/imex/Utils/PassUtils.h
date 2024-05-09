@@ -34,7 +34,7 @@ template <typename T>
     return builder.getF32FloatAttr(val);
   if (W == 16)
     return builder.getF16FloatAttr(val);
-  assert(!"only 32- and 64-bit floats supported");
+  assert(false && "only 32- and 64-bit floats supported");
 }
 
 /// @return new float ::mlir::Value with given Value and bitwidth W
@@ -308,7 +308,7 @@ template <typename V1, typename V2>
     } else if (d1 == d2) {
       shape[i] = d1;
     } else {
-      assert(!"Trying to broadcast incomaptible shapes");
+      assert(false && "Trying to broadcast incomaptible shapes");
     }
   }
   return shape;

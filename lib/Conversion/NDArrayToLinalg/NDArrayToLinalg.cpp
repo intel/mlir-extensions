@@ -1287,7 +1287,7 @@ struct ConvertNDArrayToLinalgPass
 
     ::mlir::TypeConverter typeConverter4Func;
     // Convert NDArrayType to MemRefType
-    auto convNDArray2MemRef = [&ctxt](::imex::ndarray::NDArrayType type)
+    auto convNDArray2MemRef = [](::imex::ndarray::NDArrayType type)
         -> std::optional<::mlir::Type> { return type.getMemRefType(); };
 
     typeConverter4Func.addConversion(convT2T);

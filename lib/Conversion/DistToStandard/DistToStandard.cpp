@@ -395,7 +395,6 @@ struct SubviewOpConverter
     auto slcStrides = getMixedAsValues(loc, rewriter, _slcStrides, sSlcStrides);
 
     ::imex::ValVec lViews, lVOffsets;
-    ::mlir::Value res;
     auto srcParts = createPartsOf(loc, rewriter, src);
     ::imex::ValVec lOffs = createLocalOffsetsOf(loc, rewriter, src);
     ::mlir::SmallVector<EasyIdx> shift(rank, easyIdx(loc, rewriter, 0));
@@ -618,7 +617,7 @@ struct ReshapeOpConverter
     // For now we always copy. some initial check existed in rev 3a0b97825382b
 
     assert(adaptor.getCopy().value_or(1) != 0 ||
-           !"Distributed reshape currently requires copying");
+           (false && "Distributed reshape currently requires copying"));
 
     // FIXME: Check return type: Check that static sizes are the same as the
     // default part sizes
@@ -1540,7 +1539,7 @@ struct RePartitionOpConverter
 
     // which is the part that we own?
     assert(lParts.size() == 1 || lParts.size() == 3 ||
-           !"Number of local parts must be 1 or 3");
+           (false && "Number of local parts must be 1 or 3"));
     unsigned ownPartIdx = lParts.size() == 1 ? 0 : 1;
 
     // Get offsets and shapes of parts
