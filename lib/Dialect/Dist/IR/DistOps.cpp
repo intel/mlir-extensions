@@ -207,7 +207,7 @@ void PartsOfOp::build(::mlir::OpBuilder &odsBuilder,
   auto pTypes =
       getPartsTypes(mlir::cast<::imex::ndarray::NDArrayType>(ary.getType()));
   assert(pTypes.size() == 1 || pTypes.size() == 3 ||
-         !"Number of local parts must be 1 or 3");
+         (false && "Number of local parts must be 1 or 3"));
   build(odsBuilder, odsState, pTypes, ary);
 }
 
