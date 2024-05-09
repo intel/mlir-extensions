@@ -235,7 +235,6 @@ struct VectorInsertOpConversion final
       return rewriter.notifyMatchFailure(insertOp,
                                          "dynamic position is not supported.");
     auto srcTy = insertOp.getSourceType();
-    auto src = insertOp.getSource();
     auto srcAsVec = mlir::dyn_cast<mlir::VectorType>(srcTy);
     uint64_t srcSize = 0;
     if (srcAsVec) {
@@ -245,7 +244,6 @@ struct VectorInsertOpConversion final
                                          "scalars are not supported.");
     }
 
-    auto dst = insertOp.getDest();
     auto dstShape = insertOp.getDestVectorType().getShape();
     const auto dstSize = insertOp.getDestVectorType().getNumElements();
     auto dstSizeForOffsets = dstSize;
