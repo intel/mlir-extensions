@@ -15,7 +15,7 @@ class CPUCode:
         ab_vals = ""
         if self.params.A.type == self.params.C.type:
             ab_vals = f"""
-                %a_val = memref.load %A[%i, %k_dpas] : memref<{self.params.A.memref()}>
+                %a_val = emref.load %A[%i, %k_dpas] : memref<{self.params.A.memref()}>
                 %b_val = memref.load %B[%b_k_dpas, %j] : memref<{self.params.B.memref()}>\n"""
         else:
             ab_vals = f"""
