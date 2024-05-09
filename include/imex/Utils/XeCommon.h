@@ -396,7 +396,7 @@ public:
   // friend class XeConversionPattern;
   using mlir::OneToNTypeConverter::convertType;
 
-  XeTypeConverter(mlir::MLIRContext &context) : context(context) {
+  XeTypeConverter(mlir::MLIRContext &context) {
     addConversion([&](xetile::TileType tileTy,
                       llvm::SmallVectorImpl<mlir::Type> &resultTypes)
                       -> std::optional<mlir::LogicalResult> {
@@ -422,8 +422,6 @@ public:
     llvm_unreachable("Pending Implementation for convertVectorType.");
   }
 
-private:
-  mlir::MLIRContext &context;
 };
 
 // A simple mlir::RewritePattern wrapper with methods for accessing UsageType
