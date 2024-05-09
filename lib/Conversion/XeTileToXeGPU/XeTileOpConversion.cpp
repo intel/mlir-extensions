@@ -135,7 +135,7 @@ mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
     }
   }
   return shuffleOps[0];
-};
+}
 
 // a unified function lowering Unpack and Pack ops.
 static llvm::SmallVector<mlir::Value>

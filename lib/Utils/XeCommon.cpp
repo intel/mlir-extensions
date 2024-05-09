@@ -28,7 +28,7 @@ int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
       return i;
   }
   return -1;
-};
+}
 
 mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
                                      mlir::Value operand) {
@@ -36,7 +36,7 @@ mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
   auto numControls = op.getNumControlOperands();
   assert(idx >= (int)numControls);
   return op.getRegionIterArg(idx - numControls);
-};
+}
 
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod) {
   bool hasTileTyInFuncTy = false;

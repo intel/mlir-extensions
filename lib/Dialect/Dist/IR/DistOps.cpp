@@ -194,8 +194,9 @@ void InitDistArrayOp::build(::mlir::OpBuilder &odsBuilder,
     shapes.emplace_back(
         mlir::cast<::imex::ndarray::NDArrayType>(p.getType()).getShape());
   }
+  auto resShape = getShapeFromValues(l_offset);
   ::mlir::ArrayRef<int64_t> lOffs =
-      s_Offs.size() ? s_Offs : getShapeFromValues(l_offset);
+      s_Offs.size() ? s_Offs : resShape;
   ::mlir::SmallVector<::mlir::Attribute> nEnvs(environments);
   nEnvs.emplace_back(::imex::dist::DistEnvAttr::get(team, lOffs, shapes));
   auto arType = ::imex::ndarray::NDArrayType::get(g_shape, elTyp, nEnvs);
