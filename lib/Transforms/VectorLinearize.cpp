@@ -220,6 +220,65 @@ struct VectorExtractOpConversion final
   }
 };
 
+struct VectorInsertOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::InsertOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::InsertOp insertOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstTy = getTypeConverter()->convertType(insertOp.getDestVectorType());
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(insertOp, "cannot convert type.");
+
+    // dynamic position is not supported
+    if (insertOp.hasDynamicPosition())
+      return rewriter.notifyMatchFailure(insertOp,
+                                         "dynamic position is not supported.");
+    auto srcTy = insertOp.getSourceType();
+    auto src = insertOp.getSource();
+    auto srcAsVec = mlir::dyn_cast<mlir::VectorType>(srcTy);
+    uint64_t srcSize = 0;
+    if (srcAsVec) {
+      srcSize = srcAsVec.getNumElements();
+    } else {
+      return rewriter.notifyMatchFailure(insertOp,
+                                         "scalars are not supported.");
+    }
+
+    auto dst = insertOp.getDest();
+    auto dstShape = insertOp.getDestVectorType().getShape();
+    const auto dstSize = insertOp.getDestVectorType().getNumElements();
+    auto dstSizeForOffsets = dstSize;
+
+    // compute linearized offset
+    int64_t linearizedOffset = 0;
+    auto offsetsNd = insertOp.getStaticPosition();
+    for (auto [dim, offset] : llvm::enumerate(offsetsNd)) {
+      dstSizeForOffsets /= dstShape[dim];
+      linearizedOffset += offset * dstSizeForOffsets;
+    }
+
+    llvm::SmallVector<int64_t, 2> indices(dstSize);
+    auto origValsUntil = indices.begin();
+    std::advance(origValsUntil, linearizedOffset);
+    std::iota(indices.begin(), origValsUntil,
+              0); // original values that remain [0, offset)
+    auto newValsUntil = origValsUntil;
+    std::advance(newValsUntil, srcSize);
+    std::iota(origValsUntil, newValsUntil,
+              dstSize); // new values [offset, offset+srcNumElements)
+    std::iota(newValsUntil, indices.end(),
+              linearizedOffset + srcSize); // the rest of original values
+                                           // [offset+srcNumElements, end)
+
+    rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
+        insertOp, dstTy, adaptor.getDest(), adaptor.getSource(),
+        rewriter.getI64ArrayAttr(indices));
+
+    return mlir::success();
+  }
+};
+
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -242,7 +301,8 @@ struct VectorLinearizePass final
     target.addLegalOp<mlir::vector::ShapeCastOp>();
 
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
-                 VectorExtractOpConversion>(typeConverter, context);
+                 VectorExtractOpConversion, VectorInsertOpConversion>(
+        typeConverter, context);
 
     mlir::vector::populateVectorTransposeLoweringPatterns(
         patterns,
