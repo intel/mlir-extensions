@@ -426,6 +426,7 @@ public:
   }
 };
 
+#if 0
 std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   if (auto op = val.getDefiningOp()) {
     if (auto descOp = dyn_cast<xegpu::CreateNdDescOp>(op)) {
@@ -442,6 +443,7 @@ std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   // Add more support
   return std::nullopt;
 }
+#endif
 
 template <typename OpType>
 class LoadStorePrefetchNdToRawSend : public OpConversionPattern<OpType> {
@@ -1138,9 +1140,6 @@ public:
     case mlir::xegpu::MemoryScope::SLM:
       sfid = lscSFID::TGM;
       break;
-    default:
-      llvm_unreachable("unsupported value for memory_kind attribute");
-      break;
     }
 
     switch (op.getFenceScope()) {
@@ -1149,9 +1148,6 @@ public:
       break;
     case mlir::xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
-      break;
-    default:
-      llvm_unreachable("unsupported value for fence_scope attribute");
       break;
     }
 
@@ -1252,7 +1248,7 @@ struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
 
 static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-};
+}
 
 struct VectorExtractStridedSlice final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {

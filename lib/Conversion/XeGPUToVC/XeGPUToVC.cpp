@@ -1086,9 +1086,6 @@ public:
     case mlir::xegpu::MemoryScope::SLM:
       sfid = lscSFID::TGM;
       break;
-    default:
-      llvm_unreachable("unsupported value for memory_kind attribute");
-      break;
     }
 
     switch (op.getFenceScope()) {
@@ -1097,9 +1094,6 @@ public:
       break;
     case mlir::xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
-      break;
-    default:
-      llvm_unreachable("unsupported value for fence_scope attribute");
       break;
     }
 
@@ -1207,7 +1201,7 @@ struct VectorExtractVC final
 
 static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-};
+}
 
 struct VectorExtractStridedSliceVC final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {

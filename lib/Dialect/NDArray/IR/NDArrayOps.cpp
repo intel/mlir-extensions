@@ -121,7 +121,7 @@ imex::ndarray::NDArrayBase::cloneWithEnv(::mlir::Attribute env) const {
   envs.emplace_back(env);
   return NDArrayType::get(t.getShape(), t.getElementType(), envs,
                           t.getLayout());
-};
+}
 
 bool imex::ndarray::NDArrayBase::isValidElementType(Type type) {
   return type.isIntOrIndexOrFloat();
