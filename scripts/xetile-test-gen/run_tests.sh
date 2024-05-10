@@ -61,6 +61,7 @@ export IMEX_ENABLE_LARGE_REG_FILE=1
 
 TEST_DIR="Generated_GEMM"
 mkdir -p $REPORT_DIR
+RESULT_CMD=0
 for CODE_VERSION in baseline prefetch
 do
     TEST_REPORT=$CODE_VERSION".txt"
@@ -83,9 +84,9 @@ do
                 echo $CMD | tee -a $REPORT_PATH
             fi
             $CMD |& tee -a $REPORT_PATH
-            RESULT_CMD=$?
-            if [ $RESULT_CMD -ne 0 ]; then
-                exit 1
+            tmp_res=$?
+            if [ $tmp_res -ne 0 ]; then
+                RESULT_CMD=1
             fi
             echo "" | tee -a $REPORT_PATH # new line
         fi
@@ -96,3 +97,4 @@ unset IMEX_ENABLE_LARGE_REG_FILE
 unset IMEX_ENABLE_PROFILING
 
 python3 report_to_excel.py  --reports_dir=$REPORT_DIR
+exit $RESULT_CMD
