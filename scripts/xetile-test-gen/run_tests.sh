@@ -82,9 +82,9 @@ do
             if [ $VERBOSE -eq 1 ]; then
                 echo $CMD | tee -a $REPORT_PATH
             fi
-            RESULT_CMD=eval $CMD |& tee -a $REPORT_PATH
-            echo $RESULT_CMD
-            if [ $return_value -ne 0 ]; then
+            eval $CMD > $REPORT_PATH
+            RESULT_CMD = $?
+            if [ $RESULT_CMD -ne 0 ]; then
                 exit 1
             fi
             echo "" | tee -a $REPORT_PATH # new line
