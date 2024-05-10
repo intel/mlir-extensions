@@ -268,7 +268,7 @@ class GPUCode:
         // K loop advances in {self.params.k_loop_step} steps
         %k_loop_result:{num_loop_args} = scf.for %k = %c0 to %c{self.params.A.y} step %c{self.params.k_loop_step} iter_args (
             %A_tile = %A_sg_init_tile,
-            %B_tile = %B_sg_init_tile,
+            %B_tile = %B_sg_init_til,
             %c_val = %c_init_val"""
         if self.params.test_args.code_version == "prefetch":
             template += f""",
