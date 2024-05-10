@@ -15,7 +15,7 @@ class CPUCode:
         ab_vals = ""
         if self.params.A.type == self.params.C.type:
             ab_vals = f"""
-                %a_val = emref.load %A[%i, %k_dpas] : memref<{self.params.A.memref()}>
+                %a_val = memref.load %A[%i, %k_dpas] : memref<{self.params.A.memref()}>
                 %b_val = memref.load %B[%b_k_dpas, %j] : memref<{self.params.B.memref()}>\n"""
         else:
             ab_vals = f"""
@@ -268,7 +268,7 @@ class GPUCode:
         // K loop advances in {self.params.k_loop_step} steps
         %k_loop_result:{num_loop_args} = scf.for %k = %c0 to %c{self.params.A.y} step %c{self.params.k_loop_step} iter_args (
             %A_tile = %A_sg_init_tile,
-            %B_tile = %B_sg_init_tile,
+            %B_tile = %B_sg_init_til,
             %c_val = %c_init_val"""
         if self.params.test_args.code_version == "prefetch":
             template += f""",
