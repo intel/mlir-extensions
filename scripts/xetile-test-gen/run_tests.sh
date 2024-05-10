@@ -83,7 +83,7 @@ do
                 echo $CMD | tee -a $REPORT_PATH
             fi
             eval $CMD > $REPORT_PATH
-            RESULT_CMD = $?
+            RESULT_CMD=$?
             if [ $RESULT_CMD -ne 0 ]; then
                 exit 1
             fi
