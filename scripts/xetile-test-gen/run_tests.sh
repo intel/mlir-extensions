@@ -61,6 +61,7 @@ export IMEX_ENABLE_LARGE_REG_FILE=1
 
 TEST_DIR="Generated_GEMM"
 mkdir -p $REPORT_DIR
+RESULT_CMD=0
 for CODE_VERSION in baseline prefetch
 do
     TEST_REPORT=$CODE_VERSION".txt"
@@ -69,6 +70,7 @@ do
     echo $'\nTesting code version:' $CODE_VERSION
     python3 xetile_testgen.py --code_version=$CODE_VERSION --validate=$VALIDATE --print_debug=0 --test_csv=$TEST_CSV --default_tests=$GEN_DEFAULT_CASES
     CUR_TEST_DIR=$TEST_DIR/$CODE_VERSION
+    set -o pipefail
     for TEST_CASE in $CUR_TEST_DIR/*
     do
         if [ -f "$TEST_CASE" ]
@@ -81,7 +83,11 @@ do
             if [ $VERBOSE -eq 1 ]; then
                 echo $CMD | tee -a $REPORT_PATH
             fi
-            eval $CMD |& tee -a $REPORT_PATH
+            $CMD |& tee -a $REPORT_PATH
+            tmp_res=$?
+            if [ $tmp_res -ne 0 ]; then
+                RESULT_CMD=1
+            fi
             echo "" | tee -a $REPORT_PATH # new line
         fi
     done
@@ -91,3 +97,4 @@ unset IMEX_ENABLE_LARGE_REG_FILE
 unset IMEX_ENABLE_PROFILING
 
 python3 report_to_excel.py  --reports_dir=$REPORT_DIR
+exit $RESULT_CMD
