@@ -105,10 +105,10 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
-     tile<8x16xf32, #sg_map> into vector<16x8xf32>
+     tensor_desc<8x16xf32, #sg_map> into vector<16x8xf32>
 
   %at = XeGPU.load_nd %tdesc2 {transpose = [1,0], mode = vc} :
-     tile<8x16xf32> into vector<16x8xf32>
+     tensor_desc<8x16xf32> into vector<16x8xf32>
 ```
 
 Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the specified axis and fits them into 32-bit data along the row dimension (axis 1). It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
