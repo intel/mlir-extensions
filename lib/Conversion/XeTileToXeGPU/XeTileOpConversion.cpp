@@ -145,6 +145,7 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
                   llvm::ArrayRef<int64_t> inGrids,
                   llvm::ArrayRef<int64_t> outGrids, bool isVnniFormat = false,
                   bool isForDPASB = false) {
+
   // handle based on the dim0, and save results into intermediates
   llvm::SmallVector<mlir::Value> intermediates;
   if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
@@ -269,9 +270,11 @@ class SgTileUnpackOpPattern
     // specific attention needed for vectors in vnni format,
     // which is applied to load for dpas.
     auto loadOp = op.getInVec().getDefiningOp<xetile::LoadTileOp>();
+    auto elemTy = op.getInVec().getType().getElementType();
     bool isDpasA = loadOp && isForDPASA(loadOp);
     bool isDpasB = loadOp && isForDPASB(loadOp);
-    bool isVnniFormat = isDpasA || isDpasB;
+    bool isVnniFormat = (isDpasA || isDpasB) && elemTy.isIntOrFloat() &&
+                        elemTy.getIntOrFloatBitWidth() < 32;
 
     llvm::ArrayRef<int64_t> outGrids;
     mlir::DenseI64ArrayAttr outBlkSizes;
