@@ -71,7 +71,7 @@ Attribute `memory_scope` indicates whether the tensor is located in the global o
 Attribute `boundary_check` indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true.
 For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior. The outer dimension of `wi_layout` and `wi_data` in `xegpu.sg_map` must be 1 for 1D tensor_desc.  
 
-When VC attribute is not specified, the tensor_desc must be attached with `sg_map` attribute which is specified at the tensor description cration time. Comparing to VC mode which works at the subgroup level data block, this attribute allows the XeGPU working at SIMT mode.
+When the mode attribute is not specified as "vc", the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time. Comparing to VC mode which works at the subgroup level data block, this attribute allows the XeGPU working at SIMT mode.
 
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -79,16 +79,16 @@ When VC attribute is not specified, the tensor_desc must be attached with `sg_ma
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
-Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads.  In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element.  
+Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element. 
 
-The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragrements, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribtion put them into the sg_block[1] so it causes a layout change as known as VNNI transformation.    
+The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribution put them into the sg_block[1] so it causes a layout change known as VNNI transformation.    
 
 The distribution rule can be represented as following: 
 	WI_data_frag[0] = sg_block[0]/wi_layout[0] x wi_data[0]
 	WI_data_frag[1] = wi_data[0] x wi_data[1]
 	Assertion:  sg_block[1] == wi_data[1] x wi_layout[1]
 
-`xegpu.sg_map` can be used to describe the WI data distribution for 1d block. All the rules above applies with the extra restriction that wi_layout[0] and wi_data[0] must be 1.
+`xegpu.sg_map` can be used to describe the WI data distribution for 1d block. All the rules above apply with the extra restriction that wi_layout[0] and wi_data[0] must be 1.
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 #tdesc_attr1 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false, sg= #sg_map_a>
@@ -96,7 +96,7 @@ The distribution rule can be represented as following:
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
 ```
 
-Below is an example list of using sg_map for the WI data distribution of 2d data. The sg_map describes how the subgroup level data block is distribute to 8 or 16 WI threads with each thread own its own data fragement. For exmaple, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. So the sg_map describes a subtensor with the shape of [2,8] at the subgroup level. 
+Below is an example list of using sg_map for the WI data distribution of 2d data. From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to 8 or 16 WI threads. For example, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. So the sg_map describes a subtensor with the shape of [2,8] at the subgroup level. 
 
 The result of WI dsitribution can be observed only when the data is being loaded to vectors. 
 
@@ -151,9 +151,9 @@ SIMD_LANE = 8
           tensor_desc<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
 
 ```
-Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They serve as hint directives for different levels of the cache hierarchy. The cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  An Xe GPU target may use L1_hint and L3_hint and omits L2_hint. There are only a few valid combinations between L1_hint and L3_hint for a certain Xe GPU target.  
+Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They serve as hint directives for different levels of the cache hierarchy. The cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  An Xe GPU target may use L1_hint and L3_hint and omit L2_hint. There are only a few valid combinations between L1_hint and L3_hint for a certain Xe GPU target.  
 
-Attribute `vnni` is only avaialbe for SIMT mode. When the matrix B is loaded, the load has a vnni transformation effects which takes multiple elements from first dimension and fold to the second dimension.  
+Attribute `vnni` is only avaialbe for SIMT mode. When the matrix B is loaded, the load has a vnni transformation effect which takes multiple elements from the first dimension and fold to the second dimension.  
 
 Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations. An Xe GPU target may only support data types with size of 4-byte (DW) or 8-byte (DQ).  
 Note that the WI data distribution specified by sg_map doesn't apply to the tensor data in the memory, it applies to the transposed tensor after being loaded and transposed to registers.  
