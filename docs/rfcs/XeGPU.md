@@ -38,7 +38,7 @@ XeGPU supports two flavors of load/store operations: n-dimension load (nd load) 
 The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. The tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements. For most Xe GPU targets, the stride of the innermost dimension (base_stride[0]) must be 1.
 
 ```mlir
- #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
+#sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 %tdesc1 = XeGPU.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
@@ -47,9 +47,53 @@ The example below creates a 2D tensor_desc with base matrix address, shapes, str
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16>
 ```
-Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. With the sg_map, `wi_layout` specifies the layout in which WI threads correspond to the memory, and `wi_data` describes the data block accessed by each work item (WI) thread. In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment. The data elements with each data fragment assigned to a WI thread must be contiguous. So the sg_map describes a total [2,16] submatrix at the subgroup level.
+Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data block accessed by each work item (WI) thread. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads.  In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element.  
 
-The size of the 2D subtensor referred by the result tensor_desc must be divisible by sg_map size, which comes from wi_layout multiplied by wi_data. For each dimension, the size of the 2D subtensor must be divisible by wi_layout x wi_data. The 2D subtensor size must be larger than or equal to the sg_map size. When the 2D subtensor size is larger than the sg_map size, it is distributed to WI threads in a round-robin fashion.
+The wi_data size refers to the data elements assigned to each WI thread for each single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragrements, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribtion put them into the sg_block[1] so it causes a layout change as known as VNNI transformation.    
+
+The distribution rule can be represented as following: 
+	WI_data_frag[0] = sg_block[0]/wi_layout[0] x wi_data[0]
+	WI_data_frag[1] = wi_data[0] x wi_data[1]
+	Assertion:  sg_block[1] == wi_data[1] x wi_layout[1]
+
+
+Below is an example list of using sg_map for the WI data dastribution. The sg_map describes how the subgroup level data block is distribute to 8 or 16 WI threads with each thread own its own data fragement. For exmaple, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. So the sg_map describes a subtensor with the shape of [2,8] at the subgroup level. 
+
+The result of WI dsitribution can be observed only when the data is being loaded to vectors. 
+
+```mlir
+SIMD_LANE = 16
+#sg_map_a_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>    // WI data distribte from [8, 16] to [8, 1]
+#sg_map_a_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>    // WI data distribte from [8, 16] to [8, 1]
+#sg_map_a_tf32 = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 1]>     // WI data distribte from [8, 8] to [4, 1]
+#sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>    // WI data distribte from [8, 32] to [8, 2]
+#sg_map_a_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>    // WI data distribte from [8, 32] to [8, 2]
+
+#sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribte from [16, 16] to [8, 2]  
+#sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribte from [16, 16] to [8, 2]
+#sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>   // WI data distribte from [8, 16] to [8, 1] 
+#sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribte from [32, 16] to [8, 4] 
+#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribte from [32, 16] to [8, 4] 
+
+#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribte from [8, 16] to [8, 1] 
+#sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribte from [8, 16] to [8, 1]
+
+SIMD_LANE = 8
+#sg_map_a_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribte from [8, 16] to [8, 2]
+#sg_map_a_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribte from [8, 16] to [8, 2]
+#sg_map_a_tf32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribte from [8, 8] to [8, 1]
+#sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>   // WI data distribte from [8, 32] to [8, 4]
+#sg_map_a_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>   // WI data distribte from [8, 32] to [8, 4]
+
+#sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [2, 1]>    // WI data distribte from [16, 8] to [8, 2]
+#sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [2, 1]>    // WI data distribte from [16, 8] to [8, 2]
+#sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>    // WI data distribte from [8, 8] to [8, 1]
+#sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribte from [32, 8] to [8, 4]
+#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribte from [32, 8] to [8, 4] 
+
+#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribte from [8, 8] to [8, 1] 
+#sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribte from [8, 8] to [8, 1] 
+```
 
 Attribute `mode` indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode. Under this mode, the XeGPU op is carried out by all the WI threads within a subgroup. There is no need to specify the mapping of each WI thread to the data fragments. The XeGPU operation works on the vectors as a whole.
 
@@ -64,7 +108,7 @@ create_nd_tdesc creates a tensor descriptor that covers an array of 2D subtensor
 
 create_nd_tdesc also accepts a memref as input instead of a memory address, shapes, and sizes.
 ```mlir
- #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
+ #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
  %tdesc1 = XeGPU.create_nd_tdesc %mref, %offsets:2
 		: memref<1024x1024xbf16>, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
@@ -92,9 +136,9 @@ For 1D tensor description, the base_shape and base_stride are optional, the attr
 
 `load_nd` works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.  
 ```mlir
-  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %result = XeGPU.load_nd %tdesc1 {L1_hint = uncached, L3_hint = uncached} :
-          tensor_desc<8x16xbf16, #sg_map_a> into vector<4x2xbf16>
+          tensor_desc<8x16xbf16, #sg_map_a> into vector<8x1xbf16>
 
   %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc} :
           tensor_desc<8x16xbf16> into vector<8x16xbf16>
@@ -111,54 +155,27 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
      tensor_desc<8x16xf32> into vector<16x8xf32>
 ```
 
-Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the specified axis and fits them into 32-bit data along the row dimension (axis 1). It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
-
-An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
-```mlir  
-  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
-  %bt = XeGPU.load_nd %tdesc1 {vnni_axis = 0} :
-     tile<16x16xbf16, #sg_map_b> into vector<8x16x2xbf16>
-  %bt = XeGPU.load_nd %tdesc2 {vnni_axis = 0, mode = vc} :
-     tile<16x16xbf16> into vector<8x16x2xbf16>
-```
-For the sg_map, the wi_data size along the vnni_axis must match with the size required to “pack” the low-precision data into 32-bit.
-
-When setting vnni_axis to 1, VNNI transformation has no impact on the physical data layout, so it can be optimized away from code sequence. However, it does contribute to the code readability, since it is much easier to understand that A[8, 8, 2] x B[8, 16, 2], vs. A[8, 16] x B[8, 16, 2].
-```mlir  
-  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
-  %at = XeGPU.load_nd %tdesc1 {vnni_axis = 1} :
-     tile<8x16xbf16, #sg_map_a> into vector<8x8x2xbf16>
-
-  %at = XeGPU.load_nd %tdesc2 {vnni_axis = 1, mode = vc} :
-     tile<8x16xbf16> into vector<8x8x2xbf16>
-```
-VNNI transformation and transpose can not be combined.
-
-Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a tile with fp16 data type, which transposes the tile as if it is a tile of "fp16 pairs".  `transpose_bit_width` is vc mode only.
+Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a block with fp16 data type, which transposes the block as if its element data type is "fp16 pairs".  The example below shows that a block<16x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the block as <16x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x32xbf16> using block's element data type. 
 
 ```mlir
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
+  %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32} :
+     tensor_desc<16x16xf16, #sg_map> into vector<8x2xf16>
+
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32, mode = vc} :
-     tile<32x16xf16, #sg_map> into vector<8x64xf16>
+     tensor_desc<16x16xf16, #sg_map> into vector<8x32xf16>
 ```
 
-The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a tile<32x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the tile as <32x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x64xbf16> using tile's element data type. User can use vector.shape_cast to explicitly represent the VNNI layout for the output vector without introducing any data movement.
-
-```mlir  
-  %at = XeGPU.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32, mode = vc} :
-     tile<32x16xf16> into vector<8x64xf16>
-  %bt = vector.shape_cast %at :  vector<8x64xf16> into vector<8x32x2xf16>
-```
-
-`dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3D vectors. When the input matrix is a lower-precision data type (lower than 32bit), the input vectors uses 3D representation. As the matrix B must be in VNNI layout, the reduction dimension needs to be split into 2 dimensions, and the 3rd inner dimension has 2 or 4 data elements fitting the 32bit. The result tensor is always in 2D.
+`dpas` does the matrix multiplication on the 2D matrix.
 ```mlir
   // WI mapping for vector_a, vector_b, vector_c refer to the sg_mapping associated with tensor_desc
   %vector_c = XeGPU.dpas %vector_a, %vector_b :
-     vector<4x2xbf16>, vector<8x2xbf16>
+     vector<8x1xbf16>, vector<8x2xbf16>
 	   into vector<8x1xfloat>
 
   // logically %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
   %vector_c = XeGPU.dpas %vector_a, %vector_b {mode = vc} :
-     vector<8x8x2xbf16>, vector<8x16x2xbf16>
+     vector<8x16xbf16>, vector<16x16xbf16>
 	   into vector<8x16xfloat>  
 ```
 `store_nd` stores a vector to memory specified by tensor_desc.
@@ -174,13 +191,8 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to store_nd.
 `prefetch_nd` prefetches the memory specified by tensor_desc to cache.
 Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to prefetch_nd.
 ```mlir
-  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
-  XeGPU.prefetch_nd %tdesc1: tensor_desc<8x16xbf16, #sg_map_a>  
-  XeGPU.prefetch_nd %tdesc2 {mode = vc} : tensor_desc<8x16xbf16>  
-
-  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  XeGPU.prefetch_nd %tdesc1: tensor_desc<16xbf16, #sg_map_a>
-  XeGPU.prefetch_nd %tdesc2 {mode = vc} : tensor_desc<16xbf16>
+  XeGPU.prefetch_nd %tdesc1 : tensor_desc<8x16xbf16>  
+  XeGPU.prefetch_nd %tdesc2 : tensor_desc<16xbf16>
 ```
 `update_nd_offset` updates the subtensor’s offsets for the tensor descriptor. These offsets are relative offset to the current position in the number of elements.  The operation is used when the processing over one subtensor is completed and moves to a new position. Usually, only one offset value is changed since the subtensor is only moving along one dimension.
 ```mlir
@@ -198,7 +210,6 @@ Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to
 ```
 The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  The number of work items (SIMD lanes) can be 1, 2, 4, 8, 16, 32.
 ```mlir  
-
   #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
   %scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets
 		{chunk_size_per_lane=8, mode = vc} :
