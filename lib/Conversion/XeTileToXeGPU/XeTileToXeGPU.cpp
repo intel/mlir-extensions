@@ -125,6 +125,11 @@ public:
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::math::TanhOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+
+    addDynamicallyLegalOp<mlir::vector::TransposeOp>(
+        [](mlir::vector::TransposeOp op) {
+          return op.getResult().getType().getRank() == 2;
+        });
   }
 
 private:
