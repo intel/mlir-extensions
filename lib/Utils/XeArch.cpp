@@ -218,13 +218,10 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
       return op->emitOpError() << "Unsupported dpas config";
     }
 
-    if ((lhsRank != rhsRank) || (lhsRank != 3)) {
-      return op->emitOpError()
-             << "lhs and rhs rank does not match for dpas op, or "
-             << "their rank is not 3. "
-             << "\n"
-             << "lhsRank: " << lhsRank << "\n"
-             << "rhsRank:" << rhsRank;
+    if (lhsRank != rhsRank) {
+      return op->emitOpError() << "lhs and rhs rank does not match for dpas op "
+                               << "(lhsRank: " << lhsRank << ", "
+                               << "rhsRank:" << rhsRank << ").\n";
     }
 
     DPASConfig dpasParams =
@@ -241,7 +238,8 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
              << " dpas config: mxnxk = " << M << "x" << N << "x" << K;
     }
 
-    unsigned int BNumElements = rhsShape[0] * rhsShape[1] * rhsShape[2];
+    unsigned int BNumElements = std::accumulate(
+        rhsShape.begin(), rhsShape.end(), 1, std::multiplies<unsigned>());
     // Execution size for matrix B should match dpas params
     if (BNumElements != K * N) {
       return op->emitOpError()

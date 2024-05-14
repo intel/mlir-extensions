@@ -197,23 +197,13 @@ static llvm::SmallVector<unsigned int>
 getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
            const int CPrecision, const int DPrecision,
            std::shared_ptr<XeuArchInterface> uArchInterface) {
-  assert(elemTy.isIntOrFloat());
-  auto bits = elemTy.getIntOrFloatBitWidth();
-  imex::DPASConfig dpasParams;
-  llvm::SmallVector<unsigned int> result;
-  switch (bits) {
-  case 16:
-    dpasParams = uArchInterface->getDPASConfig(APrecision, BPrecision,
-                                               CPrecision, DPrecision);
-    result = llvm::SmallVector<unsigned int>(
-        {dpasParams.m, dpasParams.k, dpasParams.n});
-    break;
-  default:
-    result = llvm::SmallVector<unsigned int>({8, 8, 8});
-    break;
-  }
-  return result;
+  assert(elemTy.isIntOrFloat() && "unsupported element type.");
+  auto dpasParams = uArchInterface->getDPASConfig(APrecision, BPrecision,
+                                                  CPrecision, DPrecision);
+  return llvm::SmallVector<unsigned int>(
+      {dpasParams.m, dpasParams.k, dpasParams.n});
 }
+
 // it blocks a constant dense value if it is used by XeTile operators,
 // e.g, tile_mma and store_tile. It currently extends a 2D vector into
 // 4D vector with the last 2 dim corresponding to block size.
