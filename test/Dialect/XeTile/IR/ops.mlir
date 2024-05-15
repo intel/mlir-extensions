@@ -309,3 +309,21 @@ func.func @test_atomic_rmw(%tile : !xetile.tile<8x16xf16>, %value : vector<8x16x
   %1 = xetile.atomic_rmw "addf" %value, %tile : vector<8x16xf16>, !xetile.tile<8x16xf16> -> vector<8x16xf16>
   return
 }
+
+func.func @test_transpose(%source: vector<8x16xf16>) {
+  // CHECK: xetile.transpose {{.*}} [1, 0] : vector<8x16xf16> -> vector<16x8xf16>
+  %1 = xetile.transpose %source [1, 0] : vector<8x16xf16> -> vector<16x8xf16>
+  return
+}
+
+func.func @test_reduce(%source: vector<8x16xf16>) {
+  // CHECK: xetile.reduce {{.*}} [0] : vector<8x16xf16> -> vector<1x16xf16>
+  %1 = xetile.reduce <add>, %source [0] : vector<8x16xf16> -> vector<1x16xf16>
+  return
+}
+
+func.func @test_broadcast(%source: vector<1x16xf16>) {
+  // CHECK: xetile.broadcast {{.*}} [0] : vector<1x16xf16> -> vector<8x16xf16>
+  %1 = xetile.broadcast %source [0] : vector<1x16xf16> -> vector<8x16xf16>
+  return
+}

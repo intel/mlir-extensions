@@ -170,7 +170,7 @@ mlir::LogicalResult InitTileOp::verify() {
   }
 
   if (isSourceMemRef() && sourceMemRefHasStaticShape()) {
-    auto memrefType = getSourceType().dyn_cast<mlir::MemRefType>();
+    auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
 
     // Checks for memrefs with format: memref<[shape], strided<[strides],
     // offsets:[offset]>>
@@ -903,6 +903,42 @@ mlir::OpFoldResult TileUnpackOp::fold(FoldAdaptor /*adaptor*/) {
     return src;
   }
   return nullptr;
+}
+
+mlir::LogicalResult TransposeOp::verify() {
+  auto srcShape = getSource().getType().getShape();
+  auto resShape = getResult().getType().getShape();
+  auto permutation = getPermutation();
+
+  auto transposeShape = srcShape.vec();
+  for (auto [i, j] : llvm::enumerate(permutation)) {
+    if (j >= (int64_t)srcShape.size())
+      return emitOpError("permutation index out of bounds");
+    transposeShape[i] = srcShape[j];
+  }
+
+  if (transposeShape != resShape.vec())
+    return emitOpError("Incorrect transpose permutation");
+
+  return mlir::success();
+}
+
+mlir::LogicalResult ReduceOp::verify() {
+  auto dims = getReductionDim();
+  auto resShape = getResult().getType().getShape();
+  for (auto i : dims)
+    if (resShape[i] != 1)
+      return emitOpError("reduction dimension of result must have size 1");
+  return mlir::success();
+}
+
+mlir::LogicalResult BroadCastOp::verify() {
+  auto dims = getBroadcastDim();
+  auto srcShape = getSource().getType().getShape();
+  for (auto i : dims)
+    if (srcShape[i] != 1)
+      return emitOpError("broadcast dimension of source must have size 1");
+  return mlir::success();
 }
 
 } // namespace xetile

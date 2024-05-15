@@ -228,3 +228,25 @@ func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
 #wg_map_4 = #xetile.tile_attr<order = [0, 1, 2]>
 // expected-error@+1 {{expect integer array of size 2 for wg_data}}
 #wg_map_5 = #xetile.tile_attr<wg_data = [32, 64, 128]>
+
+
+// -----
+func.func @test_transpose(%source: vector<8x16xf16>) {
+  // expected-error@+1 {{Incorrect transpose permutation}}
+  %1 = xetile.transpose %source [0, 1] : vector<8x16xf16> -> vector<16x8xf16>
+  return
+}
+
+// -----
+func.func @test_reduce(%source: vector<8x16xf16>) {
+  // expected-error@+1 {{reduction dimension of result must have size 1}}
+  %1 = xetile.reduce <add>, %source [0] : vector<8x16xf16> -> vector<2x16xf16>
+  return
+}
+
+// -----
+func.func @test_broadcast(%source: vector<2x16xf16>) {
+  // expected-error@+1 {{broadcast dimension of source must have size 1}}
+  %1 = xetile.broadcast %source [0] : vector<2x16xf16> -> vector<8x16xf16>
+  return
+}
