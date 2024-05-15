@@ -49,7 +49,8 @@ def XeTile_Dialect : Dialect {
     let cppNamespace = "::imex::xetile";
 
     let dependentDialects = [
-          "::mlir::memref::MemRefDialect"];
+          "::mlir::memref::MemRefDialect",
+          "::mlir::vector::VectorDialect"];
 
     // TODO: temporary disable it.
     let useDefaultTypePrinterParser = true;

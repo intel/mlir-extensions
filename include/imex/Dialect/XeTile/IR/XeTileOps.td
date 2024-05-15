@@ -18,6 +18,8 @@ include "imex/Dialect/XeTile/IR/XeTileDialect.td"
 include "imex/Dialect/XeTile/IR/XeTileTypes.td"
 include "imex/Dialect/XeTile/IR/XeTileAttrs.td"
 
+include "mlir/Dialect/Vector/IR/VectorAttributes.td"
+
 // Base class for dialect operations. This operation inherits from the base
 // `Op` class in OpBase.td, and provides:
 //   * The parent dialect of the operation.
@@ -518,6 +520,53 @@ def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
                 `->` qualified(type($result))
     }];
 }
+
+def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
+    let summary = "transpose a 2D vector.";
+    let description = [{
+        It has the same semantic with `vector.transpose`, but limits the vector to be 2D.
+    }];
+
+    let arguments = (ins XeTile_2DVector: $source,
+                         DenseI64ArrayAttr:$permutation);
+    let results = (outs XeTile_2DVector: $result);
+    let assemblyFormat = [{
+        $source $permutation attr-dict `:` type($source) `->` type($result)
+    }];
+    let hasVerifier = 1;
+}
+
+def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
+    let summary = "performs a reduction operation over a 2D vector.";
+    let description = [{
+        It has the same semantics as the `vector.multi_reduction`,
+        but restricts the vector dimension to 2D, and also the result
+        is 2D too, with the reduced axis being 1.
+    }];
+
+    let arguments = (ins Vector_CombiningKindAttr: $kind,
+                         XeTile_2DVector: $source,
+                         DenseI64ArrayAttr: $reduction_dim);
+    let results = (outs XeTile_2DVector: $result);
+    let assemblyFormat = [{
+        $kind `,` $source $reduction_dim attr-dict `:` type($source) `->` type($result)
+    }];
+
+    let hasVerifier = 1;
+}
+
+def XeTile_BroadCastOp: XeTile_Op<"broadcast", []> {
+    let summary = "broadcast a vector from 1D to 2D.";
+
+    let arguments = (ins XeTile_2DVector: $source,
+                         DenseI64ArrayAttr: $broadcast_dim);
+    let results = (outs XeTile_2DVector: $result);
+    let assemblyFormat = [{
+        $source $broadcast_dim attr-dict `:` type($source) `->` type($result)
+    }];
+    let hasVerifier = 1;
+}
+
 
 
 #endif // _XETILE_OPS_TD_INCLUDED_
