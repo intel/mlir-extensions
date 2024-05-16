@@ -28,6 +28,7 @@ spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer,
   }
   gpu.module @test_kernel {
    gpu.func @test_kernel(%arg0: memref<8x16xf16>, %arg1: memref<16x16xf16>, %arg2: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
+
      %arg00 = memref.reinterpret_cast %arg0 to offset: [0], sizes: [128], strides: [1] : memref<8x16xf16> to memref<128xf16>
      %0 = xegpu.create_nd_tdesc %arg00[0]: memref<128xf16> -> !xegpu.tensor_desc<128xf16>
      %1 = xegpu.create_nd_tdesc %arg1[0, 0] {boundary_check = true} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
