@@ -305,11 +305,7 @@ In case that certain Xe GPU target does not support atomic operation for a certa
 Attribute `scope` describes the scope of fence. "workgroup" means that the scope is within each work group. "gpu" means the scope is across work groups within the gpu.
 Attribute `Memory_kind` describes the memory kind. "global" means the global memory, "shared" means the shared local memory.
 
-`compile_hint` passes performance hints to the lower-level compiler. The schedule_barrier hint prevents instructions from being reordered by a lower-level compiler. For example, a prefetch instruction is location-sensitive, but the lower-level compiler may schedule it to an undesired location.  
-```mlir  
-XeGPU.compile_hint {hint=schedule_barrier}
-```
-nbarrier, fence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
+nbarrier and fence operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
 
 ## Notes
 
