@@ -44,7 +44,7 @@ The example below creates a 2D tensor_desc with base matrix address, shapes, str
 ```
 Attribute `mode` indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode. Under this mode, the XeGPU op is carried out by all the WI threads within a subgroup. There is no need to specify the mapping of each WI thread to the data fragments. The XeGPU operation works on the vectors as a whole.
 
-Any XeGPU operation working at VC mode needs to explicitly declare this attribute. 
+Any XeGPU operation working at VC mode needs to explicitly declare this attribute.
 
 create_nd_tdesc creates a tensor descriptor that covers an array of 2D subtensor. The size being covered by the tensor_desc is multiplied with the array_length along the innermost dimension. The subtensor being created in the example below covers 8x32xbf16.
 ```mlir
@@ -79,11 +79,11 @@ When the mode attribute is not specified as "vc", the tensor_desc must be specif
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
-Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element. 
+Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element.
 
-The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribution put them into the sg_block[1] so it causes a layout change known as "VNNI" transformation.    
+The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribution put them into the sg_block[1] so it causes a layout change known as "VNNI" transformation.  
 
-The distribution rule can be represented as following: 
+The distribution rule can be represented as following:
 	WI_data_frag[0] = sg_block[0]/wi_layout[0] x wi_data[0]
 	WI_data_frag[1] = wi_data[0] x wi_data[1]
 	Assertion:  sg_block[1] == wi_data[1] x wi_layout[1]
@@ -96,9 +96,9 @@ The distribution rule can be represented as following:
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
 ```
 
-Below is an example list of using sg_map for the WI data distribution of 2d data. From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to 8 or 16 WI threads. For example, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. So the sg_map describes a subtensor with the shape of [2,8] at the subgroup level. 
+Below is an example list of using sg_map for the WI data distribution of 2d data. From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to 8 or 16 WI threads. For example, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. So the sg_map describes a subtensor with the shape of [2,8] at the subgroup level.
 
-The result of WI dsitribution can be observed only when the data is being loaded to vectors. 
+The result of WI dsitribution can be observed only when the data is being loaded to vectors.
 
 ```mlir
 SIMD_LANE = 16
@@ -110,11 +110,11 @@ SIMD_LANE = 16
 
 #sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribute from [16, 16] to [8, 2]  
 #sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribute from [16, 16] to [8, 2]
-#sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>   // WI data distribute from [8, 16] to [8, 1] 
-#sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4] 
-#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4] 
+#sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>   // WI data distribute from [8, 16] to [8, 1]
+#sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4]
+#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4]
 
-#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1] 
+#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
 #sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
 
 SIMD_LANE = 8
@@ -128,10 +128,10 @@ SIMD_LANE = 8
 #sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [2, 1]>    // WI data distribute from [16, 8] to [8, 2]
 #sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>    // WI data distribute from [8, 8] to [8, 1]
 #sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribute from [32, 8] to [8, 4]
-#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribute from [32, 8] to [8, 4] 
+#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribute from [32, 8] to [8, 4]
 
-#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1] 
-#sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1] 
+#sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
+#sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 ```
 `load_nd` works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.  
 ```mlir
@@ -166,7 +166,7 @@ Note that the WI data distribution specified by sg_map doesn't apply to the tens
      tensor_desc<16x16xf32, #sg_map> into vector<16x16xf32>
 ```
 
-Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a block with fp16 data type, which transposes the block as if its element data type is "fp16 pairs".  The example below shows that a block<16x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the block as <16x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x32xbf16> using block's element data type. As the WI data distribution apply to the tensor data after load and transpose, so each WI get <8x2xbf16>. 
+Attribute `transpose_bit_width` specifies the bit_width of the data unit for the transpose during the load. The `transpose_bit_width` attribute overrides the element data type size for the transpose. For example, the transpose with `transpose_bit_width == 32` may be applied to a block with fp16 data type, which transposes the block as if its element data type is "fp16 pairs".  The example below shows that a block<16x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the block as <16x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x32xbf16> using block's element data type. As the WI data distribution apply to the tensor data after load and transpose, so each WI get <8x2xbf16>.
 ```mlir
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32, mode = vc} :
      tensor_desc<16x16xf16, #sg_map> into vector<8x32xf16>
