@@ -108,4 +108,29 @@ def XeTile_AtomicRMWKindAttr : I64EnumAttr<
   let cppNamespace = "::imex::xetile";
 }
 
+//===----------------------------------------------------------------------===//
+// XeTile Cache Enums.
+//===----------------------------------------------------------------------===//
+def XeTile_CachePolicyCached:        I32EnumAttrCase<"CACHED", 0, "cached">;                    // valid for read and write
+def XeTile_CachePolicyUncached:      I32EnumAttrCase<"UNCACHED", 1, "uncached">;                // valid for read and write
+def XeTile_CachePolicyStreaming:     I32EnumAttrCase<"STREAMING", 2, "streaming">;              // valid for read only
+def XeTile_CachePolicyInvalid:       I32EnumAttrCase<"READ_INVALIDATE", 3, "read_invalidate">;  // valid for read only
+def XeTile_CachePolicyWriteBack:     I32EnumAttrCase<"WRITE_BACK", 4, "write_back">;            // valid for write only
+def XeTile_CachePolicyWriteThrough:  I32EnumAttrCase<"WRITE_THROUGH", 5, "write_through">;      // valid for write only
+
+def XeTile_CachePolicyEnums : I32EnumAttr<"CachePolicy", "Cache policy",
+  [XeTile_CachePolicyCached, XeTile_CachePolicyUncached,
+   XeTile_CachePolicyStreaming, XeTile_CachePolicyInvalid,
+   XeTile_CachePolicyWriteBack, XeTile_CachePolicyWriteThrough]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::imex::xetile";
+}
+
+def XeTile_CacheHintAttr
+  : EnumAttr<XeTile_Dialect, XeTile_CachePolicyEnums, "cache_hint"> {
+    let summary = [{Describe the cache settings for prefetch/load/store operators}];
+    let assemblyFormat = "`<` $value `>`";
+}
+
+
 #endif // _XETILE_ATTR_DEF_TD_INCLUDED_
