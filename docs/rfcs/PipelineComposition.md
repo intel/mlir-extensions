@@ -29,12 +29,21 @@ This API also allows a dynamic control flow between pipelines in graph, controll
 ```C++
 class PipelineGraph {
 public:
-    void registerPipeline(
+    LogicalResult registerPipeline(
         StringRef name,
         ArrayRef<StringRef> predecessors,
         ArrayRef<StringRef> successors,
         ArrayRef<StringRef> jumpTargets,
-        std::function<void(OpPassManager &)> populateFunc);
+        std::function<void(OpPassManager &)> populateFunc,
+        raw_ostream &errorStream);
+
+    LogicalResult registerPipeline(
+        StringRef name,
+        ArrayRef<StringRef> predecessors,
+        ArrayRef<StringRef> successors,
+        ArrayRef<StringRef> jumpTargets,
+        std::function<void(PipelineGraph &)> populateFunc,
+        raw_ostream &errorStream);
 
     FailureOr<PipelineSchedule> createPipelineSchedule(raw_ostream &errorStream) const;
 };
@@ -47,17 +56,20 @@ User is adding pipelines into graph via `registerPipeline` function, each pipeli
 * `jumpTargets` - List of the names of pipelines to which we can dynamically jump after current pipeline.
 * `populateFunc` - Callback to populate pipeline with passes.
 
+User can either register linear sequence of passes via `OpPassManager` variant or a subgraph via `PipelineGraph`.
+Registered subgraphs are isolated from the current graph and always executed as single entity (i.e. control flow can't jump into or from the middle of subgraph).
+
 After user populated the graph object they must call `createPipelineSchedule` method to compile the resulted graph into runnable schedule.
 `createPipelineSchedule` will build a DAG from pipelines dependencies provided by user, and will try to get linear execution order to satify these dependencies.
 
-If two pipelines doesn't have direct and indirect dependencies, order in which they will be executed is not specified, but stable.
+If two pipelines doesn't have direct and indirect dependencies, order in which they will be executed is not specified.
 
 Implicit cycles in graph are not allowed and will result in `createPipelineSchedule` returning error. But cycles via `jumpTargets` are allowed (see later).
 
 Empty pipelines (i.e. pipelines without passes, when `populateFunc` does nothing) are allowed and sometimes desirable.
 
 One usecase is using empty pipelines as anchors for other pipelines. Let's say use wants to split hist entire compiler pipeline into 3 stages: `high`, `middle` and `low`.
-They can create a two empty pipelines `high-to-middle` and `midlle-to-low` with appropriate dependencies and the use those as anchors to specify at which compiler stage insert stages which do actual work.
+They can create a two empty pipelines `high-to-middle` and `middle-to-low` with appropriate dependencies and the use those as anchors to specify at which compiler stage insert stages which do actual work.
 
 ### PipelineSchedule
 ```C++
@@ -66,7 +78,9 @@ public:
     LogicalResult run(Operation *op);
 };
 ```
-`PipelineSchedule` object encapsulates compiled pipeline graph. Main method is `LogicalResult run(Operation *op);` which follows existing MLIR `PassManager::run`.
+`PipelineSchedule` object encapsulates compiled pipeline graph.
+Main method is `LogicalResult run(Operation *op);` which follows existing MLIR `PassManager::run` semantics.
+`run` will execute
 
 ### Dynamic pipeline control flow
 
