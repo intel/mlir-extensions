@@ -81,7 +81,7 @@ When the mode attribute is not specified as "vc", the tensor_desc must be specif
 ```
 Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension and only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. In the example above, sg_map size is 16, wi_layout=[1, 16] means that each subgroup has 16 WI threads in 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element. 
 
-The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribution put them into the sg_block[1] so it causes a layout change known as VNNI transformation.    
+The 2D subtensor, sg_block, can be larger than sg_map size and is distributed to WI items in round-robin fashion. For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0], with the quotient being sg_block[0]/wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient being the first dimension, and the wi_data size being inner-dimension. When multiple data elements are from wi_data[0], the WI distribution put them into the sg_block[1] so it causes a layout change known as "VNNI" transformation.    
 
 The distribution rule can be represented as following: 
 	WI_data_frag[0] = sg_block[0]/wi_layout[0] x wi_data[0]
@@ -139,8 +139,8 @@ SIMD_LANE = 8
   %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc} :
           tensor_desc<8x16xbf16> into vector<8x16xbf16>
 
-  %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc} :
-          tensor_desc<16x16xbf16> into vector<16x16xbf16>
+  %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, vnni = true, mode = vc} :
+          tensor_desc<16x16xbf16> into vector<8x16x2xbf16>
 
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %result = XeGPU.load_nd %tdesc1 {L1_hint = uncached, L3_hint = uncached} :
@@ -153,7 +153,7 @@ SIMD_LANE = 8
 ```
 Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They serve as hint directives for different levels of the cache hierarchy. The cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  An Xe GPU target may use L1_hint and L3_hint and omit L2_hint. There are only a few valid combinations between L1_hint and L3_hint for a certain Xe GPU target.  
 
-Attribute `vnni` is only avaialbe for SIMT mode. When the matrix B is loaded, the load has a vnni transformation effect which takes multiple elements from the first dimension and fold to the second dimension.  
+Attribute `vnni` is used to describe the layout change associated with the load. When the matrix is being loaded, the load with `vnni=true` attribute takes multiple elements from the first dimension and fold to the last dimension.  
 
 Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations. An Xe GPU target may only support data types with size of 4-byte (DW) or 8-byte (DQ).  
 Note that the WI data distribution specified by sg_map doesn't apply to the tensor data in the memory, it applies to the transposed tensor after being loaded and transposed to registers.  
@@ -183,9 +183,14 @@ Attribute `transpose_bit_width` specifies the bit_width of the data unit for the
      vector<8x1xbf16>, vector<8x2xbf16>
 	   into vector<8x1xfloat>
 
-  // logically %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
+  // DPAS on plain layout : %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
   %vector_c = XeGPU.dpas %vector_a, %vector_b {mode = vc} :
      vector<8x16xbf16>, vector<16x16xbf16>
+	   into vector<8x16xfloat>  
+
+  // DPAS on VNNI layout : %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
+  %vector_c = XeGPU.dpas %vector_a, %vector_b {mode = vc} :
+     vector<8x8x2xbf16>, vector<8x16x2xbf16>
 	   into vector<8x16xfloat>  
 ```
 `store_nd` stores a vector to memory specified by tensor_desc.
