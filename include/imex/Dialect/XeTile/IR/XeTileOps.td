@@ -340,10 +340,13 @@ def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
 
     }];
 
-    let arguments = (ins XeTile:$tile);
+    let arguments = (ins XeTile:$tile,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
 
     let assemblyFormat = [{
-        $tile attr-dict `:`  qualified(type($tile))
+        $tile attr-dict `:` qualified(type($tile))
     }];
 }
 

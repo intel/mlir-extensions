@@ -451,6 +451,28 @@ class SgInitTileOpPattern
   }
 };
 
+static mlir::xegpu::CachePolicy
+translateCachePolicy(imex::xetile::CachePolicyAttr val) {
+  if (!val)
+    return mlir::xegpu::CachePolicy::CACHED;
+
+  switch (val.getValue()) {
+  case imex::xetile::CachePolicy::CACHED:
+    return mlir::xegpu::CachePolicy::CACHED;
+  case imex::xetile::CachePolicy::UNCACHED:
+    return mlir::xegpu::CachePolicy::UNCACHED;
+  case imex::xetile::CachePolicy::STREAMING:
+    return mlir::xegpu::CachePolicy::STREAMING;
+  case imex::xetile::CachePolicy::READ_INVALIDATE:
+    return mlir::xegpu::CachePolicy::READ_INVALIDATE;
+  case imex::xetile::CachePolicy::WRITE_BACK:
+    return mlir::xegpu::CachePolicy::WRITE_BACK;
+  case imex::xetile::CachePolicy::WRITE_THROUGH:
+    return mlir::xegpu::CachePolicy::WRITE_THROUGH;
+  }
+  llvm_unreachable("Invalid CachePolicy value");
+}
+
 // It lowers a XeTile::prefetch_tile into one or more mlir::xegpu::prefetch_2d.
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile.
@@ -481,12 +503,14 @@ struct SgPrefetchTileOpPattern
       return mlir::failure();
     }
 
-    auto L1 = mlir::xegpu::CachePolicyAttr::get(
-        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
-    auto L2 = mlir::xegpu::CachePolicyAttr::get(
-        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
-    auto L3 = mlir::xegpu::CachePolicyAttr::get(
-        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
+    auto getCachePolicy = [&](imex::xetile::CachePolicyAttr val) {
+      return mlir::xegpu::CachePolicyAttr::get(op.getContext(),
+                                               translateCachePolicy(val));
+    };
+
+    auto L1 = getCachePolicy(op.getL1HintAttr());
+    auto L2 = getCachePolicy(op.getL2HintAttr());
+    auto L3 = getCachePolicy(op.getL3HintAttr());
 
     for (auto tile : tiles) {
       rewriter.create<mlir::xegpu::PrefetchNdOp>(op.getLoc(), tile, L1, L2, L3);
