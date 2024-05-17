@@ -887,22 +887,29 @@ public:
 };
 
 // TODO: enable this later
-// class AllocNbarrierToVCPattern : public OpConversionPattern<AllocNbarrierOp>
-// { public:
-//   using OpConversionPattern<AllocNbarrierOp>::OpConversionPattern;
-//   LogicalResult
-//   matchAndRewrite(AllocNbarrierOp op, OpAdaptor adaptor,
-//                   ConversionPatternRewriter &rewriter) const override {
-//     OpBuilder::InsertionGuard guard(rewriter);
-//     auto func = op->getParentOfType<spirv::FuncOp>();
-//     rewriter.setInsertionPointAfter(func);
-//     rewriter.create<spirv::ExecutionModeOp>(
-//         op.getLoc(), func, spirv::ExecutionMode::NamedBarrierCountINTEL,
-//         op.getNbarrierNum());
-//     rewriter.eraseOp(op);
-//     return success();
-//   }
-// };
+class AllocNbarrierToVCPattern
+    : public OpConversionPattern<::mlir::xegpu::AllocNbarrierOp> {
+public:
+  using OpConversionPattern<
+      ::mlir::xegpu::AllocNbarrierOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(xegpu::AllocNbarrierOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    OpBuilder::InsertionGuard guard(rewriter);
+    auto func = op->getParentOfType<gpu::GPUFuncOp>();
+    rewriter.setInsertionPointAfter(func);
+    auto executionModeAttr = spirv::ExecutionModeAttr::get(
+        rewriter.getContext(), spirv::ExecutionMode::NamedBarrierCountINTEL);
+
+    auto execModeFuncAttr = spirv::ExecutionModeFuncAttributeAttr::get(
+        rewriter.getContext(), executionModeAttr, op.getNbarrierNum());
+
+    func->setAttr("spirv.execution_mode", execModeFuncAttr);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 static Value createConstantI32(Location loc, PatternRewriter &rewriter,
                                int32_t v) {
@@ -940,11 +947,9 @@ public:
     auto nbarrier_role = rewriter.create<arith::ConstantOp>(
         loc, i32Type, rewriter.getI32IntegerAttr(0));
     auto num_participants = zext(i32Type, op.getParticipantThreadNum());
-
-    DenseElementsAttr constantData = DenseElementsAttr::get(
-        v8i32Type, ArrayRef<int>(std::vector<int>(1, 0)));
-    Value nbarrier_src =
-        rewriter.create<arith::ConstantOp>(loc, v8i32Type, constantData);
+    Value nbarrier_src = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v8i32Type, IntegerAttr::get(v8i32Type.getElementType(), 0)));
 
     Value payload = zext(i32Type, nbarrier_id);
 
@@ -961,7 +966,7 @@ public:
     payload = bitwise_or(i32Type, payload, payload_num_consumers);
 
     nbarrier_src =
-        rewriter.create<vector::InsertOp>(loc, nbarrier_src, payload, 2);
+        rewriter.create<vector::InsertOp>(loc, payload, nbarrier_src, 2);
     rewriter.replaceOp(op, nbarrier_src);
 
     return success();
@@ -1013,8 +1018,8 @@ public:
     auto i8Type = rewriter.getIntegerType(8);
     auto i32Type = rewriter.getIntegerType(32);
     auto nbarrier_src = rewriter.create<vector::ExtractOp>(loc, payload, 2);
-    auto nbarrier_id =
-        zext(i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
+    auto nbarrier_id = rewriter.create<arith::TruncIOp>(
+        loc, i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
 
     Value signal_flag = i8_val(0); // 0b0: wait 0b1: signal
     Value num_threads = i8_val(0); // This field is ignored for nbarrier.wait
@@ -1511,7 +1516,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     // TODO: Add AllocNbarrierToVCPattern patterns
     patterns.add<CreateNdDescPattern, CreateDescToVCPattern, DpasPattern,
-                 /*AllocNbarrierToVCPattern, */ InitNbarrierToVCPattern,
+                 AllocNbarrierToVCPattern, InitNbarrierToVCPattern,
                  NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                  CompilerHintToVCPattern, FenceToVCPattern,
                  UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern>(
