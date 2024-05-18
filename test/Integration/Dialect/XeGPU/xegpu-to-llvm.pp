@@ -1,3 +1,7 @@
+//// ------------- DISCLAIMER: DO NOT USE THIS PASS PIPELINE !! ----------- ////
+//// This pass pipeline is deprecated and may not contain all the intended  ////
+//// optimizations!! Please use xegpu-to-func-vc.pp !!                      ////
+
 // linalg dialect to gpu dialect lowering pipeline
 // Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 builtin.module(
