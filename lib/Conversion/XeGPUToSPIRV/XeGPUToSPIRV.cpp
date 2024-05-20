@@ -1132,6 +1132,8 @@ public:
 
     // the design limits the fence_op to NONE
     fence_op = lscFenceOp::NONE;
+    sfid = lscSFID::UGM;
+    fence_scope = lscFenceScope::GROUP;
 
     switch (op.getMemoryKind()) {
     case mlir::xegpu::MemoryScope::Global:
