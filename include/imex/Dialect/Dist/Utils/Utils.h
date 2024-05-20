@@ -296,7 +296,7 @@ createOverlap(::mlir::Location loc, ::mlir::OpBuilder rewriter,
   }
 
   return {resOffs, resSizes, resSlcOffs};
-};
+}
 
 } // namespace dist
 } // namespace imex

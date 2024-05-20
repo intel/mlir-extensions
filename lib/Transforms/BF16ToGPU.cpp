@@ -39,7 +39,6 @@ public:
       // 1-1: Create new FunctionType and replace old FunctionType
       auto oftype = op.getFunctionType();
       llvm::SmallVector<mlir::Type, 4> argTypes;
-      ArrayRef<Type> inputTypes;
       ArrayRef<Type> resultTypes;
       for (Type t : oftype.getInputs()) {
         MemRefType m = mlir::dyn_cast<MemRefType>(t);
