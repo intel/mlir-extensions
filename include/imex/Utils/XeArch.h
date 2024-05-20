@@ -159,7 +159,6 @@ public:
   XePVCuArch() : XeuArchInterface("pvc") {}
   virtual ~XePVCuArch() {}
 
-
   virtual mlir::LogicalResult
   checkSupportedDpasTypes(mlir::Operation *op, mlir::Type AType,
                           mlir::Type BType, mlir::Type CType,

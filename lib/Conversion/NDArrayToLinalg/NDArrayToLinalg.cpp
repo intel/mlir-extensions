@@ -1242,8 +1242,10 @@ struct ConvertNDArrayToLinalgPass
     // Convert unknown types to itself
     auto convT2T = [](::mlir::Type type) { return type; };
     // Convert NDArrayType to (tensorType)
-    auto convNDArray2RankedTensor = [](::imex::ndarray::NDArrayType type)
-        -> std::optional<::mlir::Type> { return type.getTensorType(); };
+    auto convNDArray2RankedTensor =
+        [](::imex::ndarray::NDArrayType type) -> std::optional<::mlir::Type> {
+      return type.getTensorType();
+    };
 
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convNDArray2RankedTensor);
@@ -1287,8 +1289,10 @@ struct ConvertNDArrayToLinalgPass
 
     ::mlir::TypeConverter typeConverter4Func;
     // Convert NDArrayType to MemRefType
-    auto convNDArray2MemRef = [](::imex::ndarray::NDArrayType type)
-        -> std::optional<::mlir::Type> { return type.getMemRefType(); };
+    auto convNDArray2MemRef =
+        [](::imex::ndarray::NDArrayType type) -> std::optional<::mlir::Type> {
+      return type.getMemRefType();
+    };
 
     typeConverter4Func.addConversion(convT2T);
     typeConverter4Func.addConversion(convNDArray2MemRef);

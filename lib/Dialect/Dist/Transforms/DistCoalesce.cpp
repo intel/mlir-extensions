@@ -219,7 +219,7 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
         op->setAttr(sSzsName, builder.getDenseI32ArrayAttr(sSzs));
       } else {
         assert(false && "found dependent operation with different rank, needs "
-                "broadcasting support?");
+                        "broadcasting support?");
       }
     }
     return nullptr;

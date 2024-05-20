@@ -421,7 +421,6 @@ public:
                     llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
     llvm_unreachable("Pending Implementation for convertVectorType.");
   }
-
 };
 
 // A simple mlir::RewritePattern wrapper with methods for accessing UsageType
