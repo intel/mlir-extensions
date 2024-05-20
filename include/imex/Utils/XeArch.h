@@ -105,6 +105,8 @@ public:
   mlir::LogicalResult isLegalPrefetch2dOp(mlir::Operation *op);
 
 protected:
+  ~XeuArchInterface() {}
+
   unsigned int repeatCount;
   unsigned int sDepth;
   unsigned int execSize; // Maximum number of channels allowed. Number of
@@ -152,8 +154,10 @@ protected:
 /// various dpas related operations like load2d, store2d, prefetch2d. This
 /// is used to verify XeGPU Dialect operations for legal ops definitions.
 class XePVCuArch : public XeuArchInterface {
+
 public:
   XePVCuArch() : XeuArchInterface("pvc") {}
+  virtual ~XePVCuArch() {}
 
   virtual mlir::LogicalResult
   checkSupportedDpasTypes(mlir::Operation *op, mlir::Type AType,

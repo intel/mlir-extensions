@@ -13,13 +13,12 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
-#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
-
+#include "XeTileOpConversion.h"
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
-#include "XeTileOpConversion.h"
 #include "imex/Utils/XeArch.h"
+#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
+#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypeInterfaces.h>
@@ -135,7 +134,7 @@ mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
     }
   }
   return shuffleOps[0];
-};
+}
 
 // a unified function lowering Unpack and Pack ops.
 static llvm::SmallVector<mlir::Value>

@@ -33,4 +33,4 @@ bool replaceOperandInplaceWithCast(::mlir::PatternRewriter &rewriter,
     }
   }
   return false;
-};
+}

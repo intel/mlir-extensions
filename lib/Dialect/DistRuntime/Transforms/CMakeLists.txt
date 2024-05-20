@@ -12,5 +12,5 @@ add_imex_dialect_library(IMEXDistRuntimeTransforms
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
-  IMEXDistRuntimeDialect
+  IMEXDistTransforms
 )
