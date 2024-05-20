@@ -135,8 +135,8 @@ getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
 namespace imex {
 namespace profiling {
 // defining two types representing kernel start and kernel end
-_IMEX_PROFILING_TRAITS_SPEC(command_start);
-_IMEX_PROFILING_TRAITS_SPEC(command_end);
+_IMEX_PROFILING_TRAITS_SPEC(command_start)
+_IMEX_PROFILING_TRAITS_SPEC(command_end)
 } // namespace profiling
 } // namespace imex
 

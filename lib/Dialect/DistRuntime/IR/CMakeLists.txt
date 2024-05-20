@@ -11,4 +11,5 @@ add_imex_dialect_library(IMEXDistRuntimeDialect
 
   LINK_LIBS PUBLIC
   MLIRIR
+  IMEXDistRuntimeTransforms
 )

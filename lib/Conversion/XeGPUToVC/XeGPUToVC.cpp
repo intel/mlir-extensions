@@ -1092,8 +1092,7 @@ public:
       sfid = lscSFID::TGM;
       break;
     default:
-      llvm_unreachable("unsupported value for memory_kind attribute");
-      break;
+      llvm_unreachable("Unsupported op memory kind");
     }
 
     switch (op.getFenceScope()) {
@@ -1104,8 +1103,7 @@ public:
       fence_scope = lscFenceScope::GPU;
       break;
     default:
-      llvm_unreachable("unsupported value for fence_scope attribute");
-      break;
+      llvm_unreachable("Unsupported fence scope type");
     }
 
     SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
@@ -1212,7 +1210,7 @@ struct VectorExtractVC final
 
 static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-};
+}
 
 struct VectorExtractStridedSliceVC final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {

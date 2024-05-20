@@ -160,7 +160,7 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
               }
               builder.setInsertionPointAfter(curr);
             } else {
-              assert(!"Not implemented");
+              assert(false && "Not implemented");
             }
           }
           assert(tOffs.size() == tSizes.size());
@@ -218,8 +218,8 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
                                       oa[3], svRank, svRank};
         op->setAttr(sSzsName, builder.getDenseI32ArrayAttr(sSzs));
       } else {
-        assert(!"found dependent operation with different rank, needs "
-                "broadcasting support?");
+        assert(false && "found dependent operation with different rank, needs "
+                        "broadcasting support?");
       }
     }
     return nullptr;
@@ -339,7 +339,7 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
       auto defOp = typedOp.getLhs().getDefiningOp();
       if (defOp) {
         n = backPropagatePart(builder, defOp, tOffs, tSizes, nOp, toDelete);
-        assert(!nOp || !"not implemented yet");
+        assert(!nOp || (false && "not implemented yet"));
       }
       val = typedOp.getRhs();
     } else if (auto typedOp = ::mlir::dyn_cast<::imex::dist::EWUnyOp>(op)) {
