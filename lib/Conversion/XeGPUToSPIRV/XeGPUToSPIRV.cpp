@@ -1140,8 +1140,6 @@ public:
     case mlir::xegpu::MemoryScope::SLM:
       sfid = lscSFID::TGM;
       break;
-    default:
-      llvm_unreachable("Unsupported op memory kind");
     }
 
     switch (op.getFenceScope()) {
@@ -1151,8 +1149,6 @@ public:
     case mlir::xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
       break;
-    default:
-      llvm_unreachable("Unsupported fence scope type");
     }
 
     SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
