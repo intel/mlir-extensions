@@ -61,6 +61,15 @@ gpu.module @test_kernel {
     //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>,
     //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>, vector<32x16xf32>, vector<32x16xf32>
     %6:3 = scf.for %arg3 = %c0 to %c1024 step %c64 iter_args(%arg4 = %4, %arg5 = %5, %arg6 = %3) -> (!xetile.tile<32x32xtf32>, !xetile.tile<32x32xtf32>, vector<32x32xf32>) {
+      //CHECK: %[[r65:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r66:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r67:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r68:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r69:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r70:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r71:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r72:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+
       //CHECK: %[[r33:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x8xtf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8xtf32>
       //CHECK: %[[r34:.*]] = vector.extract %[[r33]][0] : vector<32x8xtf32> from vector<2x32x8xtf32>
       //CHECK: %[[r35:.*]] = vector.extract %[[r33]][1] : vector<32x8xtf32> from vector<2x32x8xtf32>
@@ -95,14 +104,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r62:.*]] = vector.extract_strided_slice %[[r56]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
       //CHECK: %[[r63:.*]] = vector.extract_strided_slice %[[r56]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
       //CHECK: %[[r64:.*]] = vector.extract_strided_slice %[[r56]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
-      //CHECK: %[[r65:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r66:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r67:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r68:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r69:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r70:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r71:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r72:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+
       %8 = xetile.load_tile %arg5 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
 
       //CHECK: %[[r73:.*]] = xegpu.dpas %[[r39]], %[[r57]], %[[r65]] : vector<8x8xtf32>, vector<8x16xtf32>, vector<8x16xf32> -> vector<8x16xf32>
