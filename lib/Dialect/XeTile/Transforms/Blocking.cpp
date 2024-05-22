@@ -564,8 +564,27 @@ struct SCFForOpPattern
     if (newBlock->mightHaveTerminator())
       rewriter.eraseOp(newBlock->getTerminator());
 
+    auto savedIP = rewriter.saveInsertionPoint();
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(newBlock);
+
+    // contruct the inputs for the new scf::for block.
+    // An unpackOp is inserted for the corresponding init arg
+    // of the new block if its init value is updated with a pack op.
+    llvm::SmallVector<mlir::Value> newArguments;
+    for (auto [i, arg] : llvm::enumerate(newBlock->getArguments())) {
+      if (i && newInitArgs[i - 1].getDefiningOp<xetile::TilePackOp>()) {
+        auto unpack = addUnpackOp(arg, rewriter);
+        newArguments.push_back(unpack);
+      } else {
+        newArguments.push_back(arg);
+      }
+    }
+
+    rewriter.restoreInsertionPoint(savedIP);
+
     mlir::Block *block = op.getBody();
-    rewriter.mergeBlocks(block, newBlock, newBlock->getArguments());
+    rewriter.mergeBlocks(block, newBlock, newArguments);
 
     llvm::SmallVector<mlir::Value> newValues;
     for (auto [i, result] : llvm::enumerate(newOp->getResults())) {
