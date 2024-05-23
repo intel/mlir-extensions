@@ -146,7 +146,7 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
                   bool isForDPASB = false) {
 
   // handle based on the dim0, and save results into intermediates
-  llvm::SmallVector<mlir::Value> intermediates;
+  llvm::SmallVector<mlir::Value> intermediates(outGrids[0] * inGrids[1]);
   if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
     intermediates = inputs;
   } else if (inBlkSizes[0] < outBlkSizes[0]) { // stack on dim 0
@@ -160,13 +160,13 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
         if (valSet.size() == (size_t)nums) {
           auto newOp =
               mergeVectorsWrapper(valSet, stack, op->getLoc(), rewriter);
-          intermediates.push_back(newOp);
+          intermediates[i / nums * inGrids[1] + j] = newOp;
           valSet.clear();
         }
       }
     }
   } else { // do extract on dim0 using vector::ExtractStridedSliceOp
-    intermediates.resize(outGrids[0] * inGrids[1]);
+    // intermediates.resize(outGrids[0] * inGrids[1]);
     llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], inBlkSizes[1]});
     // if the vnni transform applied, vector shape
     // and offset need to be adjusted accordingly.
@@ -860,6 +860,33 @@ struct ElementWiseOpPattern : public SgXeTileToXeGPUConversion<Op> {
   }
 };
 
+template <typename CastOp>
+struct TypecastOpPattern : public SgXeTileToXeGPUConversion<CastOp> {
+  using SgXeTileToXeGPUConversion<CastOp>::SgXeTileToXeGPUConversion;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OpAdaptor = typename CastOp::template GenericAdaptor<RangeT>;
+
+  mlir::LogicalResult
+  matchAndRewrite(CastOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto out = mlir::dyn_cast<mlir::VectorType>(op.getType());
+    if (!out || out.getRank() != 4)
+      return mlir::failure();
+
+    auto shape = out.getShape();
+    auto vecTy =
+        mlir::VectorType::get({shape[2], shape[3]}, out.getElementType());
+    auto inputs = adaptor.getIn();
+    llvm::SmallVector<mlir::Value> newOps;
+    for (auto in : inputs) {
+      auto newOp = rewriter.create<CastOp>(op.getLoc(), vecTy, in);
+      newOps.push_back(newOp);
+    }
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
@@ -887,6 +914,18 @@ void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                   ElementWiseOpPattern<mlir::arith::XOrIOp, 2>,
                   ElementWiseOpPattern<mlir::math::PowFOp, 2>,
                   ElementWiseOpPattern<mlir::arith::SelectOp, 3>>(
+      patterns.getContext(), converter, analysis);
+  patterns.insert<TypecastOpPattern<mlir::arith::ExtFOp>,
+                  TypecastOpPattern<mlir::arith::ExtSIOp>,
+                  TypecastOpPattern<mlir::arith::ExtUIOp>,
+                  TypecastOpPattern<mlir::arith::FPToSIOp>,
+                  TypecastOpPattern<mlir::arith::FPToUIOp>,
+                  TypecastOpPattern<mlir::arith::IndexCastOp>,
+                  TypecastOpPattern<mlir::arith::IndexCastUIOp>,
+                  TypecastOpPattern<mlir::arith::SIToFPOp>,
+                  TypecastOpPattern<mlir::arith::UIToFPOp>,
+                  TypecastOpPattern<mlir::arith::TruncFOp>,
+                  TypecastOpPattern<mlir::arith::TruncIOp>>(
       patterns.getContext(), converter, analysis);
 }
 
