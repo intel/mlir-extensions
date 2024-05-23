@@ -9,9 +9,12 @@ add_imex_conversion_library(IMEXGPUToSPIRV
 
   LINK_LIBS PUBLIC
   MLIRArithToSPIRV
-  MLIRGPUDialect
+  MLIRControlFlowToSPIRV
   MLIRFuncToSPIRV
+  MLIRGPUDialect
+  MLIRGPUToSPIRV
   MLIRIR
+  MLIRMathToSPIRV
   MLIRPass
   MLIRSCFToSPIRV
   MLIRSPIRVDialect
