@@ -53,8 +53,8 @@ namespace imex {
 /// 2) Lower the body of the spirv::ModuleOp.
 class GPUXToSPIRVPass : public ::imex::ConvertGPUXToSPIRVBase<GPUXToSPIRVPass> {
 public:
-  explicit GPUXToSPIRVPass(bool mapMemorySpace,
-                           bool enableGenISAIntrinsic, bool enableVCIntrinsic)
+  explicit GPUXToSPIRVPass(bool mapMemorySpace, bool enableGenISAIntrinsic,
+                           bool enableVCIntrinsic)
       : mapMemorySpace(mapMemorySpace) {
     this->enableGenISAIntrinsic = enableGenISAIntrinsic;
     this->enableVCIntrinsic = enableVCIntrinsic;
@@ -361,11 +361,9 @@ void GPUXToSPIRVPass::runOnOperation() {
 }
 
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass(bool mapMemorySpace,
-                             bool enableGenISAIntrinsic,
+createConvertGPUXToSPIRVPass(bool mapMemorySpace, bool enableGenISAIntrinsic,
                              bool enableVCIntrinsic) {
-  return std::make_unique<GPUXToSPIRVPass>(mapMemorySpace,
-                                           enableGenISAIntrinsic,
-                                           enableVCIntrinsic);
+  return std::make_unique<GPUXToSPIRVPass>(
+      mapMemorySpace, enableGenISAIntrinsic, enableVCIntrinsic);
 }
 } // namespace imex
