@@ -118,6 +118,40 @@ gpu.module @test_kernel {
     %out:3 = scf.for %k = %c0 to %c1024 step %c64
       iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
       -> (!xetile.tile<64x64xf16>, !xetile.tile<64x64xf16>, vector<64x64xf32>) {
+      //CHECK: %[[r177:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r178:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r179:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r180:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r181:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r182:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r183:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r184:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r185:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r186:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r187:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r188:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r189:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r190:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r191:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r192:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r193:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r194:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r195:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r196:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r197:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r198:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r199:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r200:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r201:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r202:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r203:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r204:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r205:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r206:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r207:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+      //CHECK: %[[r208:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+
+
       //CHECK: %[[r105:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xf16>
       //CHECK: %[[r106:.*]] = vector.extract %[[r105]][0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
       //CHECK: %[[r107:.*]] = vector.extract %[[r105]][1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
@@ -194,38 +228,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r176:.*]] = vector.extract_strided_slice %[[r160]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16x2xf16> to vector<8x16x2xf16>
       %b_value = xetile.load_tile %b_tile : !xetile.tile<64x64xf16> -> vector<64x64xf16>
 
-      //CHECK: %[[r177:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r178:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r179:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r180:.*]] = vector.extract_strided_slice %[[arg12]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r181:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r182:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r183:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r184:.*]] = vector.extract_strided_slice %[[arg13]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r185:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r186:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r187:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r188:.*]] = vector.extract_strided_slice %[[arg14]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r189:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r190:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r191:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r192:.*]] = vector.extract_strided_slice %[[arg15]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r193:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r194:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r195:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r196:.*]] = vector.extract_strided_slice %[[arg16]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r197:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r198:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r199:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r200:.*]] = vector.extract_strided_slice %[[arg17]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r201:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r202:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r203:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r204:.*]] = vector.extract_strided_slice %[[arg18]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r205:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r206:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r207:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      //CHECK: %[[r208:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
+
       //CHECK: %[[r209:.*]] = xegpu.dpas %[[r117]], %[[r161]], %[[r177]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
       //CHECK: %[[r210:.*]] = xegpu.dpas %[[r121]], %[[r162]], %[[r209]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
       //CHECK: %[[r211:.*]] = xegpu.dpas %[[r125]], %[[r169]], %[[r210]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
