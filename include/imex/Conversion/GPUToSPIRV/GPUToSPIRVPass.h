@@ -37,7 +37,9 @@ void populateGPUPrintfToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
 
 /// Create a pass
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass(bool mapMemorySpace = true);
+createConvertGPUXToSPIRVPass(bool mapMemorySpace = true,
+                             bool enableGenISAIntrinsic = false,
+                             bool enableVCIntrinsic = false);
 
 } // namespace imex
 
