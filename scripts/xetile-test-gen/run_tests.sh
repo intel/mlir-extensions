@@ -77,7 +77,7 @@ do
         then
             echo "Testing $(basename $TEST_CASE)" | tee -a $REPORT_PATH # report parsing uses this line
             CMD="python3 $LLVM/bin/imex-runner.py --requires=l0-runtime -i $TEST_CASE  \
-                --pass-pipeline-file=../../test/Integration/Dialect/XeTile/xetile-to-llvm.pp \
+                --pass-pipeline-file=../../test/Integration/Dialect/XeTile/xetile-to-func-vc.pp \
                 --runner imex-cpu-runner -e main --entry-point-result=void \
                 --shared-libs=$LLVM/lib/libimex_runner_utils.so,$LLVM/lib/libmlir_runner_utils.so,$LLVM/lib/libmlir_c_runner_utils.so,$LLVM/lib/liblevel-zero-runtime.so"
             if [ $VERBOSE -eq 1 ]; then
