@@ -5,8 +5,11 @@ builtin.module(
         convert-xetile-to-xegpu)
     cse
     imex-vector-linearize
+    gpu.module(convert-xegpu-to-vc)
+    reconcile-unrealized-casts
+    gpu.module(convert-func-to-spirv)
+    gpu.module(convert-vector-to-spirv)
     imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
-    cse
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
     func.func(llvm-request-c-wrappers)
@@ -16,11 +19,12 @@ builtin.module(
     convert-scf-to-cf
     convert-cf-to-llvm
     convert-vector-to-llvm
+    convert-index-to-llvm
     convert-arith-to-llvm
     convert-func-to-llvm
     convert-math-to-llvm
-    convert-index-to-llvm
     convert-gpux-to-llvm
+    convert-index-to-llvm
     expand-strided-metadata
     lower-affine
     finalize-memref-to-llvm

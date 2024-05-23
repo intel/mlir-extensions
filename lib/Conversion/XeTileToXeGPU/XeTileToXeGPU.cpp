@@ -105,6 +105,28 @@ public:
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::SelectOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::ExtFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::ExtSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::ExtUIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::FPToSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::FPToUIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::IndexCastOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::IndexCastUIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::SIToFPOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::UIToFPOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::TruncFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::TruncIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
 
     // Math Ops
     addDynamicallyLegalOp<mlir::math::ExpOp>(
