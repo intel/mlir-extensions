@@ -68,6 +68,7 @@ public:
         spirv::Capability::Float64,
         spirv::Capability::AtomicFloat32AddEXT,
         spirv::Capability::ExpectAssumeKHR,
+        spirv::Capability::VectorAnyINTEL,
         // clang-format on
     };
     spirv::Capability caps_vulkan[] = {
@@ -78,7 +79,8 @@ public:
     spirv::Extension exts_opencl[] = {
         spirv::Extension::SPV_INTEL_bfloat16_conversion,
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
-        spirv::Extension::SPV_KHR_expect_assume};
+        spirv::Extension::SPV_KHR_expect_assume,
+        spirv::Extension::SPV_INTEL_vector_compute};
     spirv::Extension exts_vulkan[] = {
         spirv::Extension::SPV_KHR_storage_buffer_storage_class};
     if (m_clientAPI == "opencl") {
