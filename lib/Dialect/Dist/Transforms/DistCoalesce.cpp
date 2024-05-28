@@ -269,12 +269,10 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
                            ::mlir::func::ReturnOp retOp) {
     mlir::OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(retOp);
-    int i = -1;
     bool altered = false;
     ::imex::ValVec oprnds;
     ::mlir::SmallVector<::mlir::Operation *> toErase;
     for (auto val : retOp->getOperands()) {
-      ++i;
       if (isDist(val)) {
         bool oneUse = true;
         // "skip" casts and observe if this is a single-use chain

@@ -150,8 +150,21 @@ public:
               }
             } else {
               if (lop->getNumResults() > 0) {
-                if (lop->getResultTypes().front().isBF16()) {
-                  lop->getResult(0).setType(builder.getI16Type());
+                // Foreach result
+                //   if elemType is bf16, change it to i16
+                int i = 0;
+                for (Type t : lop->getResultTypes()) {
+                  if (mlir::isa<mlir::VectorType>(t)) {
+                    VectorType vt = mlir::cast<mlir::VectorType>(t);
+                    if (vt.getElementType().isBF16()) {
+                      vt.get(vt.getShape(), builder.getI16Type());
+                      lop->getResult(i).setType(
+                          vt.get(vt.getShape(), builder.getI16Type()));
+                    }
+                  } else if (t.isBF16()) {
+                    lop->getResult(i).setType(builder.getI16Type());
+                  }
+                  i++;
                 }
               }
             }

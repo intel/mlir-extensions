@@ -81,6 +81,7 @@ parser.add_argument("--imex-print-after-all", "-a", action='store_true', dest='a
 parser.add_argument("--no-mlir-runner", "-n", action='store_true', dest='no_mlir_runner', help="skip mlir runner")
 parser.add_argument("--filecheck", action='store_true', dest='run_filecheck', help="run FileCheck")
 parser.add_argument("--check-prefix", default=None, help="change check prefix (default: CHECK) used by FileCheck")
+parser.add_argument("--debug", "-d", action='store_true', dest='debug', help="Pass -debug to imex-opt")
 parser.add_argument("--runner", "-r", default="imex-cpu-runner", choices=runner_choices, help="mlir runner name")
 parser.add_argument('--requires', default=enabled_features, action=SplitArgs, help="skip if any of the required in the comma separated list is missing.")
 parser.add_argument("--igpu-fp64", action='store_true', dest='igpu_has_fp64', help="notify runner that igpu has fp64 support")
@@ -172,6 +173,8 @@ if args.after:
 if args.output_file:
     cmd.append(f'-o')
     cmd.append(f'{args.output_file}')
+if args.debug:
+    cmd.append(f'-debug')
 cmds.append(cmd)
 
 # build runner command
@@ -193,6 +196,7 @@ if args.run_filecheck:
         exit(1)
     cmd.append(args.input_file)
     cmds.append(cmd)
+
 
 # Run command pipeline
 last_proc = run_pipeline(cmds)

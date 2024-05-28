@@ -16,6 +16,7 @@
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -28,6 +29,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include "../PassDetail.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 
@@ -1484,7 +1486,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
       auto scalarType =
           llvm::dyn_cast_or_null<mlir::spirv::ScalarType>(elemType);
-      if (!scalarType) {
+      if (!scalarType && !elemType.isBF16()) {
         llvm::dbgs() << type
                      << " illegal: cannot convert non-scalar element type\n";
         return nullptr;
