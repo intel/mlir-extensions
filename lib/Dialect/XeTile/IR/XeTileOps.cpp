@@ -906,7 +906,7 @@ mlir::OpFoldResult TileUnpackOp::fold(FoldAdaptor /*adaptor*/) {
 }
 
 mlir::LogicalResult TransposeOp::verify() {
-  auto srcShape = getSource().getType().getShape();
+  auto srcShape = getVector().getType().getShape();
   auto resShape = getResult().getType().getShape();
   auto permutation = getPermutation();
 
@@ -932,7 +932,7 @@ mlir::LogicalResult ReduceOp::verify() {
   return mlir::success();
 }
 
-mlir::LogicalResult BroadCastOp::verify() {
+mlir::LogicalResult BroadcastOp::verify() {
   auto dims = getBroadcastDim();
   auto srcShape = getSource().getType().getShape();
   for (auto i : dims)
