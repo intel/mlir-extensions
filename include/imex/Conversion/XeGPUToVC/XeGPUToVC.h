@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 #ifndef IMEX_CONVERSION_XEGPUTOVC_H
 #define IMEX_CONVERSION_XEGPUTOVC_H
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 
