@@ -6,6 +6,7 @@ builtin.module(
     imex-vector-linearize
     gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
+    bf16-to-gpu
     gpu.module(convert-func-to-spirv)
     gpu.module(convert-vector-to-spirv)
     imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
