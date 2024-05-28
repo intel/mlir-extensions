@@ -530,11 +530,11 @@ def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
         It has the same semantic with `vector.transpose`, but limits the vector to be 2D.
     }];
 
-    let arguments = (ins XeTile_2DVector: $source,
+    let arguments = (ins XeTile_2DOr4DVector: $vector,
                          DenseI64ArrayAttr:$permutation);
-    let results = (outs XeTile_2DVector: $result);
+    let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
-        $source $permutation attr-dict `:` type($source) `->` type($result)
+        $vector $permutation attr-dict `:` type($vector) `->` type($result)
     }];
     let hasVerifier = 1;
 }
@@ -548,9 +548,9 @@ def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
     }];
 
     let arguments = (ins Vector_CombiningKindAttr: $kind,
-                         XeTile_2DVector: $source,
+                         XeTile_2DOr4DVector: $source,
                          DenseI64ArrayAttr: $reduction_dim);
-    let results = (outs XeTile_2DVector: $result);
+    let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
         $kind `,` $source $reduction_dim attr-dict `:` type($source) `->` type($result)
     }];
@@ -558,12 +558,12 @@ def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
     let hasVerifier = 1;
 }
 
-def XeTile_BroadCastOp: XeTile_Op<"broadcast", []> {
+def XeTile_BroadcastOp: XeTile_Op<"broadcast", []> {
     let summary = "broadcast a vector from 1D to 2D.";
 
-    let arguments = (ins XeTile_2DVector: $source,
+    let arguments = (ins XeTile_2DOr4DVector: $source,
                          DenseI64ArrayAttr: $broadcast_dim);
-    let results = (outs XeTile_2DVector: $result);
+    let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
         $source $broadcast_dim attr-dict `:` type($source) `->` type($result)
     }];
