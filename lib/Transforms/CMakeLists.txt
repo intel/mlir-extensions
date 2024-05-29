@@ -13,13 +13,14 @@ add_mlir_library(IMEXTransforms
   ${PROJECT_SOURCE_DIR}/imex/Transforms
 
   LINK_LIBS PUBLIC
-  MLIRSCFDialect
-  MLIRGPUDialect
-  MLIRSPIRVDialect
   MLIRFuncDialect
+  MLIRGPUDialect
   MLIRPass
+  MLIRSCFDialect
+  MLIRSPIRVDialect
   MLIRSupport
   MLIRTransformUtils
+  MLIRVectorTransforms
 
   DEPENDS
   IMEXTransformsPassIncGen
