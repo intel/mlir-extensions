@@ -3,6 +3,7 @@ add_mlir_library(IMEXTransforms
   BF16ToGPU.cpp
   InsertGPUAllocs.cpp
   LowerMemRefCopy.cpp
+  PropagatePackedLayout.cpp
   RemoveTemporaries.cpp
   SerializeSPIRV.cpp
   SetSPIRVAbiAttribute.cpp

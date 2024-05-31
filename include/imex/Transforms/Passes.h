@@ -29,6 +29,7 @@ std::unique_ptr<mlir::Pass> createLowerMemRefCopyPass();
 std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
 std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 std::unique_ptr<mlir::Pass> createVectorLinearizePass();
+std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 
 #define GEN_PASS_DECL
 #include "imex/Transforms/Passes.h.inc"
