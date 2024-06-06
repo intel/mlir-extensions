@@ -22,11 +22,13 @@
 #include <imex/Transforms/Passes.h>
 
 #include <imex/Dialect/Region/RegionUtils.h>
+#include <imex/Dialect/XeTile/IR/XeTileOps.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Pass/Pass.h>
 
 #include <optional>
@@ -153,6 +155,9 @@ public:
             ret.emplace_back(arg);
         }
         return std::move(ret);
+      } else if (auto init_tile =
+                     mlir::dyn_cast<imex::xetile::InitTileOp>(op)) {
+        return {{init_tile.getSource()}};
       } else {
         op->emitError("Uhhandled mem op in gpu region");
         return std::nullopt;
@@ -177,6 +182,10 @@ public:
           if (mlir::isa<mlir::MemRefType>(arg.getType()))
             return true;
         }
+      }
+      if (auto init_tile = mlir::dyn_cast<imex::xetile::InitTileOp>(op)) {
+        // Only handle the case where the tile source is a memref
+        return init_tile.isSourceMemRef();
       }
       return false;
     };
@@ -255,6 +264,40 @@ public:
       AccessType ret;
       for (const auto &mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
+          if (auto init_tile = mlir::dyn_cast<imex::xetile::InitTileOp>(user)) {
+            bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
+            auto res = init_tile->getResult(0);
+            for (auto use : res.getUsers()) {
+              if (auto tile_for = mlir::dyn_cast<::mlir::scf::ForOp>(use)) {
+                unsigned int idx = 0;
+                for (auto i : tile_for.getInits()) {
+                  if (i.getDefiningOp() == user) {
+                    auto a = tile_for.getRegionIterArg(idx);
+                    for (auto u : a.getUsers()) {
+                      if (auto tile_load =
+                              mlir::dyn_cast<imex::xetile::LoadTileOp>(u)) {
+                        (onDevice ? ret.deviceRead : ret.hostRead) = true;
+                      } else if (auto tile_store =
+                                     mlir::dyn_cast<imex::xetile::StoreTileOp>(
+                                         u)) {
+                        (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
+                      }
+                    }
+                  }
+                  idx++;
+                }
+              }
+              if (auto tile_load =
+                      mlir::dyn_cast<imex::xetile::LoadTileOp>(use)) {
+                (onDevice ? ret.deviceRead : ret.hostRead) = true;
+              } else if (auto tile_store =
+                             mlir::dyn_cast<imex::xetile::StoreTileOp>(use)) {
+                (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
+              }
+            }
+            continue;
+          }
+
           if (mlir::isa<mlir::func::ReturnOp>(user)) {
             ret.hostRead = true;
             ret.hostWrite = true;
