@@ -118,6 +118,20 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   return std::make_pair(str, newType);
 }
 
+/// @brief
+/// We have to use i32 for intrinsic calls like llvm_genx_raw_send2_*, if we
+/// want to get the original element type (e.g., f16) as the result of a load,
+/// we have to encode the resulting i32 vector back to it.
+mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
+                                    mlir::Type toElemType) {
+  auto elemType = currentVecType.getElementType();
+  auto currentbitWidth = elemType.getIntOrFloatBitWidth();
+  auto newBitwidth = toElemType.getIntOrFloatBitWidth();
+  const int size =
+      currentVecType.getNumElements() * currentbitWidth / newBitwidth;
+  return mlir::VectorType::get(size, toElemType);
+}
+
 unsigned encodeDataum(mlir::Type type) {
   switch (type.getIntOrFloatBitWidth()) {
   case 8:
