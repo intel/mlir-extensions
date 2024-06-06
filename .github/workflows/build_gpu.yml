@@ -43,16 +43,6 @@ jobs:
           fetch-depth: 0
           path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
 
-      - name: Setup Level Zero
-        shell: bash -le {0}
-        run: |
-          cd $HOME_DIR
-          git clone https://github.com/oneapi-src/level-zero.git
-          cd level-zero
-          git checkout $LEVEL_ZERO_VER
-          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
-          cmake --build build --target install
-
       - name: Checkout MLIR
         run: |
           cd $BUILD_ROOT
@@ -74,7 +64,7 @@ jobs:
                 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
                 -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold \
                 -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. \
-                -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ \
+                -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 \
                 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DIMEX_ENABLE_PVC_TARGET=1
           set -o pipefail
           cmake --build build --target check-imex | tee build/tests.txt
