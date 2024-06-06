@@ -518,6 +518,7 @@ With the optimized mapping, the tile_transpose below could be implemented with i
 ```
 
 ## Appendix 2.4 Gemm implementation using cooperative load through shared local memory 
+For GPU doesn't support high-performance prefetch, the example code shows how to overlap the mma operation and tile load through shared local memory buffer to hide the load latency.   
 ```mlir
 #mp_a     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
 #mp_a_cop = #wg_map<sg_layout=[64,1], sg_data=[4,32]>  
@@ -610,6 +611,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
 ```
 
 ## Appendix 2.5 Gemm implementation with two cache levels
+For GPU support high-performance prefetch through two level of caches.   
 ```mlir
 #mp_a = #wg_map<sg_layout=[8,4], sg_data=[64,32]>
 #mp_b = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
