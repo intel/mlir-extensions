@@ -414,7 +414,17 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType =
+            encodeVectorTypeTo(retType, tileType.getElementType());
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<vector::BitCastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<vector::BitCastOp>(loc, op.getType(),
                                                        funcOp->getResult(0));
@@ -583,7 +593,16 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType = encodeVectorTypeTo(newType, elmType);
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<vector::BitCastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<vector::BitCastOp>(loc, op.getType(),
                                                        funcOp->getResult(0));
@@ -640,8 +659,23 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
     auto info = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(),
                                                    infoAttr);
 
-    auto newResultType = encodeVectorType(rewriter, resultType).second;
-    SmallVector<Value, 4> args{adaptor.getRhs(), adaptor.getLhs(), info};
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    // Intrinsic accepts i32 type, therefore the element type should be casted
+    // to i32
+    auto [lhsName, lhsNewType] = encodeVectorType(rewriter, lhsType);
+    auto [rhsName, rhsNewType] = encodeVectorType(rewriter, rhsType);
+    auto [resultName, newResultType] = encodeVectorType(rewriter, resultType);
+
+    if (lhsNewType != adaptor.getLhs().getType()) {
+      lhs =
+          rewriter.create<vector::BitCastOp>(loc, lhsNewType, adaptor.getLhs());
+    }
+    if (rhsNewType != adaptor.getRhs().getType()) {
+      rhs =
+          rewriter.create<vector::BitCastOp>(loc, rhsNewType, adaptor.getRhs());
+    }
+    SmallVector<Value, 4> args{rhs, lhs, info};
     std::string funcName = "llvm.genx.dpas.nosrc0.";
     if (op.getAcc()) {
       funcName = "llvm.genx.dpas2.";
@@ -655,14 +689,14 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
       auto sdArg = createIntConstant(i32Type, sd);
       auto rcArg = createIntConstant(i32Type, rc);
       auto signless = createIntConstant(i32Type, 0);
-      args.assign({adaptor.getAcc(), adaptor.getRhs(), adaptor.getLhs(),
-                   prec1Arg, prec2Arg, sdArg, rcArg, signless, signless});
+      args.assign({adaptor.getAcc(), rhs, lhs, prec1Arg, prec2Arg, sdArg, rcArg,
+                   signless, signless});
     }
-    funcName += encodeVectorType(rewriter, resultType).first;
+    funcName += resultName;
     funcName += ".";
-    funcName += encodeVectorType(rewriter, rhsType).first;
+    funcName += rhsName;
     funcName += ".";
-    funcName += encodeVectorType(rewriter, lhsType).first;
+    funcName += lhsName;
     auto funcOp = createFuncCall(rewriter, loc, funcName,
                                  TypeRange{newResultType}, args, false);
     auto newcast = rewriter.create<vector::ShapeCastOp>(loc, resultType,
@@ -1494,15 +1528,6 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
       if (rank < 1 || type.getNumElements() == 1)
         return elemType;
-
-      // load2d/store2d is 3-d with vnni format, and 4d with array_length
-      // TODO: what if load without any vnni? are we going to transform all
-      // fp16/bf16
-      auto factor = 32 / elemType.getIntOrFloatBitWidth();
-      if ((rank == 3 || rank == 4) && type.getShape()[rank - 1] == factor) {
-        elemType = ::mlir::IntegerType::get(&getContext(), 32);
-        rank--;
-      }
 
       unsigned sum = 1;
       for (unsigned i = 0; i < rank; i++) {
