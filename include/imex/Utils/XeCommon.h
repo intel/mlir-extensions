@@ -290,6 +290,9 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
                  mlir::VectorType type, bool use64bitData = false,
                  bool enforceInteger = false);
 
+mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
+                                    mlir::Type toElemType);
+
 unsigned encodeDataum(mlir::Type type);
 
 unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind);
