@@ -275,6 +275,8 @@ class SgTileUnpackOpPattern
     bool isVnniFormat = (isDpasA || isDpasB) && elemTy.isIntOrFloat() &&
                         elemTy.getIntOrFloatBitWidth() < 32;
 
+    // the default grids used as outGrids when unpack is not paired with a pack
+    int64_t defautlOutGrids[2] = {1, 1};
     llvm::ArrayRef<int64_t> outGrids;
     mlir::DenseI64ArrayAttr outBlkSizes;
     auto packOp = llvm::dyn_cast<xetile::TilePackOp>(*(op->user_begin()));
@@ -284,8 +286,7 @@ class SgTileUnpackOpPattern
       outBlkSizes = packOp.getInnerBlocksAttr();
     } else { // lower the Unpack only
       auto outTy = op.getOutVec().getType();
-      int64_t grids[2] = {1, 1};
-      outGrids = llvm::ArrayRef<int64_t>(grids, 2);
+      outGrids = llvm::ArrayRef<int64_t>(defautlOutGrids, 2);
       auto ctx = op.getContext();
       outBlkSizes = mlir::DenseI64ArrayAttr::get(ctx, outTy.getShape());
     }
