@@ -76,12 +76,21 @@ func.func @test_store_nd_vc(%src: memref<24x32xf16>, %dst: memref<24x32xf16>) {
 
 
 // CHECK-LABEL: func @test_dpas_vc({{.*}}) {
-func.func @test_dpas_vc(%a : vector<8x8x2xf16>, %b: vector<8x16x2xf16>) {
+func.func @test_dpas_vc(%a : vector<8x16xf16>, %b: vector<8x16x2xf16>) {
   // CHECK: xegpu.dpas
-  // CHECK-SAME: vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-  %1 = xegpu.dpas %a, %b : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+  // CHECK-SAME: vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+  %1 = xegpu.dpas %a, %b : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
   return
 }
+
+// CHECK-LABEL: func @test_dpas_vc_2({{.*}}) {
+func.func @test_dpas_vc_2(%a : vector<8x16xf16>, %b: vector<16x16xf16>) {
+  // CHECK: xegpu.dpas
+  // CHECK-SAME: vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
+  %1 = xegpu.dpas %a, %b : vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
+  return
+}
+
 
 
 // CHECK-LABEL: func @test_update_nd_offset_vc({{.*}}) {
