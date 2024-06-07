@@ -2,7 +2,8 @@ builtin.module(
     cse
     gpu.module(xetile-init-duplicate
         xetile-blocking
-        convert-xetile-to-xegpu)
+        convert-xetile-to-xegpu
+        imex-propagate-packed-layout)
     cse
     imex-vector-linearize
     gpu.module(convert-xegpu-to-vc)
