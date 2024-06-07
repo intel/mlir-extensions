@@ -279,13 +279,35 @@ getVNNIShuffleIndices(mlir::ShapedType srcType, mlir::ShapedType dstType) {
     // `vector<16x16xf16>` to `vector<8x16x2xf16>`.
     assert(srcShape.size() == 2);
     assert(dstShape.size() == 3);
-    // TODO: populate shuffle indices
+    // To arrange the data in VNNI format, the shuffle indices must satisfy
+    // following mapping.
+    // [i, j, k] => i * dstShape[1] * dstShape[2] + j + k * dstShape[1]
+    int shuffleIndex = 0;
+    for (unsigned i = 0; i < dstShape[0]; ++i) {
+      for (unsigned j = 0; j < dstShape[1]; ++j) {
+        for (unsigned k = 0; k < dstShape[2]; ++k) {
+          ret[shuffleIndex++] =
+              i * dstShape[1] * dstShape[2] + j + k * dstShape[1];
+        }
+      }
+    }
   } else {
     // Convert from VNNI packed to contiguous layout, e.g. from
     // `vector<8x16x2xf16>` to `vector<16x16xf16>`.
     assert(srcShape.size() == 3);
     assert(dstShape.size() == 2);
-    // TODO: populate shuffle indices
+    // To arrange the data in contiguous format, the shuffle indices must
+    // satisfy following mapping, i.e. do the reverse mapping of the above
+    // i * srcShape[1] * srcShape[2] + j + k * srcShape[1] => [i, j, k]
+    int shuffleIndex = 0;
+    for (unsigned i = 0; i < srcShape[0]; ++i) {
+      for (unsigned j = 0; j < srcShape[1]; ++j) {
+        for (unsigned k = 0; k < srcShape[2]; ++k) {
+          ret[i * srcShape[1] * srcShape[2] + j + k * srcShape[1]] =
+              shuffleIndex++;
+        }
+      }
+    }
   }
 
   return ret;
