@@ -1,14 +1,16 @@
-From 49cf7d3645dece35c0e5a4d48d2a00c801218656 Mon Sep 17 00:00:00 2001
+From 6dd26bbdda8efbd2466315a3de8d2d9f38de3637 Mon Sep 17 00:00:00 2001
 From: Chao Chen <chao.chen@intel.com>
-Date: Fri, 10 May 2024 14:36:04 +0000
-Subject: [PATCH] amend xegpu defintion:  - add transpose_bit_width for load nd
-  - fix type print for atomic_rmw  - relax dpas verfier to accept 2D operand
+Date: Mon, 3 Jun 2024 21:08:26 +0000
+Subject: [PATCH] Amend XeGPU definition:
 
+- add transpose_bit_width for load nd
+- fix type print for atomic_rmw
+- update dpas to accept 2D for A and 2D or 3D for B
 ---
- .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td |  6 +++---
- mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp        | 19 ++++++++++++++-----
+ .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td |  6 ++---
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp        | 25 ++++++++++++-------
  mlir/test/Dialect/XeGPU/XeGPUOps.mlir         |  2 +-
- 3 files changed, 18 insertions(+), 9 deletions(-)
+ 3 files changed, 20 insertions(+), 13 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 index e477d9a0ca3f..5f95be1c87df 100644
@@ -42,7 +44,7 @@ index e477d9a0ca3f..5f95be1c87df 100644
  }
 
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 22959224d56c..858afbd6d8aa 100644
+index 22959224d56c..f62328a03cb0 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -219,6 +219,16 @@ LogicalResult LoadNdOp::verify() {
@@ -62,25 +64,27 @@ index 22959224d56c..858afbd6d8aa 100644
    if (array_len > 1) {
      auto it = tdescShape.begin();
      tdescShape.insert(it, array_len);
-@@ -413,9 +423,8 @@ LogicalResult DpasOp::verify() {
+@@ -413,18 +423,15 @@ LogicalResult DpasOp::verify() {
    int64_t lhsRank = getLhsType().getRank();
    int64_t rhsRank = getRhsType().getRank();
 
 -  if (lhsRank != rhsRank || lhsRank != 3)
 -    return emitOpError(
 -        "lhs and rhs rank does not match for dpas op, or their rank is not 3.");
-+  if (lhsRank != rhsRank)
-+    return emitOpError("lhs and rhs rank does not match for dpas op.");
-
-   if (getAcc() && getAccType() != getResultType())
-     return emitOpError("Accumulator and Result for dpas op should have the "
-@@ -423,8 +432,8 @@ LogicalResult DpasOp::verify() {
+-
+-  if (getAcc() && getAccType() != getResultType())
+-    return emitOpError("Accumulator and Result for dpas op should have the "
+-                       "same type (both shape and element type).");
++  // if (lhsRank != 2 || (rhsRank != 2 && rhsRank != 3))
++  //   return emitOpError("expecting lhs to be a 2D vector, and rhs to be either 2D or 3D (vnni transformed) vector.");
 
    auto lhsShape = getLhsType().getShape();
    auto rhsShape = getRhsType().getShape();
 -  if (lhsShape[1] != rhsShape[0] || lhsShape[2] != rhsShape[2])
 -    return emitOpError("K-dimension or vnni-factor mismatch.");
-+  if (lhsShape[1] != rhsShape[0])
++  auto aK = lhsRank == 3 ? lhsShape[1] * lhsShape[2] : lhsShape[1];
++  auto bK = rhsRank == 3 ? rhsShape[0] * rhsShape[2] : rhsShape[0];
++  if (aK != bK)
 +    return emitOpError("K-dimension mismatch.");
 
    return success();
