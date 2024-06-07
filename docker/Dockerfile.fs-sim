@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-ex", "-o", "pipefail", "-c"]
 USER root
 
 RUN export DEBIAN_FRONTEND=noninteractive \
-    && curl -s https://repositories.intel.com/graphics/intel-graphics.key \
+    && curl -s https://repositories.intel.com/gpu/intel-graphics.key \
         | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy max' \
         | tee /etc/apt/sources.list.d/intel-gpu.list \
@@ -25,10 +25,9 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         clinfo \
         intel-basekit \
         # Intel GPU requirements
-        # Simulator installs its own .deb for level-zero* packages so they are commented for now
-        # intel-level-zero-gpu
-        # level-zero
-        # level-zero-dev
+        intel-level-zero-gpu \
+        level-zero \
+        level-zero-dev \
         # FS simulator requirements
         openmpi-bin \
         libgdk-pixbuf2.0-0 \
@@ -44,6 +43,10 @@ ENV WORK_ROOT=${HOME}/trees
 ENV WORKSPACE=${WORK_ROOT}/fs
 ENV HVT_OUTPUT_FOLDER=${WORKSPACE}/hvt-output
 
+RUN mkdir ${HOME}/neo && cd ${HOME}/neo \
+    && curl https://artifactory-kfs.habana-labs.com/artifactory/bin-generic-dev-local/NEO/latest/NEO-master.tgz | tar zxf - \
+    && sudo dpkg -i -E --force-all *.deb dbgsym/*.ddeb
+
 RUN sudo apt-get update --yes \
     && mkdir -p ${WORKSPACE} \
     && cd ${WORKSPACE} \
@@ -52,5 +55,4 @@ RUN sudo apt-get update --yes \
     && export KMD_RELEASE=0.4.0 \
     && source ${WORKSPACE}/scripts/setup.sh \
     && setup_fs_dev \
-    && umd_driver_install \
     && sudo rm -rf /var/lib/apt/lists/*

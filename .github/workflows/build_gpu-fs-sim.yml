@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: [self-hosted, fs-sim, glados]
+    runs-on: [self-hosted, icx, test, glados]
     timeout-minutes: 450
 
     env:
@@ -43,16 +43,6 @@ jobs:
           fetch-depth: 0
           path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
 
-      - name: Setup Level Zero
-        shell: bash -l {0}
-        run: |
-          cd $HOME_DIR
-          git clone https://github.com/oneapi-src/level-zero.git
-          cd level-zero
-          git checkout $LEVEL_ZERO_VER
-          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
-          cmake --build build --target install
-
       - name: Checkout MLIR
         run: |
           cd $BUILD_ROOT
@@ -70,8 +60,9 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           set -x
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/ -DLLVM_LIT_ARGS="-a -j 1 --debug --timeout=600 --filter=gemm_with_transposed_B_1kx1kx1k_f16_f16_f32.mlir" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
+          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 1 --debug --timeout=600 --filter=gemm_with_transposed_B_1kx1kx1k_f16_f16_f32.mlir" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
           sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_rasty.sh
+          export NEO_BINARIES_ROOT="$HOME"/neo
           (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && ./run_in_a_loop_rasty.sh) &> fs-sim.log &
           SIM_PID=$!
           cmake --build build --target check-static | tee build/tests.txt

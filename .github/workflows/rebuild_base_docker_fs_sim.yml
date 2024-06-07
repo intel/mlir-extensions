@@ -31,7 +31,7 @@ jobs:
     runs-on:
       - self-hosted
       - glados
-      - fs-sim
+      - docker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

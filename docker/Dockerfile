@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-ex", "-o", "pipefail", "-c"]
 USER root
 
 RUN export DEBIAN_FRONTEND=noninteractive \
-    && curl -s https://repositories.intel.com/graphics/intel-graphics.key \
+    && curl -s https://repositories.intel.com/gpu/intel-graphics.key \
         | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
     && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy max' \
         | tee /etc/apt/sources.list.d/intel-gpu.list \
