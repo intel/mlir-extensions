@@ -6,6 +6,7 @@ on:
       - main
       - upstream
       - 'dist-ndarray'
+      - imex-embargo
   workflow_dispatch:
   workflow_call:
 
