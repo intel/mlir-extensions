@@ -230,7 +230,35 @@ void GPUXToSPIRVPass::runOnOperation() {
     llvm::SmallVector<mlir::Operation *, 16> eraseOps;
     gpuModule->walk([&](mlir::gpu::GPUFuncOp fop) {
       fop->walk([&](mlir::arith::BitcastOp bop) {
-        if (bop.getType().isInteger(16)) {
+        if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(bop.getType())) {
+          if (vecTy.getElementType().isInteger(16)) {
+            mlir::arith::TruncFOp inputOp =
+                llvm::dyn_cast<mlir::arith::TruncFOp>(
+                    bop.getOperand().getDefiningOp());
+            if (inputOp) {
+              if (auto inTy =
+                      llvm::dyn_cast<mlir::VectorType>(inputOp.getType())) {
+                if (inTy.getElementType().isBF16()) {
+                  if (auto truncfInTy = llvm::dyn_cast<mlir::VectorType>(
+                          inputOp.getOperand().getType())) {
+                    if (truncfInTy.getElementType().isF32()) {
+                      builder.setInsertionPoint(inputOp);
+                      auto widen =
+                          builder.create<mlir::spirv::INTELConvertFToBF16Op>(
+                              inputOp.getLoc(),
+                              mlir::VectorType::get(truncfInTy.getShape(),
+                                                    builder.getI16Type()),
+                              inputOp.getOperand());
+                      bop->getResult(0).replaceAllUsesWith(widen);
+                      eraseOps.push_back(bop);
+                      eraseOps.push_back(inputOp);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else if (bop.getType().isInteger(16)) {
           mlir::arith::TruncFOp inputOp = llvm::dyn_cast<mlir::arith::TruncFOp>(
               bop.getOperand().getDefiningOp());
           if (inputOp) {
@@ -247,7 +275,35 @@ void GPUXToSPIRVPass::runOnOperation() {
         }
       });
       fop->walk([&](mlir::arith::ExtFOp eop) {
-        if (eop.getType().isF32()) {
+        if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(eop.getType())) {
+          if (vecTy.getElementType().isF32()) {
+            mlir::arith::BitcastOp inputOp =
+                llvm::dyn_cast<mlir::arith::BitcastOp>(
+                    eop.getOperand().getDefiningOp());
+            if (inputOp) {
+              if (auto inTy =
+                      llvm::dyn_cast<mlir::VectorType>(inputOp.getType())) {
+                if (inTy.getElementType().isBF16()) {
+                  if (auto bcastInTy = llvm::dyn_cast<mlir::VectorType>(
+                          inputOp.getOperand().getType())) {
+                    if (bcastInTy.getElementType().isInteger(16)) {
+                      builder.setInsertionPoint(inputOp);
+                      auto widen =
+                          builder.create<mlir::spirv::INTELConvertBF16ToFOp>(
+                              inputOp.getLoc(),
+                              mlir::VectorType::get(bcastInTy.getShape(),
+                                                    builder.getF32Type()),
+                              inputOp.getOperand());
+                      eop->getResult(0).replaceAllUsesWith(widen);
+                      eraseOps.push_back(eop);
+                      eraseOps.push_back(inputOp);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else if (eop.getType().isF32()) {
           mlir::arith::BitcastOp inputOp =
               llvm::dyn_cast<mlir::arith::BitcastOp>(
                   eop.getOperand().getDefiningOp());
