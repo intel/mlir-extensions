@@ -55,7 +55,7 @@ struct MyTarget : public ConversionTarget {
 // *******************************
 
 // Goal: vector.transfer_read -> xegpu.create_nd_tdesc + xegpu.load_nd
-// E.g. translate 
+// E.g. translate
 //   %3 = vector.transfer_read %arg1[%0, %2], %arg2 : memref<512x640xf32>,
 //   vector<1x32xf32> to %desc = xegpu.create_nd_tdesc %arg1[%0, %2] {mode = vc}
 //   : memref<512x640xf32> -> !xegpu.tensor_desc<32xf32>
@@ -70,46 +70,47 @@ struct TransferReadOpConverter
   LogicalResult matchAndRewrite(vector::TransferReadOp read,
                                 PatternRewriter &rewriter) const override {
     auto ctx = read->getContext();
-    auto resultTile = read.getResult();      // %3 = ...
-    auto resTileType = resultTile.getType(); // vector<32xf32>
+    auto resultTile = read.getResult();
+    auto resTileType = resultTile.getType();
     auto resTileShape = resTileType.getShape();
     auto rank = resTileType.getRank();
-    auto source = read.getSource(); // memref<512x640xf32>
-    // auto intermediateShape = resTileShape; // vector<1x32xf32>
+    auto source = read.getSource();
+
+    ArrayRef<int64_t> loadShape;
+    if (rank == 1)
+      loadShape = {1, resTileShape[0]};
+    else
+      loadShape = resTileShape;
+    auto loadType = VectorType::get(loadShape, resTileType.getElementType());
+    auto tDescTy =
+        xegpu::TensorDescType::get(loadShape, resTileType.getElementType());
+    mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{read->getOperand(1),
+                                                       read->getOperand(2)};
+    rewriter.setInsertionPoint(read);
+    mlir::Value desc;
+    if (auto MemRefTypedSource =
+            mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
+      desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+          read.getLoc(), tDescTy, MemRefTypedSource, tDescOffsets);
+    } else {
+      return mlir::failure();
+    }
+
+    mlir::IntegerAttr vnniAxisAttr;
+    mlir::DenseI64ArrayAttr transposeAttr;
+    mlir::IntegerAttr transposeBitWidthAttr;
+    auto CACHED = mlir::xegpu::CachePolicy::CACHED;
+    auto L1 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
+    auto L2 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
+    auto L3 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
+    Operation *payload = rewriter.create<xegpu::LoadNdOp>(
+        read.getLoc(), loadType, desc, vnniAxisAttr, transposeAttr,
+        transposeBitWidthAttr, L1, L2, L3);
 
     if (rank == 1) {
-      // decltype(resTileShape) intermediateShape = {1, resTileShape[0]};
-      auto intermediateType =
-          VectorType::get({1, resTileShape[0]}, resTileType.getElementType());
-      auto tDescTy = xegpu::TensorDescType::get({1, resTileShape[0]},
-                                                resTileType.getElementType());
-      mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{read->getOperand(1),
-                                                         read->getOperand(2)};
-
-      rewriter.setInsertionPoint(read);
-      mlir::Value desc;
-      if (auto MemRefTypedSource =
-              mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
-        desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
-            read.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
-            tDescOffsets /*offsets*/);
-      } else {
-        return mlir::failure();
-      }
-      mlir::IntegerAttr vnniAxisAttr;
-      mlir::DenseI64ArrayAttr transposeAttr;
-      mlir::IntegerAttr transposeBitWidthAttr;
-      auto CACHED = mlir::xegpu::CachePolicy::CACHED;
-      auto L1 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
-      auto L2 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
-      auto L3 = mlir::xegpu::CachePolicyAttr::get(ctx, CACHED);
-      auto load = rewriter.create<xegpu::LoadNdOp>(
-          read.getLoc(), intermediateType, desc, vnniAxisAttr, transposeAttr,
-          transposeBitWidthAttr, L1, L2, L3);
-
+      // xegpu currently don't support 1d vector load. We need to cast it to 2d
       auto cast = rewriter.create<vector::ShapeCastOp>(
-          read.getLoc(), resTileType, load->getResults());
-      Operation *payload = cast;
+          read.getLoc(), resTileType, payload->getResults());
       if (auto map = read.getPermutationMap(); map.isSingleConstant()) {
         SmallVector<int64_t> mask(resTileShape[0],
                                   map.getSingleConstantResult());
@@ -124,40 +125,10 @@ struct TransferReadOpConverter
           // Unsupported permutation map
           return ::mlir::failure();
         }
+        payload = cast;
       }
-      rewriter.replaceOp(read, payload->getResults());
-    } else {
-      auto intermediateType =
-          VectorType::get(resTileShape, resTileType.getElementType());
-      auto tDescTy = xegpu::TensorDescType::get(resTileShape,
-                                                resTileType.getElementType());
-      mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{read->getOperand(1),
-                                                         read->getOperand(2)};
-
-      rewriter.setInsertionPoint(read);
-      mlir::Value desc;
-      if (auto MemRefTypedSource =
-              mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
-        desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
-            read.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
-            tDescOffsets /*offsets*/);
-      } else {
-        return mlir::failure();
-      }
-      mlir::IntegerAttr vnniAxisAttr;
-      mlir::DenseI64ArrayAttr transposeAttr;
-      mlir::IntegerAttr transposeBitWidthAttr;
-      auto L1 = mlir::xegpu::CachePolicyAttr::get(
-          ctx, mlir::xegpu::CachePolicy::CACHED);
-      auto L2 = mlir::xegpu::CachePolicyAttr::get(
-          ctx, mlir::xegpu::CachePolicy::CACHED);
-      auto L3 = mlir::xegpu::CachePolicyAttr::get(
-          ctx, mlir::xegpu::CachePolicy::CACHED);
-      auto load = rewriter.create<xegpu::LoadNdOp>(
-          read.getLoc(), intermediateType, desc, vnniAxisAttr, transposeAttr,
-          transposeBitWidthAttr, L1, L2, L3);
-      rewriter.replaceOp(read, load->getResults());
     }
+    rewriter.replaceOp(read, payload->getResults());
 
     return ::mlir::success();
   }
@@ -182,56 +153,39 @@ struct TransferWriteOpConverter
     auto rank = resTileType.getRank();
     auto intermediateType =
         VectorType::get({1, resTileShape[0]}, resTileType.getElementType());
+
+    ArrayRef<int64_t> loadShape;
+    if (rank == 1)
+      loadShape = {1, resTileShape[0]};
+    else
+      loadShape = resTileShape;
+    auto tDescTy =
+        xegpu::TensorDescType::get(loadShape, resTileType.getElementType());
+    mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{write->getOperand(2),
+                                                       write->getOperand(3)};
+    rewriter.setInsertionPoint(write);
+    mlir::Value payload = write.getOperand(0);
     if (rank == 1) {
-      auto tDescTy = xegpu::TensorDescType::get({1, resTileShape[0]},
-                                                resTileType.getElementType());
-      mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{write->getOperand(2),
-                                                         write->getOperand(3)};
-
-      rewriter.setInsertionPoint(write);
-      auto cast = rewriter.create<vector::ShapeCastOp>(
+      payload = rewriter.create<vector::ShapeCastOp>(
           write.getLoc(), intermediateType, write->getOperand(0));
-      mlir::Value desc;
-      if (auto MemRefTypedSource =
-              mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
-        desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
-            write.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
-            tDescOffsets /*offsets*/);
-      } else {
-        return mlir::failure();
-      }
-
-      auto WRITE_BACK = mlir::xegpu::CachePolicy::WRITE_BACK;
-      auto L1 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      auto L2 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      auto L3 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      rewriter.create<xegpu::StoreNdOp>(write.getLoc(), cast, desc, L1, L2, L3);
-      rewriter.eraseOp(write);
-    } else {
-      auto tDescTy = xegpu::TensorDescType::get(resTileShape,
-                                                resTileType.getElementType());
-      mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{write->getOperand(2),
-                                                         write->getOperand(3)};
-
-      rewriter.setInsertionPoint(write);
-      mlir::Value desc;
-      if (auto MemRefTypedSource =
-              mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
-        desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
-            write.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
-            tDescOffsets /*offsets*/);
-      } else {
-        return mlir::failure();
-      }
-
-      auto WRITE_BACK = mlir::xegpu::CachePolicy::WRITE_BACK;
-      auto L1 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      auto L2 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      auto L3 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
-      rewriter.create<xegpu::StoreNdOp>(write.getLoc(), write->getOperand(0),
-                                        desc, L1, L2, L3);
-      rewriter.eraseOp(write);
     }
+    mlir::Value desc;
+    if (auto MemRefTypedSource =
+            mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
+      desc = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+          write.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
+          tDescOffsets /*offsets*/);
+    } else {
+      return mlir::failure();
+    }
+
+    auto WRITE_BACK = mlir::xegpu::CachePolicy::WRITE_BACK;
+    auto L1 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
+    auto L2 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
+    auto L3 = mlir::xegpu::CachePolicyAttr::get(ctx, WRITE_BACK);
+    rewriter.create<xegpu::StoreNdOp>(write.getLoc(), payload, desc, L1, L2,
+                                      L3);
+    rewriter.eraseOp(write);
 
     return ::mlir::success();
   }
