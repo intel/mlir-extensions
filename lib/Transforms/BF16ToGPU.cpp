@@ -17,6 +17,7 @@
 
 #include "PassDetail.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -79,7 +80,11 @@ public:
               if (!oname.starts_with("arith.bitcast")) {
                 bool needWidening = false;
                 for (const auto &oper : lop->getOperands()) {
-                  if (oper.getType().isBF16()) {
+                  if (auto vecTy = mlir::dyn_cast<VectorType>(oper.getType())) {
+                    if (vecTy.getElementType().isBF16()) {
+                      needWidening = true;
+                    }
+                  } else if (oper.getType().isBF16()) {
                     needWidening = true;
                   }
                 }
@@ -94,7 +99,15 @@ public:
         builder.setInsertionPoint(o);
         unsigned int idx = 0;
         for (const auto &oper : o->getOperands()) {
-          if (oper.getType().isBF16()) {
+          if (auto vecTy = mlir::dyn_cast<VectorType>(oper.getType())) {
+            if (vecTy.getElementType().isBF16()) {
+              auto newTy =
+                  VectorType::get(vecTy.getShape(), builder.getF32Type());
+              auto newOp =
+                  builder.create<arith::ExtFOp>(o->getLoc(), newTy, oper);
+              o->setOperand(idx, newOp);
+            }
+          } else if (oper.getType().isBF16()) {
             auto newOp = builder.create<arith::ExtFOp>(
                 o->getLoc(), builder.getF32Type(), oper);
             o->setOperand(idx, newOp);
@@ -102,7 +115,19 @@ public:
           idx++;
         }
         for (mlir::OpResult res : o->getResults()) {
-          if (res.getType().isBF16()) {
+          if (auto vecTy = mlir::dyn_cast<VectorType>(res.getType())) {
+            if (vecTy.getElementType().isBF16()) {
+              auto resTy =
+                  VectorType::get(vecTy.getShape(), builder.getF32Type());
+              res.setType(resTy);
+              builder.setInsertionPointAfter(o);
+              auto newTy =
+                  VectorType::get(vecTy.getShape(), builder.getBF16Type());
+              auto newRes =
+                  builder.create<arith::TruncFOp>(o->getLoc(), newTy, res);
+              res.replaceAllUsesExcept(newRes, newRes);
+            }
+          } else if (res.getType().isBF16()) {
             res.setType(builder.getF32Type());
             builder.setInsertionPointAfter(o);
             auto newRes = builder.create<arith::TruncFOp>(
@@ -129,26 +154,87 @@ public:
       (void)op.getRegion().walk<WalkOrder::PreOrder>(
           [&](Operation *lop) -> WalkResult {
             if (dyn_cast<arith::ExtFOp>(lop)) {
+              auto src = lop->getOperand(0);
+              auto res = lop->getResult(0);
               // if extf i16 -> f32 : "i16" is not a typo
-              if (lop->getOperand(0).getType().isInteger(16)) {
-                if (lop->getResult(0).getType().isF32()) {
+              auto srcTy = dyn_cast<VectorType>(src.getType());
+              auto resTy = dyn_cast<VectorType>(res.getType());
+              if (srcTy && resTy) {
+                if (srcTy.getElementType().isInteger(16) &&
+                    resTy.getElementType().isF32()) {
                   builder.setInsertionPoint(lop);
-                  auto bcast = builder.create<arith::BitcastOp>(
-                      lop->getLoc(), builder.getBF16Type(), lop->getOperand(0));
+                  auto newTy =
+                      VectorType::get(srcTy.getShape(), builder.getBF16Type());
+                  auto bcast = builder.create<arith::BitcastOp>(lop->getLoc(),
+                                                                newTy, src);
                   lop->setOperand(0, bcast);
                 }
+              } else if (src.getType().isInteger(16) && res.getType().isF32()) {
+                builder.setInsertionPoint(lop);
+                auto bcast = builder.create<arith::BitcastOp>(
+                    lop->getLoc(), builder.getBF16Type(), src);
+                lop->setOperand(0, bcast);
               }
             } else if (dyn_cast<arith::TruncFOp>(lop)) {
+              auto src = lop->getOperand(0);
+              auto res = lop->getResult(0);
               // if truncf f32 -> bf16
-              if (lop->getOperand(0).getType().isF32()) {
-                if (lop->getResult(0).getType().isBF16()) {
+              auto srcTy = dyn_cast<VectorType>(src.getType());
+              auto resTy = dyn_cast<VectorType>(res.getType());
+              if (srcTy && resTy) {
+                if (srcTy.getElementType().isF32() &&
+                    resTy.getElementType().isBF16()) {
                   builder.setInsertionPointAfter(lop);
-                  auto bcast = builder.create<arith::BitcastOp>(
-                      lop->getLoc(), builder.getI16Type(), lop->getResult(0));
-                  lop->getResult(0).replaceAllUsesExcept(bcast, bcast);
+                  auto newTy =
+                      VectorType::get(resTy.getShape(), builder.getI16Type());
+                  auto bcast = builder.create<arith::BitcastOp>(lop->getLoc(),
+                                                                newTy, res);
+                  res.replaceAllUsesExcept(bcast, bcast);
                 }
+              } else if (src.getType().isF32() && res.getType().isBF16()) {
+                builder.setInsertionPointAfter(lop);
+                auto bcast = builder.create<arith::BitcastOp>(
+                    lop->getLoc(), builder.getI16Type(), res);
+                res.replaceAllUsesExcept(bcast, bcast);
               }
             } else {
+              if (auto callOp = dyn_cast<func::CallOp>(lop)) {
+                auto name = callOp.getCallee();
+                auto module = lop->getParentOfType<gpu::GPUModuleOp>();
+                if (!module)
+                  op.emitError("Parent gpu module not found!");
+                auto result = SymbolRefAttr::get(module.getContext(), name);
+                auto func = module.lookupSymbol<func::FuncOp>(result.getAttr());
+                if (!func)
+                  op.emitError("Callee not found!");
+                auto ftype = func.getFunctionType();
+                SmallVector<Type, 8> newArgTypes;
+                bool needFuncArgUpdate = false;
+                for (auto iTy : ftype.getInputs()) {
+                  if (auto vecTy = dyn_cast<VectorType>(iTy)) {
+                    if (vecTy.getElementType().isBF16()) {
+                      auto newTy = vecTy.cloneWith(vecTy.getShape(),
+                                                   builder.getI16Type());
+                      newArgTypes.push_back(newTy);
+                      needFuncArgUpdate = true;
+                    } else {
+                      newArgTypes.push_back(iTy);
+                    }
+                  } else if (iTy.isBF16()) {
+                    newArgTypes.push_back(builder.getI16Type());
+                    needFuncArgUpdate = true;
+                  } else {
+                    // TODO: Can callee arg type be bf16 memref?
+                    newArgTypes.push_back(iTy);
+                  }
+                }
+                // TODO: Can callee return type be bf16?
+                if (needFuncArgUpdate) {
+                  auto nftype = dyn_cast<FunctionType>(
+                      func.cloneTypeWith(newArgTypes, ftype.getResults()));
+                  func.setFunctionType(nftype);
+                }
+              }
               if (lop->getNumResults() > 0) {
                 // Foreach result
                 //   if elemType is bf16, change it to i16
@@ -176,6 +262,7 @@ public:
     SmallVector<Operation *, 8> replacedAllocOps;
     (void)mod.walk<WalkOrder::PreOrder>([&](gpu::LaunchFuncOp op)
                                             -> WalkResult {
+      bool hasPassthroughArgs = false;
       for (const auto &kop : op.getKernelOperands()) {
         auto mem = kop;
         Type memt = mem.getType();
@@ -195,8 +282,11 @@ public:
           mem = parentView.getViewSource();
         }
         auto dop = mem.getDefiningOp();
+        if (!dop) {
+          hasPassthroughArgs = true;
+        }
         // op is the defining Operation*
-        if (isa<gpu::AllocOp>(dop)) {
+        else if (isa<gpu::AllocOp>(dop)) {
           auto alloc = dyn_cast<gpu::AllocOp>(dop);
           // TODO: Support dynamic size
           if (alloc.getDynamicSizes().size() != 0) {
@@ -339,7 +429,73 @@ public:
           op->emitError("Expected gpu.alloc memref producer for bf16 memref "
                         "arg or arith.ConstantOp for bf16 scalar arg.");
         }
-        //}
+      }
+      // Passthrough arguments are gpu.func arguments directly forwarded
+      // from caller function arguments.
+      // In such case, caller function argument type is updated to i16
+      // This requries updating the FunctionType of caller function and
+      // and the block argument type of the entry block.
+      if (hasPassthroughArgs) {
+        if (auto caller =
+                mlir::dyn_cast<mlir::func::FuncOp>(op->getParentOp())) {
+          auto oftype = caller.getFunctionType();
+          llvm::SmallVector<mlir::Type, 4> argTypes;
+          ArrayRef<Type> resultTypes;
+          Block &eblock = caller.getBlocks().front();
+          unsigned int arg_idx = 0;
+          for (mlir::BlockArgument arg : eblock.getArguments()) {
+            bool isPassThroughArg = true;
+            Type t = oftype.getInput(arg_idx);
+            for (auto use : arg.getUsers()) {
+              auto callOp = dyn_cast<gpu::LaunchFuncOp>(use);
+              if (!callOp) {
+                isPassThroughArg = false;
+                break;
+              }
+            }
+            if (isPassThroughArg) {
+              // Update block arg element type to i16
+              Type argt = arg.getType();
+              MemRefType mt = dyn_cast<MemRefType>(argt);
+              if (mt) {
+                if (mt.getElementType().isBF16()) {
+                  MemRefType newMt = dyn_cast<MemRefType>(
+                      mt.cloneWith(mt.getShape(), builder.getI16Type()));
+                  arg.setType(newMt);
+                }
+              } else if (argt.isBF16()) {
+                arg.setType(builder.getI16Type());
+              }
+              MemRefType m = mlir::dyn_cast<MemRefType>(t);
+              if (m) {
+                Type et = m.getElementType();
+                if (et.isBF16()) {
+                  if (m.hasStaticShape()) {
+                    llvm::ArrayRef<int64_t> s = m.getShape();
+                    auto i = MemRefType::get(s, builder.getI16Type());
+                    argTypes.push_back(i);
+                  } else {
+                    // TODO: Support dynamic shape
+                    caller.emitError(
+                        "Non static shape bf16 MemRefType in FuncOp inputs");
+                  }
+                } else {
+                  argTypes.push_back(t);
+                }
+              } else if (t.isBF16()) {
+                argTypes.push_back(builder.getI16Type());
+              } else {
+                argTypes.push_back(t);
+              }
+            } else {
+              argTypes.push_back(t);
+            }
+            arg_idx++;
+          }
+          auto nftype = dyn_cast<FunctionType>(
+              caller.cloneTypeWith(argTypes, resultTypes));
+          caller.setFunctionType(nftype);
+        }
       }
       return WalkResult::advance();
     });
