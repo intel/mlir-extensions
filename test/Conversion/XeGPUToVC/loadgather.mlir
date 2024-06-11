@@ -28,7 +28,6 @@ module @gemm attributes {gpu.container_module} {
        // CHECK: %[[LOADA_v128f16:.*]] = vector.bitcast %[[LOADA_v128i32]] : vector<64xi32> to vector<128xf16>
        %66 = vector.shape_cast %3: vector<16x8xf16> to vector<128xf16>
 
-       // CHECK: %[[LOADA_v64i32:.*]] = vector.bitcast %[[LOADA_v128f16]] : vector<128xf16> to vector<64xi32>
        %6 = vector.shape_cast %66: vector<128xf16> to vector<8x8x2xf16>
 
       // CHECK: %[[B_STRUCT:.*]]= arith.constant dense<0> : vector<4xi64>
@@ -46,6 +45,7 @@ module @gemm attributes {gpu.container_module} {
 
        %4 = xegpu.load_nd %1 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
+       // CHECK: %[[LOADA_v64i32:.*]] = vector.bitcast %[[LOADA_v128f16]] : vector<128xf16> to vector<64xi32>
        // CHECK: %[[C_ACC_v128f32:.*]] = func.call @llvm.genx.dpas.nosrc0.v128f32.v128i32.v64i32(%{{.*}}, %[[LOADA_v64i32]], %{{.*}}) : (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
        %5 = xegpu.dpas %6, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 
