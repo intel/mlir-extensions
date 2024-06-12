@@ -731,11 +731,12 @@ struct SgUpdateTileOffsetOpPattern
     auto tiles = adaptor.getTile();
 
     llvm::SmallVector<mlir::Value> newOps;
+    int64_t kDynamics[2] = {mlir::ShapedType::kDynamic,
+                            mlir::ShapedType::kDynamic};
     for (const auto &tile : tiles) {
       auto xegpuTile = rewriter.create<mlir::xegpu::UpdateNdOffsetOp>(
           op.getLoc(), tile.getType(), tile, mlir::ValueRange{offsetX, offsetY},
-          llvm::ArrayRef<int64_t>(
-              {mlir::ShapedType::kDynamic, mlir::ShapedType::kDynamic}));
+          llvm::ArrayRef<int64_t>(kDynamics, 2));
       newOps.push_back(xegpuTile);
     }
     rewriter.replaceOp(op, newOps);
@@ -889,14 +890,87 @@ struct TypecastOpPattern : public SgXeTileToXeGPUConversion<CastOp> {
   }
 };
 
+struct SgBroadcastOpPattern
+    : public SgXeTileToXeGPUConversion<xetile::BroadcastOp> {
+  using SgXeTileToXeGPUConversion<
+      xetile::BroadcastOp>::SgXeTileToXeGPUConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::BroadcastOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto resultTy = op.getResult().getType();
+    auto resultShape = resultTy.getShape();
+    auto dstType = mlir::VectorType::get(resultShape.take_back(2),
+                                         resultTy.getElementType());
+
+    auto dim = op.getBroadcastDim();
+    assert(dim.size() == 2 && "Expecting 2D broadcast dim.");
+
+    llvm::SmallVector<mlir::Value> newOps;
+    if (dim[0] == 0 && dim[1] == 2) {
+      // clang-format off
+      // broadcast along the first dim, we simply need to replicate the source.
+      // For example, for
+      //    xetile.broadcast %src [0]: vector<1x64xf16> -> vector<32x64xf16>
+      // After blocking (assuming block size = [1, 16]) and lowering to xegpu,
+      // its input values (source) will be a vector of values with type <1x16xf16>
+      // and size = 4, which can be viewed as:
+      // | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
+      // so we need to replicate it 32 times (resultShape[0]) to get final results:
+      //  0: | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
+      //  ......
+      // 31: | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
+      // clang-format on
+      for (auto i = 0; i < resultShape[0]; i++)
+        newOps.append(adaptor.getSource().begin(), adaptor.getSource().end());
+    } else if (dim[0] == 1 && dim[1] == 3) {
+      // clang-format off
+      // broadcast along the second dim, we use both splatOp and replicates.
+      // For example: xetile.broadcast %src [1]: vector<32x1xf16> ->
+      // vector<32x64xf16>. After blocking (assuming block size = [1, 16]) and
+      // lowering to xegpu, the input value (source) will be a vector of values
+      // with type <1x1xf16> and size = 32, which can be viewed as:
+      //    0: | vector<1x1xf16> |
+      //           ...
+      //   31: | vector<1x1xf16> |
+      // first, splatOp is used to broadcast the value of vector<1x1xf16> to
+      // vector<1x16xf16>
+      //    0: | vector<1x16xf16> |
+      //           ...
+      //   31: | vector<1x16xf16> |
+      // and then we replicate the splatOp 4 times (resultShape[1]) to get the
+      // final results:
+      //    0: | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
+      //           ...
+      //   31: | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
+      // clang-format on
+      for (auto src : adaptor.getSource()) {
+        auto ty = mlir::dyn_cast<mlir::VectorType>(src.getType());
+        assert(ty && ty.getNumElements() == 1 &&
+               "Expecting a <1x1xelemty> vector type.");
+        auto ext = rewriter.create<mlir::vector::ExtractOp>(
+            op.getLoc(), src, llvm::ArrayRef<int64_t>({0, 0}));
+        auto splatOp =
+            rewriter.create<mlir::vector::SplatOp>(op.getLoc(), dstType, ext);
+        newOps.append(resultShape[1], splatOp);
+      }
+    } else {
+      return mlir::failure();
+    }
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
   patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
                   SgTileUnpackOpPattern, SgTilePackOpPattern,
                   SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
-                  SgUpdateTileOffsetOpPattern, SgTransposeOpPattern>(
-      patterns.getContext(), converter, analysis);
+                  SgUpdateTileOffsetOpPattern, SgTransposeOpPattern,
+                  SgBroadcastOpPattern>(patterns.getContext(), converter,
+                                        analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,

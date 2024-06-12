@@ -78,7 +78,6 @@ getInnerBlockHeightWidth(int maxHeight, int maxWidth, int minHeight,
   llvm::SmallVector<int64_t, 2> innerBlockSizes;
 
   if (height < minHeight || width < minWidth) {
-    llvm::dbgs() << "Invalid Block Size \n";
     return {};
   }
 
@@ -259,10 +258,8 @@ struct ArithConstantOpPattern
     auto blkSZ =
         getInnerBlockSizes<Load>(op.getOperation(), value.getElementType(),
                                  shape[0], shape[1], this->uArchInterface);
-    if (blkSZ.empty()) {
-      op->emitOpError() << "Invalid inner block sizes ";
-      return mlir::failure();
-    }
+    if (blkSZ.empty())
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
 
     auto newTy = mlir::VectorType::get(
         {shape[0] / blkSZ[0], shape[1] / blkSZ[1], blkSZ[0], blkSZ[1]},
