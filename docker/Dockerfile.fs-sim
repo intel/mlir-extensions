@@ -20,6 +20,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         build-essential \
         cmake \
         ninja-build \
+        clang \
         intel-opencl-icd \
         intel-level-zero-gpu \
         clinfo \
