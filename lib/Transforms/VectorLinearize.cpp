@@ -331,6 +331,7 @@ struct VectorLinearizePass final
 
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
+    target.addLegalOp<mlir::vector::ExtractElementOp>();
 
     target.addDynamicallyLegalOp<mlir::vector::SplatOp>(
         [&](mlir::vector::SplatOp op) -> bool {
