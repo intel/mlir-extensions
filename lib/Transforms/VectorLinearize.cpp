@@ -53,7 +53,6 @@ struct VectorExtractStridedSliceConversion final
         mlir::cast<mlir::VectorType>(dstType).isScalable())
       return rewriter.notifyMatchFailure(loc,
                                          "scalable vectors are not supported.");
-
     auto offsets = extractOp.getOffsets().getValue();
     auto sizes = extractOp.getSizes().getValue();
     auto strides = extractOp.getStrides().getValue();
@@ -126,11 +125,22 @@ struct VectorExtractStridedSliceConversion final
         indices[i * extractSliceLen + j] = linearizedIndex + j;
       }
     }
-    // perform a shuffle to extract the kD vector
-    rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-        extractOp, dstType, srcVector, srcVector,
-        rewriter.getI64ArrayAttr(indices));
 
+    // if indices just has one element, we will use extractElementOp
+    // to extract an element.
+    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstType);
+    if (indices.size() == 1 && (dstType.isIntOrIndexOrFloat() ||
+                                (vecTy && vecTy.getNumElements() == 1))) {
+      auto pos = rewriter.create<mlir::arith::ConstantOp>(
+          extractOp.getLoc(), rewriter.getI32IntegerAttr(indices[0]));
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
+          extractOp, adaptor.getVector(), pos);
+    } else {
+      // perform a shuffle to extract the kD vector
+      rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
+          extractOp, dstType, srcVector, srcVector,
+          rewriter.getI64ArrayAttr(indices));
+    }
     return mlir::success();
   }
 };
@@ -210,11 +220,19 @@ struct VectorExtractOpConversion final
       linearizedOffset += offsets[i] * size;
     }
 
-    llvm::SmallVector<int64_t, 2> indices(size);
-    std::iota(indices.begin(), indices.end(), linearizedOffset);
-    rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-        extractOp, dstTy, adaptor.getVector(), adaptor.getVector(),
-        rewriter.getI64ArrayAttr(indices));
+    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstTy);
+    if (dstTy.isIntOrIndexOrFloat() || (vecTy && vecTy.getNumElements() == 1)) {
+      auto pos = rewriter.create<mlir::arith::ConstantOp>(
+          extractOp.getLoc(), rewriter.getI32IntegerAttr(linearizedOffset));
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
+          extractOp, adaptor.getVector(), pos);
+    } else {
+      llvm::SmallVector<int64_t, 2> indices(size);
+      std::iota(indices.begin(), indices.end(), linearizedOffset);
+      rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
+          extractOp, dstTy, adaptor.getVector(), adaptor.getVector(),
+          rewriter.getI64ArrayAttr(indices));
+    }
 
     return mlir::success();
   }
@@ -277,6 +295,21 @@ struct VectorInsertOpConversion final
   }
 };
 
+struct VectorSplatOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::SplatOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::SplatOp splatOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstTy = getTypeConverter()->convertType(splatOp.getType());
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(splatOp, "cannot convert type.");
+    rewriter.replaceOpWithNewOp<mlir::vector::SplatOp>(
+        splatOp, adaptor.getInput(), dstTy);
+    return mlir::success();
+  }
+};
+
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -291,16 +324,22 @@ struct VectorLinearizePass final
 
     target.addDynamicallyLegalOp<mlir::vector::ShuffleOp>(
         [&](mlir::Operation *op) {
-          return mlir::cast<mlir::VectorType>(op->getResult(0).getType())
-                     .getRank() == 1;
+          auto ty = op->getResult(0).getType();
+          auto vecTy = mlir::dyn_cast_or_null<mlir::VectorType>(ty);
+          return vecTy && vecTy.getRank() == 1;
         });
 
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
 
+    target.addDynamicallyLegalOp<mlir::vector::SplatOp>(
+        [&](mlir::vector::SplatOp op) -> bool {
+          return (op && op.getAggregate().getType().getRank() == 1);
+        });
+
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
-                 VectorExtractOpConversion, VectorInsertOpConversion>(
-        typeConverter, context);
+                 VectorExtractOpConversion, VectorInsertOpConversion,
+                 VectorSplatOpConversion>(typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

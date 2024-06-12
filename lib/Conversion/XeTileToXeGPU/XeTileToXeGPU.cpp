@@ -42,9 +42,12 @@ public:
 
     addLegalOp<mlir::UnrealizedConversionCastOp>();
     addLegalOp<mlir::vector::ExtractOp>();
+    addLegalOp<mlir::vector::ExtractElementOp>();
     addLegalOp<mlir::vector::ExtractStridedSliceOp>();
+    addLegalOp<mlir::vector::ReductionOp>();
     addLegalOp<mlir::vector::ShuffleOp>();
     addLegalOp<mlir::vector::ShapeCastOp>();
+    addLegalOp<mlir::vector::SplatOp>();
 
     addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
