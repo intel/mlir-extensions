@@ -338,11 +338,6 @@ struct VectorLinearizePass final
           return (op && op.getAggregate().getType().getRank() == 1);
         });
 
-    target.addDynamicallyLegalOp<mlir::vector::SplatOp>(
-        [&](mlir::vector::SplatOp op) -> bool {
-          return (op && op.getAggregate().getType().getRank() == 1);
-        });
-
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion>(typeConverter, context);
