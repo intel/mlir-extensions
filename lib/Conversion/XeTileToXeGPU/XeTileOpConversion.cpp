@@ -744,12 +744,37 @@ struct SgUpdateTileOffsetOpPattern
   }
 };
 
-struct SgTransposeOpPattern
-    : public SgXeTileToXeGPUConversion<mlir::vector::TransposeOp> {
-  using SgXeTileToXeGPUConversion::SgXeTileToXeGPUConversion;
+// A transpose op for a larger vector will be lowered into multiple
+// explicit transpose ops for smaller vectors and the order/use of
+// these these new transpose ops are transposed too. For example:
+// xetile.transpose %1, [1, 0]: vector<16x48> -> vector<48x16> will
+// be lowered into 6 transpose ops on vector<8x16> assuming the smaller
+// vector shape is 8x16. So it will from:
+// |--------------|--------------|--------------|
+// |  0: 8x16     |  1: 8x16     |  2: 8x16     |
+// |--------------|--------------|--------------|
+// |  3: 8x16     |  4: 8x16     |  5: 8x16     |
+// |--------------|--------------|--------------|
+//
+// to:
+//
+// |--------------|--------------|
+// |  0: 16x8     |  3: 16x8     |
+// |--------------|--------------|
+// |  1: 16x8     |  4: 16x8     |
+// |--------------|--------------|
+// |  2: 16x8     |  5: 16x8     |
+// |--------------|--------------|
+// (the number before `:` is the id of the block)
+
+template <typename OpTy>
+struct SgTransposeOpPattern : public SgXeTileToXeGPUConversion<OpTy> {
+  using SgXeTileToXeGPUConversion<OpTy>::SgXeTileToXeGPUConversion;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OpAdaptor = typename OpTy::template GenericAdaptor<RangeT>;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::vector::TransposeOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
     auto resType = op.getResult().getType();
     if (resType.getRank() != 4)
@@ -965,12 +990,13 @@ struct SgBroadcastOpPattern
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
-  patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
-                  SgTileUnpackOpPattern, SgTilePackOpPattern,
-                  SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
-                  SgUpdateTileOffsetOpPattern, SgTransposeOpPattern,
-                  SgBroadcastOpPattern>(patterns.getContext(), converter,
-                                        analysis);
+  patterns.insert<
+      SgInitTileOpPattern, SgPrefetchTileOpPattern, SgTileUnpackOpPattern,
+      SgTilePackOpPattern, SgLoadTileOpPattern, SgStoreTileOpPattern,
+      SgTileMMAOpPattern, SgUpdateTileOffsetOpPattern,
+      SgTransposeOpPattern<mlir::vector::TransposeOp>,
+      SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern>(
+      patterns.getContext(), converter, analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,
