@@ -1060,8 +1060,8 @@ struct TileMMAOpPattern
         {shape[0] / mmaSize[0], shape[1] / mmaSize[2], mmaSize[0], mmaSize[2]},
         resultTy.getElementType());
 
-    mlir::Value newOp =
-        rewriter.create<imex::xetile::TileMMAOp>(op.getLoc(), vecTy, a, b, c);
+    mlir::Value newOp = rewriter.create<imex::xetile::TileMMAOp>(
+        op.getLoc(), vecTy, a, b, c, nullptr, nullptr, nullptr);
     newOp = addUnpackOp(newOp, rewriter);
     rewriter.replaceOp(op, newOp);
     return mlir::success();

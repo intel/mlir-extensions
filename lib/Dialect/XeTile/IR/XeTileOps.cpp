@@ -71,7 +71,7 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
     auto loc = parser.getCurrentLocation();
     llvm::StringRef nameId;
     if (parser.parseOptionalKeyword(&nameId, allowedKeys))
-      return parser.emitError(loc, "invalid")
+      return parser.emitError(loc, "invalid ")
              << "attribute keyword: " << nameId << ".\n";
 
     if (parser.parseEqual())
@@ -81,6 +81,18 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
       return parseAttributeHelper<mlir::DenseI64ArrayAttr>(parser, result,
                                                            nameId);
     if (nameId == "padding") {
+      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
+    }
+
+    if (nameId == "wg_map_a") {
+      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
+    }
+
+    if (nameId == "wg_map_b") {
+      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
+    }
+
+    if (nameId == "wg_map_c") {
       return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
     }
 
@@ -574,6 +586,11 @@ mlir::ParseResult TileMMAOp::parse(mlir::OpAsmParser &parser,
     }
   }
 
+  // try to parse the optional dictionary attributes
+  if (parseOptionalAttrDict(parser, result,
+                            {"wg_map_a", "wg_map_b", "wg_map_c"}))
+    return mlir::failure();
+
   if (parser.parseColon())
     return mlir::failure();
 
@@ -628,6 +645,24 @@ void TileMMAOp::print(mlir::OpAsmPrinter &printer) {
     printer << ", ";
     printer << getC();
   }
+
+  if (getWgMapA()) {
+    printer << " {wg_map_a =";
+    printer << getWgMapA();
+    printer << ", ";
+    printer << "wg_map_b =";
+    printer << getWgMapB();
+  }
+
+  if (getWgMapC()) {
+    printer << ", ";
+    printer << "wg_map_c =";
+    printer << getWgMapC();
+    printer << "}";
+  } else if (getWgMapA()) {
+    printer << "}";
+  }
+
   printer << " : ";
   printer << getA().getType() << ", ";
   printer << getB().getType();
