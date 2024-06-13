@@ -389,7 +389,10 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     let arguments = (ins
         XeTile_2DOr4DVector: $a,
         XeTile_2DOr4DVector: $b,
-        Optional<XeTile_2DOr4DVector>: $c
+        Optional<XeTile_2DOr4DVector>: $c,
+        OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_a,
+        OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_b,
+        OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_c
     );
 
     let results = (outs XeTile_2DOr4DVector: $output);
