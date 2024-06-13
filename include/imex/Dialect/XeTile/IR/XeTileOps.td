@@ -534,7 +534,7 @@ def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
                          DenseI64ArrayAttr:$permutation);
     let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
-        $vector $permutation attr-dict `:` type($vector) `->` type($result)
+        $vector `,` $permutation attr-dict `:` type($vector) `->` type($result)
     }];
     let hasVerifier = 1;
 }

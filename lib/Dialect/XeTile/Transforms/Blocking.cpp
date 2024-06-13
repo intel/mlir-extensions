@@ -182,7 +182,7 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     // TODO: get from uArch?
     maxHeight = 16;
     minHeight = 1;
-    maxWidth = 16;
+    maxWidth = 8;
     minWidth = 1;
 
     return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
@@ -437,8 +437,8 @@ struct TransposeOpPattern : public XeTileConversion<OpTy, TileUsageAnalysis> {
         mlir::DenseI64ArrayAttr::get(op.getContext(), inBlocks));
 
     int64_t newPermutation[4] = {1, 0, 3, 2};
-    mlir::Value transpose = rewriter.create<mlir::vector::TransposeOp>(
-        loc, newDstTy, pack, newPermutation);
+    mlir::Value transpose =
+        rewriter.create<OpTy>(loc, newDstTy, pack, newPermutation);
 
     mlir::Value unpack = rewriter.create<xetile::TileUnpackOp>(
         loc, resType, transpose,

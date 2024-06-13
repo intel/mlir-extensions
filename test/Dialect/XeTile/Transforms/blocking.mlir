@@ -365,10 +365,10 @@ gpu.module @test_kernel {
       //CHECK: %[[r8:.*]] = xetile.tile_unpack %[[r7]] { inner_blocks = [1, 16] }  : vector<32x4x1x16xf16> -> vector<32x64xf16>
       %6 = arith.divf %3, %5: vector<32x64xf16>
 
-      //CHECK: %[[r9:.*]] = xetile.tile_pack %[[r8]] { inner_blocks = [16, 16] }  : vector<32x64xf16> -> vector<2x4x16x16xf16>
-      //CHECK: %[[r10:.*]] = vector.transpose %[[r9]], [1, 0, 3, 2] : vector<2x4x16x16xf16> to vector<4x2x16x16xf16>
-      //CHECK: %[[r11:.*]] = xetile.tile_unpack %[[r10]] { inner_blocks = [16, 16] }  : vector<4x2x16x16xf16> -> vector<64x32xf16>
-      %7 = xetile.transpose %6 [1, 0]: vector<32x64xf16> -> vector<64x32xf16>
+      //CHECK: %[[r9:.*]] = xetile.tile_pack %[[r8]] { inner_blocks = [8, 16] }  : vector<32x64xf16> -> vector<4x4x8x16xf16>
+      //CHECK: %[[r10:.*]] = xetile.transpose %[[r9]], [1, 0, 3, 2] : vector<4x4x8x16xf16> -> vector<4x4x16x8xf16>
+      //CHECK: %[[r11:.*]] = xetile.tile_unpack %[[r10]] { inner_blocks = [16, 8] }  : vector<4x4x16x8xf16> -> vector<64x32xf16>
+      %7 = xetile.transpose %6, [1, 0]: vector<32x64xf16> -> vector<64x32xf16>
 
       //CHECK: %[[r12:.*]] = xetile.init_tile %[[arg0]][0, 0] : memref<1024x1024xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
       %8 = xetile.init_tile %a[0, 0] : memref<1024x1024xf16> -> !xetile.tile<64x32xf16>
