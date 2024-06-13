@@ -233,7 +233,7 @@ func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
 // -----
 func.func @test_transpose(%source: vector<8x16xf16>) {
   // expected-error@+1 {{Incorrect transpose permutation}}
-  %1 = xetile.transpose %source [0, 1] : vector<8x16xf16> -> vector<16x8xf16>
+  %1 = xetile.transpose %source, [0, 1] : vector<8x16xf16> -> vector<16x8xf16>
   return
 }
 
