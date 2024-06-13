@@ -221,8 +221,7 @@ getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
       {dpasParams.m, dpasParams.k, dpasParams.n});
 }
 
-// it blocks a constant dense value if it is used by XeTile operators,
-// e.g, tile_mma and store_tile. It currently extends a 2D vector into
+// It blocks/extends a 2D constant dense vector into a
 // 4D vector with the last 2 dim corresponding to block size.
 // example: arith.constant dense<0.0>: vector<32x32xf16>
 //      --> arith.constant dense<0.0>: vector<4x2x8x16xf16>
@@ -273,38 +272,7 @@ struct ArithConstantOpPattern
     auto newOp = rewriter.create<mlir::arith::ConstantOp>(loc, value);
     auto unpack = addUnpackOp(newOp, rewriter);
 
-    // TODO: we may can replace it with standard replaceOp method when
-    // we have full support for other non-xetile operators.
-    rewriter.replaceUsesWithIf(
-        op->getResults(), unpack->getResults(), [&](mlir::OpOperand &op) {
-          auto *owner = op.getOwner();
-
-          // the direct user is an xetile operator
-          if (llvm::isa<xetile::XeTileDialect>(owner->getDialect()))
-            return true;
-
-          // the direct user is an scf::ForOp, but the corresponding argument
-          // is used by an xetile operator
-          if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(owner)) {
-            auto arg = forOp.getTiedLoopRegionIterArg(&op);
-
-            auto haveXeTileUsers = std::any_of(
-                arg.user_begin(), arg.user_end(), [&](mlir::Operation *op) {
-                  return llvm::isa<xetile::XeTileDialect>(op->getDialect());
-                });
-
-            if (auto yieldOp = llvm::dyn_cast<mlir::scf::YieldOp>(
-                    forOp.getRegion().front().getTerminator())) {
-              auto idx = forOp.getTiedLoopResult(&op).getResultNumber();
-              auto definingOp = yieldOp.getResults()[idx].getDefiningOp();
-              if (definingOp)
-                haveXeTileUsers |=
-                    llvm::isa<xetile::XeTileDialect>(definingOp->getDialect());
-            }
-            return haveXeTileUsers;
-          }
-          return false;
-        });
+    rewriter.replaceOp(op, unpack);
     return mlir::success();
   }
 };
@@ -665,9 +633,12 @@ struct SCFForOpPattern
     // we don't need to update the forOp if it has no region
     // iter args, or the region iter args type are not changed.
     bool changed = false;
-    for (unsigned i = 0; i < op.getNumRegionIterArgs(); i++)
-      changed |= adaptor.getInitArgs()[i].getType() !=
-                 op.getRegionIterArg(i).getType();
+    for (unsigned i = 0; i < op.getNumRegionIterArgs(); i++) {
+      auto initArg = adaptor.getInitArgs()[i];
+      auto regionArg = op.getRegionIterArg(i);
+      changed |= (initArg.getType() != regionArg.getType()) ||
+                 bool(initArg.getDefiningOp<xetile::TileUnpackOp>());
+    }
     if (!changed)
       return mlir::failure();
 
@@ -765,13 +736,14 @@ struct SCFYieldOpPattern
         // get InnerBlock size from the corresponding output type
         auto ty =
             mlir::dyn_cast<mlir::VectorType>(forOp->getResult(i).getType());
-        assert(ty && ty.getRank() == 4);
-        auto innerBlock = ty.getShape().take_back(2);
-        auto packOp = addPackOp(v, innerBlock, rewriter);
-        rewriter.startOpModification(op);
-        op->setOperand(i, packOp);
-        rewriter.finalizeOpModification(op);
-        changed = true;
+        if (ty && ty.getRank() == 4) {
+          auto innerBlock = ty.getShape().take_back(2);
+          auto packOp = addPackOp(v, innerBlock, rewriter);
+          rewriter.startOpModification(op);
+          op->setOperand(i, packOp);
+          rewriter.finalizeOpModification(op);
+          changed = true;
+        }
       }
     }
     return mlir::success(changed);
