@@ -23,6 +23,7 @@
 #include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
+#include <mlir/Dialect/Mesh/IR/MeshOps.h>
 
 #include <iostream>
 
@@ -43,7 +44,27 @@ namespace imex {
 namespace ndarray {
 class NDArrayType;
 } // namespace ndarray
-namespace dist {} // namespace dist
+
+namespace dist {
+
+using ::mlir::DenseI64ArrayAttr;
+
+inline auto getBaseShardDimSize(int64_t shard, int64_t numShards, int64_t extend) {
+  return extend / numShards + (shard >= numShards - (extend % numShards) ? 1 : 0);
+};
+
+template<typename T>
+auto getBaseShardDimSize(T shard, T numShards, T extend) {
+  return extend / numShards + shard.sge(numShards - (extend % numShards)).select(1l, 0l);
+};
+
+template<typename T>
+auto getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
+  return (shard * (extend / numShards)) +
+         (shard - (numShards - (extend % numShards))).max(zero);
+};
+
+} // namespace dist
 } // namespace imex
 
 #include <imex/Dialect/Dist/IR/DistOpsDialect.h.inc>

@@ -43,6 +43,16 @@ bool imex::ndarray::canFoldIntoConsumerOp(imex::ndarray::CastOp castOp) {
       castOp.getType().getTensorType(),
       castOp.getSource().getType().getTensorType());
 }
+bool imex::ndarray::canFoldIntoConsumerOp(mlir::tensor::CastOp castOp) {
+  if (!castOp)
+    return false;
+
+  // Can fold if the source of cast has at least as much static information as
+  // its results.
+  return mlir::tensor::preservesStaticInformation(
+      castOp.getType(),
+      castOp.getSource().getType());
+}
 
 /// Ported from mlir::tensor
 mlir::LogicalResult imex::ndarray::foldArrayCast(mlir::Operation *op) {

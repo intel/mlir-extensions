@@ -177,19 +177,15 @@ struct SubviewLowering
     auto loc = op->getLoc();
 
     // convert src array to memref
-    auto srcArType = mlir::dyn_cast_or_null<::imex::ndarray::NDArrayType>(
-        op.getSource().getType());
-    if (!srcArType)
+    auto srcArType =
+        mlir::dyn_cast_or_null<::mlir::ShapedType>(op.getSource().getType());
+    auto resType = mlir::dyn_cast_or_null<::mlir::ShapedType>(op.getType());
+    if (!resType || !srcArType)
       return mlir::failure();
-    auto srcMRType = srcArType.getMemRefType(srcTnsr);
-    auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType);
 
-    auto *converter = getTypeConverter();
-    assert(converter && "Type converter is not set");
-    auto dstTnsrType = mlir::dyn_cast_or_null<::mlir::TensorType>(
-        converter->convertType(op.getType()));
-    if (!dstTnsrType)
-      return mlir::failure();
+    auto srcMRType = imex::getMemRefType(op.getContext(), srcArType.getShape(),
+                                         srcArType.getElementType());
+    auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType);
 
     auto offsets = ::mlir::getMixedValues(adaptor.getStaticOffsets(),
                                           adaptor.getOffsets(), rewriter);
@@ -198,14 +194,12 @@ struct SubviewLowering
     auto strides = ::mlir::getMixedValues(adaptor.getStaticStrides(),
                                           adaptor.getStrides(), rewriter);
 
-    auto resType = mlir::cast<::mlir::MemRefType>(
+    auto resMRType = mlir::cast<::mlir::MemRefType>(
         ::mlir::memref::SubViewOp::inferRankReducedResultType(
-            dstTnsrType.getShape(), srcMRType, offsets, sizes, strides));
+            resType.getShape(), srcMRType, offsets, sizes, strides));
 
     auto sw = rewriter.create<::mlir::memref::SubViewOp>(
-        loc, resType, srcMR, offsets, sizes, strides);
-
-    // assert(resType.getShape() == dstTnsrType.getShape());
+        loc, resMRType, srcMR, offsets, sizes, strides);
 
     // convert result to tensor
     auto res = rewriter.create<::mlir::bufferization::ToTensorOp>(
@@ -307,18 +301,15 @@ struct InsertSliceLowering
     // get operators
     auto src = adaptor.getSource();
     auto dst = adaptor.getDestination();
-    auto srcTyp = mlir::dyn_cast<::mlir::TensorType>(src.getType());
-    auto dstTyp = mlir::dyn_cast<::mlir::TensorType>(dst.getType());
+    auto srcTyp = mlir::dyn_cast<::mlir::ShapedType>(src.getType());
+    auto dstTyp = mlir::dyn_cast<::mlir::ShapedType>(dst.getType());
     if (!dstTyp || !srcTyp)
       return ::mlir::failure();
 
-    auto srcArType =
-        mlir::cast<imex::ndarray::NDArrayType>(op.getSource().getType());
-    auto dstArType =
-        mlir::cast<imex::ndarray::NDArrayType>(op.getDestination().getType());
-
-    auto srcMRTyp = srcArType.getMemRefType(src);
-    auto dstMRTyp = dstArType.getMemRefType(dst);
+    auto srcMRTyp = getMemRefType(op.getContext(), srcTyp.getShape(),
+                                  srcTyp.getElementType());
+    auto dstMRTyp = getMemRefType(op.getContext(), dstTyp.getShape(),
+                                  dstTyp.getElementType());
     mlir::Value srcMR = createToMemRef(loc, rewriter, src, srcMRTyp);
     auto dstMR = createToMemRef(loc, rewriter, dst, dstMRTyp);
 
@@ -1284,9 +1275,10 @@ struct ConvertNDArrayToLinalgPass
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convNDArray2RankedTensor);
 
-    auto materializeCast = [](::mlir::OpBuilder &builder, ::mlir::Type type,
-                              ::mlir::ValueRange inputs,
-                              ::mlir::Location loc) -> ::mlir::Value {
+    auto materializeCast =
+        [](::mlir::OpBuilder &builder, ::mlir::Type type,
+           ::mlir::ValueRange inputs,
+           ::mlir::Location loc) -> ::mlir::Value {
       if (inputs.size() == 1) {
         auto input = inputs[0];
         auto itype = input.getType();
