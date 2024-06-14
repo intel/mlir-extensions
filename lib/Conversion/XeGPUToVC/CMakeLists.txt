@@ -13,6 +13,7 @@ add_imex_conversion_library(IMEXXeGPUToVC
   MLIRIR
   MLIRSupport
   # MLIRTransforms
+  MLIRLLVMCommonConversion
 
   MLIRGPUDialect
   MLIRPass
