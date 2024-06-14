@@ -452,8 +452,8 @@ struct SubviewOpConverter
       // create local view
       lViews.emplace_back(rewriter.create<::imex::ndarray::SubviewOp>(
           loc,
-          mlir::dyn_cast<::imex::ndarray::NDArrayType>(lPart.getType())
-              .cloneWithDynDims(),
+          mlir::dyn_cast<::mlir::RankedTensorType>(mlir::dyn_cast<::imex::ndarray::NDArrayType>(lPart.getType())
+              .cloneWithDynDims()),
           lPart, pOffs, pSizes, pStrides));
 
       // update local offset for next part
@@ -1399,6 +1399,88 @@ struct LocalBoundingBoxOpConverter
   }
 };
 
+struct ExtendHaloForSliceOpConverter
+    : public ::mlir::OpConversionPattern<::imex::dist::ExtendHaloForSliceOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::ExtendHaloForSliceOp>::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::dist::ExtendHaloForSliceOp op,
+                  ::imex::dist::ExtendHaloForSliceOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    ::mlir::SymbolTableCollection symbolTable;
+    auto meshOp = ::mlir::mesh::getMesh(op, symbolTable);
+    if (!meshOp) {
+      return ::mlir::failure();
+    }
+    
+    // compute number of shards along split axes
+    // compute sharded dims extends (element count per sharded dim of base array)
+    ::mlir::SmallVector<int64_t> numShards, shardedDims;
+    auto baseShape = op.getStaticShape();
+    for (auto dim = 0; dim<(int64_t)op.getSplitAxes().size(); ++dim) {
+      auto axes = op.getSplitAxes().getAxes()[dim];
+      if(!axes.empty()) {
+        numShards.emplace_back(::mlir::mesh::collectiveProcessGroupSize(axes.asArrayRef(), meshOp));
+        assert(!::mlir::ShapedType::isDynamic(numShards.back()));
+        shardedDims.emplace_back(dim);
+      }
+    }
+
+    // init halo sizes either from input or to 0
+    ::mlir::SmallVector<::imex::EasyI64> haloSizes;
+    auto zero = easyI64(loc, rewriter, 0);
+    auto one = easyI64(loc, rewriter, 1);
+    if (op.getHaloSizes().empty()) {
+      haloSizes.resize(numShards.size()*2, zero);
+    } else {
+      assert(op.getHaloSizes().size() == numShards.size()*2);
+      for (auto sz : op.getHaloSizes()) {
+        haloSizes.emplace_back(easyI64(loc, rewriter, sz));
+      }
+    }
+
+    // iterate split axes and compute lower/upper halo bounds for each dim
+    int64_t curr = 0;
+    auto targetDimsOffs = op.getShardedDimsOffsets();
+    for (size_t dim=0; dim<numShards.size(); ++dim) {
+      auto num = numShards[dim];
+      auto tensorDim = shardedDims[dim];
+      auto baseOff = zero;
+      auto baseEnd = easyI64(loc, rewriter, getBaseShardDimSize(0, num, baseShape[tensorDim]));
+      auto targetOff = easyI64(loc, rewriter, op.getStaticOffsets()[tensorDim]);
+      auto stride = easyI64(loc, rewriter, op.getStaticStrides()[tensorDim]);
+      auto sz = targetDimsOffs[++curr]; // ++curr to skip the first offset
+      auto targetEnd = targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+
+      for (auto i = 0; i<num; ++i, ++curr) {
+        if (sz != 0) {
+          auto targetSz = easyI64(loc, rewriter, sz);
+          haloSizes[dim*2] = targetSz.sgt(zero).select(haloSizes[dim*2].max(zero.max(baseOff - targetOff)), haloSizes[dim*2]);
+          haloSizes[dim*2+1] = targetSz.sgt(zero).select(haloSizes[dim*2+1].max(zero.max(targetEnd - baseEnd)), haloSizes[dim*2+1]);
+          if (i+1 < num) {
+            sz = targetDimsOffs[curr+1] - targetDimsOffs[curr];
+            targetOff = targetOff + stride * targetSz;
+            targetEnd = targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+          }
+        }
+        if (i+1 < num) {
+          baseOff = baseEnd;
+          baseEnd = baseOff + easyI64(loc, rewriter, getBaseShardDimSize(i+1, num, baseShape[tensorDim]));
+        }
+      }
+    }
+
+    ::imex::ValVec results;
+    for (auto sz : haloSizes) {
+      results.emplace_back(sz.get());
+    }
+    rewriter.replaceOp(op, results);
+    return ::mlir::success();
+  }
+};
+
 /// Convert ::imex::dist::LocalCoreOp
 /// 1. Computes offset and sizes of the local data of src as if subviewed by
 /// provided slice and mapped to provided target.
@@ -1709,7 +1791,8 @@ struct ConvertDistToStandardPass
 
     auto materializeArray =
         [&](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
-            ::mlir::ValueRange inputs, ::mlir::Location loc) -> ::mlir::Value {
+            ::mlir::ValueRange inputs,
+            ::mlir::Location loc) -> ::mlir::Value {
       assert(inputs.size() == 1);
       auto input = inputs[0];
       auto itype = input.getType();
@@ -1770,15 +1853,17 @@ struct ConvertDistToStandardPass
     // All the dist conversion patterns/rewriter
     ::mlir::RewritePatternSet patterns(&ctxt);
     // all these patterns are converted
-    patterns.insert<
-        LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
-        ReductionOpConverter, ToTensorOpConverter, InsertSliceOpConverter,
-        SubviewOpConverter, EWBinOpConverter, EWUnyOpConverter,
-        LocalBoundingBoxOpConverter, LocalCoreOpConverter,
-        RePartitionOpConverter, ReshapeOpConverter,
-        LocalTargetOfSliceOpConverter, DefaultPartitionOpConverter,
-        LocalOffsetsOfOpConverter, PartsOfOpConverter, DeleteOpConverter,
-        CastElemTypeOpConverter, PermuteDimsOpConverter>(typeConverter, &ctxt);
+    patterns
+        .insert<LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
+                ReductionOpConverter, ToTensorOpConverter,
+                InsertSliceOpConverter, SubviewOpConverter, EWBinOpConverter,
+                EWUnyOpConverter, LocalBoundingBoxOpConverter,
+                LocalCoreOpConverter, RePartitionOpConverter,
+                ReshapeOpConverter, LocalTargetOfSliceOpConverter,
+                DefaultPartitionOpConverter, LocalOffsetsOfOpConverter,
+                PartsOfOpConverter, DeleteOpConverter, CastElemTypeOpConverter,
+                PermuteDimsOpConverter, ExtendHaloForSliceOpConverter>(
+            typeConverter, &ctxt);
     mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
         typeConverter, patterns, target);
     ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);

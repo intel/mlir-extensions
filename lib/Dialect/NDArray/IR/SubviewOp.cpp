@@ -21,8 +21,8 @@
 #include <mlir/IR/OpDefinition.h>
 #include <mlir/IR/OpImplementation.h>
 
-imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
-    imex::ndarray::NDArrayType sourceType,
+mlir::RankedTensorType imex::ndarray::SubviewOp::inferResultType(
+    mlir::RankedTensorType sourceType,
     mlir::ArrayRef<int64_t> staticOffsets, mlir::ArrayRef<int64_t> staticSizes,
     mlir::ArrayRef<int64_t> staticStrides) {
   unsigned rank = sourceType.getRank();
@@ -30,12 +30,12 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
   assert(staticOffsets.size() == rank && "staticOffsets length mismatch");
   assert(staticSizes.size() == rank && "staticSizes length mismatch");
   assert(staticStrides.size() == rank && "staticStrides length mismatch");
-  return mlir::cast<imex::ndarray::NDArrayType>(
+  return mlir::cast<mlir::RankedTensorType>(
       sourceType.cloneWith(staticSizes, sourceType.getElementType()));
 }
 
-imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
-    imex::ndarray::NDArrayType sourceShapedTensorType,
+mlir::RankedTensorType imex::ndarray::SubviewOp::inferResultType(
+    mlir::RankedTensorType sourceShapedTensorType,
     mlir::ArrayRef<mlir::OpFoldResult> offsets,
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides) {
@@ -48,8 +48,8 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferResultType(
                                     staticSizes, staticStrides);
 }
 
-imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
-    mlir::ArrayRef<int64_t> resultShape, imex::ndarray::NDArrayType sourceType,
+mlir::RankedTensorType imex::ndarray::SubviewOp::inferRankReducedResultType(
+    mlir::ArrayRef<int64_t> resultShape, mlir::RankedTensorType sourceType,
     mlir::ArrayRef<int64_t> offsets, mlir::ArrayRef<int64_t> sizes,
     mlir::ArrayRef<int64_t> strides) {
   auto inferredType = inferResultType(sourceType, offsets, sizes, strides);
@@ -62,12 +62,12 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
              .has_value() &&
          "invalid rank reduction");
 
-  return mlir::cast<imex::ndarray::NDArrayType>(
+  return mlir::cast<mlir::RankedTensorType>(
       sourceType.cloneWith(resultShape, sourceType.getElementType()));
 }
 
-imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
-    mlir::ArrayRef<int64_t> resultShape, imex::ndarray::NDArrayType sourceType,
+mlir::RankedTensorType imex::ndarray::SubviewOp::inferRankReducedResultType(
+    mlir::ArrayRef<int64_t> resultShape, mlir::RankedTensorType sourceType,
     mlir::ArrayRef<mlir::OpFoldResult> offsets,
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides) {
@@ -89,7 +89,7 @@ imex::ndarray::NDArrayType imex::ndarray::SubviewOp::inferRankReducedResultType(
 // type. If the type passed is nullptr, it is inferred.
 void imex::ndarray::SubviewOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result,
-    imex::ndarray::NDArrayType resultType, mlir::Value source,
+    mlir::RankedTensorType resultType, mlir::Value source,
     mlir::ArrayRef<mlir::OpFoldResult> offsets,
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides,
@@ -99,7 +99,7 @@ void imex::ndarray::SubviewOp::build(
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
-  auto sourceType = mlir::cast<imex::ndarray::NDArrayType>(source.getType());
+  auto sourceType = mlir::cast<mlir::RankedTensorType>(source.getType());
   // Structuring implementation this way avoids duplication between builders.
   if (!resultType) {
     resultType = imex::ndarray::SubviewOp::inferResultType(
@@ -120,7 +120,7 @@ void imex::ndarray::SubviewOp::build(
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, imex::ndarray::NDArrayType(), source, offsets, sizes,
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
         strides, attrs);
 }
 
@@ -149,7 +149,7 @@ void imex::ndarray::SubviewOp::build(
 // type passed is nullptr, it is inferred.
 void imex::ndarray::SubviewOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result,
-    imex::ndarray::NDArrayType resultType, mlir::Value source,
+    mlir::RankedTensorType resultType, mlir::Value source,
     mlir::ArrayRef<int64_t> offsets, mlir::ArrayRef<int64_t> sizes,
     mlir::ArrayRef<int64_t> strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
@@ -173,7 +173,7 @@ void imex::ndarray::SubviewOp::build(
 // passed is nullptr, it is inferred.
 void imex::ndarray::SubviewOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result,
-    imex::ndarray::NDArrayType resultType, mlir::Value source,
+    mlir::RankedTensorType resultType, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
   mlir::SmallVector<mlir::OpFoldResult> offsetValues =
@@ -193,7 +193,7 @@ void imex::ndarray::SubviewOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, imex::ndarray::NDArrayType(), source, offsets, sizes,
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
         strides, attrs);
 }
 
@@ -201,7 +201,7 @@ void imex::ndarray::SubviewOp::build(
 // result type. If the type passed is nullptr, it is inferred.
 void imex::ndarray::ExtractSliceOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result,
-    imex::ndarray::NDArrayType resultType, mlir::Value source,
+    mlir::RankedTensorType resultType, mlir::Value source,
     mlir::ArrayRef<mlir::OpFoldResult> offsets,
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides,
@@ -211,7 +211,7 @@ void imex::ndarray::ExtractSliceOp::build(
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
-  auto sourceType = mlir::cast<imex::ndarray::NDArrayType>(source.getType());
+  auto sourceType = mlir::cast<mlir::RankedTensorType>(source.getType());
   // Structuring implementation this way avoids duplication between builders.
   if (!resultType) {
     resultType = imex::ndarray::SubviewOp::inferResultType(
@@ -228,7 +228,7 @@ void imex::ndarray::ExtractSliceOp::build(
 // type passed is nullptr, it is inferred.
 void imex::ndarray::ExtractSliceOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result,
-    imex::ndarray::NDArrayType resultType, mlir::Value source,
+    mlir::RankedTensorType resultType, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
   mlir::SmallVector<mlir::OpFoldResult> offsetValues =
@@ -248,7 +248,7 @@ void imex::ndarray::ExtractSliceOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, imex::ndarray::NDArrayType(), source, offsets, sizes,
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
         strides, attrs);
 }
 
@@ -275,7 +275,7 @@ llvm::SmallBitVector imex::ndarray::SubviewOp::getDroppedDims() {
 
 // static bool isIdentitySubview(imex::ndarray::SubviewOp op) {
 //   auto srcType =
-//   op.getSource().getType().cast<imex::ndarray::NDArrayType>(); if (srcType
+//   op.getSource().getType().cast<mlir::RankedTensorType>(); if (srcType
 //   != op.getResult().getType())
 //     return false;
 
@@ -456,7 +456,7 @@ public:
     }
 
     size_t rank =
-        mlir::cast<::imex::ndarray::NDArrayType>(src.getType()).getRank();
+        mlir::cast<::mlir::RankedTensorType>(src.getType()).getRank();
     auto myOffs = op.getStaticOffsets();
     auto mySizes = op.getStaticSizes();
     auto myStrides = op.getStaticStrides();
@@ -498,7 +498,7 @@ public:
     auto defOp = sliceOp.getSource().getDefiningOp();
     if (!defOp)
       return mlir::failure();
-    auto castOp = mlir::dyn_cast<imex::ndarray::CastOp>(defOp);
+    auto castOp = mlir::dyn_cast<::mlir::tensor::CastOp>(defOp);
     if (!castOp)
       return mlir::failure();
 
@@ -512,7 +512,7 @@ public:
         sliceOp.getSizes(), sliceOp.getStrides(), sliceOp.getStaticOffsets(),
         sliceOp.getStaticSizes(), sliceOp.getStaticStrides());
     if (newResult.getType() != sliceOp.getType())
-      newResult = rewriter.create<imex::ndarray::CastOp>(loc, sliceOp.getType(),
+      newResult = rewriter.create<::mlir::tensor::CastOp>(loc, sliceOp.getType(),
                                                          newResult);
     rewriter.replaceOp(sliceOp, newResult);
     return mlir::success();
@@ -556,12 +556,12 @@ static void sliceElements(IterTy values, mlir::ArrayRef<int64_t> counts,
 /// Return the canonical type of the result of an subview op.
 /// Ported from mlir::tensor::ExtractSliceOp
 template <typename SubviewOpTy> struct SliceReturnTypeCanonicalizer {
-  imex::ndarray::NDArrayType
+  mlir::RankedTensorType
   operator()(SubviewOpTy op, mlir::ArrayRef<mlir::OpFoldResult> mixedOffsets,
              mlir::ArrayRef<mlir::OpFoldResult> mixedSizes,
              mlir::ArrayRef<mlir::OpFoldResult> mixedStrides) {
     auto sourceType =
-        mlir::cast<imex::ndarray::NDArrayType>(op.getSource().getType());
+        mlir::cast<mlir::RankedTensorType>(op.getSource().getType());
     return imex::ndarray::SubviewOp::inferRankReducedResultType(
         op.getType().getShape(), sourceType, mixedOffsets, mixedSizes,
         mixedStrides);
@@ -575,7 +575,7 @@ template <typename SubviewOpTy> struct SliceCanonicalizer {
                   SubviewOpTy newOp) {
     mlir::Value replacement = newOp.getResult();
     if (replacement.getType() != op.getType())
-      replacement = rewriter.create<imex::ndarray::CastOp>(
+      replacement = rewriter.create<::mlir::tensor::CastOp>(
           op.getLoc(), op.getType(), replacement);
     rewriter.replaceOp(op, replacement);
   }

@@ -16,7 +16,7 @@
 
 unsigned imex::ndarray::InsertSliceOp::getDestinationRank() {
   auto dstType = getDestination().getType();
-  return mlir::dyn_cast<imex::ndarray::NDArrayType>(dstType).getRank();
+  return mlir::dyn_cast<mlir::RankedTensorType>(dstType).getRank();
 }
 
 // Build an InsertSliceOp with mixed static and dynamic entries.
@@ -149,7 +149,8 @@ public:
   mlir::LogicalResult
   matchAndRewrite(InsertOpTy insertSliceOp,
                   mlir::PatternRewriter &rewriter) const override {
-    auto srcTyp = ::mlir::dyn_cast<::imex::ndarray::NDArrayType>(
+#if 0 // FIXME
+    auto srcTyp = ::mlir::dyn_cast<mlir::RankedTensorType>(
         insertSliceOp.getSource().getType());
     if (srcTyp && srcTyp.hasZeroSize()) {
       if (insertSliceOp->getNumResults() == 0) {
@@ -160,6 +161,7 @@ public:
       }
       return ::mlir::success();
     }
+#endif
     return mlir::failure();
   }
 };
@@ -189,7 +191,7 @@ public:
       return mlir::failure();
 
     auto sourceType = insertSliceOp.getSourceType();
-    auto dstTnsrType = insertSliceOp.getDestinationType().getTensorType();
+    auto dstTnsrType = insertSliceOp.getDestinationType(); //.getTensorType();
     // Create the new op in canonical form.
     auto sourceTnsrType =
         mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
@@ -202,8 +204,8 @@ public:
       if (newSourceType.getRank() != sourceType.getRank())
         return mlir::failure();
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      toInsert = rewriter.create<imex::ndarray::CastOp>(
-          insertSliceOp.getLoc(), newSourceType, toInsert);
+      toInsert = rewriter.create<mlir::tensor::CastOp>(insertSliceOp.getLoc(),
+                                                       newSourceType, toInsert);
     }
     rewriter.replaceOpWithNewOp<InsertOpTy>(
         insertSliceOp, insertSliceOp.getDestination(), toInsert, mixedOffsets,
