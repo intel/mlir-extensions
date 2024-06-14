@@ -57,6 +57,7 @@ jobs:
       - name: Setup IMEX and run tests
         run: |
           source /opt/intel/oneapi/setvars.sh
+          apt-cache show level-zero
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
 
           pip install psutil
