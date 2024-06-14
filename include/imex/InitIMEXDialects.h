@@ -22,6 +22,7 @@
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
+#include <imex/Dialect/NDArray/Extensions/AllExtensions.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 
@@ -36,6 +37,8 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
                     ::imex::region::RegionDialect,
                     ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect>();
+                    
+  ndarray::registerAllExtensions(registry);
   // clang-format on
 }
 

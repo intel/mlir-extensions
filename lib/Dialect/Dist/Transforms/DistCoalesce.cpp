@@ -10,7 +10,7 @@
 /// \file
 /// This file implements transforms of the Dist dialect.
 ///
-/// This pass tries to minimize the number of dist::RePartitionOps.
+/// This pass tries to minimize the number of mesh::ShardOps.
 /// Instead of creating a new copy for each repartition, it tries to combine
 /// multiple RePartitionOps into one. For this, it computes the local bounding
 /// box of several uses of repartitioned copies of the same base araay. It
@@ -43,6 +43,9 @@
 
 #include <mlir/Analysis/AliasAnalysis/LocalAliasAnalysis.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Mesh/IR/MeshDialect.h>
+#include <mlir/Dialect/Mesh/IR/MeshOps.h>
+#include <mlir/Dialect/Utils/IndexingUtils.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Interfaces/ShapedOpInterfaces.h>
 
@@ -60,6 +63,41 @@ namespace dist {
 
 namespace {
 
+bool isCreator(::mlir::Operation *op) {
+  return ::mlir::isa<::mlir::tensor::EmptyOp>(op);
+}
+
+bool isElementwise(::mlir::Operation *op) {
+  return ::mlir::isa<::mlir::linalg::AbsOp,
+                    ::mlir::linalg::AddOp,
+                    ::mlir::linalg::CeilOp,
+                    ::mlir::linalg::Conv3DOp,
+                    ::mlir::linalg::CopyOp,
+                    ::mlir::linalg::DivOp,
+                    ::mlir::linalg::DivUnsignedOp,
+                    ::mlir::linalg::ElemwiseBinaryOp,
+                    ::mlir::linalg::ElemwiseUnaryOp,
+                    ::mlir::linalg::ErfOp,
+                    ::mlir::linalg::ExpOp,
+                    ::mlir::linalg::FillOp,
+                    ::mlir::linalg::FillRng2DOp,
+                    ::mlir::linalg::FloorOp,
+                    ::mlir::linalg::LogOp,
+                    ::mlir::linalg::MapOp,
+                    ::mlir::linalg::MaxOp,
+                    ::mlir::linalg::MinOp,
+                    ::mlir::linalg::MulOp,
+                    ::mlir::linalg::NegFOp,
+                    ::mlir::linalg::PowFOp,
+                    ::mlir::linalg::ReciprocalOp,
+                    ::mlir::linalg::RoundOp,
+                    ::mlir::linalg::RsqrtOp,
+                    ::mlir::linalg::SqrtOp,
+                    ::mlir::linalg::SquareOp,
+                    ::mlir::linalg::SubOp,
+                    ::mlir::linalg::TanhOp>(op);
+}
+
 // *******************************
 // ***** Pass infrastructure *****
 // *******************************
@@ -70,6 +108,7 @@ struct DistCoalescePass
 
   DistCoalescePass() = default;
 
+#if 0
   // returns true if a Value is defined by any of the given operation types
   template <typename T, typename... Ts>
   static ::mlir::Operation *isDefByAnyOf(const ::mlir::Value &val) {
@@ -97,38 +136,14 @@ struct DistCoalescePass
            isAnyOf<::imex::ndarray::LinSpaceOp, ::imex::ndarray::CreateOp>(op);
   }
 
-  /// Follow def-chain of given Value until hitting a creation function
-  /// or array-returning EWBinOp or EWUnyOp et al
-  /// @return defining op
-  ::mlir::Operation *getArray(const ::mlir::Value &val) {
-    if (auto op =
-            isDefByAnyOf<::imex::dist::InitDistArrayOp, ::imex::dist::EWBinOp,
-                         ::imex::dist::EWUnyOp, ::imex::ndarray::ReshapeOp,
-                         ::imex::ndarray::PermuteDimsOp,
-                         ::mlir::UnrealizedConversionCastOp,
-                         ::imex::ndarray::CopyOp>(val)) {
-      return op;
-    } else if (auto op = val.getDefiningOp(); isCreator(op)) {
-      return op;
-    } else if (auto op = val.getDefiningOp<::imex::dist::SubviewOp>()) {
-      return getArray(op.getSource());
-    } else if (auto op = val.getDefiningOp<::imex::ndarray::InsertSliceOp>()) {
-      return getArray(op.getDestination());
-    } else {
-      std::cerr << "oops. Unexpected op found: ";
-      const_cast<::mlir::Value &>(val).dump();
-      assert(false);
-    }
-  }
-
-  /// return true if given op comes from a EWBinOp and has another EWBinOP
+  /// return true if given op comes from a EWOp and has another EWOp
   /// as its single user.
-  bool is_temp(::imex::dist::RePartitionOp &op) {
-    if (op.getTargetSizes().size() == 0 && op->hasOneUse() &&
+  bool is_temp(::mlir::mesh::ShardOp &op) {
+    if (!op->hasAttr("target") && op->hasOneUse() &&
         ::mlir::isa<::imex::dist::EWBinOp, ::imex::dist::EWUnyOp>(
             *op->user_begin()) &&
         ::mlir::isa<::imex::dist::EWBinOp, ::imex::dist::EWUnyOp>(
-            op.getArray().getDefiningOp())) {
+            op.getSrc().getDefiningOp())) {
       return true;
     }
     return false;
@@ -172,7 +187,7 @@ struct DistCoalescePass
           assert(tOffs.size() == tSizes.size());
           auto dynPtType = cloneWithDynEnv(
               mlir::cast<::imex::ndarray::NDArrayType>(val.getType()));
-          return builder.create<::imex::dist::RePartitionOp>(
+          return builder.create<::imex::mesh::ShardOp>(
               op->getLoc(), dynPtType, val, tOffs, tSizes);
         }
       }
@@ -231,44 +246,6 @@ struct DistCoalescePass
     return nullptr;
   }
 
-  /// entry point for back propagation of target parts, starting with
-  /// RePartitionOp. Verifies that defining ops are what we assume/can handle.
-  /// Then starts actual back propagation
-  uint64_t
-  backPropagatePart(::mlir::IRRewriter &builder, ::mlir::DominanceInfo &dom,
-                    ::imex::dist::RePartitionOp rpOp, ::mlir::Operation *&nOp,
-                    ::std::set<::imex::dist::RePartitionOp> &toDelete) {
-    nOp = nullptr;
-    auto toffs = rpOp.getTargetOffsets();
-    if (toffs.empty()) {
-      return 0;
-    }
-
-    auto defOp2 = toffs[0].getDefiningOp();
-    if (defOp2) {
-      auto ltosOp = mlir::dyn_cast<::imex::dist::LocalTargetOfSliceOp>(defOp2);
-      assert(ltosOp);
-      auto fOp = ltosOp.getArray().getDefiningOp();
-      assert(fOp);
-
-      ::mlir::SmallVector<::mlir::Operation *> toBeMoved;
-      if (canMoveAfter(dom, defOp2, fOp, toBeMoved)) {
-        ::mlir::Operation *curr = fOp;
-        for (auto dop : toBeMoved) {
-          dop->moveAfter(curr);
-          curr = dop;
-        }
-      } else {
-        // advanced analysis might be able to do more
-        return 0;
-      }
-    }
-    // else would mean it's a block arg which is fine anyway
-
-    auto tszs = rpOp.getTargetSizes();
-    return backPropagatePart(builder, rpOp, toffs, tszs, nOp, toDelete);
-  }
-
   /// clone subviewops which are returned and mark them "final"
   /// Needed to protect them from being "redirected" to a reparitioned copy
   void backPropagateReturn(::mlir::IRRewriter &builder,
@@ -311,355 +288,307 @@ struct DistCoalescePass
       }
     }
   }
+#endif
+
+  /// Follow def-chain of given Value until hitting a creation function
+  /// or array-returning EWBinOp or EWUnyOp et al
+  /// @return defining op
+  ::mlir::Operation *getBaseArray(const ::mlir::Value &val) {
+    auto defOp = val.getDefiningOp();
+    assert(defOp || !"Cannot get base array for a null value");
+
+    if (isElementwise(defOp) || isCreator(defOp)) {
+      return defOp;
+    } else if (auto op = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(defOp)) {
+      return getBaseArray(op.getSource());
+    } else if (auto op =
+                  ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(defOp)) {
+      return getBaseArray(op.getDestination());
+    } else if (auto op = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(defOp)) {
+      // this is the only place where we expect block args
+      return op.getSrc().getDefiningOp() ? getBaseArray(op.getSrc()) : op;
+    } else if (auto op = ::mlir::dyn_cast<::mlir::UnrealizedConversionCastOp>(
+                  defOp)) {
+      if (op.getInputs().size() == 1) {
+        return getBaseArray(op.getInputs().front());
+      }
+      return defOp;
+    } else {
+      std::cerr << "oops. Unexpected op found: ";
+      const_cast<::mlir::Value &>(val).dump();
+      assert(false);
+    }
+
+    return nullptr;
+  }
+  
 
   /// The actual back propagation of target parts
   /// if meeting a supported op, recursively gets defining ops and back
   /// propagates as it follows only supported ops, all other ops act as
   /// propagation barriers (e.g. InsertSliceOps) on the way it updates target
-  /// info on SubviewOps and marks RePartitionOps for elimination
-  uint64_t
-  backPropagatePart(::mlir::IRRewriter &builder, ::mlir::Operation *op,
-                    const ::mlir::ValueRange &tOffs,
-                    const ::mlir::ValueRange &tSizes, ::mlir::Operation *&nOp,
-                    ::std::set<::imex::dist::RePartitionOp> &toDelete) {
-    ::mlir::Value val;
-    uint64_t n = 0;
+  /// info on SubviewOps and marks shardOps for elimination
+  bool backPropagateShardSizes(::mlir::IRRewriter &builder, ::mlir::Operation *op,
+                               const ::mlir::mesh::MeshSharding &sharding,
+                               ::mlir::Operation *&nOp) {
     nOp = nullptr;
-    if (auto typedOp = ::mlir::dyn_cast<::imex::dist::SubviewOp>(op)) {
-      // val = typedOp.getSource();
-      nOp = updateTargetPart(builder, typedOp, tOffs, tSizes);
-    } else if (auto typedOp =
-                   ::mlir::dyn_cast<::imex::dist::RePartitionOp>(op)) {
-      auto defOp = typedOp.getArray().getDefiningOp();
-      // Stop if defining op is a initing array op, else...
-      if (!(::mlir::isa<::imex::dist::InitDistArrayOp>(defOp) ||
-            isCreator(defOp))) {
-        // ...continue even if already deleted in case different target parts
-        // are needed
-        val = typedOp.getArray();
-        toDelete.emplace(typedOp);
+    if (op == nullptr) return false;
+
+    auto assignSharding = [&](::mlir::Operation *op, const ::mlir::mesh::MeshSharding& sh) -> bool {
+      if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
+        ::mlir::mesh::MeshSharding currSharding(typedOp.getSharding());
+        if(currSharding.equalSplitAndPartialAxes(sharding)) {
+          assert(currSharding.getStaticHaloSizes().empty());
+          if(!currSharding.equalHaloAndShardSizes(sharding)) {
+            builder.setInsertionPoint(op);
+            auto newSharding = builder.create<::mlir::mesh::ShardingOp>(op->getLoc(), sh);
+            typedOp.getShardingMutable().assign(newSharding.getResult());
+            return true;
+          }
+        }
       }
-    } else if (auto typedOp = ::mlir::dyn_cast<::imex::dist::EWBinOp>(op)) {
-      auto defOp = typedOp.getLhs().getDefiningOp();
-      if (defOp) {
-        n = backPropagatePart(builder, defOp, tOffs, tSizes, nOp, toDelete);
-        assert(!nOp || (false && "not implemented yet"));
+      return false;
+    };
+
+    bool modified = false;
+    if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
+      if (typedOp.getAnnotateForUsers()) {
+        modified = assignSharding(typedOp, sharding);
+        if (modified) backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(), sharding, nOp);
+      } else {
+        auto srcOp = typedOp.getSrc().getDefiningOp();
+        if (srcOp && backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(), sharding, nOp)) {
+          assignSharding(typedOp, sharding);
+        }
       }
-      val = typedOp.getRhs();
-    } else if (auto typedOp = ::mlir::dyn_cast<::imex::dist::EWUnyOp>(op)) {
-      val = typedOp.getSrc();
+    } else if (isElementwise(op) || isCreator(op)) {
+      modified = isCreator(op);
+      for (auto oprnd : op->getOperands()) {
+        if (::mlir::isa<::mlir::RankedTensorType>(oprnd.getType())) {
+          modified |= backPropagateShardSizes(builder, oprnd.getDefiningOp(), sharding, nOp);
+        }
+      }
+    } else if(auto typedOp = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(op)) {
+      modified = backPropagateShardSizes(builder, typedOp.getSource().getDefiningOp(), sharding, nOp);
     }
-    ::mlir::Operation *defOp = nullptr;
-    if (val) {
-      defOp = val.getDefiningOp();
-      ++n;
-    }
-    return defOp ? n + backPropagatePart(builder, defOp, tOffs, tSizes, nOp,
-                                         toDelete)
-                 : n;
+
+    assert(nOp == nullptr);
+    return modified;
   }
 
-  // This pass tries to combine multiple RePartitionOps into one.
+  /// entry point for back propagation of target shardings.
+  void backPropagateShardSizes(::mlir::IRRewriter &builder,
+                               ::mlir::mesh::ShardOp op) {
+    ::mlir::Operation *nOp = nullptr;
+    auto sharding = op.getSharding();
+    assert(sharding);
+    backPropagateShardSizes(builder, op.getSrc().getDefiningOp(), sharding, nOp);
+    assert(nOp == nullptr);
+    return;
+  }
+
+  // return ShardOp that annotates the result of a given op
+  ::mlir::mesh::ShardOp getShardOp(::mlir::Operation *op) {
+    if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
+      return typedOp;
+    }
+    if(op->hasOneUse()) {
+      op = *op->user_begin();
+      if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
+        assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
+        assert(op->hasOneUse());
+        op = *op->user_begin();
+      }
+    } else {
+      assert(op->use_empty());
+    }
+    return ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op);
+  }
+
+  // return ShardOp that annotates the given operand/value
+  ::mlir::mesh::ShardOp getShardOpOfOperand(::mlir::Value val) {
+    auto op = val.getDefiningOp();
+    // FIXME as long as we have NDArrays we might meet casts
+    if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
+      assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
+      assert(op->hasOneUse() && op->getNumOperands() == 1);
+      op = op->getOperand(0).getDefiningOp();
+    }
+    assert(op->hasOneUse());
+    return ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op);
+  }
+#if 0
+
+  /// compute target part for a given InsertSliceOp
+  ::imex::dist::TargetOfSliceOp computeTarget(::mlir::IRRewriter &builder,
+                                              ::imex::ndarray::InsertSliceOp op,
+                                              ::mlir::Value sharding) {
+    auto shardingOp =
+        ::mlir::cast<::mlir::mesh::ShardingOp>(sharding.getDefiningOp());
+    auto sOffs = op.getStaticOffsets();
+    auto sSizes = op.getStaticSizes();
+    auto sStrides = op.getStaticStrides();
+    assert(!(::mlir::ShapedType::isDynamicShape(sSizes) ||
+             ::mlir::ShapedType::isDynamicShape(sOffs) ||
+             ::mlir::ShapedType::isDynamicShape(sStrides)) ||
+           (false && "SubviewOp must have dynamic offsets, sizes and strides"));
+
+    auto src = getShardOpOfOperand(op.getDestination()).getSrc();
+    return builder.create<::imex::dist::TargetOfSliceOp>(
+        op->getLoc(), src, sOffs, sSizes, sStrides, shardingOp.getMeshAttr(),
+        shardingOp.getSplitAxes());
+  }
+#endif // 0
+
+  // This pass tries to combine multiple ShardOps into one.
+  // It does not actually erase any ops, but rather annotates some so that
+  // later passes will not create actual resharding/communicating ops.
+  //
   // Dependent operations (like SubviewOp) get adequately annotated.
   //
-  // The basic idea is to compute a the bounding box of several RePartitionOps
-  // and use it for a single repartition. Dependent SubviewOps can then
+  // The basic idea is to compute a the bounding box of several SubViews
+  // and use it for a combined ShardOp. Dependent SubviewOps can then
   // extract the appropriate part from that bounding box without further
   // communication/repartitioning.
   //
+  // Right now we only support subviews with static indices (offs, sizes,
+  // strides).
+  //
   // 1. back-propagation of explicit target-parts
-  // 2. group and move SubviewOps
-  // 3. create base RePartitionOps and update dependent SubviewOps
+  // 2. group SubviewOps
+  // 3. create base ShardOp and update dependent SubviewOps
   void runOnOperation() override {
 
     auto root = this->getOperation();
     ::mlir::IRRewriter builder(&getContext());
+    ::mlir::SymbolTableCollection symbolTableCollection;
 
     // back-propagate targets from RePartitionOps
 
-    ::std::set<::imex::dist::RePartitionOp> rpToElimNew;
-    ::mlir::SmallVector<::imex::dist::RePartitionOp> rpOps;
-    ::mlir::SmallVector<::mlir::func::ReturnOp> retOps;
-    ::mlir::Operation *firstOp = nullptr;
 
-    // find first dist-op
+    // find InsertSliceOp and SubviewOp operating on the same base pointer
+    // opsGroups holds independent partial operation sequences operating on a
+    // specific base pointer
+    // on the way compute and back-propagate target parts for InsertSliceOps
+
+    std::unordered_map<::mlir::Operation *,
+                       ::mlir::SmallVector<::mlir::Operation *>>
+        opsGroups;
+    std::unordered_map<::mlir::Operation *, ::mlir::Operation *> baseIPts;
+
     root->walk([&](::mlir::Operation *op) {
-      if (::mlir::isa<::imex::dist::DistDialect>(op->getDialect())) {
-        firstOp = op;
-        return ::mlir::WalkResult::interrupt();
+      ::mlir::Value val;
+      if (auto typedOp = ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(op)) {
+        val = typedOp.getDestination();
+      } else if (auto typedOp =
+                     ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(op)) {
+        val = typedOp.getSource();
       }
-      return ::mlir::WalkResult::advance();
-    });
-    if (!firstOp) {
-      return;
-    }
-    builder.setInsertionPoint(firstOp);
+      if (val) {
+        auto base = getBaseArray(val);
+        baseIPts.emplace(base, getShardOp(base));
+        opsGroups[base].emplace_back(op);
 
-    // insert temporary casts for block args so that we have a base operation
-    ::mlir::SmallVector<::mlir::UnrealizedConversionCastOp> dummyCasts;
-    for (::mlir::Block &block : root) {
-      for (::mlir::BlockArgument &arg : block.getArguments()) {
-        if (isDist(arg) && !arg.use_empty()) {
-          auto op = builder.create<::mlir::UnrealizedConversionCastOp>(
-              builder.getUnknownLoc(), arg.getType(), arg);
-          arg.replaceAllUsesExcept(op.getResult(0), op);
-          dummyCasts.emplace_back(op);
-        }
-      }
-    }
-
-    // store all RePartitionOps with target in vector
-    // Also find returnops
-    root->walk([&](::mlir::Operation *op) {
-      if (auto typedOp = ::mlir::dyn_cast<::imex::dist::RePartitionOp>(op)) {
-        assert(isDist(typedOp.getArray()) && isDist(typedOp.getType()));
-        if (typedOp.getTargetOffsets().empty()) {
-          if (is_temp(typedOp)) {
-            rpToElimNew.emplace(typedOp);
-          }
-        } else {
-          rpOps.emplace_back(typedOp);
-        }
-      } else if (auto typedOp = ::mlir::dyn_cast<::mlir::func::ReturnOp>(op)) {
-        retOps.emplace_back(typedOp);
-      }
-    });
-
-    for (auto retOp : retOps) {
-      backPropagateReturn(builder, retOp);
-    }
-    retOps.clear();
-
-    auto &dom = this->getAnalysis<::mlir::DominanceInfo>();
-
-    // perform back propagation on each RePartitionOp
-    for (auto rp = rpOps.rbegin(); rp != rpOps.rend(); ++rp) {
-      if (rpToElimNew.find(*rp) == rpToElimNew.end()) {
-        ::mlir::Operation *nOp = nullptr;
-        backPropagatePart(builder, dom, *rp, nOp, rpToElimNew);
-        assert(!nOp);
-      }
-    }
-
-    // eliminate no longer needed RePartitionOps
-    for (auto rp : rpToElimNew) {
-      builder.replaceOp(rp, rp.getArray());
-    }
-
-    if (!rpOps.empty()) {
-      // find InsertSliceOp, SubviewOp and RePartitionOps on the same base
-      // pointer
-      // opsGroups holds independent partial operation sequences operating on a
-      // specific base pointer
-
-      std::unordered_map<::mlir::Operation *,
-                         ::mlir::SmallVector<::mlir::Operation *>>
-          opsGroups;
-      root->walk([&](::mlir::Operation *op) {
-        ::mlir::Value val;
+        // for InsertSliceOps compute and propagate target parts
         if (auto typedOp =
                 ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(op)) {
-          val = typedOp.getDestination();
-        } else if (auto typedOp =
-                       ::mlir::dyn_cast<::imex::dist::SubviewOp>(op)) {
-          val = typedOp.getSource();
-        } else if (auto typedOp =
-                       ::mlir::dyn_cast<::imex::dist::RePartitionOp>(op)) {
-          val = typedOp.getArray();
+          builder.setInsertionPointAfter(baseIPts[base]);
+          auto srcop =
+              typedOp.getSource().getDefiningOp<::mlir::mesh::ShardOp>();
+          assert(srcop && "InsertSliceOp must have a ShardOp as source");
+          assert(srcop.getAnnotateForUsers());
+          backPropagateShardSizes(builder, srcop);
         }
-        if (val) {
-          auto base = getArray(val);
-          opsGroups[base].emplace_back(op);
+      }
+    });
+
+    ::mlir::SymbolTableCollection symbolTable;
+    // outer loop iterates base over base pointers
+    for (auto grpP : opsGroups) {
+      if (grpP.second.empty())
+        continue;
+
+      auto &base = grpP.first;
+      auto baseShape = ::mlir::cast<::mlir::ShapedType>(base->getResult(0).getType());
+      assert(baseShape.hasStaticShape() && "Base array must have static shape");
+
+      auto shardOp = getShardOp(base);
+      ::mlir::SmallVector<::mlir::mesh::ShardOp> shardOps;
+      ::mlir::ValueRange halos;
+      int numHalos = 0;
+      for (auto axes : shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>().getSplitAxes()) {
+        if (!axes.empty()) {
+          ++numHalos;
         }
-      });
+      }
+      ::mlir::SmallVector<::mlir::Type> haloResultTypes(numHalos*2, builder.getI64Type());
 
-      // outer loop iterates base over base pointers
-      for (auto grpP : opsGroups) {
-        if (grpP.second.empty())
-          continue;
-
-        auto &base = grpP.first;
-        auto &dom = this->getAnalysis<::mlir::DominanceInfo>();
-
-        builder.setInsertionPointAfter(base);
-        auto dEnv = getDistEnv(mlir::cast<::imex::ndarray::NDArrayType>(
-            base->getResult(0).getType()));
-        auto team = dEnv.getTeam();
-        auto nProcs = createNProcs(base->getLoc(), builder, team);
-        auto pRank = createPRank(base->getLoc(), builder, team);
-
-        // find groups operating on the same base, groups are separated by write
-        // operations (InsertSliceOps for now)
-        for (auto j = grpP.second.begin(); j != grpP.second.end(); ++j) {
-          ::mlir::SmallVector<::mlir::Operation *> grp;
-          ::mlir::SmallVector<::mlir::Operation *> unhandled;
-          int nEx = 0;
-
-          for (auto i = j; i != grpP.second.end(); ++i, ++j) {
-            if (::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(*i)) {
-              break;
-            }
-            grp.emplace_back(*i);
-            if (::mlir::dyn_cast<::imex::dist::SubviewOp>(*i)) {
-              ++nEx;
+      for (auto currOp : grpP.second) {
+        // collect SubviewOps until we meet a InsertSliceOp
+        if (auto subviewOp = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(*currOp)) {
+          if (!subviewOp->hasAttr("final")) {
+            auto sOffs = subviewOp.getStaticOffsets();
+            auto sSizes = subviewOp.getStaticSizes();
+            auto sStrides = subviewOp.getStaticStrides();
+            assert(
+                !(::mlir::ShapedType::isDynamicShape(sSizes) ||
+                  ::mlir::ShapedType::isDynamicShape(sOffs) ||
+                  ::mlir::ShapedType::isDynamicShape(sStrides))
+                && "SubviewOp must have static offsets, sizes and strides");
+            if(auto svShardOp = getShardOp(subviewOp)) {
+              auto svShardingOp = svShardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
+              assert(svShardingOp);
+              auto target = svShardingOp.getStaticShardedDimsOffsets();
+              assert(!::mlir::ShapedType::isDynamicShape(target) && "ShardOp of Subview must have static sharded dims sizes");
+              auto mesh = svShardingOp.getMeshAttr().getValue();
+              builder.setInsertionPoint(shardOp);
+              halos = builder.create<::imex::dist::ExtendHaloForSliceOp>(subviewOp->getLoc(), haloResultTypes, baseShape.getShape(), mesh, svShardingOp.getSplitAxes(), halos, sOffs, sSizes, sStrides, target).getResult();
+              shardOps.emplace_back(getShardOpOfOperand(subviewOp.getSource()));
+              // subviewOps.emplace_back(subviewOp);
             }
           }
+        } else if (auto insertSlcOp =
+                       ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(
+                           *currOp)) {
+          shardOps.emplace_back(shardOps.emplace_back(
+              getShardOpOfOperand(insertSlcOp.getDestination())));
+        }
+      }
 
-          // iterate over group until all ops are handled
-          // we might not be able to move all SubviewOps to the point which
-          // is early enough to have a single repartition. Hence we have to loop
-          // until we handled all sub-groups.
-          while (grp.size() > 0) {
-            ::mlir::SmallVector<::imex::dist::RePartitionOp> rpToElim;
-            auto fOp = grp.front();
-            ::mlir::Operation *eIPnt = nullptr;
-            auto rpIPnt = fOp;
-            auto bbIPnt = fOp;
-            ::mlir::ValueRange bbOffs, bbSizes;
-            ::mlir::Operation *combined = nullptr;
+      // Update base sharding with halo sizes
+      auto orgSharding = shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
+      builder.setInsertionPointAfter(shardOp);
+      auto newSharding = builder.create<::mlir::mesh::ShardingOp>(
+        shardOp->getLoc(), ::mlir::mesh::ShardingType::get(shardOp->getContext()),
+        orgSharding.getMeshAttr(), orgSharding.getSplitAxesAttr(), orgSharding.getPartialAxesAttr(), orgSharding.getPartialTypeAttr(),
+        ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), {}), ::mlir::ValueRange{},
+        ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), ::mlir::SmallVector<int64_t>(halos.size(), ::mlir::ShapedType::kDynamic)), halos);
+      auto newShardOp = builder.create<::mlir::mesh::ShardOp>(
+          shardOp->getLoc(), shardOp, newSharding.getResult());
 
-            // iterate group
-            for (auto i = grp.begin(); i != grp.end(); ++i) {
-              auto e = ::mlir::dyn_cast<::imex::dist::SubviewOp>(*i);
-              if (e && e->hasAttr("final")) {
-                continue;
-              }
-              auto rp = ::mlir::dyn_cast<::imex::dist::RePartitionOp>(*i);
-              // check if we can move current op up
-              if (dom.dominates(fOp, *i)) {
-                bool can_move = true;
-                if (fOp != *i) {
-                  for (auto o : (*i)->getOperands()) {
-                    if (!dom.dominates(o.getDefiningOp(),
-                                       eIPnt ? eIPnt : rpIPnt)) {
-                      can_move = false;
-                      break;
-                    }
-                  }
-                }
+      // update shardOps of dependent Subview/InsertSliceOps
+      for (auto svShardOp : shardOps) {
+        svShardOp.getSrcMutable().assign(newShardOp.getResult());
+        svShardOp.getShardingMutable().assign(newSharding);
+      }
+      // barriers/halo-updates get inserted when InsertSliceOps (or other write ops) get spmdized
+    } // for (auto grpP : opsGroups)
 
-                // if it's safe to move: do it
-                if (can_move) {
-                  if (e) {
-                    if (false && nEx < 2) {
-                      e->moveBefore(rpIPnt);
-                    } else {
-                      auto loc = e.getLoc();
-                      builder.setInsertionPointAfter(bbIPnt);
-
-                      auto _sizes = getMixedAsValues(loc, builder, e.getSizes(),
-                                                     e.getStaticSizes());
-                      auto _offs = getMixedAsValues(
-                          loc, builder, e.getOffsets(), e.getStaticOffsets());
-                      auto _strides = getMixedAsValues(
-                          loc, builder, e.getStrides(), e.getStaticStrides());
-
-                      // if there is no target part, compute/use default
-                      ::mlir::ValueRange tOffs = e.getTargetOffsets();
-                      ::mlir::ValueRange tSizes = e.getTargetSizes();
-                      if (tOffs.empty()) {
-                        assert(tSizes.empty());
-                        auto defPart =
-                            builder.create<::imex::dist::DefaultPartitionOp>(
-                                loc, nProcs, pRank, _sizes);
-                        tOffs = defPart.getLOffsets();
-                        tSizes = defPart.getLShape();
-                        auto nop = updateTargetPart(builder, e, tOffs, tSizes);
-                        assert(!nop);
-                      }
-
-                      // compute/extend local bounding box
-                      auto bbox =
-                          builder.create<::imex::dist::LocalBoundingBoxOp>(
-                              loc, false, _offs, _sizes, _strides, tOffs,
-                              tSizes, bbOffs, bbSizes);
-                      bbOffs = bbox.getResultOffsets();
-                      bbSizes = bbox.getResultSizes();
-                      bbIPnt = bbox;
-                      assert(bbOffs.size() == bbSizes.size());
-
-                      // make BB available to repartitionop
-                      if (combined) {
-                        auto rank = bbOffs.size();
-                        combined->setOperands(1 + 0 * rank, rank, bbOffs);
-                        combined->setOperands(1 + 1 * rank, rank, bbSizes);
-                      } else {
-                        for (auto o : bbOffs) {
-                          assert(dom.dominates(o.getDefiningOp(), bbIPnt));
-                        }
-                        for (auto o : bbSizes) {
-                          assert(dom.dominates(o.getDefiningOp(), bbIPnt));
-                        }
-                        auto dynPtType = cloneWithDynEnv(
-                            mlir::cast<::imex::ndarray::NDArrayType>(
-                                base->getResult(0).getType()));
-                        combined = builder.create<::imex::dist::RePartitionOp>(
-                            loc, dynPtType, base->getResult(0), bbOffs,
-                            bbSizes);
-                      }
-                      e->moveAfter(eIPnt ? eIPnt : combined);
-                      e->setOperand(0, combined->getResult(0));
-                      eIPnt = *i;
-                      // any RepartitionOps of this extract slice can
-                      // potentially be eliminated
-                      for (auto u : e->getUsers()) {
-                        if (auto r =
-                                ::mlir::dyn_cast<::imex::dist::RePartitionOp>(
-                                    u)) {
-                          rpToElim.emplace_back(u);
-                        }
-                      }
-                    }
-                  } else { // if e
-                    assert(rp);
-                    (*i)->moveAfter(rpIPnt);
-                    rpIPnt = *i;
-                  }
-                  continue;
-                } // if(can_move)
-              }   // dominates
-              // if fOp does not dominate i or i's inputs do not dominate fOp
-              // we try later with remaining unhandled ops
-              unhandled.emplace_back(*i);
-            } // for grp
-
-            // FIXME: handling of remaining repartitionops needs simplification
-            for (auto o : rpToElim) {
-              for (auto x : grp) {
-                // elmiminate only if it is in our current group
-                if (x == o) {
-                  assert(o.getTargetOffsets().empty());
-                  // remove from unhandled
-                  for (auto it = unhandled.begin(); it != unhandled.end();
-                       ++it) {
-                    if (*it == o) {
-                      unhandled.erase(it);
-                      break;
-                    }
-                  }
-                  builder.replaceOp(o, o.getArray());
-                  break;
-                }
-              }
-            }
-            grp.clear();
-            grp.swap(unhandled);
-          }
-          if (j == grpP.second.end()) {
-            break;
-          } // while (grp.size() > 0)
-        }   // for (auto j = grpP.second.begin(); j != grpP.second.end(); ++j)
-      }     // for (auto grpP : opsGroups)
-    }       // !rpOps.empty()
-
-    // Get rid of dummy casts
-    for (auto op : dummyCasts) {
-      op.getResult(0).replaceAllUsesWith(op->getOperand(0));
-      builder.eraseOp(op);
-    }
-  }
-};
-
+    mlir::SmallVector<mlir::mesh::ShardingOp> prevShardings;
+    root->walk([&](::mlir::mesh::ShardingOp op) {
+      for(auto prev : prevShardings) {
+        if(mlir::mesh::MeshSharding(op.getResult()) == mlir::mesh::MeshSharding(prev.getResult())) {
+          builder.replaceOp(op, prev.getResult());
+          op = nullptr;
+          break;
+        }
+      }
+      if(op) {
+        prevShardings.emplace_back(op);
+      }
+    });
+  } // runOnOperation
+}; // DistCoalescePass
 } // namespace
 } // namespace dist
 

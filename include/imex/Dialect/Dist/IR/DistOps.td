@@ -19,6 +19,11 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/Dialect/Mesh/IR/MeshBase.td"
 
 // Provide a definition of the 'Dist' dialect in the ODS framework so that we
 // can define our operations.
@@ -50,12 +55,26 @@ def Dist_Dialect : Dialect {
   let cppNamespace = "::imex::dist";
   // let useDefaultTypePrinterParser = true;
   let useDefaultAttributePrinterParser = true;
+  let useDefaultTypePrinterParser = 1;
 }
 
 
 class Dist_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<Dist_Dialect, attrName, traits> {
   let mnemonic = attrMnemonic;
+}
+
+def DistSliceAttr : Dist_Attr<"DistSlice", "dist_slice"> {
+  let summary = "List of offsets, sizes and strides for a number of slices.";
+  let parameters = (ins
+    ArrayRefParameter<"DenseI64ArrayAttr">:$slcOffsets,
+    ArrayRefParameter<"DenseI64ArrayAttr">:$slcSizes,
+    ArrayRefParameter<"DenseI64ArrayAttr">:$slcStrides
+    // OptionalArrayRefParameter<"::mlir::DenseI64ArrayAttr">:$baseSizes
+  );
+  let assemblyFormat = [{
+    `<` `[` $slcOffsets `]`  `[` $slcSizes `]` `[` $slcStrides `]` `>`
+  }];
 }
 
 def DistEnvAttr
@@ -443,5 +462,178 @@ def EWUnyOp : Dist_Op<"ewuny", [Pure, SameVariadicOperandSize]> {
   // result is a ndarray
   let results = (outs AnyType);
 }
+
+////////////////////////////////////////////////////
+// shard
+
+// common base classes for types in NDArray dialect
+class Dist_Type<string name, string typeMnemonic, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<Dist_Dialect, name, traits, baseCppClass> {
+  let mnemonic = typeMnemonic;
+}
+
+def Dist_ShardingConstraint : Dist_Type<"ShardingConstraint", "shardingconstraint"> {
+  let summary = "sharding constraint";
+}
+
+def ShardOp : Dist_Op<"shard", [Pure,
+    AllTypesMatch<["result", "src"]>
+  ]> {
+  let summary = "Annotate on how a tensor is sharded across a mesh.";
+  let description = [{
+    The mesh.shard operation is designed to specify and guide the sharding
+    behavior of a tensor value across a mesh topology. This operation has one
+    operand and two attributes:
+
+    1. `input`: This operand represents the tensor value that needs to be
+    annotated for sharding.
+
+    2. `shard`: This attribute is type of `MeshSharding`, which is the core data
+    structure to represent distribution of a tensor on a mesh.
+
+    3. `annotate_for_users`: A unit attribute addressing the scenario when a
+    tensor's sharding annotation differs based on its context of use (either as
+    a result or an operand). If specified, the sharding pertains to specific
+    users of the tensor value, indicating how it should be considered when used
+    as an operand in subsequent operations. If not, the sharding applies to the
+    operation that defines the tensor value.
+
+    Example:
+    ```
+    func.func @only_result_annotated(%arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> : tensor<4x8xf32>
+      ...
+    }
+
+    func.func @only_operand_annotated(%arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> annotate_for_users : tensor<4x8xf32>
+      ...
+    }
+
+    // The first mesh.shard op applies to %arg0, the second mesh.shard op
+    // applies for the operand of op0, the third mesh.shard op applies for the
+    // operand of op2
+    func.func @both_result_and_multi_operands_annotated(
+        %arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> : tensor<4x8xf32>
+      %1 = mesh.shard %0 to <@mesh0, [[1]]> annotate_for_users : tensor<4x8xf32>
+      %2 = mesh.shard %0 to <@mesh0, [[2]]> annotate_for_users : tensor<4x8xf32>
+      "op0"(%1) : ...
+      "op1"(%2) : ...
+      ...
+    }
+    ```
+
+    The following usages are undefined:
+    ```
+    func.func @annotate_on_same_result_with_different_sharding(
+        %arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> : tensor<4x8xf32>
+      %1 = mesh.shard %0 to <@mesh0, [[1]]> : tensor<4x8xf32>
+      ...
+    }
+
+    func.func @annotate_on_same_result_same_value_with_different_sharding(
+        %arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> : tensor<4x8xf32>
+      %1 = mesh.shard %arg0 to <@mesh0, [[1]]> : tensor<4x8xf32>
+      ...
+    }
+
+    func.func @annotate_on_same_operand_with_different_sharding(
+        %arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> annotate_for_users : tensor<4x8xf32>
+      %1 = mesh.shard %0 to <@mesh0, [[1]]> annotate_for_users : tensor<4x8xf32>
+      ...
+    }
+
+    func.func @result_annotated_after_operand(
+        %arg0 : tensor<4x8xf32>) -> () {
+      %0 = mesh.shard %arg0 to <@mesh0, [[0]]> annotate_for_users : tensor<4x8xf32>
+      %1 = mesh.shard %0 to <@mesh0, [[1]]> : tensor<4x8xf32>
+      ...
+    }
+    ```
+  }];
+  let arguments = (ins
+    AnyRankedTensor:$src,
+    AnyAttr:$shard,
+    UnitAttr:$annotate_for_users,
+    Optional<Dist_ShardingConstraint>:$constraint
+  );
+  let results = (outs
+    AnyRankedTensor:$result
+  );
+  let assemblyFormat = [{
+    $src `to` ($constraint^)? attr-dict `:` type($result)
+  }];
+}
+
+def TargetOfSliceOp : Dist_Op<"target_of_slice",
+    [Pure]> {
+  let summary = "Compute intersections of a distributed array with a slice.";
+  let description = [{
+    This operation computes the intersection of the shards of the array and the
+    provided slice. The slice is provided as a triplet of offsets, sizes and strides
+    (similar to a subview).
+
+    All input shapes/offsets/strides are `$array.rank()`-long vectors.
+    The operation produces $array.rank()*split_axes.size() many values.
+  }];
+
+  let arguments = (ins
+    AnyType:$array,
+    DenseI64ArrayAttr:$static_offsets,
+    DenseI64ArrayAttr:$static_sizes,
+    DenseI64ArrayAttr:$static_strides,
+    FlatSymbolRefAttr:$mesh,
+    Mesh_MeshAxesArrayAttr:$split_axes
+  );
+  let results = (outs Variadic<Index>:$result);
+
+  let assemblyFormat = [{
+    $array attr-dict `:` qualified(type($array)) `to` qualified(type(results))
+  }];
+}
+
+def BoundingBoxOp : Dist_Op<"bounding_box", [SameVariadicOperandSize, Pure]> {
+  let summary = "Compute bounding box.";
+
+  let arguments = (ins
+    DistSliceAttr:$static_slices,
+    Variadic<Dist_ShardingConstraint>:$subviewConstraints);
+  let results = (outs Dist_ShardingConstraint:$constraint);
+
+  let assemblyFormat = [{
+    `[` $subviewConstraints `]` attr-dict `:` qualified(type(results))
+  }];
+}
+
+def ExtendHaloForSliceOp : Dist_Op<"extend_halo_for_slice", [Pure]> {
+  let summary = "Extend halo for slice.";
+  let description = [{
+    This operation computes the halo required to compute the slice of the array
+    And extends provided halo if necessary.
+    The halo is returned as a flattened array.
+  }];
+
+  let arguments = (ins
+    DenseI64ArrayAttr:$static_shape,
+    FlatSymbolRefAttr:$mesh,
+    Mesh_MeshAxesArrayAttr:$split_axes,
+    Variadic<I64>:$halo_sizes,
+    DenseI64ArrayAttr:$static_offsets,
+    DenseI64ArrayAttr:$static_sizes,
+    DenseI64ArrayAttr:$static_strides,
+    DenseI64ArrayAttr:$sharded_dims_offsets
+  );
+  let results = (outs Variadic<I64>:$result);
+
+  let assemblyFormat = [{
+    `[` $halo_sizes `]` attr-dict `:` qualified(type(results))
+  }];
+}
+
 
 #endif // _Dist_OPS_TD_INCLUDED_
