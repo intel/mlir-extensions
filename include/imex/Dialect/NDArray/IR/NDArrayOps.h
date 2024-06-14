@@ -109,6 +109,7 @@ inline ::imex::region::GPUEnvAttr getGPUEnv(const ::mlir::Type &t) {
 
 // Determine whether CastOp casts to a nore dynamic version of the source tensor
 bool canFoldIntoConsumerOp(CastOp castOp);
+bool canFoldIntoConsumerOp(::mlir::tensor::CastOp castOp);
 
 /// Performs folding of any operand of `op` if it comes from a ndarray::CastOp
 /// that can be folded.

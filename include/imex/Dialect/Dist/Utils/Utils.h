@@ -248,6 +248,37 @@ inline auto createDefaultPartition(const ::mlir::Location &loc,
                                                           gShape);
 }
 
+template <typename T> static T _min(const T &a, const T &b) {
+  return std::min(a, b);
+}
+template <typename T> static T _max(const T &a, const T &b) {
+  return std::max(a, b);
+}
+template <typename T> static T _get(const T &a) { return a; };
+template <typename T> struct _gen {
+  template <typename U>
+  T operator()(::mlir::Location, ::mlir::OpBuilder, const U &a) {
+    return static_cast<T>(a);
+  }
+};
+
+[[maybe_unused]] static EasyIdx _min(const EasyIdx &a, const EasyIdx &b) {
+  return a.min(b);
+}
+[[maybe_unused]] static EasyIdx _max(const EasyIdx &a, const EasyIdx &b) {
+  return a.max(b);
+}
+[[maybe_unused]] static EasyIdx::ElType _get(const EasyIdx &a) {
+  return a.get();
+};
+template <> struct _gen<EasyIdx> {
+  template <typename U>
+  EasyIdx operator()(::mlir::Location loc, ::mlir::OpBuilder rewriter,
+                     const U &a) {
+    return easyIdx(loc, rewriter, a);
+  }
+};
+
 /// @brief compute overlap of given slices with local off/shape
 /// @param lShape local shape
 /// @param lOff local offset
@@ -255,26 +286,28 @@ inline auto createDefaultPartition(const ::mlir::Location &loc,
 /// @param slcSize slice's size
 /// @param slcStride slice's stride
 /// @return offsets and sizes of overlap and leading/skipped elements of slice
-template <typename I, typename R = I>
+template <typename I, typename R = I, typename Num = EasyIdx>
 inline std::tuple<R, R, R>
 createOverlap(::mlir::Location loc, ::mlir::OpBuilder rewriter,
               const ::mlir::ValueRange &lOffs, const ::mlir::ValueRange &lShape,
-              const I &slcOffs, const I &slcSizes, const I &slcStrides) {
-  auto zero = easyIdx(loc, rewriter, 0);
-  auto one = easyIdx(loc, rewriter, 1);
-  auto rank = lShape.size();
+              const I &slcOffs, const I &slcSizes, const I &slcStrides,
+              size_t rank = 0) {
+  rank = rank ? rank : lShape.size();
+  auto mygen = _gen<Num>();
+  auto zero = mygen(loc, rewriter, 0);
+  auto one = mygen(loc, rewriter, 1);
 
-  R resOffs(rank, zero.get());
-  R resSlcOffs(rank, zero.get());
+  R resOffs(rank, _get(zero));
+  R resSlcOffs(rank, _get(zero));
   R resSizes(slcSizes.begin(), slcSizes.end());
 
   for (unsigned i = 0; i < rank; ++i) {
     // Get the vals from dim
-    auto lOff = easyIdx(loc, rewriter, lOffs[i]);
-    auto slcOff = easyIdx(loc, rewriter, slcOffs[i]);
-    auto slcStride = easyIdx(loc, rewriter, slcStrides[i]);
-    auto slcSize = easyIdx(loc, rewriter, slcSizes[i]);
-    auto lSize = easyIdx(loc, rewriter, lShape[i]);
+    auto lOff = mygen(loc, rewriter, lOffs[i]);
+    auto slcOff = mygen(loc, rewriter, slcOffs[i]);
+    auto slcStride = mygen(loc, rewriter, slcStrides[i]);
+    auto slcSize = mygen(loc, rewriter, slcSizes[i]);
+    auto lSize = mygen(loc, rewriter, lShape[i]);
 
     // last index of slice
     auto slcEnd = slcOff + slcSize * slcStride;
@@ -287,12 +320,12 @@ createOverlap(::mlir::Location loc, ::mlir::OpBuilder rewriter,
     // local<slc    s            s                  s
     auto resOff =
         slcOff + (((maxOff + stride_1 - slcOff) / slcStride) * slcStride);
-    auto resSz = (slcEnd.min(lEnd) + stride_1 - resOff).max(zero) / slcStride;
-    auto resSlcOff = ((resOff - slcOff) / slcStride).min(slcSize);
+    auto resSz = _max(_min(slcEnd, lEnd) + stride_1 - resOff, zero) / slcStride;
+    auto resSlcOff = _min((resOff - slcOff) / slcStride, slcSize);
 
-    resOffs[i] = resOff.get();
-    resSizes[i] = resSz.get();
-    resSlcOffs[i] = resSlcOff.get();
+    resOffs[i] = _get(resOff);
+    resSizes[i] = _get(resSz);
+    resSlcOffs[i] = _get(resSlcOff);
   }
 
   return {resOffs, resSizes, resSlcOffs};
