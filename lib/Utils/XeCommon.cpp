@@ -76,6 +76,9 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   }
   std::string str;
   switch (size) {
+  case 8:
+    str += "v8";
+    break;
   case 16:
     str += "v16";
     break;
