@@ -1502,6 +1502,9 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addIllegalOp<::mlir::vector::ShapeCastOp,
                         ::mlir::vector::ExtractStridedSliceOp>();
 
+    // Don't convert "index" to "i64"
+    typeConverter.addConversion([&](mlir::IndexType type) { return type; });
+
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
           auto i32Type = ::mlir::IntegerType::get(&getContext(), 32);
