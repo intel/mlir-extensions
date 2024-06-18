@@ -286,9 +286,21 @@ struct VectorInsertOpConversion final
     std::iota(newValsUntil, indices.end(),
               linearizedOffset + srcSize); // the rest of original values
                                            // [offset+srcNumElements, end)
+    // NOTE : LLVM (and IGC) only supports shuffling vectors with the same
+    // number of elements. Therefore, we need to modify the source vector to
+    // have the same number of elements as the destination vector. eg.
+    // %newSource = vector.shuffle %source, %source, [ {0-srcSize} ... fill with
+    // 0 ]
+    //     %dest = vector.shuffle %dest, %newSource, [ insert shuffle indices ]
+    llvm::SmallVector<int64_t> modifiedSrcIndices(dstSize, 0);
+    std::iota(modifiedSrcIndices.begin(), modifiedSrcIndices.begin() + srcSize,
+              0);
+    auto modifiedSource = rewriter.create<mlir::vector::ShuffleOp>(
+        insertOp.getLoc(), dstTy, adaptor.getSource(), adaptor.getSource(),
+        rewriter.getI64ArrayAttr(modifiedSrcIndices));
 
     rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-        insertOp, dstTy, adaptor.getDest(), adaptor.getSource(),
+        insertOp, dstTy, adaptor.getDest(), modifiedSource,
         rewriter.getI64ArrayAttr(indices));
 
     return mlir::success();
