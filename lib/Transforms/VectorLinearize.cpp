@@ -359,6 +359,8 @@ struct VectorLinearizePass final
         patterns,
         mlir::vector::VectorTransformsOptions().setVectorTransposeLowering(
             mlir::vector::VectorTransposeLowering::Shuffle16x16));
+    // Lower vector.broadcast into low-level vector ops.
+    mlir::vector::populateVectorBroadcastLoweringPatterns(patterns);
     unsigned targetVectBitWidth = std::numeric_limits<unsigned>::max();
     mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
         typeConverter, patterns, target, targetVectBitWidth);

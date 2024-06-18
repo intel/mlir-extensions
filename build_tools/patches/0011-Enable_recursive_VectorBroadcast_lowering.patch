@@ -1,0 +1,27 @@
+From 4958ae3283ab858e1f883862b234319ddebbcd52 Mon Sep 17 00:00:00 2001
+From: "Gusthinna Waduge, Charitha Saumya"
+ <charitha.saumya.gusthinna.waduge@intel.com>
+Date: Tue, 18 Jun 2024 00:22:58 +0000
+Subject: [PATCH 1/1] Enable recursive application of VectorBroadcast lowering
+
+---
+ mlir/lib/Dialect/Vector/Transforms/LowerVectorBroadcast.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/mlir/lib/Dialect/Vector/Transforms/LowerVectorBroadcast.cpp b/mlir/lib/Dialect/Vector/Transforms/LowerVectorBroadcast.cpp
+index 44e3f76112a7..cbaa4d69b879 100644
+--- a/mlir/lib/Dialect/Vector/Transforms/LowerVectorBroadcast.cpp
++++ b/mlir/lib/Dialect/Vector/Transforms/LowerVectorBroadcast.cpp
+@@ -45,6 +45,10 @@ class BroadcastOpLowering : public OpRewritePattern<vector::BroadcastOp> {
+ public:
+   using OpRewritePattern::OpRewritePattern;
+
++  void initialize() {
++    this->setHasBoundedRewriteRecursion();
++  }
++
+   LogicalResult matchAndRewrite(vector::BroadcastOp op,
+                                 PatternRewriter &rewriter) const override {
+     auto loc = op.getLoc();
+--
+2.34.1
