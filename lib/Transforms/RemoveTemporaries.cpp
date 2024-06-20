@@ -15,6 +15,7 @@
 #include "mlir/Pass/Pass.h"
 #include <imex/Utils/PassUtils.h>
 #include <mlir/Analysis/AliasAnalysis.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 
 namespace imex {
 #define GEN_PASS_DEF_REMOVETEMPORARIES
@@ -77,6 +78,23 @@ void findAllSubviews(::mlir::Operation *op,
       findAllSubviews(user, foundOps);
     }
   }
+}
+
+/// Find if val is being returned
+/// Follows chained subview and cast ops
+bool findReturn(::mlir::Value val) {
+  for (auto user : val.getUsers()) {
+    DEBUG_OP("findReturn", "  user", user)
+    if (::mlir::isa<::mlir::func::ReturnOp>(user)) {
+      return true;
+    }
+    if (::mlir::isa<::mlir::memref::SubViewOp, ::mlir::memref::CastOp>(user)) {
+      if (findReturn(user->getResult(0))) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /// Returns the root value in a chain of memref.subview/cast ops
@@ -485,6 +503,8 @@ private:
     DEBUG_OP("RemoveTemporaries", "inspecting", op)
     DEBUG_OP("RemoveTemporaries", "  src alloc op", srcAllocOp)
 
+    bool srcIsReturned = findReturn(srcAllocOp->getResult(0));
+
     if (copyOpParentReg != allocOpParentReg) {
       DEBUG_MSG("RemoveTemporaries",
                 "alloc and copy are in different regions, skipping")
@@ -493,6 +513,17 @@ private:
     if (dstDefOp) {
       // There is a dst defining op
       DEBUG_OP("RemoveTemporaries", "  defining op", dstDefOp)
+      auto tmpOps = ::mlir::SmallVector<::mlir::Operation *>();
+      auto dstRootValue = findSubviewRootValue(dst, tmpOps);
+      bool dstIsReturned = findReturn(dstRootValue);
+      if (srcIsReturned && dstIsReturned) {
+        // removing src alloc would potentially result in returning dst and
+        // its subview which changes function semantics
+        // TODO need to check for a subview as well?
+        DEBUG_MSG("RemoveTemporaries",
+                  "  both src and dst are returned, aborting.")
+        return;
+      }
       auto &memrefAlias = getAnalysis<mlir::AliasAnalysis>();
       memrefAlias.alias(src, dst);
       if (!checkReadWriteConflict(op, srcAllocOp, dstDefOp, memrefAlias)) {
@@ -511,6 +542,13 @@ private:
       DEBUG_OP("RemoveTemporaries", "   with", dstDefOp)
       replaceUsesAndPropagateType(rewriter, srcAllocOp, dstDefOp->getResult(0));
     } else {
+      if (srcIsReturned) {
+        // no defining op, dst is function argument, after removing scr allow
+        // we potentially end up returning a view to dst
+        DEBUG_MSG("RemoveTemporaries",
+                  "  no dst defining op and src is returned, aborting.")
+        return;
+      }
       // no defining op, replace src with dst mlir::Value
       DEBUG_OP("RemoveTemporaries", "  replacing src alloc", srcAllocOp)
       DEBUG_MSG("RemoveTemporaries", "    with copy op dst value")

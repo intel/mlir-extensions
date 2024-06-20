@@ -261,4 +261,42 @@ module {
     // CHECK-NEXT:  memref.dealloc
     // CHECK-NEXT:  return
   }
+  func.func @ewbinop_return_alias(%arg0: memref<64xi64>, %arg1: memref<64xi64>, %arg2: memref<64xi64>) -> memref<64xi64> {
+    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64>, memref<64xi64>) outs(%alloc : memref<64xi64>) {
+    ^bb0(%in: i64, %in_0: i64, %out: i64):
+      %0 = arith.addi %in, %in_0 : i64
+      linalg.yield %0 : i64
+    }
+    memref.copy %alloc, %arg2 : memref<64xi64> to memref<64xi64>
+    return %alloc : memref<64xi64>
+    // CHECK-LABEL: func @ewbinop_return_alias
+    // CHECK-NEXT:  memref.alloc
+    // CHECK-NEXT:  linalg.generic
+    // CHECK-NEXT:  ^bb0
+    // CHECK-NEXT:  arith.addi
+    // CHECK-NEXT:  linalg.yield
+    // CHECK-NEXT:  }
+    // CHECK-NEXT:  memref.copy
+  }
+  func.func @ewbinop_return_alias2(%arg0: memref<64xi64>, %arg1: memref<64xi64>) -> (memref<64xi64>, memref<64xi64>) {
+    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %arg2 = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64>, memref<64xi64>) outs(%alloc : memref<64xi64>) {
+    ^bb0(%in: i64, %in_0: i64, %out: i64):
+      %0 = arith.addi %in, %in_0 : i64
+      linalg.yield %0 : i64
+    }
+    memref.copy %alloc, %arg2 : memref<64xi64> to memref<64xi64>
+    return %alloc, %arg2 : memref<64xi64>, memref<64xi64>
+    // CHECK-LABEL: func @ewbinop_return_alias2
+    // CHECK-NEXT:  memref.alloc
+    // CHECK-NEXT:  memref.alloc
+    // CHECK-NEXT:  linalg.generic
+    // CHECK-NEXT:  ^bb0
+    // CHECK-NEXT:  arith.addi
+    // CHECK-NEXT:  linalg.yield
+    // CHECK-NEXT:  }
+    // CHECK-NEXT:  memref.copy
+  }
 }
