@@ -117,6 +117,22 @@ lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
 
 // expected input is type of vector<ixjx1xnxf16>, where i and n is power of 2
 // and the third dim is always 1, which should be set by the blocking pass.
+// For a vector of vector<32x64xf16> with reduction on dim 1, it will blocked
+// into a vector<32x4x1x16> with reduction on dim 1 and dim 3.
+// lowerInnerReductionWithIntraVectorShuffles performs the reduction with
+// arithmetic operations on vector<16xf16>. To perform reduction on dim 1,
+// simple vector arithmetic operations are issued, we will get 32 vectors of
+// vector<16xf16>, each vector<16xf16> represents the partial reduction result
+// of each row. To perform redcution on dim 3, it uses two vector shuffles
+/// to shuffle values from two conjuction rows. For example, given
+// row1 = [a0, a1, ..., a15], and  row2 = [b0, b1, ..., b15]. It will shuffle
+// the vector into row1' = [a0, .., a7, b0, ..., b7],
+// row2' = [a8, ..., a15, b8, ..., b15], and then perform the vector arith op
+// on row1' and row2', geting the result: c = [c0, ..., c7, c8, ..., c15].
+// here, c0, ..., c7 are the partial reduction results of row1 and c8, ..., c15
+// are the partial results of row2.  This process will be repeated until get the
+// final result, such that each element in c represents a final reduction result
+// of a row.
 llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
     mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
     mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
@@ -211,6 +227,42 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
     blkSize /= 2;
   }
   return intermediates;
+}
+
+// TODO: Debug the IGC crash on this path. Currently, the upstream lows
+// vector.reduction <add> into a spirv.CL.mul operation. But the generated
+// code caused a crash in IGC.
+llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
+    mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
+    mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
+    XeGPUOneToNPatterRewriter &rewriter) {
+
+  assert(shape.size() == 4 && "shape should be 4D.");
+  // vector<ixjx1xnxf16> equals to a grid of ixj of vector<1xnxf16>
+  // this stage will use vector.shapecast to cast vector<1xnxf16> into 1D and
+  // use vector.reduction firstly to perform the reduction over each vector,
+  // and then use arith opertors to perform the reduction over the
+  // aforementioned results for a row.
+  llvm::SmallVector<mlir::Value> results;
+  for (auto i = 0; i < shape[0]; i++) {
+    llvm::SmallVector<mlir::Value> reductions;
+    // perform reduction over each vector in a row
+    for (auto j = 0; j < shape[1]; j++) {
+      auto targetTy = mlir::VectorType::get({shape[2] * shape[3]}, elemTy);
+      auto cast = rewriter.create<mlir::vector::ShapeCastOp>(
+          loc, targetTy, sources[i * shape[1] + j]);
+      auto value = rewriter.create<mlir::vector::ReductionOp>(loc, kind, cast);
+      reductions.push_back(value);
+    }
+    auto reductionVal = reductions[0];
+    // perform reduction over the results of each vector in a row
+    for (auto j = 1; j < shape[1]; j++) {
+      reductionVal =
+          createBinOp(kind, reductionVal, reductions[j], elemTy, loc, rewriter);
+    }
+    results.push_back(reductionVal);
+  }
+  return results;
 }
 
 class SgVectorMultiDimReductionOpPattern
