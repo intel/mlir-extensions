@@ -744,6 +744,84 @@ struct SgUpdateTileOffsetOpPattern
   }
 };
 
+extern llvm::SmallVector<mlir::Value>
+lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
+                    mlir::vector::CombiningKind kind, mlir::Location loc,
+                    mlir::Type elemTy, XeGPUOneToNPatterRewriter &rewriter);
+
+extern llvm::SmallVector<mlir::Value>
+lowerInnerReductionWithIntraVectorShuffles(mlir::ValueRange sources,
+                                           llvm::ArrayRef<int64_t> shape,
+                                           mlir::vector::CombiningKind kind,
+                                           mlir::Location loc,
+                                           mlir::Type elemTy,
+                                           XeGPUOneToNPatterRewriter &rewriter);
+
+extern llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
+    mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
+    mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
+    XeGPUOneToNPatterRewriter &rewriter);
+
+struct SgTileReduceOpPattern
+    : public SgXeTileToXeGPUConversion<xetile::ReduceOp> {
+  using SgXeTileToXeGPUConversion<xetile::ReduceOp>::SgXeTileToXeGPUConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
+                  XeGPUOneToNPatterRewriter &rewriter) const override {
+    auto srcTy = op.getSource().getType();
+    auto elemTy = srcTy.getElementType();
+    auto dims = op.getReductionDim();
+    // its input should be a 4D vector, and has 2 reduction dims,
+    // otherwise run the blocking pass first.
+    if (dims.size() != 2 || srcTy.getRank() != 4)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto shape = srcTy.getShape();
+    auto sources = adaptor.getSource();
+
+    rewriter.setInsertionPoint(op);
+    // doing reduction on outer dimension
+    if (dims[0] == 0 && dims[1] == 2) {
+      auto intermediates = lowerOuterReduction(sources, shape, op.getKind(),
+                                               loc, elemTy, rewriter);
+      rewriter.replaceOp(op, intermediates);
+      return mlir::success();
+    }
+
+    // doing reduction on inner dimension, otherwise it is not supported.
+    assert(dims[0] == 1 && dims[1] == 3 && "unsupported reduction operation.");
+
+    auto intermediates = lowerInnerReductionWithIntraVectorShuffles(
+        sources, shape, op.getKind(), loc, elemTy, rewriter);
+    llvm::SmallVector<mlir::Value> newOps;
+    {
+      // intermediate is a vector of values with type of vector<shape[3]xf16>,
+      // each value represents a portion of the reduced value. For example,
+      // for vector<32x4x1x16> with reduction on dim 1 and dim 3. the
+      // intermediate values will be two vectors of vector<16xf16>. The values
+      // in the first vector represents the reduction result of the first 16
+      // rows. Here we will extract each value and splat it to a vector<1x1xf16>
+      // as results to their consumers.
+      for (auto v : intermediates) {
+        auto targetTy = mlir::VectorType::get({1, 1}, elemTy);
+        for (auto i = 0; i < shape[3]; i++) {
+          auto pos = rewriter.create<mlir::arith::ConstantOp>(
+              op.getLoc(), rewriter.getI32IntegerAttr(i));
+          auto extractOp =
+              rewriter.create<mlir::vector::ExtractElementOp>(loc, v, pos);
+          auto splatOp = rewriter.create<mlir::vector::SplatOp>(
+              op.getLoc(), targetTy, extractOp);
+          newOps.push_back(splatOp);
+        }
+      }
+    }
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 // A transpose op for a larger vector will be lowered into multiple
 // explicit transpose ops for smaller vectors and the order/use of
 // these these new transpose ops are transposed too. For example:
@@ -990,12 +1068,13 @@ struct SgBroadcastOpPattern
 void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
-  patterns.insert<
-      SgInitTileOpPattern, SgPrefetchTileOpPattern, SgTileUnpackOpPattern,
-      SgTilePackOpPattern, SgLoadTileOpPattern, SgStoreTileOpPattern,
-      SgTileMMAOpPattern, SgUpdateTileOffsetOpPattern,
-      SgTransposeOpPattern<mlir::vector::TransposeOp>,
-      SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern>(
+  patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
+                  SgTileUnpackOpPattern, SgTilePackOpPattern,
+                  SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
+                  SgUpdateTileOffsetOpPattern,
+                  SgTransposeOpPattern<mlir::vector::TransposeOp>,
+                  SgTransposeOpPattern<xetile::TransposeOp>,
+                  SgBroadcastOpPattern, SgTileReduceOpPattern>(
       patterns.getContext(), converter, analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
