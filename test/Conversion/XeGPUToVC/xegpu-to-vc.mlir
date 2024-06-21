@@ -66,7 +66,7 @@ module @gemm attributes {gpu.container_module} {
       // LSC: %[[B_OFFSETY:.*]] = vector.extract %[[B_PAYLOAD]][6] : i32 from vector<8xi32>
       // LSC: %[[LOAD2D_B_v128i32:.*]] = func.call @llvm.genx.lsc.load2d.stateless.v128i32.i1.i64({{.*}}, %[[BASE_B]], {{.*}}, %[[B_OFFSETX]], %[[B_OFFSETY]]) : {{.*}} -> vector<128xi32>
       // CHECK: %[[LOAD2D_B_v128i32_CAST:.*]] = vector.bitcast %[[LOAD2D_B_v128i32]] : vector<128xi32> to vector<256xf16>
-      %4 = xegpu.load_nd %1 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %4 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       %6 = vector.shape_cast %3: vector<128xf16> to vector<8x8x2xf16>
 
       // CHECK: %[[LOAD2D_A_v32i64_RECAST:.*]] = vector.bitcast %[[LOAD2D_A_v32i64_CAST]] : vector<128xf16> to vector<64xi32>

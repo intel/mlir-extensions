@@ -29,10 +29,10 @@ module @gemm attributes {gpu.container_module} {
       %c16 = arith.constant 16 : index
       // load A tile
       %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %val0 = xegpu.load_nd %a_tile0 { vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %val0 = xegpu.load_nd %a_tile0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
       // load B tile
       %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %val2 = xegpu.load_nd %b_tile0 { vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %val2 = xegpu.load_nd %b_tile0 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       // load B cast
       %bcast_tile = xegpu.create_nd_tdesc %bcast [%c0, %c0] : memref<1x32xf16> -> !xegpu.tensor_desc<1x32xf16>
       %val3 = xegpu.load_nd %bcast_tile  : !xegpu.tensor_desc<1x32xf16> -> vector<1x32xf16>
@@ -41,11 +41,10 @@ module @gemm attributes {gpu.container_module} {
         : vector<1x32xf16> to vector<1x16xf16>
       // broadcast over row dim
       %val6 = vector.broadcast %val5 : vector<1x16xf16> to vector<8x16xf16>
-      %val7 = vector.shape_cast %val6 : vector<8x16xf16> to vector<8x8x2xf16>
       // add to A
-      %val8 = arith.addf %val0, %val7 : vector<8x8x2xf16>
+      %val8 = arith.addf %val0, %val6 : vector<8x16xf16>
       // do DPAS
-      %val4 = xegpu.dpas %val8, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %val4 = xegpu.dpas %val8, %val2 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // store
       %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
       xegpu.store_nd %val4, %out_tile  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>

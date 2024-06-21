@@ -33,9 +33,9 @@ func.func @test_load_nd_simd_f16(%src: memref<24x32xf16>, %x : index, %y : index
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
 
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, vnni_axis = 0 : i64}>
+  // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, packed}>
   // CHECK-SAME: !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
-  %2 = xegpu.load_nd %1 {vnni_axis = 0, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
+  %2 = xegpu.load_nd %1 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
   return
 }
 
@@ -46,9 +46,9 @@ func.func @test_load_nd_simd_bf16(%src: ui64, %w : index, %h : index, %x : index
   // CHECK-SAME: ui64 -> !xegpu.tensor_desc<8x16xbf16>
   %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : ui64 -> !xegpu.tensor_desc<8x16xbf16>
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, vnni_axis = 1 : i64}>
-  // CHECK-SAME: !xegpu.tensor_desc<8x16xbf16> -> vector<8x8x2xbf16>
-  %2 = xegpu.load_nd %1 {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xbf16> -> vector<8x8x2xbf16>
+  // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}>
+  // CHECK-SAME: !xegpu.tensor_desc<8x16xbf16> -> vector<8x16xbf16>
+  %2 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xbf16> -> vector<8x16xbf16>
 
   return
 }

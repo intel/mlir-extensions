@@ -32,10 +32,10 @@ func.func @test_load_nd_fp16(%A: memref<24x32xf16>, %B : memref<24x32xf16>, %C :
     : memref<24x32xf16> -> !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b>
 
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: {vnni_axis = 0}
+  // CHECK-SAME: {packed}
   // CHECK-SAME: !xegpu.tensor_desc<16x16xf16, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
   // CHECK-SAME: -> vector<8x1x2xf16>
-  %4 = xegpu.load_nd %3 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b> -> vector<8x1x2xf16>
+  %4 = xegpu.load_nd %3 {packed} : !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b> -> vector<8x1x2xf16>
 
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: memref<24x32xf16>
@@ -89,10 +89,10 @@ func.func @test_load_nd_bf16(%A: memref<24x32xbf16>, %B : memref<24x32xbf16>, %C
     : memref<24x32xbf16> -> !xegpu.tensor_desc<16x16xbf16, #sg_map_bf16_b>
 
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: {vnni_axis = 0}
+  // CHECK-SAME: {packed}
   // CHECK-SAME: !xegpu.tensor_desc<16x16xbf16, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
   // CHECK-SAME: -> vector<8x1x2xbf16>
-  %4 = xegpu.load_nd %3 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xbf16, #sg_map_bf16_b> -> vector<8x1x2xbf16>
+  %4 = xegpu.load_nd %3 {packed} : !xegpu.tensor_desc<16x16xbf16, #sg_map_bf16_b> -> vector<8x1x2xbf16>
 
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: memref<24x32xbf16>
@@ -135,10 +135,10 @@ func.func @test_load_nd_i8(%A: memref<64x64xi8>, %B : memref<64x64xi8>, %C : mem
     : memref<64x64xi8> -> !xegpu.tensor_desc<32x16xi8, #sg_map_i8_b>
 
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: {vnni_axis = 0}
+  // CHECK-SAME: {packed}
   // CHECK-SAME: !xegpu.tensor_desc<32x16xi8, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
   // CHECK-SAME: -> vector<8x1x4xi8>
-  %4 = xegpu.load_nd %3 {vnni_axis = 0} : !xegpu.tensor_desc<32x16xi8, #sg_map_i8_b> -> vector<8x1x4xi8>
+  %4 = xegpu.load_nd %3 {packed} : !xegpu.tensor_desc<32x16xi8, #sg_map_i8_b> -> vector<8x1x4xi8>
 
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: memref<64x64xi8>

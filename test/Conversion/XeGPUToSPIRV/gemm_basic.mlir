@@ -33,9 +33,9 @@ module @gemm attributes {gpu.container_module} {
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16, #sg_map_fp16_a>
       %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b>
       %2 = xegpu.create_nd_tdesc %arg2[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32, #sg_map_fp16_c>
-      %3 = xegpu.load_nd %0  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16, #sg_map_fp16_a> -> vector<4x1x2xf16>
-      %4 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b> -> vector<8x1x2xf16>
-      %5 = xegpu.dpas %3, %4 : vector<4x1x2xf16>, vector<8x1x2xf16> -> vector<8x1xf32>
+      %3 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x16xf16, #sg_map_fp16_a> -> vector<4x2xf16>
+      %4 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16, #sg_map_fp16_b> -> vector<8x1x2xf16>
+      %5 = xegpu.dpas %3, %4 : vector<4x2xf16>, vector<8x1x2xf16> -> vector<8x1xf32>
       xegpu.store_nd %5, %2 : vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #sg_map_fp16_c>
       gpu.return
     }

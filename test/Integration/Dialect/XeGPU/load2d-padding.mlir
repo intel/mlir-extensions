@@ -26,9 +26,8 @@ module @gemm attributes {gpu.container_module} {
       : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
       %2 = xegpu.create_nd_tdesc %arg1[0, 0]
       : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %3 = xegpu.load_nd %0 {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %7 = vector.shape_cast %3: vector<8x8x2xf16> to vector<8x16xf16>
-      xegpu.store_nd %7,%2 : vector<8x16xf16>,!xegpu.tensor_desc<8x16xf16>
+      %3 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      xegpu.store_nd %3,%2 : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       gpu.return
     }
   }

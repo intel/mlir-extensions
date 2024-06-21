@@ -29,16 +29,16 @@ module @gemm attributes {gpu.container_module} {
       %c16 = arith.constant 16 : index
       %c8 = arith.constant 8 : index
       %c1024 = arith.constant 1024 : index
-      %cst = arith.constant dense<1.0> : vector<8x8x2xf16>
+      %cst = arith.constant dense<1.0> : vector<8x16xf16>
       %0 = gpu.block_id  x
       %1 = gpu.block_id  y
       %4 = xegpu.create_nd_tdesc %C[%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
       %7 = xegpu.create_nd_tdesc %A[%c0, %c0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
       %8 = xegpu.create_nd_tdesc %B[%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %9 = xegpu.load_nd %7  {vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %10 = xegpu.load_nd %8  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %13 = arith.addf %9, %cst : vector<8x8x2xf16>
-      %11 = xegpu.dpas %13, %10 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %9 = xegpu.load_nd %7 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %10 = xegpu.load_nd %8 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %13 = arith.addf %9, %cst : vector<8x16xf16>
+      %11 = xegpu.dpas %13, %10 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       xegpu.store_nd %11, %4 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
