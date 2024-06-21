@@ -2,9 +2,6 @@
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: vector<8x16xf16>, %[[ARG2:.*]]: vector<16x16xf16>)
-//       CHECK:  %[[A1:.*]] = vector.shape_cast %[[ARG1]] : vector<8x16xf16> to vector<128xf16>
-//       CHECK:  %[[A2:.*]] = vector.shuffle %[[A1]], %[[A1]] [{{.*}}] : vector<128xf16>, vector<128xf16>
-//       CHECK:  %[[A3:.*]] = vector.shape_cast %[[A2]] : vector<128xf16> to vector<8x8x2xf16>
 //       CHECK:  %[[B1:.*]] = vector.shape_cast %[[ARG2]] : vector<16x16xf16> to vector<256xf16>
 //       CHECK:  %[[B2:.*]] = vector.shuffle %[[B1]], %[[B1]]
 // CHECK: [0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23, 8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31,
@@ -16,7 +13,7 @@
 // CHECK: 192, 208, 193, 209, 194, 210, 195, 211, 196, 212, 197, 213, 198, 214, 199, 215, 200, 216, 201, 217, 202, 218, 203, 219, 204, 220, 205, 221, 206, 222, 207, 223,
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B3:.*]] = vector.shape_cast %[[B2]] : vector<256xf16> to vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A3]], %[[B3]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[ARG1]], %[[B3]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : vector<8x16xf16>, %arg2 : vector<16x16xf16>) -> vector<8x16xf32> {
@@ -28,9 +25,6 @@ func.func @test(%arg1 : vector<8x16xf16>, %arg2 : vector<16x16xf16>) -> vector<8
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: vector<8x32xi8>, %[[ARG2:.*]]: vector<32x32xi8>) -> vector<8x32xi32> {
-//       CHECK: %[[A1:.*]] = vector.shape_cast %[[ARG1]] : vector<8x32xi8> to vector<256xi8>
-//       CHECK: %[[A2:.*]] = vector.shuffle %[[A1]], %[[A1]] [{{.*}}] : vector<256xi8>, vector<256xi8>
-//       CHECK: %[[A3:.*]] = vector.shape_cast %[[A2]] : vector<256xi8> to vector<8x8x4xi8>
 //       CHECK: %[[B1:.*]] = vector.shape_cast %[[ARG2]] : vector<32x32xi8> to vector<1024xi8>
 //       CHECK: %[[B2:.*]] = vector.shuffle %[[B1]], %[[B1]]
 // CHECK: [0, 32, 64, 96, 1, 33, 65, 97, 2, 34, 66, 98, 3, 35, 67, 99, 4, 36, 68, 100, 5, 37, 69, 101, 6, 38, 70, 102, 7, 39, 71, 103, 8, 40, 72, 104, 9, 41, 73, 105, 10, 42, 74, 106, 11, 43, 75, 107, 12, 44, 76, 108, 13, 45, 77, 109, 14, 46, 78, 110, 15, 47, 79, 111, 16, 48, 80, 112, 17, 49, 81, 113, 18, 50, 82, 114, 19, 51, 83, 115, 20, 52, 84, 116, 21, 53, 85, 117, 22, 54, 86, 118, 23, 55, 87, 119, 24, 56, 88, 120, 25, 57, 89, 121, 26, 58, 90, 122, 27, 59, 91, 123, 28, 60, 92, 124, 29, 61, 93, 125, 30, 62, 94, 126, 31, 63, 95, 127,
@@ -42,7 +36,7 @@ func.func @test(%arg1 : vector<8x16xf16>, %arg2 : vector<16x16xf16>) -> vector<8
 // CHECK: 768, 800, 832, 864, 769, 801, 833, 865, 770, 802, 834, 866, 771, 803, 835, 867, 772, 804, 836, 868, 773, 805, 837, 869, 774, 806, 838, 870, 775, 807, 839, 871, 776, 808, 840, 872, 777, 809, 841, 873, 778, 810, 842, 874, 779, 811, 843, 875, 780, 812, 844, 876, 781, 813, 845, 877, 782, 814, 846, 878, 783, 815, 847, 879, 784, 816, 848, 880, 785, 817, 849, 881, 786, 818, 850, 882, 787, 819, 851, 883, 788, 820, 852, 884, 789, 821, 853, 885, 790, 822, 854, 886, 791, 823, 855, 887, 792, 824, 856, 888, 793, 825, 857, 889, 794, 826, 858, 890, 795, 827, 859, 891, 796, 828, 860, 892, 797, 829, 861, 893, 798, 830, 862, 894, 799, 831, 863, 895,
 // CHECK: 896, 928, 960, 992, 897, 929, 961, 993, 898, 930, 962, 994, 899, 931, 963, 995, 900, 932, 964, 996, 901, 933, 965, 997, 902, 934, 966, 998, 903, 935, 967, 999, 904, 936, 968, 1000, 905, 937, 969, 1001, 906, 938, 970, 1002, 907, 939, 971, 1003, 908, 940, 972, 1004, 909, 941, 973, 1005, 910, 942, 974, 1006, 911, 943, 975, 1007, 912, 944, 976, 1008, 913, 945, 977, 1009, 914, 946, 978, 1010, 915, 947, 979, 1011, 916, 948, 980, 1012, 917, 949, 981, 1013, 918, 950, 982, 1014, 919, 951, 983, 1015, 920, 952, 984, 1016, 921, 953, 985, 1017, 922, 954, 986, 1018, 923, 955, 987, 1019, 924, 956, 988, 1020, 925, 957, 989, 1021, 926, 958, 990, 1022, 927, 959, 991, 1023] : vector<1024xi8>, vector<1024xi8>
 //       CHECK: %[[B3:.*]] = vector.shape_cast %[[B2]] : vector<1024xi8> to vector<8x32x4xi8>
-//       CHECK: %[[RES:.*]] = xegpu.dpas %[[A3]], %[[B3]] : vector<8x8x4xi8>, vector<8x32x4xi8> -> vector<8x32xi32>
+//       CHECK: %[[RES:.*]] = xegpu.dpas %[[ARG1]], %[[B3]] : vector<8x32xi8>, vector<8x32x4xi8> -> vector<8x32xi32>
 //       CHECK: return %[[RES]] : vector<8x32xi32>
 
 func.func @test(%arg1 : vector<8x32xi8>, %arg2 : vector<32x32xi8>) -> vector<8x32xi32> {
@@ -54,9 +48,9 @@ func.func @test(%arg1 : vector<8x32xi8>, %arg2 : vector<32x32xi8>) -> vector<8x3
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> vector<8x16xf32> {
@@ -70,10 +64,10 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-//       CHECK:  %[[RES1:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-//       CHECK:  %[[RES2:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[RES1:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES2:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES1]], %[[RES2]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> (vector<8x16xf32>, vector<8x16xf32>) {
@@ -88,7 +82,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 //       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
 //       CHECK:  %[[B1:.*]] = vector.shape_cast %[[B]] : vector<16x16xf16> to vector<256xf16>
 //       CHECK:  %[[B2:.*]] = vector.shuffle %[[B1]], %[[B1]]
@@ -101,7 +95,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 // CHECK: 192, 208, 193, 209, 194, 210, 195, 211, 196, 212, 197, 213, 198, 214, 199, 215, 200, 216, 201, 217, 202, 218, 203, 219, 204, 220, 205, 221, 206, 222, 207, 223,
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B3:.*]] = vector.shape_cast %[[B2]] : vector<256xf16> to vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B3]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B3]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> (vector<8x16xf32>, vector<16x16xf16>) {
@@ -115,11 +109,11 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  %[[B1:.*]] = arith.extf %[[B]] : vector<8x16x2xf16> to vector<8x16x2xf32>
 //       CHECK:  %[[B2:.*]] = arith.truncf %[[B1]] : vector<8x16x2xf32> to vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B2]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B2]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> vector<8x16xf32> {
@@ -135,11 +129,11 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-//       CHECK:  %[[B2:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[B2:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  %[[B3:.*]] = arith.addf %[[B1]], %[[B2]] : vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B3]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B3]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> vector<8x16xf32> {
@@ -155,8 +149,8 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  %[[B2:.*]] = arith.constant dense<1.000000e+00> : vector<16x16xf16>
 //       CHECK:  %[[B3:.*]] = vector.shape_cast %[[B2]] : vector<16x16xf16> to vector<256xf16>
 //       CHECK:  %[[B4:.*]] = vector.shuffle %[[B3]], %[[B3]]
@@ -170,7 +164,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B5:.*]] = vector.shape_cast %[[B4]] : vector<256xf16> to vector<8x16x2xf16>
 //       CHECK:  %[[B6:.*]] = arith.addf %[[B1]], %[[B5]] : vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B6]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B6]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> vector<8x16xf32> {
@@ -186,7 +180,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 //       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
 //       CHECK:  %[[B2:.*]] = xegpu.load_nd %[[ARG2]] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
 //       CHECK:  %[[B3:.*]] = arith.addf %[[B1]], %[[B2]] : vector<16x16xf16>
@@ -201,7 +195,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 // CHECK: 192, 208, 193, 209, 194, 210, 195, 211, 196, 212, 197, 213, 198, 214, 199, 215, 200, 216, 201, 217, 202, 218, 203, 219, 204, 220, 205, 221, 206, 222, 207, 223,
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B6:.*]] = vector.shape_cast %[[B5]] : vector<256xf16> to vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B6]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B6]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]], %[[B2]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>) -> (vector<8x16xf32>, vector<16x16xf16>) {
@@ -217,13 +211,13 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>, %{{.*}}: index)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+//       CHECK:  %[[B:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  %[[RES1:.*]]:2 = scf.for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} iter_args(%[[ITER1:.*]] = %[[B]], %[[ITER2:.*]] = %[[RES]]) -> (vector<8x16x2xf16>, vector<8x16xf32>) {
-//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  %[[B2:.*]] = arith.addf %[[ITER1]], %[[B1]] : vector<8x16x2xf16>
-//       CHECK:  %[[RES2:.*]] = xegpu.dpas %[[A]], %[[B2]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES2:.*]] = xegpu.dpas %[[A]], %[[B2]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  scf.yield %[[B2]], %[[RES2]] : vector<8x16x2xf16>, vector<8x16xf32>
 //       CHECK:  }
 //       CHECK:  return %[[RES1]]#1 : vector<8x16xf32>
@@ -247,14 +241,14 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>, %{{.*}}: i1)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 //       CHECK:  %[[B:.*]] = scf.if %{{.*}} -> (vector<8x16x2xf16>)
-//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  scf.yield %[[B1]]
 //       CHECK:  else
-//       CHECK:  %[[B2:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[B2:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  scf.yield %[[B2]]
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>, %arg3 : i1) -> vector<8x16xf32> {
@@ -274,7 +268,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 
 // CHECK-LABEL: @test
 //  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xf16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xf16>, %{{.*}}: i1)
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 //       CHECK:  %[[B:.*]] = scf.if %{{.*}} -> (vector<16x16xf16>)
 //       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
 //       CHECK:  scf.yield %[[B1]]
@@ -292,7 +286,7 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 // CHECK: 192, 208, 193, 209, 194, 210, 195, 211, 196, 212, 197, 213, 198, 214, 199, 215, 200, 216, 201, 217, 202, 218, 203, 219, 204, 220, 205, 221, 206, 222, 207, 223,
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B5:.*]] = vector.shape_cast %[[B4]] : vector<256xf16> to vector<8x16x2xf16>
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B5]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B5]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]], %[[B]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>, %arg3 : i1) -> (vector<8x16xf32>, vector<16x16xf16>) {
@@ -323,13 +317,13 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
 // CHECK: 192, 208, 193, 209, 194, 210, 195, 211, 196, 212, 197, 213, 198, 214, 199, 215, 200, 216, 201, 217, 202, 218, 203, 219, 204, 220, 205, 221, 206, 222, 207, 223,
 // CHECK: 224, 240, 225, 241, 226, 242, 227, 243, 228, 244, 229, 245, 230, 246, 231, 247, 232, 248, 233, 249, 234, 250, 235, 251, 236, 252, 237, 253, 238, 254, 239, 255] : vector<256xf16>, vector<256xf16>
 //       CHECK:  %[[B4:.*]] = vector.shape_cast %[[B3]] : vector<256xf16> to vector<8x16x2xf16>
-//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]] <{vnni_axis = 1 : i64}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+//       CHECK:  %[[A:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 //       CHECK:  %[[B:.*]] = scf.if %{{.*}} -> (vector<8x16x2xf16>)
-//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{vnni_axis = 0 : i64}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+//       CHECK:  %[[B1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 //       CHECK:  scf.yield %[[B1]]
 //       CHECK:  else
 //       CHECK:  scf.yield %[[B4]]
-//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+//       CHECK:  %[[RES:.*]] = xegpu.dpas %[[A]], %[[B]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 //       CHECK:  return %[[RES]]
 
 func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc<16x16xf16>, %arg3 : vector<16x16xf16>, %arg4 : i1) -> vector<8x16xf32> {

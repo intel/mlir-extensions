@@ -78,12 +78,12 @@ module @gemm attributes {gpu.container_module} {
       xegpu.prefetch_nd %A_tdesc : !xegpu.tensor_desc<8x16xf16>
       xegpu.prefetch_nd %B_tdesc : !xegpu.tensor_desc<16x16xf16>
       %A_increment = arith.constant dense<1.0> : vector<128xf16>
-      %A_increment_ = vector.shape_cast %A_increment : vector<128xf16> to vector<8x8x2xf16>
+      %A_increment_ = vector.shape_cast %A_increment : vector<128xf16> to vector<8x16xf16>
 
-      %A_tensor = xegpu.load_nd %A_tdesc  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %A_tensor_incremented = arith.addf %A_tensor, %A_increment_ : vector<8x8x2xf16>
-      %B_tensor = xegpu.load_nd %B_tdesc  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %dpas_result = xegpu.dpas %A_tensor_incremented, %B_tensor : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %A_tensor = xegpu.load_nd %A_tdesc : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %A_tensor_incremented = arith.addf %A_tensor, %A_increment_ : vector<8x16xf16>
+      %B_tensor = xegpu.load_nd %B_tdesc {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %dpas_result = xegpu.dpas %A_tensor_incremented, %B_tensor : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       xegpu.store_nd %dpas_result, %C_tdesc : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }

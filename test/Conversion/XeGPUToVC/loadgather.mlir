@@ -28,7 +28,7 @@ module @gemm attributes {gpu.container_module} {
        // CHECK: %[[LOADA_v128f16:.*]] = vector.bitcast %[[LOADA_v128i32]] : vector<64xi32> to vector<128xf16>
        %66 = vector.shape_cast %3: vector<16x8xf16> to vector<128xf16>
 
-       %6 = vector.shape_cast %66: vector<128xf16> to vector<8x8x2xf16>
+       %6 = vector.shape_cast %66: vector<128xf16> to vector<8x16xf16>
 
       // CHECK: %[[B_STRUCT:.*]]= arith.constant dense<0> : vector<4xi64>
       // CHECK: %[[B_BASEPTR:.*]] = memref.extract_aligned_pointer_as_index {{.*}} : memref<16x16xf16> -> index
@@ -43,11 +43,11 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[B_PAYLOAD:.*]] = vector.insert %{{.*}}, %[[p6]] [7] : i32 into vector<8xi32>
        %1 = xegpu.create_nd_tdesc %arg1[0, 0] {boundary_check = true} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
 
-       %4 = xegpu.load_nd %1 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+       %4 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
        // CHECK: %[[LOADA_v64i32:.*]] = vector.bitcast %[[LOADA_v128f16]] : vector<128xf16> to vector<64xi32>
        // CHECK: %[[C_ACC_v128f32:.*]] = func.call @llvm.genx.dpas.nosrc0.v128f32.v128i32.v64i32(%{{.*}}, %[[LOADA_v64i32]], %{{.*}}) : (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
-       %5 = xegpu.dpas %6, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+       %5 = xegpu.dpas %6, %4 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 
        // CHECK: %[[cst_17:.*]] = arith.constant dense<[0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480]> : vector<16xindex>
        // CHECK: %[[C_OFFSETS:.*]] = builtin.unrealized_conversion_cast %[[cst_17]] : vector<16xindex> to vector<16xi64>

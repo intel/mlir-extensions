@@ -40,9 +40,9 @@ module @gemm attributes {gpu.container_module} {
       xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
       xegpu.prefetch_nd %1 : !xegpu.tensor_desc<16x16xf16>
 
-      %3 = xegpu.load_nd %0  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %4 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %5 = xegpu.dpas %3, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %3 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %4 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %5 = xegpu.dpas %3, %4 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       xegpu.store_nd %5, %2 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }

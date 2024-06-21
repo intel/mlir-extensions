@@ -25,12 +25,12 @@ module @gemm attributes {gpu.container_module} {
       %mask = vector.shape_cast %cst : vector<128xi1> to vector<16x8xi1>
       %3 = xegpu.load %0, %mask : !xegpu.tensor_desc<16x8xf16, #xegpu.tdesc_attr<scattered = true>>, vector<16x8xi1> -> vector<16x8xf16>
       %66 = vector.shape_cast %3: vector<16x8xf16> to vector<128xf16>
-      %6 = vector.shape_cast %66: vector<128xf16> to vector<8x8x2xf16>
+      %6 = vector.shape_cast %66: vector<128xf16> to vector<8x16xf16>
 
       %1 = xegpu.create_nd_tdesc %arg1[0, 0] {boundary_check = true} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %4 = xegpu.load_nd %1 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %4 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
-      %5 = xegpu.dpas %6, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %5 = xegpu.dpas %6, %4 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
 
       %offsets2 = arith.constant dense<[0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480]> : vector<16xindex>
       %arg02 = memref.reinterpret_cast %arg2 to offset: [0], sizes: [128], strides: [1] : memref<8x16xf32> to memref<128xf32>

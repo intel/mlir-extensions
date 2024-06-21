@@ -39,15 +39,15 @@ func.func @test_gemm_bf16(%a : memref<1024x1024xbf16>, %b: memref<1024x1024xbf16
               -> (!xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a>, !xegpu.tensor_desc<16x16xbf16, #sg_map_fp16_b>, vector<8x1xf32>) {
         // CHECK: xegpu.load_nd
         // CHECK-SAME: vector<4x1x2xbf16>
-        %4 = xegpu.load_nd %subA {vnni_axis = 1} : !xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a> -> vector<4x1x2xbf16>
+        %4 = xegpu.load_nd %subA : !xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a> -> vector<4x2xbf16>
 
         // CHECK: xegpu.load_nd
         // CHECK-SAME: vector<8x1x2xbf16>
-        %5 = xegpu.load_nd %subB {vnni_axis = 0} : !xegpu.tensor_desc<16x16xbf16, #sg_map_fp16_b> -> vector<8x1x2xbf16>
+        %5 = xegpu.load_nd %subB {packed} : !xegpu.tensor_desc<16x16xbf16, #sg_map_fp16_b> -> vector<8x1x2xbf16>
 
         // CHECK: xegpu.dpas
         // CHECK-SAME: vector<4x1x2xbf16>, vector<8x1x2xbf16>, vector<8x1xf32> -> vector<8x1xf32>
-        %6 = xegpu.dpas %4, %5, %subC  : vector<4x1x2xbf16>, vector<8x1x2xbf16>, vector<8x1xf32> -> vector<8x1xf32>
+        %6 = xegpu.dpas %4, %5, %subC  : vector<4x2xbf16>, vector<8x1x2xbf16>, vector<8x1xf32> -> vector<8x1xf32>
 
         %7 = xegpu.update_nd_offset %subA, [%c0, %c16] : !xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a>
             -> !xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a>

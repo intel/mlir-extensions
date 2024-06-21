@@ -40,9 +40,9 @@ module @gemm attributes {gpu.container_module} {
         %7 = xegpu.create_nd_tdesc %arg0[%2, %c0] : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
         %8 = xegpu.create_nd_tdesc %arg1[%c0, %3]  : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
       %6:3 = scf.for %arg3 = %c0 to %c1024 step %c16 iter_args(%arg4 = %5, %subA = %7, %subB = %8) -> (vector<8x16xf32>, !xegpu.tensor_desc<8x16xf16>, !xegpu.tensor_desc<16x16xf16>) {
-        %9 = xegpu.load_nd %subA  {vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-        %10 = xegpu.load_nd %subB  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-        %11 = xegpu.dpas %9, %10, %arg4 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %9 = xegpu.load_nd %subA : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+        %10 = xegpu.load_nd %subB {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+        %11 = xegpu.dpas %9, %10, %arg4 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
         %12 = xegpu.update_nd_offset %subA, [%c0, %c16] : !xegpu.tensor_desc<8x16xf16>
         %13 = xegpu.update_nd_offset %subB, [%c16, %c0] : !xegpu.tensor_desc<16x16xf16>
         scf.yield %11, %12, %13: vector<8x16xf32>, !xegpu.tensor_desc<8x16xf16>, !xegpu.tensor_desc<16x16xf16>

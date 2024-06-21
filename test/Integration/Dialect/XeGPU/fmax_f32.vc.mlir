@@ -26,16 +26,16 @@ module @gemm attributes {gpu.container_module} {
       %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
       %a_tile1 = xegpu.create_nd_tdesc %A [%c0, %c16] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
       // load A tiles
-      %val0 = xegpu.load_nd %a_tile0 { vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %val1 = xegpu.load_nd %a_tile1 { vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %val0 = xegpu.load_nd %a_tile0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %val1 = xegpu.load_nd %a_tile1 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
       %b_tile0 = xegpu.create_nd_tdesc %B [%c0, %c0] : memref<16x32xf16> -> !xegpu.tensor_desc<16x16xf16>
       %b_tile1 = xegpu.create_nd_tdesc %B [%c0, %c16] : memref<16x32xf16> -> !xegpu.tensor_desc<16x16xf16>
       // load B tiles
-      %val2 = xegpu.load_nd %b_tile0 { vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %val3 = xegpu.load_nd %b_tile1 { vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %val2 = xegpu.load_nd %b_tile0 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %val3 = xegpu.load_nd %b_tile1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       // do DPAS
-      %val4 = xegpu.dpas %val0, %val2 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-      %val5 = xegpu.dpas %val1, %val3 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %val4 = xegpu.dpas %val0, %val2 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %val5 = xegpu.dpas %val1, %val3 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       // take fmax
       %val6 = arith.maximumf %val4, %val5 fastmath<nnan> : vector<8x16xf32>
       // store fmax
