@@ -24,6 +24,7 @@
 #include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include "imex/Transforms/Passes.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <cstdint>
 #include <numeric>
@@ -328,6 +329,14 @@ struct VectorLinearizePass final
   void runOnOperation() override {
     auto *context = &getContext();
 
+    // vector.broadcast requires progressive lowering
+    {
+      mlir::RewritePatternSet patterns(&getContext());
+      mlir::vector::populateVectorBroadcastLoweringPatterns(patterns);
+      (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                               std::move(patterns));
+    }
+
     mlir::TypeConverter typeConverter;
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
@@ -359,8 +368,6 @@ struct VectorLinearizePass final
         patterns,
         mlir::vector::VectorTransformsOptions().setVectorTransposeLowering(
             mlir::vector::VectorTransposeLowering::Shuffle16x16));
-    // Lower vector.broadcast into low-level vector ops.
-    mlir::vector::populateVectorBroadcastLoweringPatterns(patterns);
     unsigned targetVectBitWidth = std::numeric_limits<unsigned>::max();
     mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
         typeConverter, patterns, target, targetVectBitWidth);
