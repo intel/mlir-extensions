@@ -22,7 +22,7 @@ gpu.module @test attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.
 
   gpu.func @load_nd(%src : memref<64x64xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     %1 = xegpu.create_nd_tdesc %src[0, 0] : memref<64x64xf16> ->  !xegpu.tensor_desc<16x16xf16>
-    %3 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+    %3 = xegpu.load_nd %1 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
     gpu.return
   }
 

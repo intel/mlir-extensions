@@ -20,13 +20,11 @@ module @gemm attributes {gpu.container_module} {
    gpu.func @test_kernel(%arg0: memref<8x32xf16>, %arg1: memref<8x32xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
       %1 = xegpu.create_nd_tdesc %arg0[0, 16] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %2 = xegpu.load_nd %0  {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}
-                  : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %3 = xegpu.load_nd %1  {vnni_axis = 1, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}
-                  : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %4 = vector.shape_cast %2 : vector<8x8x2xf16> to vector<8x16xf16>
-      %5 = vector.shape_cast %3 : vector<8x8x2xf16> to vector<8x16xf16>
-      %8 = vector.shuffle %4, %5 [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]
+      %2 = xegpu.load_nd %0  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}
+                  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %3 = xegpu.load_nd %1  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}
+                  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %8 = vector.shuffle %2, %3 [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]
                                   : vector<8x16xf16>, vector<8x16xf16>
       %9 = vector.shape_cast %8 : vector<16x16xf16> to vector<256xf16>
       %11 = vector.shape_cast %9 : vector<256xf16> to vector<8x32xf16>

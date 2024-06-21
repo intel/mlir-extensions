@@ -292,8 +292,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -470,8 +469,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -649,7 +647,7 @@ public:
     auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
     auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
-    uint8_t sd = lhsType.getShape()[1];
+    uint8_t sd = rhsType.getShape()[0];
     // refer to IGC/visa/Common_ISA_util.cpp#87
     auto encodePrecision = [&](Type type) -> uint8_t {
       if (type == rewriter.getBF16Type())
@@ -1572,8 +1570,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true

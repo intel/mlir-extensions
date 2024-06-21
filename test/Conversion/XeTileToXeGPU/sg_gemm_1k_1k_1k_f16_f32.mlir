@@ -152,62 +152,62 @@ gpu.module @test_kernel {
       //CHECK: %[[r208:.*]] = vector.extract_strided_slice %[[arg19]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
 
 
-      //CHECK: %[[r105:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xf16>
-      //CHECK: %[[r106:.*]] = vector.extract %[[r105]][0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r107:.*]] = vector.extract %[[r105]][1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r108:.*]] = xegpu.load_nd %[[arg5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xf16>
-      //CHECK: %[[r109:.*]] = vector.extract %[[r108]][0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r110:.*]] = vector.extract %[[r108]][1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r111:.*]] = xegpu.load_nd %[[arg6]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xf16>
-      //CHECK: %[[r112:.*]] = vector.extract %[[r111]][0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r113:.*]] = vector.extract %[[r111]][1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r114:.*]] = xegpu.load_nd %[[arg7]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xf16>
-      //CHECK: %[[r115:.*]] = vector.extract %[[r114]][0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r116:.*]] = vector.extract %[[r114]][1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
-      //CHECK: %[[r117:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r118:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r119:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r120:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r121:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r122:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r123:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r124:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r125:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r126:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r127:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r128:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r129:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r130:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r131:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r132:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r133:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r134:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r135:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r136:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r137:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r138:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r139:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r140:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r141:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r142:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r143:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r144:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r145:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r146:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r147:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
-      //CHECK: %[[r148:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xf16> to vector<8x8x2xf16>
+      //CHECK: %[[r105:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xf16>
+      //CHECK: %[[r106:.*]] = vector.extract %[[r105]][0] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r107:.*]] = vector.extract %[[r105]][1] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r108:.*]] = xegpu.load_nd %[[arg5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xf16>
+      //CHECK: %[[r109:.*]] = vector.extract %[[r108]][0] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r110:.*]] = vector.extract %[[r108]][1] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r111:.*]] = xegpu.load_nd %[[arg6]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xf16>
+      //CHECK: %[[r112:.*]] = vector.extract %[[r111]][0] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r113:.*]] = vector.extract %[[r111]][1] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r114:.*]] = xegpu.load_nd %[[arg7]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xf16>
+      //CHECK: %[[r115:.*]] = vector.extract %[[r114]][0] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r116:.*]] = vector.extract %[[r114]][1] : vector<32x16xf16> from vector<2x32x16xf16>
+      //CHECK: %[[r117:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r118:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r119:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r120:.*]] = vector.extract_strided_slice %[[r106]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r121:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r122:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r123:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r124:.*]] = vector.extract_strided_slice %[[r107]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r125:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r126:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r127:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r128:.*]] = vector.extract_strided_slice %[[r109]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r129:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r130:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r131:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r132:.*]] = vector.extract_strided_slice %[[r110]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r133:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r134:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r135:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r136:.*]] = vector.extract_strided_slice %[[r112]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r137:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r138:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r139:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r140:.*]] = vector.extract_strided_slice %[[r113]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r141:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r142:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r143:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r144:.*]] = vector.extract_strided_slice %[[r115]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r145:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r146:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r147:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r148:.*]] = vector.extract_strided_slice %[[r116]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
       %a_value = xetile.load_tile %a_tile : !xetile.tile<64x64xf16> -> vector<64x64xf16>
 
-      //CHECK: %[[r149:.*]] = xegpu.load_nd %[[arg8]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 0 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
+      //CHECK: %[[r149:.*]] = xegpu.load_nd %[[arg8]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
       //CHECK: %[[r150:.*]] = vector.extract %[[r149]][0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
       //CHECK: %[[r151:.*]] = vector.extract %[[r149]][1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
-      //CHECK: %[[r152:.*]] = xegpu.load_nd %[[arg9]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 0 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
+      //CHECK: %[[r152:.*]] = xegpu.load_nd %[[arg9]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
       //CHECK: %[[r153:.*]] = vector.extract %[[r152]][0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
       //CHECK: %[[r154:.*]] = vector.extract %[[r152]][1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
-      //CHECK: %[[r155:.*]] = xegpu.load_nd %[[arg10]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 0 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
+      //CHECK: %[[r155:.*]] = xegpu.load_nd %[[arg10]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
       //CHECK: %[[r156:.*]] = vector.extract %[[r155]][0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
       //CHECK: %[[r157:.*]] = vector.extract %[[r155]][1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
-      //CHECK: %[[r158:.*]] = xegpu.load_nd %[[arg11]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 0 : i64}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
+      //CHECK: %[[r158:.*]] = xegpu.load_nd %[[arg11]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xf16>
       //CHECK: %[[r159:.*]] = vector.extract %[[r158]][0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
       //CHECK: %[[r160:.*]] = vector.extract %[[r158]][1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
       //CHECK: %[[r161:.*]] = vector.extract_strided_slice %[[r150]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16x2xf16> to vector<8x16x2xf16>
@@ -229,134 +229,134 @@ gpu.module @test_kernel {
       %b_value = xetile.load_tile %b_tile : !xetile.tile<64x64xf16> -> vector<64x64xf16>
 
 
-      //CHECK: %[[r209:.*]] = xegpu.dpas %[[r117]], %[[r161]], %[[r177]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r210:.*]] = xegpu.dpas %[[r121]], %[[r162]], %[[r209]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r211:.*]] = xegpu.dpas %[[r125]], %[[r169]], %[[r210]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r212:.*]] = xegpu.dpas %[[r129]], %[[r170]], %[[r211]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r213:.*]] = xegpu.dpas %[[r117]], %[[r163]], %[[r181]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r214:.*]] = xegpu.dpas %[[r121]], %[[r164]], %[[r213]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r215:.*]] = xegpu.dpas %[[r125]], %[[r171]], %[[r214]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r216:.*]] = xegpu.dpas %[[r129]], %[[r172]], %[[r215]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r217:.*]] = xegpu.dpas %[[r117]], %[[r165]], %[[r185]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r218:.*]] = xegpu.dpas %[[r121]], %[[r166]], %[[r217]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r219:.*]] = xegpu.dpas %[[r125]], %[[r173]], %[[r218]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r220:.*]] = xegpu.dpas %[[r129]], %[[r174]], %[[r219]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r221:.*]] = xegpu.dpas %[[r117]], %[[r167]], %[[r189]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r222:.*]] = xegpu.dpas %[[r121]], %[[r168]], %[[r221]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r223:.*]] = xegpu.dpas %[[r125]], %[[r175]], %[[r222]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r224:.*]] = xegpu.dpas %[[r129]], %[[r176]], %[[r223]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r225:.*]] = xegpu.dpas %[[r118]], %[[r161]], %[[r178]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r226:.*]] = xegpu.dpas %[[r122]], %[[r162]], %[[r225]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r227:.*]] = xegpu.dpas %[[r126]], %[[r169]], %[[r226]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r228:.*]] = xegpu.dpas %[[r130]], %[[r170]], %[[r227]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r229:.*]] = xegpu.dpas %[[r118]], %[[r163]], %[[r182]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r230:.*]] = xegpu.dpas %[[r122]], %[[r164]], %[[r229]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r231:.*]] = xegpu.dpas %[[r126]], %[[r171]], %[[r230]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r232:.*]] = xegpu.dpas %[[r130]], %[[r172]], %[[r231]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r233:.*]] = xegpu.dpas %[[r118]], %[[r165]], %[[r186]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r234:.*]] = xegpu.dpas %[[r122]], %[[r166]], %[[r233]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r235:.*]] = xegpu.dpas %[[r126]], %[[r173]], %[[r234]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r236:.*]] = xegpu.dpas %[[r130]], %[[r174]], %[[r235]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r237:.*]] = xegpu.dpas %[[r118]], %[[r167]], %[[r190]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r238:.*]] = xegpu.dpas %[[r122]], %[[r168]], %[[r237]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r239:.*]] = xegpu.dpas %[[r126]], %[[r175]], %[[r238]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r240:.*]] = xegpu.dpas %[[r130]], %[[r176]], %[[r239]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r241:.*]] = xegpu.dpas %[[r119]], %[[r161]], %[[r179]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r242:.*]] = xegpu.dpas %[[r123]], %[[r162]], %[[r241]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r243:.*]] = xegpu.dpas %[[r127]], %[[r169]], %[[r242]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r244:.*]] = xegpu.dpas %[[r131]], %[[r170]], %[[r243]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r245:.*]] = xegpu.dpas %[[r119]], %[[r163]], %[[r183]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r246:.*]] = xegpu.dpas %[[r123]], %[[r164]], %[[r245]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r247:.*]] = xegpu.dpas %[[r127]], %[[r171]], %[[r246]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r248:.*]] = xegpu.dpas %[[r131]], %[[r172]], %[[r247]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r249:.*]] = xegpu.dpas %[[r119]], %[[r165]], %[[r187]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r250:.*]] = xegpu.dpas %[[r123]], %[[r166]], %[[r249]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r251:.*]] = xegpu.dpas %[[r127]], %[[r173]], %[[r250]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r252:.*]] = xegpu.dpas %[[r131]], %[[r174]], %[[r251]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r253:.*]] = xegpu.dpas %[[r119]], %[[r167]], %[[r191]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r254:.*]] = xegpu.dpas %[[r123]], %[[r168]], %[[r253]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r255:.*]] = xegpu.dpas %[[r127]], %[[r175]], %[[r254]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r256:.*]] = xegpu.dpas %[[r131]], %[[r176]], %[[r255]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r257:.*]] = xegpu.dpas %[[r120]], %[[r161]], %[[r180]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r258:.*]] = xegpu.dpas %[[r124]], %[[r162]], %[[r257]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r259:.*]] = xegpu.dpas %[[r128]], %[[r169]], %[[r258]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r260:.*]] = xegpu.dpas %[[r132]], %[[r170]], %[[r259]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r261:.*]] = xegpu.dpas %[[r120]], %[[r163]], %[[r184]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r262:.*]] = xegpu.dpas %[[r124]], %[[r164]], %[[r261]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r263:.*]] = xegpu.dpas %[[r128]], %[[r171]], %[[r262]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r264:.*]] = xegpu.dpas %[[r132]], %[[r172]], %[[r263]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r265:.*]] = xegpu.dpas %[[r120]], %[[r165]], %[[r188]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r266:.*]] = xegpu.dpas %[[r124]], %[[r166]], %[[r265]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r267:.*]] = xegpu.dpas %[[r128]], %[[r173]], %[[r266]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r268:.*]] = xegpu.dpas %[[r132]], %[[r174]], %[[r267]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r269:.*]] = xegpu.dpas %[[r120]], %[[r167]], %[[r192]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r270:.*]] = xegpu.dpas %[[r124]], %[[r168]], %[[r269]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r271:.*]] = xegpu.dpas %[[r128]], %[[r175]], %[[r270]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r272:.*]] = xegpu.dpas %[[r132]], %[[r176]], %[[r271]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r273:.*]] = xegpu.dpas %[[r133]], %[[r161]], %[[r193]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r274:.*]] = xegpu.dpas %[[r137]], %[[r162]], %[[r273]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r275:.*]] = xegpu.dpas %[[r141]], %[[r169]], %[[r274]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r276:.*]] = xegpu.dpas %[[r145]], %[[r170]], %[[r275]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r277:.*]] = xegpu.dpas %[[r133]], %[[r163]], %[[r197]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r278:.*]] = xegpu.dpas %[[r137]], %[[r164]], %[[r277]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r279:.*]] = xegpu.dpas %[[r141]], %[[r171]], %[[r278]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r280:.*]] = xegpu.dpas %[[r145]], %[[r172]], %[[r279]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r281:.*]] = xegpu.dpas %[[r133]], %[[r165]], %[[r201]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r282:.*]] = xegpu.dpas %[[r137]], %[[r166]], %[[r281]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r283:.*]] = xegpu.dpas %[[r141]], %[[r173]], %[[r282]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r284:.*]] = xegpu.dpas %[[r145]], %[[r174]], %[[r283]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r285:.*]] = xegpu.dpas %[[r133]], %[[r167]], %[[r205]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r286:.*]] = xegpu.dpas %[[r137]], %[[r168]], %[[r285]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r287:.*]] = xegpu.dpas %[[r141]], %[[r175]], %[[r286]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r288:.*]] = xegpu.dpas %[[r145]], %[[r176]], %[[r287]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r289:.*]] = xegpu.dpas %[[r134]], %[[r161]], %[[r194]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r290:.*]] = xegpu.dpas %[[r138]], %[[r162]], %[[r289]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r291:.*]] = xegpu.dpas %[[r142]], %[[r169]], %[[r290]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r292:.*]] = xegpu.dpas %[[r146]], %[[r170]], %[[r291]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r293:.*]] = xegpu.dpas %[[r134]], %[[r163]], %[[r198]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r294:.*]] = xegpu.dpas %[[r138]], %[[r164]], %[[r293]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r295:.*]] = xegpu.dpas %[[r142]], %[[r171]], %[[r294]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r296:.*]] = xegpu.dpas %[[r146]], %[[r172]], %[[r295]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r297:.*]] = xegpu.dpas %[[r134]], %[[r165]], %[[r202]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r298:.*]] = xegpu.dpas %[[r138]], %[[r166]], %[[r297]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r299:.*]] = xegpu.dpas %[[r142]], %[[r173]], %[[r298]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r300:.*]] = xegpu.dpas %[[r146]], %[[r174]], %[[r299]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r301:.*]] = xegpu.dpas %[[r134]], %[[r167]], %[[r206]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r302:.*]] = xegpu.dpas %[[r138]], %[[r168]], %[[r301]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r303:.*]] = xegpu.dpas %[[r142]], %[[r175]], %[[r302]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r304:.*]] = xegpu.dpas %[[r146]], %[[r176]], %[[r303]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r305:.*]] = xegpu.dpas %[[r135]], %[[r161]], %[[r195]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r306:.*]] = xegpu.dpas %[[r139]], %[[r162]], %[[r305]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r307:.*]] = xegpu.dpas %[[r143]], %[[r169]], %[[r306]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r308:.*]] = xegpu.dpas %[[r147]], %[[r170]], %[[r307]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r309:.*]] = xegpu.dpas %[[r135]], %[[r163]], %[[r199]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r310:.*]] = xegpu.dpas %[[r139]], %[[r164]], %[[r309]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r311:.*]] = xegpu.dpas %[[r143]], %[[r171]], %[[r310]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r312:.*]] = xegpu.dpas %[[r147]], %[[r172]], %[[r311]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r313:.*]] = xegpu.dpas %[[r135]], %[[r165]], %[[r203]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r314:.*]] = xegpu.dpas %[[r139]], %[[r166]], %[[r313]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r315:.*]] = xegpu.dpas %[[r143]], %[[r173]], %[[r314]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r316:.*]] = xegpu.dpas %[[r147]], %[[r174]], %[[r315]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r317:.*]] = xegpu.dpas %[[r135]], %[[r167]], %[[r207]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r318:.*]] = xegpu.dpas %[[r139]], %[[r168]], %[[r317]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r319:.*]] = xegpu.dpas %[[r143]], %[[r175]], %[[r318]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r320:.*]] = xegpu.dpas %[[r147]], %[[r176]], %[[r319]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r321:.*]] = xegpu.dpas %[[r136]], %[[r161]], %[[r196]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r322:.*]] = xegpu.dpas %[[r140]], %[[r162]], %[[r321]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r323:.*]] = xegpu.dpas %[[r144]], %[[r169]], %[[r322]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r324:.*]] = xegpu.dpas %[[r148]], %[[r170]], %[[r323]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r325:.*]] = xegpu.dpas %[[r136]], %[[r163]], %[[r200]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r326:.*]] = xegpu.dpas %[[r140]], %[[r164]], %[[r325]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r327:.*]] = xegpu.dpas %[[r144]], %[[r171]], %[[r326]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r328:.*]] = xegpu.dpas %[[r148]], %[[r172]], %[[r327]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r329:.*]] = xegpu.dpas %[[r136]], %[[r165]], %[[r204]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r330:.*]] = xegpu.dpas %[[r140]], %[[r166]], %[[r329]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r331:.*]] = xegpu.dpas %[[r144]], %[[r173]], %[[r330]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r332:.*]] = xegpu.dpas %[[r148]], %[[r174]], %[[r331]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r333:.*]] = xegpu.dpas %[[r136]], %[[r167]], %[[r208]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r334:.*]] = xegpu.dpas %[[r140]], %[[r168]], %[[r333]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r335:.*]] = xegpu.dpas %[[r144]], %[[r175]], %[[r334]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r336:.*]] = xegpu.dpas %[[r148]], %[[r176]], %[[r335]] : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r209:.*]] = xegpu.dpas %[[r117]], %[[r161]], %[[r177]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r210:.*]] = xegpu.dpas %[[r121]], %[[r162]], %[[r209]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r211:.*]] = xegpu.dpas %[[r125]], %[[r169]], %[[r210]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r212:.*]] = xegpu.dpas %[[r129]], %[[r170]], %[[r211]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r213:.*]] = xegpu.dpas %[[r117]], %[[r163]], %[[r181]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r214:.*]] = xegpu.dpas %[[r121]], %[[r164]], %[[r213]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r215:.*]] = xegpu.dpas %[[r125]], %[[r171]], %[[r214]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r216:.*]] = xegpu.dpas %[[r129]], %[[r172]], %[[r215]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r217:.*]] = xegpu.dpas %[[r117]], %[[r165]], %[[r185]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r218:.*]] = xegpu.dpas %[[r121]], %[[r166]], %[[r217]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r219:.*]] = xegpu.dpas %[[r125]], %[[r173]], %[[r218]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r220:.*]] = xegpu.dpas %[[r129]], %[[r174]], %[[r219]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r221:.*]] = xegpu.dpas %[[r117]], %[[r167]], %[[r189]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r222:.*]] = xegpu.dpas %[[r121]], %[[r168]], %[[r221]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r223:.*]] = xegpu.dpas %[[r125]], %[[r175]], %[[r222]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r224:.*]] = xegpu.dpas %[[r129]], %[[r176]], %[[r223]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r225:.*]] = xegpu.dpas %[[r118]], %[[r161]], %[[r178]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r226:.*]] = xegpu.dpas %[[r122]], %[[r162]], %[[r225]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r227:.*]] = xegpu.dpas %[[r126]], %[[r169]], %[[r226]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r228:.*]] = xegpu.dpas %[[r130]], %[[r170]], %[[r227]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r229:.*]] = xegpu.dpas %[[r118]], %[[r163]], %[[r182]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r230:.*]] = xegpu.dpas %[[r122]], %[[r164]], %[[r229]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r231:.*]] = xegpu.dpas %[[r126]], %[[r171]], %[[r230]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r232:.*]] = xegpu.dpas %[[r130]], %[[r172]], %[[r231]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r233:.*]] = xegpu.dpas %[[r118]], %[[r165]], %[[r186]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r234:.*]] = xegpu.dpas %[[r122]], %[[r166]], %[[r233]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r235:.*]] = xegpu.dpas %[[r126]], %[[r173]], %[[r234]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r236:.*]] = xegpu.dpas %[[r130]], %[[r174]], %[[r235]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r237:.*]] = xegpu.dpas %[[r118]], %[[r167]], %[[r190]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r238:.*]] = xegpu.dpas %[[r122]], %[[r168]], %[[r237]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r239:.*]] = xegpu.dpas %[[r126]], %[[r175]], %[[r238]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r240:.*]] = xegpu.dpas %[[r130]], %[[r176]], %[[r239]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r241:.*]] = xegpu.dpas %[[r119]], %[[r161]], %[[r179]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r242:.*]] = xegpu.dpas %[[r123]], %[[r162]], %[[r241]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r243:.*]] = xegpu.dpas %[[r127]], %[[r169]], %[[r242]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r244:.*]] = xegpu.dpas %[[r131]], %[[r170]], %[[r243]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r245:.*]] = xegpu.dpas %[[r119]], %[[r163]], %[[r183]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r246:.*]] = xegpu.dpas %[[r123]], %[[r164]], %[[r245]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r247:.*]] = xegpu.dpas %[[r127]], %[[r171]], %[[r246]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r248:.*]] = xegpu.dpas %[[r131]], %[[r172]], %[[r247]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r249:.*]] = xegpu.dpas %[[r119]], %[[r165]], %[[r187]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r250:.*]] = xegpu.dpas %[[r123]], %[[r166]], %[[r249]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r251:.*]] = xegpu.dpas %[[r127]], %[[r173]], %[[r250]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r252:.*]] = xegpu.dpas %[[r131]], %[[r174]], %[[r251]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r253:.*]] = xegpu.dpas %[[r119]], %[[r167]], %[[r191]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r254:.*]] = xegpu.dpas %[[r123]], %[[r168]], %[[r253]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r255:.*]] = xegpu.dpas %[[r127]], %[[r175]], %[[r254]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r256:.*]] = xegpu.dpas %[[r131]], %[[r176]], %[[r255]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r257:.*]] = xegpu.dpas %[[r120]], %[[r161]], %[[r180]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r258:.*]] = xegpu.dpas %[[r124]], %[[r162]], %[[r257]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r259:.*]] = xegpu.dpas %[[r128]], %[[r169]], %[[r258]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r260:.*]] = xegpu.dpas %[[r132]], %[[r170]], %[[r259]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r261:.*]] = xegpu.dpas %[[r120]], %[[r163]], %[[r184]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r262:.*]] = xegpu.dpas %[[r124]], %[[r164]], %[[r261]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r263:.*]] = xegpu.dpas %[[r128]], %[[r171]], %[[r262]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r264:.*]] = xegpu.dpas %[[r132]], %[[r172]], %[[r263]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r265:.*]] = xegpu.dpas %[[r120]], %[[r165]], %[[r188]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r266:.*]] = xegpu.dpas %[[r124]], %[[r166]], %[[r265]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r267:.*]] = xegpu.dpas %[[r128]], %[[r173]], %[[r266]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r268:.*]] = xegpu.dpas %[[r132]], %[[r174]], %[[r267]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r269:.*]] = xegpu.dpas %[[r120]], %[[r167]], %[[r192]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r270:.*]] = xegpu.dpas %[[r124]], %[[r168]], %[[r269]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r271:.*]] = xegpu.dpas %[[r128]], %[[r175]], %[[r270]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r272:.*]] = xegpu.dpas %[[r132]], %[[r176]], %[[r271]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r273:.*]] = xegpu.dpas %[[r133]], %[[r161]], %[[r193]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r274:.*]] = xegpu.dpas %[[r137]], %[[r162]], %[[r273]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r275:.*]] = xegpu.dpas %[[r141]], %[[r169]], %[[r274]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r276:.*]] = xegpu.dpas %[[r145]], %[[r170]], %[[r275]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r277:.*]] = xegpu.dpas %[[r133]], %[[r163]], %[[r197]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r278:.*]] = xegpu.dpas %[[r137]], %[[r164]], %[[r277]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r279:.*]] = xegpu.dpas %[[r141]], %[[r171]], %[[r278]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r280:.*]] = xegpu.dpas %[[r145]], %[[r172]], %[[r279]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r281:.*]] = xegpu.dpas %[[r133]], %[[r165]], %[[r201]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r282:.*]] = xegpu.dpas %[[r137]], %[[r166]], %[[r281]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r283:.*]] = xegpu.dpas %[[r141]], %[[r173]], %[[r282]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r284:.*]] = xegpu.dpas %[[r145]], %[[r174]], %[[r283]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r285:.*]] = xegpu.dpas %[[r133]], %[[r167]], %[[r205]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r286:.*]] = xegpu.dpas %[[r137]], %[[r168]], %[[r285]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r287:.*]] = xegpu.dpas %[[r141]], %[[r175]], %[[r286]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r288:.*]] = xegpu.dpas %[[r145]], %[[r176]], %[[r287]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r289:.*]] = xegpu.dpas %[[r134]], %[[r161]], %[[r194]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r290:.*]] = xegpu.dpas %[[r138]], %[[r162]], %[[r289]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r291:.*]] = xegpu.dpas %[[r142]], %[[r169]], %[[r290]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r292:.*]] = xegpu.dpas %[[r146]], %[[r170]], %[[r291]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r293:.*]] = xegpu.dpas %[[r134]], %[[r163]], %[[r198]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r294:.*]] = xegpu.dpas %[[r138]], %[[r164]], %[[r293]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r295:.*]] = xegpu.dpas %[[r142]], %[[r171]], %[[r294]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r296:.*]] = xegpu.dpas %[[r146]], %[[r172]], %[[r295]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r297:.*]] = xegpu.dpas %[[r134]], %[[r165]], %[[r202]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r298:.*]] = xegpu.dpas %[[r138]], %[[r166]], %[[r297]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r299:.*]] = xegpu.dpas %[[r142]], %[[r173]], %[[r298]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r300:.*]] = xegpu.dpas %[[r146]], %[[r174]], %[[r299]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r301:.*]] = xegpu.dpas %[[r134]], %[[r167]], %[[r206]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r302:.*]] = xegpu.dpas %[[r138]], %[[r168]], %[[r301]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r303:.*]] = xegpu.dpas %[[r142]], %[[r175]], %[[r302]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r304:.*]] = xegpu.dpas %[[r146]], %[[r176]], %[[r303]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r305:.*]] = xegpu.dpas %[[r135]], %[[r161]], %[[r195]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r306:.*]] = xegpu.dpas %[[r139]], %[[r162]], %[[r305]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r307:.*]] = xegpu.dpas %[[r143]], %[[r169]], %[[r306]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r308:.*]] = xegpu.dpas %[[r147]], %[[r170]], %[[r307]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r309:.*]] = xegpu.dpas %[[r135]], %[[r163]], %[[r199]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r310:.*]] = xegpu.dpas %[[r139]], %[[r164]], %[[r309]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r311:.*]] = xegpu.dpas %[[r143]], %[[r171]], %[[r310]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r312:.*]] = xegpu.dpas %[[r147]], %[[r172]], %[[r311]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r313:.*]] = xegpu.dpas %[[r135]], %[[r165]], %[[r203]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r314:.*]] = xegpu.dpas %[[r139]], %[[r166]], %[[r313]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r315:.*]] = xegpu.dpas %[[r143]], %[[r173]], %[[r314]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r316:.*]] = xegpu.dpas %[[r147]], %[[r174]], %[[r315]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r317:.*]] = xegpu.dpas %[[r135]], %[[r167]], %[[r207]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r318:.*]] = xegpu.dpas %[[r139]], %[[r168]], %[[r317]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r319:.*]] = xegpu.dpas %[[r143]], %[[r175]], %[[r318]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r320:.*]] = xegpu.dpas %[[r147]], %[[r176]], %[[r319]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r321:.*]] = xegpu.dpas %[[r136]], %[[r161]], %[[r196]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r322:.*]] = xegpu.dpas %[[r140]], %[[r162]], %[[r321]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r323:.*]] = xegpu.dpas %[[r144]], %[[r169]], %[[r322]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r324:.*]] = xegpu.dpas %[[r148]], %[[r170]], %[[r323]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r325:.*]] = xegpu.dpas %[[r136]], %[[r163]], %[[r200]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r326:.*]] = xegpu.dpas %[[r140]], %[[r164]], %[[r325]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r327:.*]] = xegpu.dpas %[[r144]], %[[r171]], %[[r326]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r328:.*]] = xegpu.dpas %[[r148]], %[[r172]], %[[r327]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r329:.*]] = xegpu.dpas %[[r136]], %[[r165]], %[[r204]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r330:.*]] = xegpu.dpas %[[r140]], %[[r166]], %[[r329]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r331:.*]] = xegpu.dpas %[[r144]], %[[r173]], %[[r330]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r332:.*]] = xegpu.dpas %[[r148]], %[[r174]], %[[r331]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r333:.*]] = xegpu.dpas %[[r136]], %[[r167]], %[[r208]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r334:.*]] = xegpu.dpas %[[r140]], %[[r168]], %[[r333]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r335:.*]] = xegpu.dpas %[[r144]], %[[r175]], %[[r334]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r336:.*]] = xegpu.dpas %[[r148]], %[[r176]], %[[r335]] : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
       %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value : vector<64x64xf16>, vector<64x64xf16>, vector<64x64xf32> -> vector<64x64xf32>
 

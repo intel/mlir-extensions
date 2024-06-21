@@ -21,11 +21,11 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: llvm_genx_raw_send2_v64i32_i1_v8i32
       // CHECK: llvm_genx_raw_send2_v64i32_i1_v8i32
       %0 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %1 = xegpu.load_nd %0  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %1 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
       %2 = xegpu.update_nd_offset %0, [%c8, %c0] : !xegpu.tensor_desc<8x16xf16>
-      %3 = xegpu.load_nd %2  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %lhs = vector.shape_cast %1 : vector<8x8x2xf16> to vector<128xf16>
-      %rhs = vector.shape_cast %3 : vector<8x8x2xf16> to vector<128xf16>
+      %3 = xegpu.load_nd %2 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %lhs = vector.shape_cast %1 : vector<8x16xf16> to vector<128xf16>
+      %rhs = vector.shape_cast %3 : vector<8x16xf16> to vector<128xf16>
       %add = arith.addf %lhs, %rhs: vector<128xf16>
       %out = arith.extf %add : vector<128xf16> to vector<128xf32>
       %cast = vector.shape_cast %out : vector<128xf32> to vector<8x16xf32>

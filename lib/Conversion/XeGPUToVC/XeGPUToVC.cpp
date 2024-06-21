@@ -316,8 +316,7 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -464,8 +463,7 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -639,7 +637,7 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
     auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
     auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
-    uint8_t sd = lhsType.getShape()[1];
+    uint8_t sd = rhsType.getShape()[0];
     auto encodePrecision = [&](Type type) -> uint8_t {
       if (type == rewriter.getBF16Type())
         return 9;

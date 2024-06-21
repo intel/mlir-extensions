@@ -119,8 +119,8 @@ struct LayoutLattice : public mlir::dataflow::Lattice<Layout> {
   }
 };
 
-static mlir::Type getPackedType(mlir::VectorType vec, unsigned axis,
-                                int64_t factor) {
+static mlir::Type getPackedType(mlir::VectorType vec, int64_t factor) {
+  const unsigned axis = 0;
   auto shape = vec.getShape();
   assert(axis < shape.size());
   auto newShape = llvm::to_vector(shape);
@@ -140,11 +140,8 @@ static mlir::Type getDpasLayout(mlir::xegpu::DpasOp dpas, mlir::Value arg) {
 
   auto factor = 4 / elementSize;
 
-  if (dpas.getLhs() == arg)
-    return getPackedType(type, 1, factor);
-
   if (dpas.getRhs() == arg)
-    return getPackedType(type, 0, factor);
+    return getPackedType(type, factor);
 
   return nullptr;
 }
@@ -406,7 +403,8 @@ static void updateLoadOp(mlir::OpBuilder &builder, mlir::xegpu::LoadNdOp op,
 
   auto &&[axis, factor] = getVNNIInfo(srcType, dstType);
   op.getResult().setType(dstType);
-  op.setVnniAxis(axis);
+  if (axis == 0)
+    op.setPacked(true);
 }
 
 static void updateDpasOp(mlir::OpBuilder &builder, mlir::xegpu::DpasOp op,

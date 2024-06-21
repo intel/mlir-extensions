@@ -69,13 +69,13 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
         %37 = xetile.init_tile %arg0[%36, %9] : memref<16384x12288xbf16> -> !xetile.tile<32x32xbf16>
         %38:3 = scf.for %arg6 = %c0 to %c12288 step %c32 iter_args(%arg7 = %37, %arg8 = %29, %arg9 = %cst_0) -> (!xetile.tile<32x32xbf16>, !xetile.tile<32x32xbf16>, vector<32x32xf32>) {
 
-          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 1 : i64}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x8x2xbf16>
-          //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<32x8x2xbf16> from vector<2x32x8x2xbf16>
-          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [8, 8], strides = [1, 1]} : vector<32x8x2xbf16> to vector<8x8x2xbf16>
+          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xbf16>
+          //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<32x16xbf16> from vector<2x32x16xbf16>
+          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [8, 16], strides = [1, 1]} : vector<32x16xbf16> to vector<8x16xbf16>
           %48 = xetile.load_tile %arg7 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
 
 
-          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, vnni_axis = 0 : i64}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xbf16>
+          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xbf16>
           //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<16x16x2xbf16> from vector<2x16x16x2xbf16>
           //CHECK-COUNT-4: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [8, 16], strides = [1, 1]} : vector<16x16x2xbf16> to vector<8x16x2xbf16>
           %49 = xetile.load_tile %arg8 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
@@ -85,7 +85,7 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
           %50 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
           %51 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
 
-          //CHECK-COUNT-16: %{{.*}} = xegpu.dpas %{{.*}}, %{{.*}}, %{{.*}} : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+          //CHECK-COUNT-16: %{{.*}} = xegpu.dpas %{{.*}}, %{{.*}}, %{{.*}} : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
           %52 = xetile.tile_mma %48, %49, %arg9 : vector<32x32xbf16>, vector<32x32xbf16>, vector<32x32xf32> -> vector<32x32xf32>
           scf.yield %50, %51, %52 : !xetile.tile<32x32xbf16>, !xetile.tile<32x32xbf16>, vector<32x32xf32>
         } {lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 3>, step = 32 : index, upperBoundMap = affine_map<() -> (12288)>}
