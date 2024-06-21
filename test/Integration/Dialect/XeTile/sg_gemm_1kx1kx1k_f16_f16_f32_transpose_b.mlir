@@ -49,7 +49,7 @@ module @gemm attributes {gpu.container_module} {
       %c_init_value = xetile.load_tile %c_init_tile  : !xetile.tile<16x32xf32> -> vector<16x32xf32>
       // initalize A and B tiles
       %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<16x32xf16>
-      %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
+      %b_init_tile = xetile.init_tile %B[%n, %c0] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
       // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
       %out:3 = scf.for %k = %c0 to %c1024 step %c32
         iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
@@ -65,7 +65,7 @@ module @gemm attributes {gpu.container_module} {
         // update the offsets for A and B tiles
         %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32]
           : !xetile.tile<16x32xf16>, index, index -> !xetile.tile<16x32xf16>
-        %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0]
+        %b_next_tile = xetile.update_tile_offset %b_tile, [%c0, %c32]
           : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
         // partial C tile result
         scf.yield %a_next_tile, %b_next_tile, %c_new_value
@@ -86,15 +86,15 @@ module @gemm attributes {gpu.container_module} {
     %B = memref.alloc() : memref<1024x1024xf16>
     %C = memref.alloc() : memref<1024x1024xf32>
     %C_ref = memref.alloc() : memref<1024x1024xf32>
-    // intialize matrix A ; A[i, j] = j
+    // intialize matrix B ; B[i, j] = j
     scf.for %i = %c0 to %c1024 step %c1 {
       scf.for %j = %c0 to %c1024 step %c1 {
         %t = index.castu %j : index to i16
         %val = arith.uitofp %t : i16 to f16
-        memref.store %val, %A[%i, %j] : memref<1024x1024xf16>
+        memref.store %val, %B[%i, %j] : memref<1024x1024xf16>
       }
     }
-    // make matrix B an identity matrix
+    // make matrix A an identity matrix
     scf.for %i = %c0 to %c1024 step %c1 {
       scf.for %j = %c0 to %c1024 step %c1 {
         %i_i32 = index.castu %i : index to i32
@@ -102,9 +102,9 @@ module @gemm attributes {gpu.container_module} {
         %i_j_same = arith.cmpi eq, %i_i32, %j_i32 : i32
 
         scf.if %i_j_same {
-          memref.store %cf_1, %B[%i, %j] : memref<1024x1024xf16>
+          memref.store %cf_1, %A[%i, %j] : memref<1024x1024xf16>
         } else {
-          memref.store %cf_0, %B[%i, %j] : memref<1024x1024xf16>
+          memref.store %cf_0, %A[%i, %j] : memref<1024x1024xf16>
         }
       }
     }
@@ -122,7 +122,7 @@ module @gemm attributes {gpu.container_module} {
         %c_curr = memref.load %C_ref[%i, %j] : memref<1024x1024xf32>
         %c_val = scf.for %k = %c0 to %c1024 step %c1 iter_args(%c_partial = %c_curr) -> f32 {
           %a_val = memref.load %A[%i, %k] : memref<1024x1024xf16>
-          %b_val = memref.load %B[%k, %j] : memref<1024x1024xf16>
+          %b_val = memref.load %B[%j, %k] : memref<1024x1024xf16>
           %t = arith.mulf %a_val, %b_val : f16
           %t_cast = arith.extf %t : f16 to f32
           %c_sum = arith.addf %t_cast, %c_partial : f32
