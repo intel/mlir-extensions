@@ -373,7 +373,13 @@ static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
 static void deallocDeviceMemory(GPUL0QUEUE *queue, void *ptr) {
   CHECK_ZE_RESULT(zeMemFree(queue->zeContext_, ptr));
 }
-
+// @TODO: Add support for async copy
+// Currnetly, we only support synchrnous copy?
+static void memoryCopy(GPUL0QUEUE *queue, void *dstPtr, void *srcPtr,
+                       size_t size) {
+  CHECK_ZE_RESULT(zeCommandListAppendMemoryCopy(
+      queue->zeCommandList_, dstPtr, srcPtr, size, nullptr, 0, nullptr));
+}
 static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
                                      size_t dataSize) {
   assert(data);
@@ -592,6 +598,11 @@ gpuMemAlloc(GPUL0QUEUE *queue, size_t size, size_t alignment, bool isShared) {
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(GPUL0QUEUE *queue,
                                                      void *ptr) {
   catchAll([&]() { deallocDeviceMemory(queue, ptr); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
+gpuMemCopy(GPUL0QUEUE *queue, void *dstPtr, void *srcPtr, size_t size) {
+  return catchAll([&]() { memoryCopy(queue, dstPtr, srcPtr, size); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_module_handle_t
