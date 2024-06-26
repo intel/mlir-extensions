@@ -30,6 +30,7 @@
 #include <map>
 #include <mutex>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
+#include <sycl/queue.hpp> // for queue
 
 #ifdef _WIN32
 #define SYCL_RUNTIME_EXPORT __declspec(dllexport)
@@ -306,11 +307,23 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
     auto rounds = 100;
     auto warmups = 3;
 
-    // Before each run we need to flush the L2 cache to make sure each profiling
-    // run has the same cache state. This is done by writing to zero to a buffer
-    // larger than the L2 cache size.
-    size_t cacheSize = 256000000;
-    auto *cache = allocDeviceMemory(queue, cacheSize, 64, true);
+    // Before each run we need to flush the L3 cache (global memory cache) to
+    // make sure each profiling run has the same cache state. This is done by
+    // writing 'zero' to a global device memory buffer larger than the L3 cache
+    // size. This way, any data in the cache from previous run is evicted and we
+    // get a cold cache behavior. The write to the buffer is 'cached' in other
+    // words, the write goes through the L3 (global memory cache).
+    size_t cacheSize =
+        queue->syclDevice_
+            .get_info<sycl::info::device::global_mem_cache_size>();
+
+    // Allocate a device memory buffer twice the size of the
+    // L3 cache (global memory cache) of the device.
+    // The buffer can be host_shared or device-only, for our use-case we choose
+    // it to be device-only, it removes the need for extra copy from/to host.
+    // More importantly, it removes the possiblity of accidentally doing the
+    // flush in the host-side using a host side function.
+    auto *cache = allocDeviceMemory(queue, 2 * cacheSize, 64, false);
 
     if (getenv("IMEX_PROFILING_RUNS")) {
       auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
@@ -332,6 +345,11 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
     }
 
     for (int r = 0; r < rounds; r++) {
+      // Flush the L3 cache (global memory cache).
+      if (getenv("IMEX_ENABLE_CACHE_FLUSHING")) {
+        int init_val = 0;
+        syclQueue.memset(cache, init_val, cacheSize);
+      }
       sycl::event event =
           enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
       event.wait();
@@ -346,8 +364,6 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
         maxTime = gap;
       if (gap < minTime)
         minTime = gap;
-      // flush the cache.
-      memset(cache, 0, cacheSize);
     }
 
     deallocDeviceMemory(queue, cache);
