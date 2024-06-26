@@ -447,6 +447,31 @@ static void enqueueKernel(ze_command_list_handle_t zeCommandList,
                                                   numWaitEvents, phWaitEvents));
 }
 
+// Utility to discover the Global memory cache (L3) size of the device
+static size_t getGlobalMemoryCacheSize(ze_device_handle_t zeDevice) {
+  static constexpr unsigned MaxPropertyEntries = 16;
+  uint32_t CachePropCount = MaxPropertyEntries;
+  ze_device_cache_properties_t CacheProperties[MaxPropertyEntries];
+  for (uint32_t i = 0; i < MaxPropertyEntries; ++i) {
+    CacheProperties[i].stype = ZE_STRUCTURE_TYPE_DEVICE_CACHE_PROPERTIES;
+    CacheProperties[i].pNext = nullptr;
+  }
+  CHECK_ZE_RESULT(
+      zeDeviceGetCacheProperties(zeDevice, &CachePropCount, CacheProperties));
+  size_t globaMemoryCacheSize = 0;
+  for (uint32_t i = 0; i < CachePropCount; ++i) {
+    // find largest cache that is not user-controlled
+    if ((CacheProperties[i].flags &
+         ZE_DEVICE_CACHE_PROPERTY_FLAG_USER_CONTROL) != 0u) {
+      continue;
+    }
+    if (globaMemoryCacheSize < CacheProperties[i].cacheSize) {
+      globaMemoryCacheSize = CacheProperties[i].cacheSize;
+    }
+  }
+  return globaMemoryCacheSize;
+}
+
 static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
                          size_t gridX, size_t gridY, size_t gridZ,
                          size_t blockX, size_t blockY, size_t blockZ,
@@ -466,11 +491,21 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
     auto rounds = 1000;
     auto warmups = 3;
 
-    // Before each run we need to flush the L2 cache to make sure each profiling
-    // run has the same cache state. This is done by writing to zero to a buffer
-    // larger than the L2 cache size.
-    size_t cacheSize = 256000000;
-    auto *cache = allocDeviceMemory(queue, cacheSize, 64, true);
+    // Before each run we need to flush the L3 cache (global memory cache) to
+    // make sure each profiling run has the same cache state. This is done by
+    // writing 'zero' to a global device memory buffer larger than the L3 cache
+    // size. This way, any data in the cache from previous run is evicted and we
+    // get a cold cache behavior. The write to the buffer is 'cached' in other
+    // words, the write goes through the L3 (global memory cache).
+    size_t cacheSize = getGlobalMemoryCacheSize(queue->zeDevice_);
+
+    // Allocate a device memory buffer twice the size of the
+    // L3 cache (global memory cache) of the device.
+    // The buffer can be host_shared or device-only, for our use-case we choose
+    // it to be device-only, it removes the need for extra copy from/to host.
+    // More importantly, it removes the possiblity of accidentally doing the
+    // flush in the host-side using a host side function.
+    auto *cache = allocDeviceMemory(queue, 2 * cacheSize, 64, false);
 
     if (getenv("IMEX_PROFILING_RUNS")) {
       auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
@@ -485,13 +520,22 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
     }
 
     // warmup
-    for (int r = 0; r < warmups; r++)
+    for (int r = 0; r < warmups; r++) {
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
                     sharedMemBytes, nullptr, 0, nullptr);
+    }
 
     // profiling using timestamp event privided by level-zero
     for (int r = 0; r < rounds; r++) {
       Event event(queue->zeContext_, queue->zeDevice_);
+      // Flush the L3 cache (global memory cache).
+      if (getenv("IMEX_ENABLE_CACHE_FLUSHING")) {
+        int init_val = 0;
+        CHECK_ZE_RESULT(zeCommandListAppendMemoryFill(
+            queue->zeCommandList_, cache, &init_val, 1, cacheSize, NULL, 0,
+            NULL));
+      }
+
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
                     sharedMemBytes, event.zeEvent, 0, nullptr);
 
@@ -504,8 +548,6 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
         maxTime = duration;
       if (duration < minTime)
         minTime = duration;
-      // flush the cache.
-      memset(cache, 0, cacheSize);
     }
     deallocDeviceMemory(queue, cache);
     fprintf(stdout,
