@@ -27,7 +27,6 @@ Below is a summary.
 |nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
 |nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
 |fence	| operation ::= XeGPU.fence attr-dict | XeGPU.fence {scope = gpu, memory_kind = global} |
-|complile-hint	| operation ::= XeGPU.compile_hint attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
 
 The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.
 
@@ -110,10 +109,10 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
   %at = XeGPU.load_nd %tdesc2 {transpose = [1,0], mode = vc} :
      tile<8x16xf32> into vector<16x8xf32>
 ```
+Attribute `packed` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the row dimension and fits them into 32-bit data along the column dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor]. The first dimension needs to be split by a `vnni_factor`, which represents the number of elements needed to fit 32-bit. The result tensor is always in 2D.
 
-Attribute `packed` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the row dimension and fits them into 32-bit data along the column dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor].
+An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8.
 
-An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the B matrix for the DPAS operation.
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
   %bt = XeGPU.load_nd %tdesc1 {packed} :
@@ -140,18 +139,35 @@ The `transpose_bit_width` attribute can be used to transpose B matrix and at the
   %bt = vector.shape_cast %at :  vector<8x64xf16> into vector<8x32x2xf16>
 ```
 
-`dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3D vectors. When the input matrix is a lower-precision data type (lower than 32bit), the input vectors uses 3D representation. As the matrix B must be in VNNI layout, the reduction dimension needs to be split into 2 dimensions, and the 3rd inner dimension has 2 or 4 data elements fitting the 32bit. The result tensor is always in 2D.
+`dpas` does the matrix multiplication on the 2D matrix represented as 2D. This is the official representation regardless the hardware requires VNNI layout for the B matrix or not.
+
 ```mlir
   // WI mapping for vector_a, vector_b, vector_c refer to the sg_mapping associated with tensor_desc
-  %vector_c = XeGPU.dpas %vector_a, %vector_b :
+  %vector_c = XeGPU.dpas %vector_a, %vector_b, %vector_c :
      vector<4x2xbf16>, vector<8x2xbf16>
 	   into vector<8x1xfloat>
 
+  // A `dpas`  variant without vector_c initialization.
+  %vector_c = XeGPU.dpas %vector_a, %vector_b :
+     vector<4x2xbf16>, vector<8x2xbf16>
+	   into vector<8x1xfloat>
+```
+
+When the input matrix is a lower-precision data type (lower than 32bit), the input vectors is optionally to use 3D representation. When this variant is used, the matrix B must be in VNNI layout, and the matrix A may be in original 2D or reshaped to 3D represenation. The reshape for matrix A simply split the second dimension by `vnni_factor`, to match with matrix B.
+
+```mlir
   // logically %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
-  %vector_c = XeGPU.dpas %vector_a, %vector_b {mode = vc} :
+  // %vector_a is in original 2D shape, and %vector_b in VNNI layout
+  %vector_c = XeGPU.dpas %vector_a, %vector_b, %vector_c {mode = vc} :
+     vector<8x16xbf16>, vector<8x16x2xbf16>
+	   into vector<8x16xfloat>
+  // %vector_a reshaped to 3D shape, to match %vector_b's VNNI layout
+  %vector_c = XeGPU.dpas %vector_a, %vector_b, %vector_c {mode = vc} :
      vector<8x8x2xbf16>, vector<8x16x2xbf16>
 	   into vector<8x16xfloat>
-```
+
+  ```
+
 `store_nd` stores a vector to memory specified by tensor_desc.
 Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to store_nd.
 ```mlir
@@ -269,11 +285,7 @@ In case that certain Xe GPU target does not support atomic operation for a certa
 Attribute `scope` describes the scope of fence. "workgroup" means that the scope is within each work group. "gpu" means the scope is across work groups within the gpu.
 Attribute `Memory_kind` describes the memory kind. "global" means the global memory, "shared" means the shared local memory.
 
-`compile_hint` passes performance hints to the lower-level compiler. The schedule_barrier hint prevents instructions from being reordered by a lower-level compiler. For example, a prefetch instruction is location-sensitive, but the lower-level compiler may schedule it to an undesired location.
-```mlir
-XeGPU.compile_hint {hint=schedule_barrier}
-```
-nbarrier, fence, and compile_hint operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
+`nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
 
 ## Notes
 
