@@ -555,7 +555,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
        %a3_r  = load_tile %a3_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
        %b3_r = load_tile %b3_glb  : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>
 
-       gpu.barrier 
+       gpu.barrier
        store_tile %a1_r, %a1_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
        store_tile %b1_r, %b1_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>
        store_tile %a2_r, %a2_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
@@ -564,12 +564,12 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
        store_tile %b3_r, %b3_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>
 
        gpu.barrier
-       
+
        %a1_load = init_tile %a[%i, %c0] : memref<4096x4096xf16, slm> -> tile<256x32xf16, #mp_a >   // sg_layout=[8, 8]
        %b1_load = init_tile %b[%c0, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b >   // sg_layout=[8,8]
 
        %c_glb = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<256x256xf32, #mp_c>         // sg_layout=[8, 8]
-         
+
        %slm_offset = 0
 
        scf.for %k= %c0 to %c4096 step %c32 {
@@ -583,7 +583,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
 
            %slm_offset = add %slm_offset,  %c32
            %slm_offset = mod %slm_offset,  %c128
-    
+
            %a1_load = update_tile_offset  %a1_load, %c0, %slm_offset :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
            %b1_load = update_tile_offset  %b1_load, %slm_offset, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
            %a4_glb = update_tile_offset   %a4_glb, %c0, %c32 : tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
@@ -593,18 +593,18 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
 
            %c_r = tile_mma %a1_rr, %b1_rr #mp_a #mp_b #mp_c:
                    (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> // sg_layout=[8,8], sg_data=[32,32]
-     
+
            gpu.barrier
 
            // cooperative save to slm
 	   store_tile %a4_r, %a4_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
            store_tile %b4_r, %b4_slm: tile<32x256x f16, #mp_b_cop>, vector<256x256xf32>
-  
+
            %a4_slm = %a4_slm’
            %b4_slm = %b4_slm’
         }
         store_tile %c_r, %c_glb: (tile<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 8]
-    } 
+    }
   }
 }
 ```
@@ -667,7 +667,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
         scf.for %k= %c0 to %c4096 step %c32 {
             %a1_r = load_tile %a1_load : tile<256x32xf16  #mp_a > -> vector<512x32xf16>
             %b1_r = load_tile %b1_load  : tile<32x256xf16 #mp_b> -> vector<32x256xf16>
-          
+
             Scf.if (%k %4 == 0) {
                 gpu.barrier
                 prefetch_tile %a2_l2’ locality<2>: tile<512x128xf16, #mp_a_copl2>
@@ -690,5 +690,3 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
    }
 }
 ```
-
-
