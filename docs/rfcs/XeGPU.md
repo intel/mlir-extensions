@@ -111,7 +111,7 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
 ```
 Attribute `packed` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the row dimension and fits them into 32-bit data along the column dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor]. The first dimension needs to be split by a `vnni_factor`, which represents the number of elements needed to fit 32-bit. The result tensor is always in 2D.
 
-An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. 
+An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8.
 
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
@@ -153,7 +153,7 @@ The `transpose_bit_width` attribute can be used to transpose B matrix and at the
 	   into vector<8x1xfloat>
 ```
 
-When the input matrix is a lower-precision data type (lower than 32bit), the input vectors is optionally to use 3D representation. When this variant is used, the matrix B must be in VNNI layout, and the matrix A may be in original 2D or reshaped to 3D represenation. The reshape for matrix A simply split the second dimension by `vnni_factor`, to match with matrix B. 
+When the input matrix is a lower-precision data type (lower than 32bit), the input vectors is optionally to use 3D representation. When this variant is used, the matrix B must be in VNNI layout, and the matrix A may be in original 2D or reshaped to 3D represenation. The reshape for matrix A simply split the second dimension by `vnni_factor`, to match with matrix B.
 
 ```mlir
   // logically %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
