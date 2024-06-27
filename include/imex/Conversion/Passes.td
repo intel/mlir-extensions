@@ -436,6 +436,7 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
                             "::mlir::LLVM::LLVMDialect",
                             "::mlir::func::FuncDialect",
                            "::mlir::arith::ArithDialect",
+                           "::mlir::spirv::SPIRVDialect"
                             ];
   let constructor = "imex::createConvertXeGPUToVCPass()";
 }

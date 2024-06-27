@@ -73,7 +73,8 @@ module @gemm attributes {gpu.container_module} {
         // LSC: %[[A_OFFSETX:.*]] = vector.extract %[[A_PAYLOAD]][5] : i32 from vector<8xi32>
         // LSC: %[[A_OFFSETY:.*]] = vector.extract %[[A_PAYLOAD]][6] : i32 from vector<8xi32>
         // LSC: %[[LOAD2D_A_v64i32:.*]] = func.call @llvm.genx.lsc.load2d.stateless.v64i32.i1.i64({{.*}}, %[[BASE_A]], {{.*}}, %[[A_OFFSETX]], %[[A_OFFSETY]]) : (i1, i8, i8, i8, i8, i8, i32, i32, i8, i64, i32, i32, i32, i32, i32) -> vector<64xi32>
-        %9 = xegpu.load_nd %7  {vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+        // CHECK: %[[LOAD2D_A_v64i32_CAST:.*]] = vector.bitcast %[[LOAD2D_A_v64i32]] : vector<64xi32> to vector<128xf16>
+        %9 = xegpu.load_nd %7 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 
         // RAW: %[[LOAD2D_B_v128i32:.*]] = func.call @llvm.genx.raw.send2.v128i32.i1.v8i32({{.*}}, %[[B_PAYLOAD]], %{{.*}}) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<8xi32>, vector<128xi32>) -> vector<128xi32>
 
@@ -82,10 +83,13 @@ module @gemm attributes {gpu.container_module} {
         // LSC: %[[B_OFFSETX:.*]] = vector.extract %[[B_PAYLOAD]][5] : i32 from vector<8xi32>
         // LSC: %[[B_OFFSETY:.*]] = vector.extract %[[B_PAYLOAD]][6] : i32 from vector<8xi32>
         // LSC: %[[LOAD2D_B_v128i32:.*]] = func.call @llvm.genx.lsc.load2d.stateless.v128i32.i1.i64({{.*}}, %[[BASE_B]], {{.*}}, %[[B_OFFSETX]], %[[B_OFFSETY]]) : {{.*}} -> vector<128xi32>
-        %10 = xegpu.load_nd %8  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+        // CHECK: %[[LOAD2D_B_v128i32_CAST:.*]] = vector.bitcast %[[LOAD2D_B_v128i32]] : vector<128xi32> to vector<256xf16>
+        %10 = xegpu.load_nd %8 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
-        // CHECK: %[[DPAS_RES:.*]] = func.call @llvm.genx.dpas2.v128f32.v128i32.v64i32(%[[arg4]], %[[LOAD2D_B_v128i32]], %[[LOAD2D_A_v64i32]], {{.*}}) : (vector<128xf32>, vector<128xi32>, vector<64xi32>, i32, i32, i32, i32, i32, i32) -> vector<128xf32>
-        %11 = xegpu.dpas %9, %10, %arg4 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+        // CHECK: %[[LOAD2D_A_v64i32_RECAST:.*]] = vector.bitcast %[[LOAD2D_A_v64i32_CAST]] : vector<128xf16> to vector<64xi32>
+        // CHECK: %[[LOAD2D_B_v128i32_RECAST:.*]] = vector.bitcast %[[LOAD2D_B_v128i32_CAST]] : vector<256xf16> to vector<128xi32>
+        // CHECK: %[[DPAS_RES:.*]] = func.call @llvm.genx.dpas2.v128f32.v128i32.v64i32(%[[arg4]], %[[LOAD2D_B_v128i32_RECAST]], %[[LOAD2D_A_v64i32_RECAST]], {{.*}}) : (vector<128xf32>, vector<128xi32>, vector<64xi32>, i32, i32, i32, i32, i32, i32) -> vector<128xf32>
+        %11 = xegpu.dpas %9, %10, %arg4 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
         // CHECK: scf.yield %[[DPAS_RES]] : vector<128xf32>
         scf.yield %11 : vector<8x16xf32>
       }

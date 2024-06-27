@@ -16,6 +16,7 @@
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -28,6 +29,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include "../PassDetail.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 
@@ -314,8 +316,7 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -412,7 +413,17 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType =
+            encodeVectorTypeTo(retType, tileType.getElementType());
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<vector::BitCastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<vector::BitCastOp>(loc, op.getType(),
                                                        funcOp->getResult(0));
@@ -452,8 +463,7 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -581,7 +591,16 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
       if (rank == 2) {
-        rewriter.replaceOp(op, funcOp);
+        // Intrinsic accepts and returns i32 type, but we want to return a
+        // vector of the original element type
+        auto loadResultInOrigType = encodeVectorTypeTo(newType, elmType);
+        if (loadResultInOrigType != funcOp->getResult(0).getType()) {
+          auto cast = rewriter.create<vector::BitCastOp>(
+              loc, loadResultInOrigType, funcOp->getResult(0));
+          rewriter.replaceOp(op, cast);
+        } else {
+          rewriter.replaceOp(op, funcOp);
+        }
       } else {
         auto cast = rewriter.create<vector::BitCastOp>(loc, op.getType(),
                                                        funcOp->getResult(0));
@@ -618,7 +637,7 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
     auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
     auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
-    uint8_t sd = lhsType.getShape()[1];
+    uint8_t sd = rhsType.getShape()[0];
     auto encodePrecision = [&](Type type) -> uint8_t {
       if (type == rewriter.getBF16Type())
         return 9;
@@ -638,8 +657,23 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
     auto info = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(),
                                                    infoAttr);
 
-    auto newResultType = encodeVectorType(rewriter, resultType).second;
-    SmallVector<Value, 4> args{adaptor.getRhs(), adaptor.getLhs(), info};
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    // Intrinsic accepts i32 type, therefore the element type should be casted
+    // to i32
+    auto [lhsName, lhsNewType] = encodeVectorType(rewriter, lhsType);
+    auto [rhsName, rhsNewType] = encodeVectorType(rewriter, rhsType);
+    auto [resultName, newResultType] = encodeVectorType(rewriter, resultType);
+
+    if (lhsNewType != adaptor.getLhs().getType()) {
+      lhs =
+          rewriter.create<vector::BitCastOp>(loc, lhsNewType, adaptor.getLhs());
+    }
+    if (rhsNewType != adaptor.getRhs().getType()) {
+      rhs =
+          rewriter.create<vector::BitCastOp>(loc, rhsNewType, adaptor.getRhs());
+    }
+    SmallVector<Value, 4> args{rhs, lhs, info};
     std::string funcName = "llvm.genx.dpas.nosrc0.";
     if (op.getAcc()) {
       funcName = "llvm.genx.dpas2.";
@@ -653,14 +687,14 @@ struct DpasPattern : public OpConversionPattern<::mlir::xegpu::DpasOp> {
       auto sdArg = createIntConstant(i32Type, sd);
       auto rcArg = createIntConstant(i32Type, rc);
       auto signless = createIntConstant(i32Type, 0);
-      args.assign({adaptor.getAcc(), adaptor.getRhs(), adaptor.getLhs(),
-                   prec1Arg, prec2Arg, sdArg, rcArg, signless, signless});
+      args.assign({adaptor.getAcc(), rhs, lhs, prec1Arg, prec2Arg, sdArg, rcArg,
+                   signless, signless});
     }
-    funcName += encodeVectorType(rewriter, resultType).first;
+    funcName += resultName;
     funcName += ".";
-    funcName += encodeVectorType(rewriter, rhsType).first;
+    funcName += rhsName;
     funcName += ".";
-    funcName += encodeVectorType(rewriter, lhsType).first;
+    funcName += lhsName;
     auto funcOp = createFuncCall(rewriter, loc, funcName,
                                  TypeRange{newResultType}, args, false);
     auto newcast = rewriter.create<vector::ShapeCastOp>(loc, resultType,
@@ -887,22 +921,29 @@ public:
 };
 
 // TODO: enable this later
-// class AllocNbarrierToVCPattern : public OpConversionPattern<AllocNbarrierOp>
-// { public:
-//   using OpConversionPattern<AllocNbarrierOp>::OpConversionPattern;
-//   LogicalResult
-//   matchAndRewrite(AllocNbarrierOp op, OpAdaptor adaptor,
-//                   ConversionPatternRewriter &rewriter) const override {
-//     OpBuilder::InsertionGuard guard(rewriter);
-//     auto func = op->getParentOfType<spirv::FuncOp>();
-//     rewriter.setInsertionPointAfter(func);
-//     rewriter.create<spirv::ExecutionModeOp>(
-//         op.getLoc(), func, spirv::ExecutionMode::NamedBarrierCountINTEL,
-//         op.getNbarrierNum());
-//     rewriter.eraseOp(op);
-//     return success();
-//   }
-// };
+class AllocNbarrierToVCPattern
+    : public OpConversionPattern<::mlir::xegpu::AllocNbarrierOp> {
+public:
+  using OpConversionPattern<
+      ::mlir::xegpu::AllocNbarrierOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(xegpu::AllocNbarrierOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    OpBuilder::InsertionGuard guard(rewriter);
+    auto func = op->getParentOfType<gpu::GPUFuncOp>();
+    rewriter.setInsertionPointAfter(func);
+    auto executionModeAttr = spirv::ExecutionModeAttr::get(
+        rewriter.getContext(), spirv::ExecutionMode::NamedBarrierCountINTEL);
+
+    auto execModeFuncAttr = spirv::ExecutionModeFuncAttributeAttr::get(
+        rewriter.getContext(), executionModeAttr, op.getNbarrierNum());
+
+    func->setAttr("spirv.execution_mode", execModeFuncAttr);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 static Value createConstantI32(Location loc, PatternRewriter &rewriter,
                                int32_t v) {
@@ -940,11 +981,9 @@ public:
     auto nbarrier_role = rewriter.create<arith::ConstantOp>(
         loc, i32Type, rewriter.getI32IntegerAttr(0));
     auto num_participants = zext(i32Type, op.getParticipantThreadNum());
-
-    DenseElementsAttr constantData = DenseElementsAttr::get(
-        v8i32Type, ArrayRef<int>(std::vector<int>(1, 0)));
-    Value nbarrier_src =
-        rewriter.create<arith::ConstantOp>(loc, v8i32Type, constantData);
+    Value nbarrier_src = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v8i32Type, IntegerAttr::get(v8i32Type.getElementType(), 0)));
 
     Value payload = zext(i32Type, nbarrier_id);
 
@@ -961,7 +1000,7 @@ public:
     payload = bitwise_or(i32Type, payload, payload_num_consumers);
 
     nbarrier_src =
-        rewriter.create<vector::InsertOp>(loc, nbarrier_src, payload, 2);
+        rewriter.create<vector::InsertOp>(loc, payload, nbarrier_src, 2);
     rewriter.replaceOp(op, nbarrier_src);
 
     return success();
@@ -1013,8 +1052,8 @@ public:
     auto i8Type = rewriter.getIntegerType(8);
     auto i32Type = rewriter.getIntegerType(32);
     auto nbarrier_src = rewriter.create<vector::ExtractOp>(loc, payload, 2);
-    auto nbarrier_id =
-        zext(i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
+    auto nbarrier_id = rewriter.create<arith::TruncIOp>(
+        loc, i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
 
     Value signal_flag = i8_val(0); // 0b0: wait 0b1: signal
     Value num_threads = i8_val(0); // This field is ignored for nbarrier.wait
@@ -1078,6 +1117,8 @@ public:
 
     // the design limits the fence_op to NONE
     fence_op = lscFenceOp::NONE;
+    sfid = lscSFID::UGM;
+    fence_scope = lscFenceScope::GROUP;
 
     switch (op.getMemoryKind()) {
     case mlir::xegpu::MemoryScope::Global:
@@ -1085,9 +1126,6 @@ public:
       break;
     case mlir::xegpu::MemoryScope::SLM:
       sfid = lscSFID::TGM;
-      break;
-    default:
-      llvm_unreachable("unsupported value for memory_kind attribute");
       break;
     }
 
@@ -1097,9 +1135,6 @@ public:
       break;
     case mlir::xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
-      break;
-    default:
-      llvm_unreachable("unsupported value for fence_scope attribute");
       break;
     }
 
@@ -1207,7 +1242,7 @@ struct VectorExtractVC final
 
 static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-};
+}
 
 struct VectorExtractStridedSliceVC final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {
@@ -1465,6 +1500,9 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addIllegalOp<::mlir::vector::ShapeCastOp,
                         ::mlir::vector::ExtractStridedSliceOp>();
 
+    // Don't convert "index" to "i64"
+    typeConverter.addConversion([&](mlir::IndexType type) { return type; });
+
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
           auto i32Type = ::mlir::IntegerType::get(&getContext(), 32);
@@ -1483,7 +1521,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
       auto scalarType =
           llvm::dyn_cast_or_null<mlir::spirv::ScalarType>(elemType);
-      if (!scalarType) {
+      if (!scalarType && !elemType.isBF16()) {
         llvm::dbgs() << type
                      << " illegal: cannot convert non-scalar element type\n";
         return nullptr;
@@ -1491,15 +1529,6 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
       if (rank < 1 || type.getNumElements() == 1)
         return elemType;
-
-      // load2d/store2d is 3-d with vnni format, and 4d with array_length
-      // TODO: what if load without any vnni? are we going to transform all
-      // fp16/bf16
-      auto factor = 32 / elemType.getIntOrFloatBitWidth();
-      if ((rank == 3 || rank == 4) && type.getShape()[rank - 1] == factor) {
-        elemType = ::mlir::IntegerType::get(&getContext(), 32);
-        rank--;
-      }
 
       unsigned sum = 1;
       for (unsigned i = 0; i < rank; i++) {
@@ -1511,7 +1540,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     // TODO: Add AllocNbarrierToVCPattern patterns
     patterns.add<CreateNdDescPattern, CreateDescToVCPattern, DpasPattern,
-                 /*AllocNbarrierToVCPattern, */ InitNbarrierToVCPattern,
+                 AllocNbarrierToVCPattern, InitNbarrierToVCPattern,
                  NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                  CompilerHintToVCPattern, FenceToVCPattern,
                  UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern>(

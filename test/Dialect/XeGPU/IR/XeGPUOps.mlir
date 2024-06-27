@@ -41,9 +41,9 @@ func.func @test_load_nd_vc(%src: memref<24x32xf16>, %x : index, %y : index) {
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
 
   // CHECK: xegpu.load_nd
-  // CHECK-SAME: {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, vnni_axis = 0 : i64}
+  // CHECK-SAME: {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, packed}
   // CHECK-SAME: !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
-  %2 = xegpu.load_nd %1 {vnni_axis = 0, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
+  %2 = xegpu.load_nd %1 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
   return
 }
 
@@ -76,12 +76,21 @@ func.func @test_store_nd_vc(%src: memref<24x32xf16>, %dst: memref<24x32xf16>) {
 
 
 // CHECK-LABEL: func @test_dpas_vc({{.*}}) {
-func.func @test_dpas_vc(%a : vector<8x8x2xf16>, %b: vector<8x16x2xf16>) {
+func.func @test_dpas_vc(%a : vector<8x16xf16>, %b: vector<8x16x2xf16>) {
   // CHECK: xegpu.dpas
-  // CHECK-SAME: vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-  %1 = xegpu.dpas %a, %b : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+  // CHECK-SAME: vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+  %1 = xegpu.dpas %a, %b : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
   return
 }
+
+// CHECK-LABEL: func @test_dpas_vc_2({{.*}}) {
+func.func @test_dpas_vc_2(%a : vector<8x16xf16>, %b: vector<16x16xf16>) {
+  // CHECK: xegpu.dpas
+  // CHECK-SAME: vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
+  %1 = xegpu.dpas %a, %b : vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
+  return
+}
+
 
 
 // CHECK-LABEL: func @test_update_nd_offset_vc({{.*}}) {

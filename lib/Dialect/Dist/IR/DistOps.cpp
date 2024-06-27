@@ -194,8 +194,8 @@ void InitDistArrayOp::build(::mlir::OpBuilder &odsBuilder,
     shapes.emplace_back(
         mlir::cast<::imex::ndarray::NDArrayType>(p.getType()).getShape());
   }
-  ::mlir::ArrayRef<int64_t> lOffs =
-      s_Offs.size() ? s_Offs : getShapeFromValues(l_offset);
+  auto resShape = getShapeFromValues(l_offset);
+  ::mlir::ArrayRef<int64_t> lOffs = s_Offs.size() ? s_Offs : resShape;
   ::mlir::SmallVector<::mlir::Attribute> nEnvs(environments);
   nEnvs.emplace_back(::imex::dist::DistEnvAttr::get(team, lOffs, shapes));
   auto arType = ::imex::ndarray::NDArrayType::get(g_shape, elTyp, nEnvs);
@@ -207,7 +207,7 @@ void PartsOfOp::build(::mlir::OpBuilder &odsBuilder,
   auto pTypes =
       getPartsTypes(mlir::cast<::imex::ndarray::NDArrayType>(ary.getType()));
   assert(pTypes.size() == 1 || pTypes.size() == 3 ||
-         !"Number of local parts must be 1 or 3");
+         (false && "Number of local parts must be 1 or 3"));
   build(odsBuilder, odsState, pTypes, ary);
 }
 

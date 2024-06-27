@@ -292,8 +292,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -426,6 +425,7 @@ public:
   }
 };
 
+#if 0
 std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   if (auto op = val.getDefiningOp()) {
     if (auto descOp = dyn_cast<xegpu::CreateNdDescOp>(op)) {
@@ -442,6 +442,7 @@ std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   // Add more support
   return std::nullopt;
 }
+#endif
 
 template <typename OpType>
 class LoadStorePrefetchNdToRawSend : public OpConversionPattern<OpType> {
@@ -468,8 +469,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true
@@ -647,7 +647,7 @@ public:
     auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
     auto resultType = mlir::cast<VectorType>(op.getResultType());
     uint8_t rc = lhsType.getShape()[0];
-    uint8_t sd = lhsType.getShape()[1];
+    uint8_t sd = rhsType.getShape()[0];
     // refer to IGC/visa/Common_ISA_util.cpp#87
     auto encodePrecision = [&](Type type) -> uint8_t {
       if (type == rewriter.getBF16Type())
@@ -1130,6 +1130,8 @@ public:
 
     // the design limits the fence_op to NONE
     fence_op = lscFenceOp::NONE;
+    sfid = lscSFID::UGM;
+    fence_scope = lscFenceScope::GROUP;
 
     switch (op.getMemoryKind()) {
     case mlir::xegpu::MemoryScope::Global:
@@ -1137,9 +1139,6 @@ public:
       break;
     case mlir::xegpu::MemoryScope::SLM:
       sfid = lscSFID::TGM;
-      break;
-    default:
-      llvm_unreachable("unsupported value for memory_kind attribute");
       break;
     }
 
@@ -1149,9 +1148,6 @@ public:
       break;
     case mlir::xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
-      break;
-    default:
-      llvm_unreachable("unsupported value for fence_scope attribute");
       break;
     }
 
@@ -1252,7 +1248,7 @@ struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
 
 static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
   return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-};
+}
 
 struct VectorExtractStridedSlice final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {
@@ -1574,8 +1570,7 @@ public:
     auto vnni = false;
     auto transpose = false;
     if constexpr (isLoad) {
-      auto vnniValue = op.getVnniAxis();
-      vnni = vnniValue.has_value() && vnniValue.value() == 0 ? true : false;
+      vnni = op.getPacked().value_or(false);
       auto transposeValue = op.getTranspose();
       transpose = transposeValue.has_value() && transposeValue.value()[0] == 1
                       ? true

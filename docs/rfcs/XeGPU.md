@@ -109,10 +109,10 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
   %at = XeGPU.load_nd %tdesc2 {transpose = [1,0], mode = vc} :
      tile<8x16xf32> into vector<16x8xf32>
 ```
-
 Attribute `packed` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the row dimension and fits them into 32-bit data along the column dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor]. The first dimension needs to be split by a `vnni_factor`, which represents the number of elements needed to fit 32-bit. The result tensor is always in 2D.
 
 An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. 
+
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
   %bt = XeGPU.load_nd %tdesc1 {packed} :
@@ -165,6 +165,7 @@ When the input matrix is a lower-precision data type (lower than 32bit), the inp
   %vector_c = XeGPU.dpas %vector_a, %vector_b, %vector_c {mode = vc} :
      vector<8x8x2xbf16>, vector<8x16x2xbf16>
 	   into vector<8x16xfloat>
+
   ```
 
 `store_nd` stores a vector to memory specified by tensor_desc.
@@ -284,7 +285,7 @@ In case that certain Xe GPU target does not support atomic operation for a certa
 Attribute `scope` describes the scope of fence. "workgroup" means that the scope is within each work group. "gpu" means the scope is across work groups within the gpu.
 Attribute `Memory_kind` describes the memory kind. "global" means the global memory, "shared" means the shared local memory.
 
-nbarrier and fence operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
+`nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the sg_map or VC mode.
 
 ## Notes
 

@@ -124,7 +124,16 @@ def RemoveTemporaries : Pass<"imex-remove-temporaries"> {
 def VectorLinearize : Pass<"imex-vector-linearize"> {
   let summary = "Linearizes ND vectors into 1D for N >= 2";
   let constructor = "imex::createVectorLinearizePass()";
-    let dependentDialects = [
+  let dependentDialects = [
+    "::mlir::vector::VectorDialect"
+  ];
+}
+
+def PropagatePackedLayout : Pass<"imex-propagate-packed-layout"> {
+  let summary = "Propagate packed layout (i.e. VNNI) through ops";
+  let constructor = "imex::createPropagatePackedLayoutPass()";
+
+  let dependentDialects = [
     "::mlir::vector::VectorDialect"
   ];
 }

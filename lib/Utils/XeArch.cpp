@@ -218,12 +218,6 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
       return op->emitOpError() << "Unsupported dpas config";
     }
 
-    if (lhsRank != rhsRank) {
-      return op->emitOpError() << "lhs and rhs rank does not match for dpas op "
-                               << "(lhsRank: " << lhsRank << ", "
-                               << "rhsRank:" << rhsRank << ").\n";
-    }
-
     DPASConfig dpasParams =
         this->getDPASConfig(APrecision, BPrecision, CPrecision, DPrecision);
 
@@ -231,21 +225,28 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
     unsigned int N = dpasParams.n; // Execution size
     unsigned int K = dpasParams.k; // systolicDepth * opsPerChannel
 
+    // TODO: restrict A to be 2D instead of both 2D and 3D
+    auto aK = lhsRank == 3 ? lhsShape[1] * lhsShape[2] : lhsShape[1];
+    auto bK = rhsRank == 3 ? rhsShape[0] * rhsShape[2] : rhsShape[0];
+
     if (!(lhsShape[0] >= 1 && lhsShape[0] <= M)) {
       return op->emitOpError()
-             << "A matrix has incorrect size and does not match dpas config.\n"
-             << " A[" << lhsShape[0] << "x" << lhsShape[1] << "\n"
-             << " dpas config: mxnxk = " << M << "x" << N << "x" << K;
+             << "A matrix has incorrect size and does not match dpas config. "
+             << "A[" << lhsShape[0] << "x" << aK << "], dpas config: "
+             << "mxnxk = " << M << "x" << N << "x" << K << "\n";
     }
 
-    unsigned int BNumElements = std::accumulate(
-        rhsShape.begin(), rhsShape.end(), 1, std::multiplies<unsigned>());
+    if (aK != K || bK != K)
+      return op->emitOpError() << "K-dim of A matrix (mxk), and B matrix (kxn) "
+                                  "should be fixed to "
+                               << K << " (dpas config: mxnxk = " << M << "x"
+                               << N << "x" << K << ").\n";
+
     // Execution size for matrix B should match dpas params
-    if (BNumElements != K * N) {
-      return op->emitOpError()
-             << "B matrix has incorrect size and does not match dpas config\n."
-             << "B matrix # of Elements: " << BNumElements
-             << " dpas config: mxnxk = " << M << "x" << N << "x" << K;
+    if (rhsShape[1] != N) {
+      return op->emitOpError() << "N-dim of B matrix (kxn) should be fixed to "
+                               << N << " (dpas config: mxnxk = " << M << "x"
+                               << N << "x" << K << ").\n";
     }
   }
   return mlir::success();
@@ -305,7 +306,7 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
     int elementSize = loadOp.getTensorDescType().getElementTypeBitWidth();
 
     LoadStore2DConfig loadParams;
-    bool vnni = loadOp.getVnniAxis() == 0 ? true : false;
+    bool vnni = loadOp.getPacked().value_or(false);
     bool transpose =
         loadOp.getTranspose() == llvm::ArrayRef<int64_t>({1, 0}) ? true : false;
 

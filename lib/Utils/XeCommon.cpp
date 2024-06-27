@@ -28,7 +28,7 @@ int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
       return i;
   }
   return -1;
-};
+}
 
 mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
                                      mlir::Value operand) {
@@ -36,7 +36,7 @@ mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
   auto numControls = op.getNumControlOperands();
   assert(idx >= (int)numControls);
   return op.getRegionIterArg(idx - numControls);
-};
+}
 
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod) {
   bool hasTileTyInFuncTy = false;
@@ -76,6 +76,9 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   }
   std::string str;
   switch (size) {
+  case 8:
+    str += "v8";
+    break;
   case 16:
     str += "v16";
     break;
@@ -109,10 +112,27 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   else if (elemType == rewriter.getF16Type()) {
     str += "i32";
     elemType = rewriter.getI32Type();
+  } else if (elemType == rewriter.getBF16Type()) {
+    str += "i32";
+    elemType = rewriter.getI32Type();
   } else
     assert(0 && "add more support");
   auto newType = mlir::VectorType::get(size, elemType);
   return std::make_pair(str, newType);
+}
+
+/// @brief
+/// We have to use i32 for intrinsic calls like llvm_genx_raw_send2_*, if we
+/// want to get the original element type (e.g., f16) as the result of a load,
+/// we have to encode the resulting i32 vector back to it.
+mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
+                                    mlir::Type toElemType) {
+  auto elemType = currentVecType.getElementType();
+  auto currentbitWidth = elemType.getIntOrFloatBitWidth();
+  auto newBitwidth = toElemType.getIntOrFloatBitWidth();
+  const int size =
+      currentVecType.getNumElements() * currentbitWidth / newBitwidth;
+  return mlir::VectorType::get(size, toElemType);
 }
 
 unsigned encodeDataum(mlir::Type type) {

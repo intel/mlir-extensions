@@ -31,9 +31,9 @@ gpu.module @test_kernel {
 
 // CHECK-LABEL: test_blocking_transpose
 //  CHECK-SAME: (%[[SRC:.*]]: vector<64x32xf16>)
-//       CHECK: %[[PACK:.*]] = xetile.tile_pack %[[SRC]] { inner_blocks = [16, 16] } : vector<64x32xf16> -> vector<4x2x16x16xf16>
-//       CHECK: %[[T:.*]] = vector.transpose %[[PACK]], [1, 0, 3, 2] : vector<4x2x16x16xf16> to vector<2x4x16x16xf16>
-//       CHECK: %[[UNPACK:.*]] = xetile.tile_unpack %[[T]] { inner_blocks = [16, 16] } : vector<2x4x16x16xf16> -> vector<32x64xf16>
+//       CHECK: %[[PACK:.*]] = xetile.tile_pack %[[SRC]] { inner_blocks = [8, 16] } : vector<64x32xf16> -> vector<8x2x8x16xf16>
+//       CHECK: %[[T:.*]] = vector.transpose %[[PACK]], [1, 0, 3, 2] : vector<8x2x8x16xf16> to vector<2x8x16x8xf16>
+//       CHECK: %[[UNPACK:.*]] = xetile.tile_unpack %[[T]] { inner_blocks = [16, 8] } : vector<2x8x16x8xf16> -> vector<32x64xf16>
 //       CHECK: return %[[UNPACK]] : vector<32x64xf16>
 func.func @test_blocking_transpose(%a: vector<64x32xf16>) -> vector<32x64xf16> {
   %0 = vector.transpose %a, [1, 0]: vector<64x32xf16> to vector<32x64xf16>
@@ -48,9 +48,9 @@ gpu.module @test_kernel {
 
 // CHECK-LABEL: test_blocking_transpose_small
 //  CHECK-SAME: (%[[SRC:.*]]: vector<16x8xf16>)
-//       CHECK: %[[PACK:.*]] = xetile.tile_pack %[[SRC]] { inner_blocks = [16, 8] } : vector<16x8xf16> -> vector<1x1x16x8xf16>
-//       CHECK: %[[T:.*]] = vector.transpose %[[PACK]], [1, 0, 3, 2] : vector<1x1x16x8xf16> to vector<1x1x8x16xf16>
-//       CHECK: %[[UNPACK:.*]] = xetile.tile_unpack %[[T]] { inner_blocks = [8, 16] } : vector<1x1x8x16xf16> -> vector<8x16xf16>
+//       CHECK: %[[PACK:.*]] = xetile.tile_pack %[[SRC]] { inner_blocks = [8, 8] } : vector<16x8xf16> -> vector<2x1x8x8xf16>
+//       CHECK: %[[T:.*]] = vector.transpose %[[PACK]], [1, 0, 3, 2] : vector<2x1x8x8xf16> to vector<1x2x8x8xf16>
+//       CHECK: %[[UNPACK:.*]] = xetile.tile_unpack %[[T]] { inner_blocks = [8, 8] } : vector<1x2x8x8xf16> -> vector<8x16xf16>
 //       CHECK: return %[[UNPACK]] : vector<8x16xf16>
 func.func @test_blocking_transpose_small(%a: vector<16x8xf16>) -> vector<8x16xf16> {
   %0 = vector.transpose %a, [1, 0]: vector<16x8xf16> to vector<8x16xf16>

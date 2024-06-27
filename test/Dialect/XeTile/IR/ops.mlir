@@ -11,6 +11,19 @@
 #tile_attr_w_order = #xetile.tile_attr<order = [0, 1]>
 #tile_attr_w_wg_data = #xetile.tile_attr<wg_map = #wg_map, wg_data = [128, 128]>
 
+
+#wg_map_mma_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
+#wg_map_mma_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+#wg_map_mma_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+
+
+#wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
+#wg_map_a2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
+
+#wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
+#wg_map_b2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
+
+
 // init_tile with a static shaped memref
 // CHECK-LABEL: func @test_init_tile_using_static_memref({{.*}}) {
 func.func @test_init_tile_using_static_memref(%src: memref<1024x1024xf16>) {
@@ -312,7 +325,7 @@ func.func @test_atomic_rmw(%tile : !xetile.tile<8x16xf16>, %value : vector<8x16x
 
 func.func @test_transpose(%source: vector<8x16xf16>) {
   // CHECK: xetile.transpose {{.*}} [1, 0] : vector<8x16xf16> -> vector<16x8xf16>
-  %1 = xetile.transpose %source [1, 0] : vector<8x16xf16> -> vector<16x8xf16>
+  %1 = xetile.transpose %source, [1, 0] : vector<8x16xf16> -> vector<16x8xf16>
   return
 }
 
@@ -322,8 +335,30 @@ func.func @test_reduce(%source: vector<8x16xf16>) {
   return
 }
 
+func.func @test_reduce_map(%source: vector<256x128xf16>) {
+  // CHECK: xetile.reduce {{.*}} [1] {map1 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>, map2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>} : vector<256x128xf16> -> vector<256x1xf16>
+  %1 = xetile.reduce <add>, %source [1] {map1 = #wg_map_a, map2 = #wg_map_a2} : vector<256x128xf16> -> vector<256x1xf16>
+  return
+}
+
+
 func.func @test_broadcast(%source: vector<1x16xf16>) {
   // CHECK: xetile.broadcast {{.*}} [0] : vector<1x16xf16> -> vector<8x16xf16>
   %1 = xetile.broadcast %source [0] : vector<1x16xf16> -> vector<8x16xf16>
+  return
+}
+
+func.func @test_broadcast_map(%source: vector<256x1xf16>) {
+  // CHECK: xetile.broadcast {{.*}} [1] {map1 = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>, map2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>} : vector<256x1xf16> -> vector<256x256xf16>
+  %1 = xetile.broadcast %source [1] {map1 = #wg_map_b, map2 = #wg_map_b2} : vector<256x1xf16> -> vector<256x256xf16>
+  return
+}
+
+
+func.func @test_tile_mma_map(%a : vector<256x256xf16>, %b : vector<256x256xf16>, %c : vector<256x256xf32>) {
+// CHECK: xetile.tile_mma
+// CHECK-SAME : {wg_map_a =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>, wg_map_b =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>, wg_map_c =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>}
+ %result = xetile.tile_mma %a, %b, %c {wg_map_a = #wg_map_mma_a, wg_map_b = #wg_map_mma_b, wg_map_c = #wg_map_mma_c} :
+     vector<256x256xf16>, vector<256x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
   return
 }

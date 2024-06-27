@@ -78,7 +78,6 @@ getInnerBlockHeightWidth(int maxHeight, int maxWidth, int minHeight,
   llvm::SmallVector<int64_t, 2> innerBlockSizes;
 
   if (height < minHeight || width < minWidth) {
-    llvm::dbgs() << "Invalid Block Size \n";
     return {};
   }
 
@@ -183,7 +182,7 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     // TODO: get from uArch?
     maxHeight = 16;
     minHeight = 1;
-    maxWidth = 16;
+    maxWidth = 8;
     minWidth = 1;
 
     return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
@@ -222,8 +221,7 @@ getMMASize(mlir::Type elemTy, const int APrecision, const int BPrecision,
       {dpasParams.m, dpasParams.k, dpasParams.n});
 }
 
-// it blocks a constant dense value if it is used by XeTile operators,
-// e.g, tile_mma and store_tile. It currently extends a 2D vector into
+// It blocks/extends a 2D constant dense vector into a
 // 4D vector with the last 2 dim corresponding to block size.
 // example: arith.constant dense<0.0>: vector<32x32xf16>
 //      --> arith.constant dense<0.0>: vector<4x2x8x16xf16>
@@ -259,10 +257,8 @@ struct ArithConstantOpPattern
     auto blkSZ =
         getInnerBlockSizes<Load>(op.getOperation(), value.getElementType(),
                                  shape[0], shape[1], this->uArchInterface);
-    if (blkSZ.empty()) {
-      op->emitOpError() << "Invalid inner block sizes ";
-      return mlir::failure();
-    }
+    if (blkSZ.empty())
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
 
     auto newTy = mlir::VectorType::get(
         {shape[0] / blkSZ[0], shape[1] / blkSZ[1], blkSZ[0], blkSZ[1]},
@@ -276,38 +272,7 @@ struct ArithConstantOpPattern
     auto newOp = rewriter.create<mlir::arith::ConstantOp>(loc, value);
     auto unpack = addUnpackOp(newOp, rewriter);
 
-    // TODO: we may can replace it with standard replaceOp method when
-    // we have full support for other non-xetile operators.
-    rewriter.replaceUsesWithIf(
-        op->getResults(), unpack->getResults(), [&](mlir::OpOperand &op) {
-          auto *owner = op.getOwner();
-
-          // the direct user is an xetile operator
-          if (llvm::isa<xetile::XeTileDialect>(owner->getDialect()))
-            return true;
-
-          // the direct user is an scf::ForOp, but the corresponding argument
-          // is used by an xetile operator
-          if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(owner)) {
-            auto arg = forOp.getTiedLoopRegionIterArg(&op);
-
-            auto haveXeTileUsers = std::any_of(
-                arg.user_begin(), arg.user_end(), [&](mlir::Operation *op) {
-                  return llvm::isa<xetile::XeTileDialect>(op->getDialect());
-                });
-
-            if (auto yieldOp = llvm::dyn_cast<mlir::scf::YieldOp>(
-                    forOp.getRegion().front().getTerminator())) {
-              auto idx = forOp.getTiedLoopResult(&op).getResultNumber();
-              auto definingOp = yieldOp.getResults()[idx].getDefiningOp();
-              if (definingOp)
-                haveXeTileUsers |=
-                    llvm::isa<xetile::XeTileDialect>(definingOp->getDialect());
-            }
-            return haveXeTileUsers;
-          }
-          return false;
-        });
+    rewriter.replaceOp(op, unpack);
     return mlir::success();
   }
 };
@@ -386,23 +351,25 @@ struct VectorizableOpPattern
   }
 };
 
-struct TransposeOpPattern
-    : public XeTileConversion<mlir::vector::TransposeOp, TileUsageAnalysis> {
+template <typename OpTy>
+struct TransposeOpPattern : public XeTileConversion<OpTy, TileUsageAnalysis> {
 
-  using XeTileConversion::XeTileConversion;
+  using XeTileConversion<OpTy, TileUsageAnalysis>::XeTileConversion;
+  using OpAdaptor = typename OpTy::Adaptor;
 
   TransposeOpPattern(mlir::MLIRContext *context,
                      imex::XeTypeConverter &converter,
                      TileUsageAnalysis &analysis,
                      std::shared_ptr<XeuArchInterface> ptruArch)
-      : XeTileConversion(context, converter, analysis) {
+      : XeTileConversion<OpTy, TileUsageAnalysis>(context, converter,
+                                                  analysis) {
     this->uArchInterface = ptruArch;
   }
 
   std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::vector::TransposeOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   mlir::PatternRewriter &rewriter) const override {
     auto res = op.getResult();
     auto resType = mlir::cast<mlir::VectorType>(res.getType());
@@ -431,18 +398,19 @@ struct TransposeOpPattern
         resType.getElementType());
 
     mlir::Value arg = adaptor.getVector();
+
     Location loc = op->getLoc();
     mlir::Value pack = rewriter.create<xetile::TilePackOp>(
         loc, newSrcTy, arg,
-        mlir::DenseI64ArrayAttr::get(getContext(), inBlocks));
+        mlir::DenseI64ArrayAttr::get(op.getContext(), inBlocks));
 
     int64_t newPermutation[4] = {1, 0, 3, 2};
-    mlir::Value transpose = rewriter.create<mlir::vector::TransposeOp>(
-        loc, newDstTy, pack, newPermutation);
+    mlir::Value transpose =
+        rewriter.create<OpTy>(loc, newDstTy, pack, newPermutation);
 
     mlir::Value unpack = rewriter.create<xetile::TileUnpackOp>(
         loc, resType, transpose,
-        mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+        mlir::DenseI64ArrayAttr::get(op.getContext(), blocks));
 
     rewriter.replaceOp(op, unpack);
 
@@ -515,6 +483,134 @@ struct VectorMultiDimReductionOpPattern
   }
 };
 
+struct TileReduceOpPattern
+    : public XeTileConversion<xetile::ReduceOp, TileUsageAnalysis> {
+
+  using XeTileConversion<xetile::ReduceOp, TileUsageAnalysis>::XeTileConversion;
+
+  TileReduceOpPattern(mlir::MLIRContext *context,
+                      imex::XeTypeConverter &converter,
+                      TileUsageAnalysis &analysis,
+                      std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto srcTy = op.getSource().getType();
+    auto elemTy = srcTy.getElementType();
+    auto shape = srcTy.getShape();
+    auto reductionDims = op.getReductionDim();
+
+    if (srcTy.getRank() != 2 || reductionDims.size() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "source type is not 2D vector or reduction dims are not 1");
+
+    auto blkSizes = getInnerBlockSizes<Elementwise>(
+        op, elemTy, shape[0], shape[1], this->uArchInterface);
+
+    if (blkSizes.empty())
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
+
+    // reduction on one dim becomes reduction on two dims after blocking.
+    // For example:
+    // reduce<add>, %e [1]: vector<16x32xf16> to vector<16xf16>
+    // will be transformed to
+    // reduce<add>, %e [1, 3]: vector<16x2x1x16xf16> to
+    // vector<16x1xf16>
+    auto dim = reductionDims[0];
+    auto newReductionDims =
+        mlir::DenseI64ArrayAttr::get(op.getContext(), {dim, dim + 2});
+    llvm::SmallVector<int64_t> newDestShape({shape[0] / blkSizes[0],
+                                             shape[1] / blkSizes[1],
+                                             blkSizes[0], blkSizes[1]});
+    for (auto dim : newReductionDims.asArrayRef()) {
+      newDestShape[dim] = 1;
+    }
+
+    auto newDestType =
+        mlir::VectorType::get(newDestShape, srcTy.getElementType());
+
+    auto newSource =
+        addPackOp(adaptor.getSource(), {blkSizes[0], blkSizes[1]}, rewriter);
+    auto newDest = rewriter.create<xetile::ReduceOp>(
+        loc, newDestType, op.getKind(), newSource, newReductionDims);
+    auto unpack = addUnpackOp(newDest.getResult(), rewriter);
+    rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
+struct TileBroadcastOpPattern
+    : public XeTileConversion<xetile::BroadcastOp, TileUsageAnalysis> {
+
+  using XeTileConversion<xetile::BroadcastOp,
+                         TileUsageAnalysis>::XeTileConversion;
+
+  TileBroadcastOpPattern(mlir::MLIRContext *context,
+                         imex::XeTypeConverter &converter,
+                         TileUsageAnalysis &analysis,
+                         std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::BroadcastOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto srcTy = op.getSource().getType();
+    auto elemTy = srcTy.getElementType();
+    auto shape = srcTy.getShape();
+    auto broadcastDims = op.getBroadcastDim();
+
+    if (srcTy.getRank() != 2 || broadcastDims.size() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "source type is not 2D vector or rank of broadcastDims is not 1");
+
+    auto inBlkSizes = getInnerBlockSizes<Elementwise>(
+        op, elemTy, shape[0], shape[1], this->uArchInterface);
+
+    auto outShape = op.getResult().getType().getShape();
+    auto outBlkSizes = getInnerBlockSizes<Elementwise>(
+        op, elemTy, outShape[0], outShape[1], this->uArchInterface);
+
+    if (inBlkSizes.empty() || outBlkSizes.empty())
+      return rewriter.notifyMatchFailure(op, "Invalid inner block sizes");
+
+    llvm::SmallVector<int64_t> newDestShape({outShape[0] / outBlkSizes[0],
+                                             outShape[1] / outBlkSizes[1],
+                                             outBlkSizes[0], outBlkSizes[1]});
+
+    auto newSource = addPackOp(adaptor.getSource(),
+                               {inBlkSizes[0], inBlkSizes[1]}, rewriter);
+
+    auto newDestType =
+        mlir::VectorType::get(newDestShape, srcTy.getElementType());
+
+    // broadcast on one dim becomes broadcast on two dims after blocking.
+    // For example:
+    // broadcast %a [0]: vector<1x32xf16> to vector<16x32xf16>
+    // will be transformed to
+    // broadcast %a [0, 2]: vector<1x2x1x16xf16> to vector<16x2x1x16xf16>
+    auto dim = broadcastDims[0];
+    auto newBroadcastDims =
+        mlir::DenseI64ArrayAttr::get(op.getContext(), {dim, dim + 2});
+    auto newDest = rewriter.create<xetile::BroadcastOp>(
+        loc, newDestType, newSource, newBroadcastDims);
+    auto unpack = addUnpackOp(newDest.getResult(), rewriter);
+    rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
 // It rewrites the SCF forOp, it mainly updates the arguments of its
 // region block. unpack ops are added for VectorType operands if needed.
 struct SCFForOpPattern
@@ -537,9 +633,12 @@ struct SCFForOpPattern
     // we don't need to update the forOp if it has no region
     // iter args, or the region iter args type are not changed.
     bool changed = false;
-    for (unsigned i = 0; i < op.getNumRegionIterArgs(); i++)
-      changed |= adaptor.getInitArgs()[i].getType() !=
-                 op.getRegionIterArg(i).getType();
+    for (unsigned i = 0; i < op.getNumRegionIterArgs(); i++) {
+      auto initArg = adaptor.getInitArgs()[i];
+      auto regionArg = op.getRegionIterArg(i);
+      changed |= (initArg.getType() != regionArg.getType()) ||
+                 bool(initArg.getDefiningOp<xetile::TileUnpackOp>());
+    }
     if (!changed)
       return mlir::failure();
 
@@ -564,8 +663,27 @@ struct SCFForOpPattern
     if (newBlock->mightHaveTerminator())
       rewriter.eraseOp(newBlock->getTerminator());
 
+    auto savedIP = rewriter.saveInsertionPoint();
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(newBlock);
+
+    // contruct the inputs for the new scf::for block.
+    // An unpackOp is inserted for the corresponding init arg
+    // of the new block if its init value is updated with a pack op.
+    llvm::SmallVector<mlir::Value> newArguments;
+    for (auto [i, arg] : llvm::enumerate(newBlock->getArguments())) {
+      if (i && newInitArgs[i - 1].getDefiningOp<xetile::TilePackOp>()) {
+        auto unpack = addUnpackOp(arg, rewriter);
+        newArguments.push_back(unpack);
+      } else {
+        newArguments.push_back(arg);
+      }
+    }
+
+    rewriter.restoreInsertionPoint(savedIP);
+
     mlir::Block *block = op.getBody();
-    rewriter.mergeBlocks(block, newBlock, newBlock->getArguments());
+    rewriter.mergeBlocks(block, newBlock, newArguments);
 
     llvm::SmallVector<mlir::Value> newValues;
     for (auto [i, result] : llvm::enumerate(newOp->getResults())) {
@@ -618,13 +736,14 @@ struct SCFYieldOpPattern
         // get InnerBlock size from the corresponding output type
         auto ty =
             mlir::dyn_cast<mlir::VectorType>(forOp->getResult(i).getType());
-        assert(ty && ty.getRank() == 4);
-        auto innerBlock = ty.getShape().take_back(2);
-        auto packOp = addPackOp(v, innerBlock, rewriter);
-        rewriter.startOpModification(op);
-        op->setOperand(i, packOp);
-        rewriter.finalizeOpModification(op);
-        changed = true;
+        if (ty && ty.getRank() == 4) {
+          auto innerBlock = ty.getShape().take_back(2);
+          auto packOp = addPackOp(v, innerBlock, rewriter);
+          rewriter.startOpModification(op);
+          op->setOperand(i, packOp);
+          rewriter.finalizeOpModification(op);
+          changed = true;
+        }
       }
     }
     return mlir::success(changed);
@@ -913,8 +1032,8 @@ struct TileMMAOpPattern
         {shape[0] / mmaSize[0], shape[1] / mmaSize[2], mmaSize[0], mmaSize[2]},
         resultTy.getElementType());
 
-    mlir::Value newOp =
-        rewriter.create<imex::xetile::TileMMAOp>(op.getLoc(), vecTy, a, b, c);
+    mlir::Value newOp = rewriter.create<imex::xetile::TileMMAOp>(
+        op.getLoc(), vecTy, a, b, c, nullptr, nullptr, nullptr);
     newOp = addUnpackOp(newOp, rewriter);
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -955,12 +1074,15 @@ struct UpdateTileOffsetOpPattern
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
-  patterns
-      .insert<ArithConstantOpPattern, VectorizableOpPattern, SCFForOpPattern,
-              SCFYieldOpPattern, InitTileOpPattern, LoadTileOpPattern,
-              StoreTileOpPattern, TileMMAOpPattern, UpdateTileOffsetOpPattern,
-              TransposeOpPattern, VectorMultiDimReductionOpPattern>(
-          patterns.getContext(), converter, analysis, ptruArch);
+  patterns.insert<ArithConstantOpPattern, VectorizableOpPattern,
+                  SCFForOpPattern, SCFYieldOpPattern, InitTileOpPattern,
+                  LoadTileOpPattern, StoreTileOpPattern, TileMMAOpPattern,
+                  UpdateTileOffsetOpPattern, VectorMultiDimReductionOpPattern,
+                  TileReduceOpPattern, TileBroadcastOpPattern>(
+      patterns.getContext(), converter, analysis, ptruArch);
+  patterns.insert<TransposeOpPattern<mlir::vector::TransposeOp>,
+                  TransposeOpPattern<xetile::TransposeOp>>(
+      patterns.getContext(), converter, analysis, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector

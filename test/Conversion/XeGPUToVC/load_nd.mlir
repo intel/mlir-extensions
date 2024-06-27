@@ -89,7 +89,7 @@ module @gemm attributes {gpu.container_module} {
       //LSC: %11 = vector.extract %8[5] : i32 from vector<8xi32>
       //LSC: %12 = vector.extract %8[6] : i32 from vector<8xi32>
       //LSC: %13 = func.call @llvm.genx.lsc.load2d.stateless.v64i32.i1.i64(%true, %c0_i8, %c0_i8, %c2_i8, %c1_i8, %c1_i8, %c16_i32, %c8_i32, %c1_i8, %10, %c31_i32, %c7_i32, %c31_i32, %11, %12) : (i1, i8, i8, i8, i8, i8, i32, i32, i8, i64, i32, i32, i32, i32, i32) -> vector<64xi32>
-      %1 = xegpu.load_nd %0 <{vnni_axis = 0}> : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
+      %1 = xegpu.load_nd %0 <{packed}> : !xegpu.tensor_desc<8x16xf16> -> vector<4x16x2xf16>
       // CHECK: gpu.return
       gpu.return
     }
@@ -135,7 +135,7 @@ module @gemm attributes {gpu.container_module} {
       //LSC: %11 = vector.extract %8[5] : i32 from vector<8xi32>
       //LSC: %12 = vector.extract %8[6] : i32 from vector<8xi32>
       //LSC: %13 = func.call @llvm.genx.lsc.load2d.stateless.v64i32.i1.i64(%true, %c0_i8, %c0_i8, %c2_i8, %c1_i8, %c1_i8, %c16_i32, %c8_i32, %c0_i8, %10, %c31_i32, %c7_i32, %c31_i32, %11, %12) : (i1, i8, i8, i8, i8, i8, i32, i32, i8, i64, i32, i32, i32, i32, i32) -> vector<64xi32>
-      %1 = xegpu.load_nd %0 <{vnni_axis = 1}> : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %1 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
       // CHECK: gpu.return
       gpu.return
     }
