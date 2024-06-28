@@ -79,6 +79,7 @@ cmake -G Ninja -B build -S llvm \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
@@ -107,6 +108,7 @@ cmake -G Ninja -B build -S . \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
@@ -127,6 +129,7 @@ cmake -G Ninja -B build -S . \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
