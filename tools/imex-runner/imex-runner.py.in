@@ -57,7 +57,7 @@ imex_enable_opencl_runtime = @IMEX_ENABLE_OPENCL_RUNTIME@
 
 runner_choices = ['imex-cpu-runner']
 enabled_features = []
-all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime', 'opencl-runtime, 'igpu-fp64']
+all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime', 'opencl-runtime', 'igpu-fp64']
 if imex_enable_vulkan_runner:
     runner_choices.append('mlir-vulkan-runner')
     enabled_features.append('vulkan-runner')

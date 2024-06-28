@@ -35,8 +35,10 @@ target_compile_options (opencl-runtime PUBLIC -fexceptions -frtti)
 
 target_include_directories(opencl-runtime PRIVATE
     ${MLIR_INCLUDE_DIRS}
+    ${OpenCL_INCLUDE_DIRS}
     )
 
+message(STATUS "OpenCL Libraries: ${OpenCL_LIBRARIES}")
 target_link_libraries(opencl-runtime PRIVATE ${OpenCL_LIBRARIES})
 
-set_property(TARGET opencl-runtime APPEND PROPERTY BUILD_RPATH "${OpenCL_LIBRARY}")
+# set_property(TARGET opencl-runtime APPEND PROPERTY BUILD_RPATH "${OpenCL_LIBRARY}")

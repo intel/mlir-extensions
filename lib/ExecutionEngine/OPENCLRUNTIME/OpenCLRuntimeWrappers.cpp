@@ -43,12 +43,12 @@ template <typename F> auto catchAll(F &&func) {
   try {
     return func();
   } catch (const std::exception &e) {
-    fprintf(stdout, "An exception was thrown: %s\n", e.what());
-    fflush(stdout);
+    fprintf(stderr, "An exception was thrown: %s\n", e.what());
+    fflush(stderr);
     abort();
   } catch (...) {
-    fprintf(stdout, "An unknown exception was thrown\n");
-    fflush(stdout);
+    fprintf(stderr, "An unknown exception was thrown\n");
+    fflush(stderr);
     abort();
   }
 }
@@ -66,8 +66,9 @@ template <typename F> auto catchAll(F &&func) {
   {                                                                            \
     auto status = (call);                                                      \
     if (status != CL_SUCCESS) {                                                \
-      fprintf(stdout, "CL error %d\n", status);                                \
-      fflush(stdout);                                                          \
+      fprintf(stderr, "CL error %d @ line=%d (%s)\n", status, __LINE__,        \
+              (#call));                                                        \
+      fflush(stderr);                                                          \
       abort();                                                                 \
     }                                                                          \
   }
@@ -95,8 +96,7 @@ void *queryCLExtFunc(cl_platform_id CurPlatform, const char *FuncName) {
   void *ret = clGetExtensionFunctionAddressForPlatform(CurPlatform, FuncName);
 
   if (!ret) {
-    fprintf(stdout, "Failed to get CL extension function %s\n", FuncName);
-    fflush(stdout);
+    fflush(stderr);
     abort();
   }
   return ret;
@@ -141,6 +141,7 @@ struct CLExtTableCache {
   std::array<std::atomic<cl_device_id>, numExtCache> devices;
   std::array<CLExtTable, numExtCache> tables;
   std::mutex lock;
+  CLExtTableCache() { std::fill(devices.begin(), devices.end(), nullptr); }
   static CLExtTableCache &get() {
     static CLExtTableCache v;
     return v;
@@ -164,7 +165,7 @@ struct CLExtTableCache {
         return nullptr;
       }
       tables[secondSearch] = CLExtTable(dev);
-      devices[secondSearch].store(dev, std::memory_order_acquire);
+      devices[secondSearch].store(dev, std::memory_order_release);
       return &tables[secondSearch];
     }
   }
@@ -172,7 +173,7 @@ struct CLExtTableCache {
 private:
   int search(cl_device_id dev, int startIdx, bool &found) {
     for (int i = startIdx; i < numExtCache; i++) {
-      auto val = devices[i].load(std::memory_order_release);
+      auto val = devices[i].load(std::memory_order_acquire);
       if (!val) {
         found = false;
         return i;
@@ -283,7 +284,7 @@ private:
       context_ = context;
     }
     CHECK2(queue_ =
-               clCreateCommandQueueWithProperties(context, device, 0, &err));
+               clCreateCommandQueueWithProperties(context_, device, 0, &err));
     queue_owned_ = true;
   }
 }; // end of GPUSYCLQUEUE
@@ -325,13 +326,13 @@ static cl_program loadModule(GPUSYCLQUEUE *queue, const unsigned char *data,
   cl_int err;
   CHECK2(program = clCreateProgramWithBinary(
              queue->context_, 1, &queue->device_, sizes, codes, &err, &errNum));
-  const char *build_flags = nullptr;
+  const char *build_flags = "-cl-kernel-arg-info -x spir";
   // enable large register file if needed
   if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
     build_flags =
         "-vc-codegen -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
         "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
-        "'-printregusage -enableBCR' ";
+        "'-printregusage -enableBCR' -cl-kernel-arg-info -x spir";
   }
   L0_SAFE_CALL(clBuildProgram(program, 0, NULL, build_flags, NULL, NULL));
   return program;
@@ -343,6 +344,9 @@ static cl_kernel getKernel(GPUSYCLQUEUE *queue, cl_program program,
   cl_int err;
   CHECK2(kernel = clCreateKernel(program, name, &err));
   cl_bool TrueVal = CL_TRUE;
+  L0_SAFE_CALL(clSetKernelExecInfo(
+      kernel, CL_KERNEL_EXEC_INFO_INDIRECT_HOST_ACCESS_INTEL, sizeof(cl_bool),
+      &TrueVal));
   L0_SAFE_CALL(clSetKernelExecInfo(
       kernel, CL_KERNEL_EXEC_INFO_INDIRECT_DEVICE_ACCESS_INTEL, sizeof(cl_bool),
       &TrueVal));
@@ -356,10 +360,10 @@ static void launchKernel(GPUSYCLQUEUE *queue, cl_kernel kernel, size_t gridX,
                          size_t gridY, size_t gridZ, size_t blockX,
                          size_t blockY, size_t blockZ, size_t sharedMemBytes,
                          ParamDesc *params) {
-  // auto func = queue->ext_table_
-  //                 ? queue->ext_table_->setKernelArgMemPtr
-  //                 : (clSetKernelArgMemPointerINTEL_fn)queryCLExtFunc(
-  //                       queue->device_, SetKernelArgMemPointerName);
+  auto func = queue->ext_table_
+                  ? queue->ext_table_->setKernelArgMemPtr
+                  : (clSetKernelArgMemPointerINTEL_fn)queryCLExtFunc(
+                        queue->device_, SetKernelArgMemPointerName);
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
   // The assumption is, if there is a param for the shared local memory,
   // then that will always be the last argument.
@@ -367,8 +371,16 @@ static void launchKernel(GPUSYCLQUEUE *queue, cl_kernel kernel, size_t gridX,
     paramsCount = paramsCount - 1;
   }
   for (size_t i = 0; i < paramsCount; i++) {
+    cl_kernel_arg_address_qualifier name;
+    size_t nameSize = sizeof(name);
+    L0_SAFE_CALL(clGetKernelArgInfo(kernel, i, CL_KERNEL_ARG_ADDRESS_QUALIFIER,
+                                    sizeof(name), &name, &nameSize));
     auto param = params[i];
-    L0_SAFE_CALL(clSetKernelArg(kernel, i, param.size, param.data));
+    if (param.size == sizeof(void *) && name == CL_KERNEL_ARG_ADDRESS_GLOBAL) {
+      L0_SAFE_CALL(func(kernel, i, *(void **)param.data));
+    } else {
+      L0_SAFE_CALL(clSetKernelArg(kernel, i, param.size, param.data));
+    }
   }
   if (sharedMemBytes) {
     L0_SAFE_CALL(clSetKernelArg(kernel, paramsCount, sharedMemBytes, nullptr));
@@ -419,8 +431,9 @@ gpuModuleLoad(GPUSYCLQUEUE *queue, const unsigned char *data, size_t dataSize) {
   });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT cl_kernel
-gpuKernelGet(GPUSYCLQUEUE *queue, cl_program module, const char *name) {
+extern "C" SYCL_RUNTIME_EXPORT cl_kernel gpuKernelGet(GPUSYCLQUEUE *queue,
+                                                      cl_program module,
+                                                      const char *name) {
   return catchAll([&]() {
     if (queue) {
       return getKernel(queue, module, name);
@@ -429,7 +442,7 @@ gpuKernelGet(GPUSYCLQUEUE *queue, cl_program module, const char *name) {
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void
-gpuLaunchKernel(GPUSYCLQUEUE *queue,  cl_kernel kernel, size_t gridX,
+gpuLaunchKernel(GPUSYCLQUEUE *queue, cl_kernel kernel, size_t gridX,
                 size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
                 size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
