@@ -61,8 +61,8 @@ create_nd_tdesc also accepts a memref as input instead of a memory address, shap
 
 The example below accepts a memory address and an offset and creates a 1D tensor_desc. The tensor_desc describes a 1D vector that is loaded by all WI threads combined within the subgroup.
 ```mlir
-  #tdesc_attr2 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
-  %tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %offset:
+  #tdesc_attr1 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
+  %tdesc1 = XeGPU.create_nd_tdesc %mem_addr, %offset:
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr2>
 ```
 
@@ -80,7 +80,7 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They s
 Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations. An Xe GPU target may only support data types with size of 4-byte (DW) or 8-byte (DQ).  
 ```mlir
   %at = XeGPU.load_nd %tdesc2 {transpose = [1,0]} :
-     tile<16x8xf32> into vector<8x16xf32>
+     tensor_desc<16x8xf32> into vector<8x16xf32>
 ```
 Attribute `packed` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the row dimension and fits them into 32-bit data along the column dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor]. The first dimension needs to be split by a `vnni_factor`, which represents the number of elements needed to fit 32-bit. The result tensor is always in 2D.
 
@@ -88,7 +88,10 @@ An Xe GPU target may only support loading with VNNI transformation for low-preci
 
 ```mlir
   %bt = XeGPU.load_nd %tdesc2 {packed} :
-     tile<16x16xbf16> into vector<8x16x2xbf16>
+     tensor_desc<16x16xbf16> into vector<8x16x2xbf16>
+
+  XeGPU.load_nd %value, %tdesc1:
+     tensor_desc<16xbf16> into vector<16xbf16>
 ```
 
 VNNI transformation and transpose can not be combined.
@@ -97,14 +100,14 @@ Attribute `transpose_bit_width` specifies the bit_width of the data unit for the
 
 ```mlir
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32} :
-     tile<16x16xfp16> into vector<8x32xfp16>
+     tensor_desc<16x16xfp16> into vector<8x32xfp16>
 ```
 
 The `transpose_bit_width` attribute can be used to transpose B matrix and at the same time perform a VNNI transformation on the transposed B matrix. The example below shows that a tile<32x16xbf16> is transposed with `transpose_bit_width = 32`, which overrides the bf16 data type for the transpose and treats the tile as <32x8xi32>. The transpose changes the output vector's layout to be <8x32xi32>, which is represented as vector<8x64xbf16> using tile's element data type. User can use vector.shape_cast to explicitly represent the VNNI layout for the output vector without introducing any data movement.
 
 ```mlir
   %at = XeGPU.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32} :
-     tile<16x16xfp16> into vector<8x32xfp16>
+     tensor_desc<16x16xfp16> into vector<8x32xfp16>
   %bt = vector.shape_cast %at :  vector<8x64xfp16> into vector<8x32x2xfp16>
 ```
 
@@ -143,7 +146,10 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to store_nd.
 ```mlir
   XeGPU.store_nd %value, %tdesc2:
           vector<8x16xbf16>, tensor_desc<8x16xbf16>
+  XeGPU.store_nd %value, %tdesc2:
+          vector<16xbf16>, tensor_desc<16xbf16>
 ```
+
 `prefetch_nd` prefetches the memory specified by tensor_desc to cache.
 Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to prefetch_nd.
 ```mlir
@@ -273,7 +279,7 @@ When multiple data elements are from wi_data[0], the WI distribution put them in
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
   %vector_b = XeGPU.load_nd %tdesc1:
-     tile<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
+     tensor_desc<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
 ```
 Below is an example on how to load a 2d block, perform dpas, and store back to memory.  
 ```mlir
@@ -286,12 +292,12 @@ Below is an example on how to load a 2d block, perform dpas, and store back to m
      	into tensor_desc<8x16xbf16, #sg_map_a>
 
   %vector_a = XeGPU.load_nd %tdesc1:
-     tile<8x16xbf16, #sg_map_a> into vector<8x1xbf16>
+     tensor_desc<8x16xbf16, #sg_map_a> into vector<8x1xbf16>
 
   XeGPU.prefetch_nd %tdesc1: tensor_desc<8x16xbf16, #sg_map_a>
 
   %vector_b = XeGPU.load_nd %tdesc1:
-     tile<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
+     tensor_desc<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
 
   %vector_c = XeGPU.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b #sg_map_c} :vector<8x1xbf16>, vector<8x2xbf16> into vector<8x1xfloat> 
 
@@ -340,19 +346,19 @@ The WI data distribution specified by sg_map doesn't apply to the tensor data in
   // As the WI data distribution apply to the tensor data after load and transpose, so each WI get <8x1xf32>.
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
-     tile<16x8xf32, #sg_map_a> into vector<8x1xf32>
+     tensor_desc<16x8xf32, #sg_map_a> into vector<8x1xf32>
 
   #sg_map_at = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
-     tile<16x8xf32, #sg_map_at> into vector<8x1xf32>
+     tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 
   #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 1]>     // WI data distribute from [16, 8] to [8, 1]
   %a = XeGPU.load_nd %tdesc1 :
-     tile<16x8xtf32, #sg_map_at> into vector<8x1xf32>
+     tensor_desc<16x8xtf32, #sg_map_at> into vector<8x1xf32>
   
   #sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>     // WI data distribute from [16, 8] to [, 8], transpose to [8, 1]
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
-     tile<16x8xf32, #sg_map_at> into vector<8x1xf32>
+     tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 
 ```
 
@@ -363,6 +369,26 @@ The WI data distribution specified by sg_map doesn't apply to the tensor data in
 
   ARC SIMD_LANE = 8 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+```
+
+```mlir
+
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  #scatter_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
+  %scatter_tdesc_chunk = XeGPU.create_tdesc, %src_addr, %offsets
+		{chunk_size_per_lane=4} :
+		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
+
+  %result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
+          tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<16xi1> -> vector<4x1xfp32>
+
+  #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
+  %tdesc2 = XeGPU.create_nd_tdesc %dest_addr, %offset:
+		uint64, index into tensor_desc<64xfp32, #tdesc_attr>
+  XeGPU.store_nd %value, %tdesc2: 
+                vector<4xfp32>, tensor_desc<64xfp32, #tdesc_attr>
+
 ```
 
 ## Notes
