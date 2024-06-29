@@ -245,11 +245,13 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 ## XeGPU Attributes to support Work Item Level semantics  
 
-Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. To distribute the XeGPU operation to WI threads, the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time.
+Attribute `xegpu.sg_map` describes the mapping between work item (WI) WI threads and the 2D subtensor specified by the tensor descriptor. To distribute the XeGPU operation to WI threads, the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time.
 
-Within the sg_map, `wi_layout` specifies the layout of WI threads, and wi_layout[0] x wi_layout[1] must be equal to the number of WI threads within a subgroup. `wi_data` describes the data elements assigned to each work item (WI) thread for a single distribution. The data elements can be from either dimension but only one dimension, so either wi_data[0] or wi_data[1] must be 1. sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. 
+Within the sg_map, `wi_layout` specifies the layout of WI threads, describing the mapping of WI threads to the tensor. wi_layout[0] x wi_layout[1] must be equal to the total number of WI threads within a subgroup. `wi_data` specifies the data elements assigned to each WI thread for a single distribution. The data elements can only be from either of one dimension, so either wi_data[0] or wi_data[1] must be 1. In the example below, wi_layout=[1, 16] means that 16 WI threads in a subgroup has a layout of 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element. 
 
-In the example below, wi_layout=[1, 16] means that 16 WI threads in a subgroup has a layout of 1 row and 16 columns, and wi_data=[1,1] means that each WI thread owns 1 data element. From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to WI threads. wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. The sg_map describes a subtensor with the shape of [1,16] at the subgroup level, and the sg_map size is 16. The tensor descriptor created by `create_nd_tdesc`, describes a subtensor named as sg_block, which has size 8x16.   
+sg_map size refers to the total size accessed by all the WI threads with the size specified by wi_data, so it represents the minimum size of a 2D subtensor to fully distributes to all WI threads. 
+
+From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to WI threads. wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. The sg_map describes a subtensor with the shape of [1,16] at the subgroup level, and the sg_map size is 16. The tensor descriptor created by `create_nd_tdesc`, describes a subtensor named as sg_block, which has size 8x16.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %sg_block_tdesc = XeGPU.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
@@ -338,7 +340,20 @@ The WI data distribution specified by sg_map doesn't apply to the tensor data in
   // As the WI data distribution apply to the tensor data after load and transpose, so each WI get <8x1xf32>.
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
-     tile<16x8xf32, #sg_map> into vector<8x1xf32>
+     tile<16x8xf32, #sg_map_a> into vector<8x1xf32>
+
+  #sg_map_at = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
+     tile<16x8xf32, #sg_map_at> into vector<8x1xf32>
+
+  #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 1]>     // WI data distribute from [16, 8] to [8, 1]
+  %a = XeGPU.load_nd %tdesc1 :
+     tile<16x8xtf32, #sg_map_at> into vector<8x1xf32>
+  
+  #sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>     // WI data distribute from [16, 8] to [, 8], transpose to [8, 1]
+  %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
+     tile<16x8xf32, #sg_map_at> into vector<8x1xf32>
+
 ```
 
 `xegpu.sg_map` can be used to describe the WI data distribution for load_nd with 1d tensor or regular load. All the rules above apply with the extra restriction that wi_layout[0] and wi_data[0] must be 1.
