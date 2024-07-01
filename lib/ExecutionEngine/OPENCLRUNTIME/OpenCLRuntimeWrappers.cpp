@@ -30,6 +30,7 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <thread>
 
 #ifdef _WIN32
 #define SYCL_RUNTIME_EXPORT __declspec(dllexport)
@@ -61,8 +62,7 @@ namespace {
 constexpr char DeviceMemAllocName[] = "clDeviceMemAllocINTEL";
 constexpr char SharedMemAllocName[] = "clSharedMemAllocINTEL";
 constexpr char MemBlockingFreeName[] = "clMemBlockingFreeINTEL";
-constexpr char SetKernelArgMemPointerName[] =
-    "clSetKernelArgMemPointerINTEL";
+constexpr char SetKernelArgMemPointerName[] = "clSetKernelArgMemPointerINTEL";
 static constexpr char EnqueueMemcpyName[] = "clEnqueueMemcpyINTEL";
 
 void *queryCLExtFunc(cl_platform_id CurPlatform, const char *FuncName) {
@@ -367,16 +367,28 @@ static void launchKernel(GPUCLQUEUE *queue, cl_kernel kernel, size_t gridX,
                                       globalSize, localSize, 0, NULL, NULL));
 }
 
+static GPUCLQUEUE *getDefaultQueue() {
+  static GPUCLQUEUE defaultq(static_cast<cl_device_id>(nullptr), nullptr,
+                             nullptr);
+  return &defaultq;
+}
+
 // Wrappers
 
 extern "C" SYCL_RUNTIME_EXPORT GPUCLQUEUE *gpuCreateStream(void *device,
                                                            void *context) {
+  // todo: this is a workaround of issue of gpux generating multiple streams
+  if (!device && !context) {
+    return getDefaultQueue();
+  }
   return new GPUCLQUEUE(reinterpret_cast<cl_device_id>(device),
                         reinterpret_cast<cl_context>(context), nullptr);
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(GPUCLQUEUE *queue) {
-  delete queue;
+  // todo: this is a workaround of issue of gpux generating multiple streams
+  // should uncomment the below line to release the queue
+  // delete queue;
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void *
