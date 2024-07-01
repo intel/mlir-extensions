@@ -6,6 +6,10 @@
 // RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=opencl-runtime -i %s --pass-pipeline-file=%p/spirv-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%opencl_runtime --filecheck
 
 module @argmax attributes {gpu.container_module} {
   memref.global "private" constant @__constant_1x4x4x3xf32 : memref<1x4x4x3xf32> = dense<[[[[9.000000e+00, 8.000000e+00, 0.000000e+00], [1.000000e+00, 5.000000e+00, 0.000000e+00], [1.000000e+00, 1.000000e+00, 7.000000e+00], [8.000000e+00, 2.000000e+00, 2.000000e+00]], [[8.000000e+00, 0.000000e+00, 4.000000e+00], [7.000000e+00, 5.000000e+00, 5.000000e+00], [8.000000e+00, 2.000000e+00, 0.000000e+00], [0.000000e+00, 9.000000e+00, 5.000000e+00]], [[4.000000e+00, 7.000000e+00, 2.000000e+00], [4.000000e+00, 5.000000e+00, 1.000000e+00], [3.000000e+00, 3.000000e+00, 6.000000e+00], [8.000000e+00, 0.000000e+00, 1.000000e+00]], [[2.000000e+00, 8.000000e+00, 4.000000e+00], [0.000000e+00, 5.000000e+00, 5.000000e+00], [6.000000e+00, 1.000000e+00, 1.000000e+00], [3.000000e+00, 3.000000e+00, 1.000000e+00]]]]>
