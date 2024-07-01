@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wno-return-type -Wno-cast-qual")
-
 find_package(OpenCL REQUIRED)
 
 if(NOT OpenCL_FOUND)
@@ -41,4 +39,3 @@ target_include_directories(opencl-runtime PRIVATE
 message(STATUS "OpenCL Libraries: ${OpenCL_LIBRARIES}")
 target_link_libraries(opencl-runtime PRIVATE ${OpenCL_LIBRARIES})
 
-# set_property(TARGET opencl-runtime APPEND PROPERTY BUILD_RPATH "${OpenCL_LIBRARY}")
