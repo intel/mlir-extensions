@@ -361,7 +361,7 @@ static void launchKernel(GPUCLQUEUE *queue, cl_kernel kernel, size_t gridX,
   if (sharedMemBytes) {
     CL_SAFE_CALL(clSetKernelArg(kernel, paramsCount, sharedMemBytes, nullptr));
   }
-  size_t globalSize[3] = {gridX, gridY, gridZ};
+  size_t globalSize[3] = {gridX * blockX, gridY * blockY, gridZ * blockZ};
   size_t localSize[3] = {blockX, blockY, blockZ};
   CL_SAFE_CALL(clEnqueueNDRangeKernel(queue->queue_, kernel, 3, NULL,
                                       globalSize, localSize, 0, NULL, NULL));

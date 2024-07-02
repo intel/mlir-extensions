@@ -38,4 +38,3 @@ target_include_directories(opencl-runtime PRIVATE
 
 message(STATUS "OpenCL Libraries: ${OpenCL_LIBRARIES}")
 target_link_libraries(opencl-runtime PRIVATE ${OpenCL_LIBRARIES})
-
