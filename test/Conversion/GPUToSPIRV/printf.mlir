@@ -1,4 +1,4 @@
-// RUN: imex-opt -allow-unregistered-dialect -split-input-file -imex-convert-gpu-to-spirv='enable-vc-intrinsic=true' -verify-diagnostics %s -o - | FileCheck %s
+// RUN: imex-opt -allow-unregistered-dialect -split-input-file -imex-convert-gpu-to-spirv -verify-diagnostics %s -o - | FileCheck %s
 
 module @test attributes {
   gpu.container_module,
