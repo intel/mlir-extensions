@@ -12,25 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
+#include <CL/cl.h>
+#include <CL/cl_ext.h>
 #include <array>
 #include <atomic>
 #include <cassert>
-#include <cfloat>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <stdexcept>
-#include <tuple>
-#include <vector>
-
-#include <CL/cl.h>
-#include <CL/cl_ext.h>
-#include <atomic>
-#include <map>
 #include <mutex>
-#include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #define SYCL_RUNTIME_EXPORT __declspec(dllexport)
