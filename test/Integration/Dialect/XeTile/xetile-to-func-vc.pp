@@ -11,7 +11,7 @@ builtin.module(
     bf16-to-gpu
     gpu.module(convert-func-to-spirv)
     gpu.module(convert-vector-to-spirv)
-    imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
+    imex-convert-gpu-to-spirv
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
     func.func(llvm-request-c-wrappers)

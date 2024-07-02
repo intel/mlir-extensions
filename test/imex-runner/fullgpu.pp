@@ -53,7 +53,7 @@ builtin.module(
     gpu.module(set-spirv-abi-attrs{client-api=opencl}),
     canonicalize,
     fold-memref-alias-ops,
-    imex-convert-gpu-to-spirv{enable-vc-intrinsic=true},
+    imex-convert-gpu-to-spirv,
     spirv.module(spirv-lower-abi-attrs),
     spirv.module(spirv-update-vce),
     // func.func(llvm-request-c-wrappers),

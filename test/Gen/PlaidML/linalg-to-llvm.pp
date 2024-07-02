@@ -31,7 +31,7 @@ builtin.module(convert-tensor-to-linalg
     canonicalize
     fold-memref-alias-ops
     bf16-to-gpu // do not call canonicalize before imex-convert-gpu-to-spirv
-    imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
+    imex-convert-gpu-to-spirv
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
     func.func(llvm-request-c-wrappers)
