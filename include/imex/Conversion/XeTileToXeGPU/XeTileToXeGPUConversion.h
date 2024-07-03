@@ -67,7 +67,7 @@ public:
   }
 
   mlir::Block *
-  applySignatureConversion(mlir::Region *region,
+  applySignatureConversion(mlir::Block *block,
                            mlir::TypeConverter::SignatureConversion &conversion,
                            const mlir::TypeConverter *converter = nullptr);
 

@@ -1124,7 +1124,7 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     { // initialize the inner block size per op.

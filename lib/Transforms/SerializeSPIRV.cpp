@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "imex/Utils/GPUSerialize.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
@@ -54,13 +55,25 @@ public:
         signalPassFailure();
         return;
       }
-
       // attach the spv binary to the gpu module
       auto spvData =
           llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
                           spvBinary.size() * sizeof(uint32_t));
+      if(auto targets = gpuMod.getTargets()) {
+        auto& tgts = *targets;
+        if(tgts.size()!=1) {
+        spvMod.emitError() << "Failed to serialize SPIR-V module";
+        signalPassFailure();
+        return;
+        }
+        auto target = tgts.begin();
+      } else {
+        spvMod.emitError() << "Failed to serialize SPIR-V module";
+        signalPassFailure();
+        return;
+      }
       auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
-      gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
+      gpuMod->setAttr(imex::gpuBinaryAttrName, spvAttr);
       spvMod->erase();
     }
   }

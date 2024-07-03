@@ -227,9 +227,9 @@ XeGPUTypeConverter::computeTypeMapping(mlir::ValueRange original,
 }
 
 mlir::Block *XeGPUOneToNPatterRewriter::applySignatureConversion(
-    mlir::Region *region, mlir::TypeConverter::SignatureConversion &conversion,
+    mlir::Block *block, mlir::TypeConverter::SignatureConversion &conversion,
     const mlir::TypeConverter *converter) {
-  return rewriter.applySignatureConversion(region, conversion, converter);
+  return rewriter.applySignatureConversion(block, conversion, converter);
 }
 
 void XeGPUOneToNPatterRewriter::replaceOp(mlir::Operation *op,

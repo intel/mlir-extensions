@@ -19,6 +19,7 @@
 
 #include "imex/Utils/FuncUtils.hpp"
 #include "imex/Utils/TypeConversion.hpp"
+#include "imex/Utils/GPUSerialize.h"
 
 #include "../PassDetail.h"
 
@@ -591,8 +592,7 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                           target);
 
-  mlir::populateGpuToLLVMConversionPatterns(
-      converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+  mlir::populateGpuToLLVMConversionPatterns(converter, patterns);
 
   imex::populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
                                                            target);
@@ -636,7 +636,7 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       >(converter);
 
   patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
-      converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
+      converter, imex::gpuBinaryAttrName);
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
   target.addIllegalDialect<imex::gpux::GPUXDialect>();

@@ -92,7 +92,7 @@ public:
           spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
       auto op = getOperation();
       op->walk([&](mlir::gpu::GPUModuleOp op) {
-        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+        op.setTargetsAttr(mlir::ArrayAttr::get(op.getContext(), {attr}));
       });
     } else if (m_clientAPI == "vulkan") {
       auto triple = spirv::VerCapExtAttr::get(
@@ -103,7 +103,7 @@ public:
           spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
       auto op = getOperation();
       op->walk([&](mlir::gpu::GPUModuleOp op) {
-        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+        op.setTargetsAttr(mlir::ArrayAttr::get(op.getContext(), {attr}));
       });
     }
   }
