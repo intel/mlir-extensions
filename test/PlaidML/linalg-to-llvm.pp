@@ -4,7 +4,6 @@ builtin.module(convert-tensor-to-linalg
     func.func(empty-tensor-to-alloc-tensor)
           //eliminate-empty-tensors
     one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
-    buffer-deallocation-pipeline
     func.func(convert-linalg-to-parallel-loops
           imex-add-outer-parallel-loop
           gpu-map-parallel-loops

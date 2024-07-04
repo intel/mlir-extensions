@@ -660,8 +660,7 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       ConvertGpuStreamDestroyPattern,
       ConvertAllocOpToGpuRuntimeCallPattern,
       ConvertDeallocOpToGpuRuntimeCallPattern,
-      RemoveGPUModulePattern,
-      RemoveGPUFuncPattern
+      RemoveGPUModulePattern
       // clang-format on
       >(converter);
 

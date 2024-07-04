@@ -11,8 +11,7 @@ builtin.module(
     memref-expand
     func.func(empty-tensor-to-alloc-tensor)
     func.func(linalg-detensorize)
-    one-shot-bufferize="unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries"
-    buffer-deallocation-pipeline
+    one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
     imex-remove-temporaries
     func.func(convert-linalg-to-parallel-loops)
     func.func(scf-parallel-loop-fusion)
