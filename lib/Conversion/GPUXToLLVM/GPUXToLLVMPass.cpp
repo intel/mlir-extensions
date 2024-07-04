@@ -532,6 +532,20 @@ public:
   }
 };
 
+class RemoveGPUFuncPattern
+    : public mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp> {
+public:
+  RemoveGPUFuncPattern(mlir::LLVMTypeConverter &converter)
+      : mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp>(converter) {}
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::GPUFuncOp op,
+                  mlir::gpu::GPUFuncOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 /// A rewrite pattern to convert gpux.create_stream operations into a GPU
 /// runtime call.
 class ConvertGpuStreamCreatePattern
@@ -646,7 +660,8 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       ConvertGpuStreamDestroyPattern,
       ConvertAllocOpToGpuRuntimeCallPattern,
       ConvertDeallocOpToGpuRuntimeCallPattern,
-      RemoveGPUModulePattern
+      RemoveGPUModulePattern,
+      RemoveGPUFuncPattern
       // clang-format on
       >(converter);
 
