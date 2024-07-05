@@ -349,6 +349,8 @@ void GPUXToSPIRVPass::runOnOperation() {
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateBuiltinFuncToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateVectorToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
     mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
