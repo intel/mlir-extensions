@@ -32,6 +32,7 @@
 
 #include "../PassDetail.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 
@@ -249,6 +250,33 @@ public:
   }
 };
 
+class UpdateOffsetOpToVCPattern
+    : public OpConversionPattern<::mlir::xegpu::UpdateOffsetOp> {
+public:
+  using OpConversionPattern<::mlir::xegpu::UpdateOffsetOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(mlir::xegpu::UpdateOffsetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto tensorDesc = adaptor.getTensorDesc();
+    auto v16index = VectorType::get(16, rewriter.getIndexType());
+
+    Value offsetFactor = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v16index, IntegerAttr::get(v16index.getElementType(),
+                                            op.getTensorDesc()
+                                                    .getType()
+                                                    .getElementType()
+                                                    .getIntOrFloatBitWidth() /
+                                                8)));
+    Value offsets =
+        rewriter.create<arith::MulIOp>(loc, offsetFactor, adaptor.getOffsets());
+    Value payLoad = rewriter.create<arith::AddIOp>(loc, tensorDesc, offsets);
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
 class CreateDescToVCPattern
     : public OpConversionPattern<::mlir::xegpu::CreateDescOp> {
 public:
@@ -256,22 +284,28 @@ public:
   LogicalResult
   matchAndRewrite(::mlir::xegpu::CreateDescOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     auto loc = op.getLoc();
-    auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v8i32 = VectorType::get(8, i32Type);
-    auto v4i64 = VectorType::get(4, i64Type);
+    auto v16index = VectorType::get(16, rewriter.getIndexType());
     Value payLoad = rewriter.create<arith::ConstantOp>(
         loc, DenseElementsAttr::get(
-                 v4i64, IntegerAttr::get(v4i64.getElementType(), 0)));
-
+                 v16index, IntegerAttr::get(v16index.getElementType(), 0)));
     auto base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
         loc, adaptor.getSource());
-    Value baseVal = rewriter.create<arith::IndexCastUIOp>(loc, i64Type, base);
-
-    payLoad = rewriter.create<vector::InsertOp>(loc, baseVal, payLoad, 0);
-    payLoad = rewriter.create<vector::BitCastOp>(loc, v8i32, payLoad);
+    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
+    SmallVector<int64_t, 16> indices(16, 0);
+    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
+        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
+    Value offsetFactor = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v16index, IntegerAttr::get(v16index.getElementType(),
+                                            op.getTensorDesc()
+                                                    .getType()
+                                                    .getElementType()
+                                                    .getIntOrFloatBitWidth() /
+                                                8)));
+    Value offsets =
+        rewriter.create<arith::MulIOp>(loc, offsetFactor, adaptor.getOffsets());
+    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
     rewriter.replaceOp(op, payLoad);
     return success();
   }
@@ -725,25 +759,23 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     };
 
     /// collect common info
-    auto i1Type = rewriter.getI1Type();
     auto i8Type = rewriter.getI8Type();
     auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v4i64 = VectorType::get(4, i64Type);
-    auto tensorDesc = adaptor.getTensorDesc();
-    tensorDesc = rewriter.create<vector::BitCastOp>(loc, v4i64, tensorDesc);
-    auto base = rewriter.create<vector::ExtractOp>(loc, tensorDesc, 0);
-    VectorType newType = VectorType::get(1, i32Type);
     std::string funcName;
     VectorType vecType;
+    std::string_view payloadType{"v16i64"};
+    std::string_view maskType{"v16i1"};
     if constexpr (isLoad) {
       vecType = cast<VectorType>(op.getResult().getType());
       funcName = "llvm.genx.raw.send2.";
     } else {
       vecType = cast<VectorType>(op.getValue().getType());
-      funcName = "llvm.genx.raw.sends2.noresult.i1.v8i32.";
+      funcName = llvm::formatv("llvm.genx.raw.sends2.noresult.{0}.{1}.",
+                               maskType, payloadType)
+                     .str();
     }
     std::string typeStr;
+    VectorType newType = VectorType::get(1, i32Type);
     std::tie(typeStr, newType) = encodeVectorType(rewriter, vecType);
     funcName += typeStr;
     unsigned cacheHint = encodeCacheHint(op);
@@ -752,7 +784,7 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     // bit[1:0] EOT,sendc
     auto modifier = createIntConstant(i8Type, 0);
     auto execSize = createIntConstant(i8Type, 4);
-    auto pred = createIntConstant(i1Type, 1);
+    auto pred = adaptor.getMask();
     auto numSrc1 = createIntConstant(i8Type, 2);
     unsigned numDstVal = newType.getNumElements() / 16;
     auto numDst = createIntConstant(i8Type, numDstVal);
@@ -776,36 +808,23 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     rawSendMsg |= 2 << 25;
     auto msg = createIntConstant(i32Type, rawSendMsg);
     // payload
-    auto v16i64 = VectorType::get(16, i64Type);
-    Value payLoad = rewriter.create<arith::ConstantOp>(
-        loc, DenseElementsAttr::get(
-                 v16i64, IntegerAttr::get(v16i64.getElementType(), 0)));
-    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
-    SmallVector<int64_t, 16> indices(16, 0);
-    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
-        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
-    auto createDescOp =
-        op.getTensorDesc().template getDefiningOp<xegpu::CreateDescOp>();
-    auto offsets = rewriter.getRemappedValue(createDescOp.getOffsets());
-    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
+    auto payLoad = adaptor.getTensorDesc();
     SmallVector<Value> args{modifier, execSize, pred, numSrc1, numDst,
                             sfid,     extMsg,   msg,  payLoad};
     if constexpr (isLoad) {
-      funcName += ".i1.v16i64";
+      funcName += llvm::formatv(".{0}.{1}", maskType, payloadType).str();
       auto elementTy = newType.getElementType();
       Attribute initValueAttr;
       if (isa<FloatType>(elementTy))
         initValueAttr = FloatAttr::get(elementTy, 0.0);
       else
         initValueAttr = IntegerAttr::get(elementTy, 0);
-
       Value old = rewriter.create<arith::ConstantOp>(
           loc, DenseElementsAttr::get(newType, initValueAttr));
       args.push_back(old);
       auto retType = newType;
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
-
       auto *converter = this->getTypeConverter();
       auto castTy = converter->convertType(op.getType());
       auto cast =
@@ -844,8 +863,6 @@ public:
     auto i8Type = rewriter.getI8Type();
     auto i16Type = rewriter.getI16Type();
     auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v4i64 = VectorType::get(4, i64Type);
     VectorType vecType = cast<VectorType>(op.getResult().getType());
     std::string funcName = "llvm.genx.lsc.xatomic.stateless.";
     auto [typeStr, newType] = encodeVectorType(rewriter, vecType, false, true);
@@ -871,25 +888,10 @@ public:
     }
     auto vecSize = createIntConstant(i8Type, lscVecSize);
     auto transposed = createIntConstant(i8Type, 1);
-    auto mask = createIntConstant(i8Type, 0);
+    auto mask = adaptor.getMask();
 
-    auto tensorDesc = adaptor.getTensorDesc();
-    tensorDesc = rewriter.create<vector::BitCastOp>(loc, v4i64, tensorDesc);
-    auto base = rewriter.create<vector::ExtractOp>(loc, tensorDesc, 0);
     // payload
-    auto v16i64 = VectorType::get(16, i64Type);
-    Value payLoad = rewriter.create<arith::ConstantOp>(
-        loc, DenseElementsAttr::get(
-                 v16i64, IntegerAttr::get(v16i64.getElementType(), 0)));
-
-    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
-
-    SmallVector<int64_t, 16> indices(16, 0);
-    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
-        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
-    auto createDescOp = op.getTensorDesc().getDefiningOp<xegpu::CreateDescOp>();
-    auto offsets = rewriter.getRemappedValue(createDescOp.getOffsets());
-    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
+    Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32 = VectorType::get(16, i32Type);
     Value undef = rewriter.create<arith::ConstantOp>(
@@ -1600,6 +1602,10 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
+          if (type.getScattered()) {
+            return ::mlir::VectorType::get(
+                16, ::mlir::IndexType::get(&getContext()));
+          }
           auto i32Type = ::mlir::IntegerType::get(&getContext(), 32);
           return ::mlir::VectorType::get(8, i32Type);
         });
@@ -1638,8 +1644,8 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                  AllocNbarrierToVCPattern, InitNbarrierToVCPattern,
                  NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                  CompilerHintToVCPattern, FenceToVCPattern,
-                 UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern,
-                 ElementwiseToVCPattern<arith::MaximumFOp>,
+                 UpdateNDOffsetToVCPattern, UpdateOffsetOpToVCPattern,
+                 SCFYieldOpVCPattern, ElementwiseToVCPattern<arith::MaximumFOp>,
                  ElementwiseToVCPattern<math::ExpOp>>(patterns.getContext());
     patterns
         .add<GatherScatterToRawSend<xegpu::LoadGatherOp>,

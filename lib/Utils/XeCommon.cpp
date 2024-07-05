@@ -76,6 +76,9 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   }
   std::string str;
   switch (size) {
+  case 4:
+    str += "v4";
+    break;
   case 8:
     str += "v8";
     break;
@@ -104,7 +107,7 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   if (use64bitData) {
     str += "i64";
     elemType = rewriter.getI64Type();
-  } else if (enforceInteger) {
+  } else if (enforceInteger || elemType == rewriter.getI32Type()) {
     str += "i32";
     elemType = rewriter.getI32Type();
   } else if (elemType == rewriter.getF32Type())
