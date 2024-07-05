@@ -2,7 +2,6 @@
 builtin.module(inline
 convert-tensor-to-linalg
 convert-elementwise-to-linalg
-arith-bufferize
 func.func(empty-tensor-to-alloc-tensor)
 one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
 buffer-deallocation-pipeline
