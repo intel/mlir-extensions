@@ -210,4 +210,28 @@ def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
   ];
 }
 
+def TileLoops : Pass<"tile-loops", "::mlir::func::FuncOp"> {
+  let summary = "Tile linalg.generic loops for GPU offloading";
+  let description = [{
+    Tiles loops defined with tensor inputs/outputs using the given tile sizes.
+    This pass should be applied after loop fusion and before bufferization.
+    Uses `TileUsingSCF` method. To map the loop to GPU blocks and threads this
+    pass should be called twice. If `in-regions` is set, only loops within GPU
+    regions are tiled.
+  }];
+  let options = [
+    ListOption<"tileSizes", "tile-sizes", "int64_t", "Tile sizes">,
+    Option<"minTileFactor", "min-tile-factor", "int64_t", "2",
+           "Minimum factor between dimension size and a tile size">,
+    Option<"inRegions", "in-regions", "bool", "false",
+           "Convert loops only within GPU regions">
+  ];
+  let constructor = "imex::createTileLoopsPass()";
+  let dependentDialects = [
+    "::mlir::linalg::LinalgDialect",
+    "::mlir::scf::SCFDialect"
+  ];
+}
+
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
