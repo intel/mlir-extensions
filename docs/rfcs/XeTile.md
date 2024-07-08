@@ -26,7 +26,7 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
 |tile_mma	| operation ::=XeTile.tile_mma $matA, $matB, $matC attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
 |atomic_rmw_tile| operation ::=XeTile.atomic_rmw_tile \<$kind\>, $vec, $tile: type($vec), type($tile) -> type($res)	 | %vector_a = atomic_rmw_tile \<add\> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
-|tile_transpose	| operation ::=XeTile.tile_transpose $vec $permuation_dims attr_dict: type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b [1, 0]: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose $vec $permuation_dims attr_dict: type($vec) -> type($res)	 | %vector_a = XeTile.tile_transpose %vector_b [1, 0]: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_reduce	| operation ::=XeTile.tile_reduce \<$kind\> $src  $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce \<add\> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src $broadcast_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b[0]: vector<1x32xfloat> into vector<64x32xfloat>  |
 |tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
@@ -61,7 +61,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
   %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
-     memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
+     memref<128x128xbf16, affine_map=<(d0, d1)->(d1, d0)> into tile<64x32xbf16, #tile_attr>
 ```
 
 
@@ -99,9 +99,9 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
      vector<64x32xb16> to tile<64x32xbf16, #tile_attr>
 ```
 
-`prefetch_tile` prefetches the tile to cache.
+`prefetch_tile` prefetches the tile to cache. Just like memref.preftech, the locality hint ranges from locality<0> (no locality) to locality<3> (extremely local keep in cache).
 ```mlir
-  XeTile.prefetch_tile %coop_tile: tile<8x32xbf16>
+  XeTile.prefetch_tile %coop_tile locality<3>: tile<8x32xbf16>
 ```
 `tile_mma` represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.
 ```mlir
@@ -133,7 +133,7 @@ XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
 
 `tile_transpose` transpose a 2D vector. It has the same semantics as the vector.transpose, but restricts the vector dimension to 2D.
 ```mlir
-   %vector_a = XeTile.transpose_tile [1, 0] %vector_b: vector<64x32xfloat> into vector<32x64xfloat>
+   %vector_a = XeTile.tile_transpose [1, 0] %vector_b: vector<64x32xfloat> into vector<32x64xfloat>
 ```
 `tile_reduce` performs a reduction operation over a 2D vector. The result is a 2D vector with the size of reduced axis being 1. It has the same semantics as the vector.multi_dimesnion, but restricts the vector dimension to 2D. The reduce operation are the same as vector.multi_dimension:add/mul/minsi/minui/maxsi/maxui /and/or/xor for integers, and add/mul/minnumf/maxnumf/minimumf /maximumf for floats.
 ```mlir
@@ -238,7 +238,7 @@ The proposal is to attach the `xetile.wg_map` to the vector based XeTile operati
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
 |tile_mma	| operation ::=XeTile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c {#mp_a #mp_b #mp_c #mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
-|tile_transpose	| operation ::=XeTile.tile_transpose $permuation_dims attr_dict $vec : type($vec) -> type($res)	 | %vector_a = XeTile.transpose_tile %vector_b {#mp_b #mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
+|tile_transpose	| operation ::=XeTile.tile_transpose $permuation_dims attr_dict $vec : type($vec) -> type($res)	 | %vector_a = XeTile.tile_transpose %vector_b {#mp_b #mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_reduce	| operation ::=XeTile.tile_reduce $kind $src $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce <add> %vector_b [1] {#mp_b #mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src $broadcast_dims attr_dict : type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b  [0] {#mp_b #mp_a}: vector<1x32xfloat> into vector<64x32xfloat>  |
 |tile_conv_layout	| operation ::=XeTile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_conv_layout %vector_b {#mp_b #mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
@@ -276,12 +276,11 @@ The transpose could be implemented by saving and restoring from the share local 
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>
    #wg_map_a = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
-   %vector_a = XeTile.transpose_tile %vector_b {#wg_map_b #wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
+   %vector_a = XeTile.tile_transpose %vector_b {#wg_map_b #wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
 ```
-The transpose_tile example above can be further lowered to two operations: 1) save the vector to to shared memory with the #wg_map_b mapping and 2) use wg_map_a mapping to load the data from shared memory to vector. The transpose_tile may require a different block size to support effiecient share local memory access.
+The tile_transpose can be conceptually viewd as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming row_major.
 
-An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.  
-
+An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
 
 `tile_convert_layout` changes the layout of subgroup threads.
 ```mlir
@@ -337,8 +336,8 @@ For i = 0, M-1, M_tile  Do
             %c = init_tile &C, [i, j], [M, N], [N, 1] : tile<64x64xbf16>;               // M_tile=64, N_tile=64
              %va = load_tile %a : vector<64x32xbf16>;
              %vbt = load_tile %bt : vector<64x 32x bf16>;
-             %vb = tile_transpose %vbt: vector<64x32xbf16> into  vector<32x64x bf16>;
-             %vc = tile_mma %va, %vbt : vector<64x32xbf16>, vector<32x64x bf16> into vector<64x64xbf16>;
+             %vb = tile_transpose %vbt: vector<64x32xbf16> into vector<32x64xbf16>;
+             %vc = tile_mma %va, %vbt : vector<64x32xbf16>, vector<32x64xbf16> into vector<64x64xbf16>;
 ```
 
 All these three use cases can be programed by using memref and vector dialect. User may run into the same issue that matrix B is given as BT, so it is presented in the memory as a transposed matrix. User also have the same two choices to write the program, either use the plain layout memref reflecting the physical memory layout (3rd use case), or try to use the stride or affine_map attribute to represent it as “col-major” layout  (2nd use case).   Memref has a stride and affine_map attribute, both can be used to describe the memory layout. So a memref a[i, j] could be refer to the position to i*stride_i + j*stride_j (using stride), j*stride_i + i (using affien_map to swap index).  This effectively creates the same effect that order[0, 1] attribute try to provide to user. User now can swap the i, j in the program.
@@ -406,9 +405,9 @@ C[4096, 4096] = matmul (A[4096, 4096], B[4096, 4096])
 
 ```mlir
 #mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
-#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
-#mp_b_pfh = #wg_map<sg_layout=[4,8], sg_data=[8,32]>  
+#mp_b_pfh = #wg_map<sg_layout=[4,8], sg_data=[8,32]>
 #mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 
 func.func @test_gemm(%a : memref<4096x4096xf16>,
@@ -449,10 +448,10 @@ Reduce[4096] = reduce_add(C[4096, 4096], dim=1)
 
 ```mlir
 #mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
-#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
-#mp_bt_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>  
+#mp_bt_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
 #mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 
 #mp_bcast = #wg_map<sg_layout=[8, 4], sg_data=[1,64]>
@@ -505,7 +504,7 @@ The transpose in the program above can be optimized to use a slightly different 
 ```mlir
 #mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 #mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
-%10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]          
+%10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
 ```
 
@@ -515,4 +514,179 @@ With the optimized mapping, the tile_transpose below could be implemented with i
 #mp_bt    = #wg_map<sg_layout=[32,1], sg_data=[64,32]>
 %10 = load_tile %2  : tile<256x32xf16 #mp_bt> -> vector<256x32xf16>// sg_layout=[32,1], sg_data=[64,32]
 %5  = tile_transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[32,1] ->sg_layout=[8,4]
+```
+
+## Appendix 2.4 Gemm implementation using cooperative load through shared local memory
+For GPU doesn't support high-performance prefetch, the example code shows how to overlap the mma operation and tile load through shared local memory buffer to hide the load latency.
+```mlir
+#mp_a     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+#mp_a_cop = #wg_map<sg_layout=[64,1], sg_data=[4,32]>
+#mp_b     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+#mp_b_cop = #wg_map<sg_layout=[8,8], sg_data=[4,32]>
+#mp_c     = #wg_map<sg_layout=[8,8], sg_data=[32,32]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %a1_glb = init_tile %a[%i, %c0] : memref<4096x4096xf16 > -> tile<256x32xf16, #mp_a_cop >   // sg_layout=[64,1]
+       %b1_glb = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop >   // sg_layout=[8,8]
+       %a2_glb = init_tile %a[%i, %c32] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b2_glb = init_tile %b [%c32, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a3_glb = init_tile %a[%i, %c64] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b3_glb = init_tile %b [%c64, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a4_glb = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b4_glb = init_tile %b [%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+
+       %a1_slm = init_tile %a[%i, %c0] : memref<4096x4096xf16, slm> -> tile<256x32xf16, #mp_a_cop >   // sg_layout=[64,1]
+       %b1_slm = init_tile %b[%c0, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop >   // sg_layout=[8,8]
+       %a2_slm = init_tile %a[%i, %c32] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b2_slm = init_tile %b [%c32, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a3_slm = init_tile %a[%i, %c64] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b3_slm = init_tile %b [%c64, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+       %a4_slm = init_tile %a[%i, %c96] : memref<4096x4096xf16, slm > -> tile<256x32xf16, #mp_a_cop]>  // sg_layout=[64,1]
+       %b4_slm = init_tile %b [%c96, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b_cop> // sg_layout=[8,8]
+
+       %a1_r  = load_tile %a1_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b1_r = load_tile %b1_glb : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>
+       %a2_r  = load_tile %a2_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b2_r = load_tile %b2_glb  : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>
+       %a3_r  = load_tile %a3_glb : tile<256x32xf16  #mp_a_cop > -> vector<256x32xf16>
+       %b3_r = load_tile %b3_glb  : tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>
+
+       gpu.barrier
+       store_tile %a1_r, %a1_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
+       store_tile %b1_r, %b1_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>
+       store_tile %a2_r, %a2_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
+       store_tile %b2_r, %b2_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>
+       store_tile %a3_r, %a3_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
+       store_tile %b3_r, %b3_slm: tile<32x256xf16, #mp_b_cop>, vector<256x256xf32>
+
+       gpu.barrier
+
+       %a1_load = init_tile %a[%i, %c0] : memref<4096x4096xf16, slm> -> tile<256x32xf16, #mp_a >   // sg_layout=[8, 8]
+       %b1_load = init_tile %b[%c0, %j] : memref<4096x4096xf16, slm > -> tile<32x256xf16, #mp_b >   // sg_layout=[8,8]
+
+       %c_glb = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<256x256xf32, #mp_c>         // sg_layout=[8, 8]
+
+       %slm_offset = 0
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           // cooperative load from global
+           %a4_r  = load_tile %a4_glb : tile<256x32xf16#mp_a_cop > -> vector<256x32xf16> // sg_layout=[64,1],sg_data=[4,32]
+           %b4_r = load_tile %b4_glb: tile<32x256xf16 #mp_b_cop> -> vector<32x256xf16>  // sg_layout=[8,8], sg_data=[4,32]
+
+           // load from slm
+           %a1_rr  = load_tile %a1_load : tile<256x32xf16  #mp_a > -> vector<256x32xf16> // sg_layout=[8,8], sg_data=[32,32]
+           %b1_rr = load_tile %b1_load : tile<32x256xf16 #mp_b> -> vector<32x256xf16>  // sg_layout=[8,8], sg_data=[32,32]
+
+           %slm_offset = add %slm_offset,  %c32
+           %slm_offset = mod %slm_offset,  %c128
+
+           %a1_load = update_tile_offset  %a1_load, %c0, %slm_offset :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
+           %b1_load = update_tile_offset  %b1_load, %slm_offset, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
+           %a4_glb = update_tile_offset   %a4_glb, %c0, %c32 : tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %b4_glb = update_tile_offset   %b4_glb, %c32, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
+           %a4_slm’ = update_tile_offset  %a4_slm, %c0, %slm_offset: tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
+           %b4_slm’ = update_tile_offset  %b4_slm, %slm_offset, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16,#mp_b_pft>
+
+           %c_r = tile_mma %a1_rr, %b1_rr #mp_a #mp_b #mp_c:
+                   (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> // sg_layout=[8,8], sg_data=[32,32]
+
+           gpu.barrier
+
+           // cooperative save to slm
+	   store_tile %a4_r, %a4_slm: tile<256x32xf16, #mp_a_cop>, vector<256x256xf32>
+           store_tile %b4_r, %b4_slm: tile<32x256x f16, #mp_b_cop>, vector<256x256xf32>
+
+           %a4_slm = %a4_slm’
+           %b4_slm = %b4_slm’
+        }
+        store_tile %c_r, %c_glb: (tile<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 8]
+    }
+  }
+}
+```
+
+## Appendix 2.5 Gemm implementation with two cache levels
+For GPU support high-performance prefetch through two level of caches.
+```mlir
+#mp_a = #wg_map<sg_layout=[8,4], sg_data=[64,32]>
+#mp_b = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_c = #wg_map<sg_layout=[8,4], sg_data=[64,64]>
+
+#mp_a_copl2 = #wg_map<sg_layout=[32,1], sg_data=[16,128]>
+#mp_b_copl2 = #wg_map< sg_layout=[16,2], sg_data=[8,128]>
+
+#mp_a_copl1 = #wg_map<sg_layout=[32,1], sg_data=[16,32]>
+#mp_b_copl1 = #wg_map< sg_layout=[4, 8], sg_data=[8,32]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+   scf.for %i = %c0 to %c4096 step %c256 {
+     scf.for %j = %c0 to %c4096 step %c256 {
+        %a1_l2 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x128xf16, #mp_a_copl2>
+        %b1_l2 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<128x256xf16, #mp_b_copl2>
+        %a2_l2 = init_tile %a[%i, %c256] : memref<4096x4096xf16> -> tile<512x128xf16, #mp_a_copl2>
+        %b2_l2 = init_tile %b[%c256, %j] : memref<4096x4096xf16> -> tile<128x256xf16, #mp_b_copl2>
+
+        prefetch_tile %a1_l2 locality<2>: tile<512x128xf16, #mp_a_copl2>
+        prefetch_tile %b1_l2 locality<2>: tile<128x256xf16, #mp_b_copl2>
+	prefetch_tile %a2_l2 locality<2>: tile<512x128xf16, #mp_a_copl2>
+        prefetch_tile %b2_l2 locality<2>: tile<128x256xf16, #mp_b_copl2>
+        %a2_l2’ = update_tile_offset   %a2_l2, %c0, %c32 :  tile<512x128xf16, #mp_b_copl2>
+        %b2_l2’ = update_tile_offset   %b2_l2, %c32, %c0 :  tile<128x256xf16, #mp_b_copl2>
+
+        %a1_l1 = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+        %b1_l1 = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+        %a2_l1 = init_tile %a[%i, %c32] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+        %b2_l1 = init_tile %b[%c32, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+        %a3_l1 = init_tile %a[%i, %c64] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+        %b3_l1 = init_tile %b[%c64, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+        %a4_l1 = init_tile %a[%i, %c96] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a_copl1>
+        %b4_l1 = init_tile %b[%c96, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b_copl1>
+
+        prefetch_tile %a1_l1 locality<3>: tile<512x32xf16, #mp_a_copl1>
+        prefetch_tile %b1_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a2_l1 locality<3>: tile<512x32xf16, #mp_a_copl1>
+        prefetch_tile %b2_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a3_l1 locality<3>: tile<512x32xf16, #mp_a_copl1>
+        prefetch_tile %b3_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        prefetch_tile %a4_l1 locality<3>: tile<512x32xf16, #mp_a_copl1>
+        prefetch_tile %b4_l1 locality<3>: tile<32x256xf16, #mp_b_copl1>
+        %a4_l1’ = update_tile_offset   % a4_l1, %c0, %c128 :  tile<512x32xf16, #mp_a_copl1>
+        %b4_l1’ = update_tile_offset   % b4_l1, %c128, %c0 :  tile<32x256xf16, #mp_b_copl1>
+
+        %a1_load = init_tile %a[%i, %c0] : memref<4096x4096xf16> -> tile<512x32xf16, #mp_a>
+        %b1_load = init_tile %b[%c0, %j] : memref<4096x4096xf16> -> tile<32x256xf16, #mp_b>
+
+        %c = init_tile %c[%i, %j] : memref<4096x4096xf32> -> tile<512x256xf32, #mp_c>
+
+        scf.for %k= %c0 to %c4096 step %c32 {
+            %a1_r = load_tile %a1_load : tile<256x32xf16  #mp_a > -> vector<512x32xf16>
+            %b1_r = load_tile %b1_load  : tile<32x256xf16 #mp_b> -> vector<32x256xf16>
+
+            Scf.if (%k %4 == 0) {
+                gpu.barrier
+                prefetch_tile %a2_l2’ locality<2>: tile<512x128xf16, #mp_a_copl2>
+                prefetch_tile %b2_l2’ locality<2>: tile<128x256xf16, #mp_b_copl2>
+                %a2_l2’ = update_tile_offset   %a2_l2’, %c0, %c128 :  tile<512x128xf16, #mp_a_copl2>
+                %b2_l2’ = update_tile_offset   %b2_l2’, %c128, %c0 :  tile<128x256xf16, #mp_b_copl2>
+            }
+            prefetch_tile %a4_l1’ locality<3>: tile<512x32xf16, #mp_a_copl1>
+            prefetch_tile %b4_l1’ locality<3>: tile<32x256xf16, #mp_b_copl1>
+            %a4_l1’ = update_tile_offset   %a4_l1’, %c0, %c32 :  tile<512x32xf16, #mp_a_copl1>
+            %b4_l1’ = update_tile_offset   %b4_l1’, %c32, %c0 :  tile<32x256xf16, #mp_b_copl1>
+
+            %a1_load = update_tile_offset   %a1_load, %c0, %c32 :  tile<512x32xf16, #mp_a>
+            %a2_load = update_tile_offset   %b1_load, %c32, %c0 :  tile<32x256xf16, #mp_b>
+
+            %6 = tile_mma %4, %5 #mp_a #mp_b #mp_c %4, %10 : (vector<512x32xf16>, vector<32x256xf16>) -> vector<512x256xf32>
+        }
+       store_tile %3, %6: (tile<512x256xf32, #mp_c>, vector<512x256xf32>)
+     }
+   }
+}
 ```
