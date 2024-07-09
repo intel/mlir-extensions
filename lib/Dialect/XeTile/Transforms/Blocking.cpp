@@ -932,17 +932,10 @@ struct StoreTileOpPattern
     auto tileTy = llvm::dyn_cast<xetile::TileType>(adaptor.getTile().getType());
     auto innerBlocks = tileTy.getInnerBlocks();
     auto value = adaptor.getValue();
-    // its inputs has not been updated yet.
-    if (innerBlocks && value.getDefiningOp<xetile::TileUnpackOp>()) {
-      value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
-      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
-                                                       adaptor.getTile());
-      return mlir::success();
-    }
+    auto valTy = mlir::dyn_cast<mlir::VectorType>(value.getType());
 
-    // TODO: Blocking is not applied on shapecast yet, so it needs special
-    // attention.
-    if (innerBlocks && value.getDefiningOp<mlir::vector::ShapeCastOp>()) {
+    // its inputs has not been updated yet.
+    if (innerBlocks && valTy.getRank() == 2) {
       value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
       rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
                                                        adaptor.getTile());
