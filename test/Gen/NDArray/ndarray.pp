@@ -8,18 +8,12 @@ builtin.module(
     linalg-fuse-elementwise-ops
     convert-shape-to-std
     arith-expand
-    arith-bufferize
-    func-bufferize
     func.func(
         empty-tensor-to-alloc-tensor
-        scf-bufferize
-        tensor-bufferize
-        linalg-bufferize
-        bufferization-bufferize
-        linalg-detensorize
-        tensor-bufferize
-        finalizing-bufferize
-        convert-linalg-to-parallel-loops)
+        linalg-detensorize)
+    one-shot-bufferize="unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries"
+    buffer-deallocation-pipeline
+    func.func(convert-linalg-to-parallel-loops)
     drop-regions
     canonicalize
     fold-memref-alias-ops

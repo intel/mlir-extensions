@@ -1433,7 +1433,8 @@ struct SCFForOpBlockVCPattern final
                                    newOp.getRegion().getArgument(i).getType());
     }
 
-    rewriter.applySignatureConversion(&op.getRegion(), signatureConverter);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(),
+                                      signatureConverter);
 
     rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),

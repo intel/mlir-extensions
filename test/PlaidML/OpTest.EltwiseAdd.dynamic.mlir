@@ -1,6 +1,6 @@
 
 
-//imex-opt OpTest.EltwiseAdd.dynamic.mlir --pass-pipeline="builtin.module(convert-tensor-to-linalg,arith-bufferize,func.func(empty-tensor-to-alloc-tensor,eliminate-empty-tensors,scf-bufferize,shape-bufferize,linalg-bufferize,bufferization-bufferize,tensor-bufferize),func-bufferize,func.func(finalizing-bufferize,convert-linalg-to-parallel-loops,imex-add-outer-parallel-loop,gpu-map-parallel-loops,convert-parallel-loops-to-gpu))"
+//imex-opt OpTest.EltwiseAdd.dynamic.mlir --pass-pipeline='builtin.module(convert-tensor-to-linalg,func.func(empty-tensor-to-alloc-tensor,eliminate-empty-tensors),-one-shot-bufferize="unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries",func.func(convert-linalg-to-parallel-loops,imex-add-outer-parallel-loop,gpu-map-parallel-loops,convert-parallel-loops-to-gpu))'
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
