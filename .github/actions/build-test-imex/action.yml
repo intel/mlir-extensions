@@ -1,0 +1,91 @@
+name: Build and test IMEX
+inputs:
+  workflow:
+    description: Reusable IMEX build
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup
+      shell: bash -el -o pipefail {0}
+      run: |
+        rm -f $HOME/.bash_profile
+        echo LLVM_SHA=$(cat build_tools/llvm_version.txt) >>$GITHUB_ENV
+
+        conda update conda || {
+            curl -sSLO https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+            sh Miniconda3-latest-Linux-x86_64.sh -b
+            rm Miniconda3-latest-Linux-x86_64.sh
+            echo CONDA=$HOME/miniconda3 >>$GITHUB_ENV
+            $HOME/miniconda3/bin/conda init bash
+            echo $HOME/miniconda3/bin >>$GITHUB_PATH
+        }
+
+    - name: Activate conda
+      shell: bash -elo pipefail {0}
+      run: |
+        echo "source $CONDA/etc/profile.d/conda.sh" >>$HOME/.profile
+        echo "conda activate imex-dev" >>$HOME/.profile
+        conda create -n imex-dev cmake #ninja conda-forge::lit conda-forge::doxygen
+
+    - name: Install Build tools
+      shell: bash -elo pipefail {0}
+      run: |
+        conda info
+        conda install cmake ninja conda-forge::lit conda-forge::doxygen
+        conda list
+
+    - name: Cache LLLVM-MLIR
+      uses: actions/cache@v4
+      env:
+        LLVM_CACHE_NUMBER: 1  # Increase to reset cache
+      with:
+        path: |
+          /home/runner/work/llvm-mlir/_mlir_install/**
+        key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+
+    - name: Build LLVM-MLIR
+      shell: bash -e -o pipefail {0}
+      run: |
+        if test ! -d /home/runner/work/llvm-mlir/_mlir_install/
+        then
+          mkdir -p /home/runner/work/llvm-mlir
+          cd /home/runner/work/llvm-mlir
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=$(nproc)
+          echo "INFO: nproc $np"
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch
+          cd llvm-project
+          git checkout ${LLVM_SHA}
+          git apply $GITHUB_WORKSPACE/build_tools/patches/*.patch
+          cmake -G Ninja -B build -S llvm                                  \
+            -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
+            -DLLVM_ENABLE_PROJECTS=mlir                                    \
+            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+            -DLLVM_USE_LINKER=gold                                         \
+            -DLLVM_INSTALL_UTILS=ON                                        \
+            -DLLVM_TARGETS_TO_BUILD=X86                                    \
+            -DLLVM_ENABLE_BINDINGS=OFF                                     \
+            -DLLVM_ENABLE_ZSTD=OFF                                         \
+            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
+          cmake --build build --target install
+        fi
+
+    - name: Build IMEX and run lit tests
+      shell: bash -elo pipefail {0}
+      run: |
+        external_lit=$(which lit)
+        echo ${external_lit}
+        cmake -S . -B build -GNinja  \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_EXTERNAL_LIT=${external_lit} \
+          -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
+          -DLLVM_LIT_ARGS=-a
+        cmake --build build --target check-imex | tee tests.log
+
+    - name: Upload tests.txt
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: tests.log
+        path: tests.log

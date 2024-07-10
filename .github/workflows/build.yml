@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions: read-all
 
@@ -14,14 +15,6 @@ jobs:
   build_linux:
     name: Builds IMEX on Linux
     runs-on: ubuntu-latest
-    timeout-minutes: 450
-
-    env:
-      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
-
-    strategy:
-      matrix:
-        python: [3.9]
 
     steps:
       - name: Cancel Previous Runs
@@ -29,86 +22,13 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Setup conda
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python }}
-          activate-environment: imex-devel
-
-      - name: Conda info
-        shell: bash -le {0}
-        run: conda info
-
-      - name: Install Build tools
-        shell: bash -le {0}
-        run: |
-          conda install cmake ninja conda-forge::lit conda-forge::doxygen
-          conda list
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Cache Vars
-        run: |
-          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
-          cat $LLVM_SHA_FILE >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+      - uses: ./.github/actions/build-test-imex
 
-      - name: Cache LLLVM-MLIR
-        id: cache-llvm-mlir
-        uses: actions/cache@v4
-        env:
-          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
-        with:
-          path: |
-            /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
-
-      - name: Build LLVM-MLIR
-        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
-        shell: bash -el {0}
-        timeout-minutes: 420
+      - name: Build doxygen
+        shell: bash -elo pipefail {0}
         run: |
-          mkdir -p /home/runner/work/llvm-mlir
-          pushd /home/runner/work/llvm-mlir
-          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
-          np=`nproc`
-          echo "INFO: nproc $np"
-          git clone https://github.com/llvm/llvm-project --branch main --single-branch
-          cd llvm-project
-          git checkout ${LLVM_SHA}
-          if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
-          cmake -G Ninja -B _build -S llvm                                  \
-            -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
-            -DLLVM_ENABLE_PROJECTS=mlir                                    \
-            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
-            -DLLVM_USE_LINKER=gold                                         \
-            -DLLVM_INSTALL_UTILS=ON                                        \
-            -DLLVM_TARGETS_TO_BUILD=X86                                    \
-            -DLLVM_ENABLE_BINDINGS=OFF                                     \
-            -DLLVM_ENABLE_ZSTD=OFF                                         \
-            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
-          cmake --build _build --target install
-          popd
-
-      - name: Build IMEX and run lit tests
-        shell: bash -le {0}
-        run: |
-          external_lit=`which lit`
-          echo ${external_lit}
-          cd /home/runner/work/mlir-extensions/mlir-extensions
-          cmake -S . -B _build -GNinja  \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_EXTERNAL_LIT=${external_lit} \
-            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
-            -DLLVM_LIT_ARGS=-a
-          cmake --build _build --target check-imex
-
-      - name: Build doxygen docs
-        shell: bash -le {0}
-        run: |
-          cd /home/runner/work/mlir-extensions/mlir-extensions
-          cmake --build _build --target doc_doxygen
+          cmake --build build --target doc_doxygen
