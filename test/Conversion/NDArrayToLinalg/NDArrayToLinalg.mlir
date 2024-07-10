@@ -8,12 +8,12 @@ func.func @test_subview(%arg0: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi6
     return %0 : !ndarray.ndarray<?xi64>
 }
 // CHECK-LABEL: @test_subview
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[S0:%.*]] = memref.subview [[V0]][[[C0]]] [[[C1]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] writable : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] restrict writable : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[V2:%.*]] = bufferization.to_memref
 // CHECK-NEXT: return [[V2]] : memref<?xi64, strided<[?], offset: ?>>
 
@@ -28,10 +28,10 @@ func.func @test_static_mr_2_tnsr_2_static_mr(%arg0: memref<55xi32, strided<[1], 
 // CHECK-LABEL: @test_static_mr_2_tnsr_2_static_mr
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<55xi32, strided<[1], offset: 2>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<55xi32, strided<[1], offset: 2>>
 // CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : memref<55xi32, strided<[1], offset: 2>>
 // CHECK-NEXT: [[S0:%.*]] = memref.subview [[V0]][[[C0]]] [[[C1]]] [[[C1]]] : memref<55xi32, strided<[1], offset: 2>> to memref<?xi32, strided<[?], offset: ?>>
-// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] writable : memref<?xi32, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] restrict writable : memref<?xi32, strided<[?], offset: ?>>
 // CHECK-NEXT: [[V2:%.*]] = bufferization.to_memref
 // CHECK-NEXT: [[V3:%.*]] = memref.cast [[V2]]
 // CHECK-NEXT: return [[V3]] : memref<3xi32, strided<[?], offset: ?>>
@@ -44,7 +44,7 @@ func.func @test_extract_slice(%arg0: !ndarray.ndarray<?xi64>) -> !ndarray.ndarra
     return %0 : !ndarray.ndarray<?xi64>
 }
 // CHECK-LABEL: @test_extract_slice
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[V0:%.*]] = tensor.extract_slice [[V]][%c0] [%c3] [%c3] : tensor<?xi64> to tensor<?xi64>
@@ -105,9 +105,9 @@ func.func @test_reshape2(%arg0: index) -> !ndarray.ndarray<?x?xi64> {
 // CHECK-LABEL: @test_reshape2
 // CHECK: tensor.empty
 // CHECK: tensor.dim
-// CHECK: tensor.empty
+// CHECK: memref.alloc
 // CHECK: bufferization.to_memref
-// CHECK: bufferization.to_memref
+// CHECK: region.env_region "protect_copy_op"
 // CHECK: memref.copy
 // CHECK: tensor.from_elements
 // CHECK: tensor.reshape
@@ -193,8 +193,8 @@ func.func @test_insert_slice(%arg0: !ndarray.ndarray<?xi64>, %arg1: !ndarray.nda
     return
 }
 // CHECK-LABEL: @test_insert_slice
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[VV:%.*]] = bufferization.to_tensor %arg1 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[VV:%.*]] = bufferization.to_tensor %arg1 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[C3:%.*]] = arith.constant
@@ -212,8 +212,8 @@ func.func @test_insert_slice_scalar(%arg0: !ndarray.ndarray<?xi64>, %arg1: !ndar
     return
 }
 // CHECK-LABEL: @test_insert_slice_scalar
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[VV:%.*]] = bufferization.to_tensor %arg1 : memref<i64, strided<[], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[VV:%.*]] = bufferization.to_tensor %arg1 restrict : memref<i64, strided<[], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[C3:%.*]] = arith.constant
@@ -231,8 +231,8 @@ func.func @test_immutable_insert_slice(%arg0: !ndarray.ndarray<?xi64>, %arg1: !n
     return %0 : !ndarray.ndarray<?xi64>
 }
 // CHECK-LABEL: @test_immutable_insert_slice
-// CHECK-NEXT: [[A0:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[A1:%.*]] = bufferization.to_tensor %arg1 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[A0:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[A1:%.*]] = bufferization.to_tensor %arg1 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[C3:%.*]] = arith.constant
@@ -256,7 +256,7 @@ func.func @test_load(%arg0: !ndarray.ndarray<?xi64>) -> i64 {
     return %1 : i64
 }
 // CHECK-LABEL: @test_load
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[V0:%.*]] = tensor.extract [[V]][[[C0]]] : tensor<?xi64>
 // CHECK-NEXT: return [[V0]] : i64
@@ -267,7 +267,7 @@ func.func @test_to_tensor(%arg0: !ndarray.ndarray<?xi64>) -> tensor<?xi64> {
     return %0 : tensor<?xi64>
 }
 // CHECK-LABEL: @test_to_tensor
-// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 restrict : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: return [[V]] : tensor<?xi64>
 
 // -----
