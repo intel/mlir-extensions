@@ -17,6 +17,12 @@
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "imex/Utils/XeArch.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include <algorithm>
+#include <cassert>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 #include <mlir/Dialect/Math/IR/Math.h>
@@ -363,7 +369,7 @@ class SgInitTileOpPattern
   matchAndRewrite(xetile::InitTileOp op, OpAdaptor adaptor,
                   XeGPUOneToNPatterRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto source = op.getSource();
+    mlir::Value source = op.getSource();
     auto tileTy = op.getType();
     auto innerBlocks = tileTy.getInnerBlocks();
     auto shape = llvm::to_vector(tileTy.getShape());
@@ -375,19 +381,44 @@ class SgInitTileOpPattern
     if (!innerBlocks || innerBlocks.size() != 2)
       return op.emitOpError("Missing valid innerBlock for the tile in op.");
 
+    bool hasColMajorTraversal =
+        tileTy.getOrder().asArrayRef() == mlir::ArrayRef({0, 1});
     // Need to make a copy, so we can swap values.
     auto innerBlk = llvm::to_vector(innerBlocks.asArrayRef());
-    if (tileTy.getOrder().asArrayRef() == mlir::ArrayRef({0, 1})) {
+    // If order is [1, 0] (source memref is col-major), we need to swap the
+    // shape and innerBlocks because XeGPU ops only support row-major tile
+    // creation.
+    if (hasColMajorTraversal) {
+      assert(op.isSourceMemRef() && op.sourceMemRefHasStaticShape() &&
+             "Expecting a static shape source memref.");
       std::swap(innerBlk[0], innerBlk[1]);
       std::swap(shape[0], shape[1]);
     }
 
-    // using array_length for load if dim1 of innerBlocks
-    // is smaller than dim 1 of shape.
+    // using array_length for load if dim1 of innerBlocks is smaller than
+    // dim1 of shape.
     auto array_length =
         isForLoad(op) && shape[1] > innerBlk[1]
             ? getBlockArrayLength(tileTy.getElementType(), innerBlk[1])
             : 1;
+    // If the source memref is col-major we need to convert into a row-major
+    // because at XeGPU level we only support row-major memrefs. Also
+    // array_length must be 1 if col-major memrefs are used as the source.
+    if (hasColMajorTraversal) {
+      array_length = 1;
+      // create a memref.reinterpret_cast to convert col-major to row-major
+      auto sourceStaticShape = op.getSourceMemrefStaticShape();
+      auto rowMajorSourceShape = llvm::SmallVector<int64_t>(
+          {sourceStaticShape[1], sourceStaticShape[0]});
+      auto rowMajorSourceStrides =
+          llvm::SmallVector<int64_t>({sourceStaticShape[0], 1});
+      int64_t rowMajorSourceOffset = 0;
+      auto newMemRefTy =
+          mlir::MemRefType::get(rowMajorSourceShape, tileTy.getElementType());
+      source = rewriter.create<mlir::memref::ReinterpretCastOp>(
+          loc, newMemRefTy, source, rowMajorSourceOffset, rowMajorSourceShape,
+          rowMajorSourceStrides);
+    }
 
     auto width = array_length * innerBlk[1];
 
@@ -406,8 +437,9 @@ class SgInitTileOpPattern
       }
     }
 
-    auto offsetsX = offsets[0];
-    auto offsetsY = offsets[1];
+    // For col-major memref initial offsets need to be swapped.
+    auto offsetsX = hasColMajorTraversal ? offsets[1] : offsets[0];
+    auto offsetsY = hasColMajorTraversal ? offsets[0] : offsets[1];
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
         innerBlk, tileTy.getElementType(), false /*scattered*/, array_length,
@@ -420,7 +452,8 @@ class SgInitTileOpPattern
 
     rewriter.setInsertionPoint(op);
 
-    llvm::SmallVector<mlir::Value> xegpuOps;
+    llvm::SmallVector<mlir::Value> xegpuOps(blocks[0] * blocks[1],
+                                            mlir::Value());
     for (int i = 0; i < blocks[0]; i++) {
       for (int j = 0; j < blocks[1]; j++) {
         auto subOffX = createIndexConstant(indexType, (innerBlk[0] * i));
@@ -439,7 +472,12 @@ class SgInitTileOpPattern
           auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
               op.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
               tDescOffsets /*offsets*/);
-          xegpuOps.push_back(createNdOp);
+          // col-major source memref requires creating the tiles in transposed
+          // order
+          if (hasColMajorTraversal)
+            xegpuOps[blocks[0] * j + i] = createNdOp;
+          else
+            xegpuOps[blocks[1] * i + j] = createNdOp;
         } else {
           return mlir::failure();
         }
@@ -722,12 +760,20 @@ struct SgUpdateTileOffsetOpPattern
     auto offsetY = op.getOffsetY();
     auto tiles = adaptor.getTile();
 
+    bool hasColMajorTraversal =
+        op.getTile().getType().getOrder().asArrayRef() ==
+        mlir::ArrayRef({0, 1});
+
     llvm::SmallVector<mlir::Value> newOps;
     int64_t kDynamics[2] = {mlir::ShapedType::kDynamic,
                             mlir::ShapedType::kDynamic};
     for (const auto &tile : tiles) {
+      // if the traversal is col-major, we need to reverse the offsets at XeGPU
+      // level because only row-major traversal is supported.
       auto xegpuTile = rewriter.create<mlir::xegpu::UpdateNdOffsetOp>(
-          op.getLoc(), tile.getType(), tile, mlir::ValueRange{offsetX, offsetY},
+          op.getLoc(), tile.getType(), tile,
+          hasColMajorTraversal ? mlir::ValueRange({offsetY, offsetX})
+                               : mlir::ValueRange({offsetX, offsetY}),
           llvm::ArrayRef<int64_t>(kDynamics, 2));
       newOps.push_back(xegpuTile);
     }
