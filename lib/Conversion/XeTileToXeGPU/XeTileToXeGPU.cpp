@@ -27,6 +27,7 @@
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
 #include "imex/Utils/XeArch.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include <memory>
 namespace imex {
@@ -48,6 +49,7 @@ public:
     addLegalOp<mlir::vector::ShuffleOp>();
     addLegalOp<mlir::vector::ShapeCastOp>();
     addLegalOp<mlir::vector::SplatOp>();
+    addLegalOp<mlir::memref::ReinterpretCastOp>();
 
     addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
