@@ -81,7 +81,8 @@ jobs:
           cd llvm-project
           git checkout ${LLVM_SHA}
           if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
-          cmake -G Ninja -B _build -S llvm                                  \
+          CC=/usr/bin/clang CXX=/usr/bin/clang++                           \
+          cmake -G Ninja -B _build -S llvm                                 \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
@@ -100,6 +101,7 @@ jobs:
           external_lit=`which lit`
           echo ${external_lit}
           cd /home/runner/work/mlir-extensions/mlir-extensions
+          CC=/usr/bin/clang CXX=/usr/bin/clang++ \
           cmake -S . -B _build -GNinja  \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_EXTERNAL_LIT=${external_lit} \
