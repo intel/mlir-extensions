@@ -1,25 +1,18 @@
 builtin.module(
     convert-ndarray-to-linalg
-    func.func(
-        tosa-to-linalg
-        tosa-to-tensor
-    )
+    canonicalize
+    func.func(tosa-make-broadcastable)
+    func.func(tosa-to-linalg)
+    func.func(tosa-to-tensor)
     canonicalize
     linalg-fuse-elementwise-ops
-    convert-shape-to-std
     arith-expand
-    arith-bufferize
-    func-bufferize
-    func.func(
-        empty-tensor-to-alloc-tensor
-        scf-bufferize
-        tensor-bufferize
-        linalg-bufferize
-        bufferization-bufferize
-        linalg-detensorize
-        tensor-bufferize
-        finalizing-bufferize
-        convert-linalg-to-parallel-loops)
+    memref-expand
+    func.func(empty-tensor-to-alloc-tensor)
+    one-shot-bufferize{bufferize-function-boundaries}
+    imex-remove-temporaries
+    func.func(convert-linalg-to-parallel-loops)
+    func.func(scf-parallel-loop-fusion)
     drop-regions
     canonicalize
     fold-memref-alias-ops
@@ -31,4 +24,5 @@ builtin.module(
     convert-math-to-llvm
     convert-math-to-libm
     convert-func-to-llvm
-    reconcile-unrealized-casts)
+    reconcile-unrealized-casts
+)

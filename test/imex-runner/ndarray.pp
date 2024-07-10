@@ -8,16 +8,8 @@ builtin.module(
     linalg-fuse-elementwise-ops
     arith-expand
     memref-expand
-    arith-bufferize
-    func-bufferize
     func.func(empty-tensor-to-alloc-tensor)
-    func.func(scf-bufferize)
-    func.func(tensor-bufferize)
-    func.func(bufferization-bufferize)
-    func.func(linalg-bufferize)
-    func.func(linalg-detensorize)
-    func.func(tensor-bufferize)
-    func.func(finalizing-bufferize)
+    one-shot-bufferize{bufferize-function-boundaries}
     imex-remove-temporaries
     func.func(convert-linalg-to-parallel-loops)
     func.func(scf-parallel-loop-fusion)
