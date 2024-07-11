@@ -127,15 +127,14 @@ struct VectorExtractStridedSliceConversion final
       }
     }
 
-    // if indices just has one element, we will use extractElementOp
-    // to extract an element.
-    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstType);
-    if (indices.size() == 1 && (dstType.isIntOrIndexOrFloat() ||
-                                (vecTy && vecTy.getNumElements() == 1))) {
-      auto pos = rewriter.create<mlir::arith::ConstantOp>(
-          extractOp.getLoc(), rewriter.getI32IntegerAttr(indices[0]));
-      rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
-          extractOp, adaptor.getVector(), pos);
+    // If indices just has one element, we will continue to use
+    // ExtractStridedSliceOp. Avoid using vector.shuffle on <1xT>
+    // vector, as vector-to-spirv pass does not handle it well.
+    if (indices.size() == 1) {
+      int64_t sizes[] = {1};
+      int64_t strides[] = {1};
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractStridedSliceOp>(
+          extractOp, srcVector, indices, sizes, strides);
     } else {
       // perform a shuffle to extract the kD vector
       rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
@@ -221,17 +220,20 @@ struct VectorExtractOpConversion final
       linearizedOffset += offsets[i] * size;
     }
 
-    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstTy);
-    if (dstTy.isIntOrIndexOrFloat() || (vecTy && vecTy.getNumElements() == 1)) {
+    auto srcVector = adaptor.getVector();
+
+    // ExtractOp also supports a semantic with result as a scalar, in which case
+    // We need to use ExtractElementOp instead of ShuffleOp.
+    if (dstTy.isIntOrIndexOrFloat()) {
       auto pos = rewriter.create<mlir::arith::ConstantOp>(
           extractOp.getLoc(), rewriter.getI32IntegerAttr(linearizedOffset));
       rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
-          extractOp, adaptor.getVector(), pos);
+          extractOp, srcVector, pos);
     } else {
       llvm::SmallVector<int64_t, 2> indices(size);
       std::iota(indices.begin(), indices.end(), linearizedOffset);
       rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-          extractOp, dstTy, adaptor.getVector(), adaptor.getVector(),
+          extractOp, dstTy, srcVector, srcVector,
           rewriter.getI64ArrayAttr(indices));
     }
 
@@ -348,6 +350,11 @@ struct VectorLinearizePass final
           auto ty = op->getResult(0).getType();
           auto vecTy = mlir::dyn_cast_or_null<mlir::VectorType>(ty);
           return vecTy && vecTy.getRank() == 1;
+        });
+
+    target.addDynamicallyLegalOp<mlir::vector::ExtractStridedSliceOp>(
+        [&](mlir::vector::ExtractStridedSliceOp op) {
+          return op.getVector().getType().getRank() == 1;
         });
 
     target.addIllegalOp<mlir::vector::TransposeOp>();
