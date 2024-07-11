@@ -1,6 +1,7 @@
 builtin.module(
     cse
     gpu.module(xetile-init-duplicate
+        xetile-optimize-transpose
         xetile-blocking
         convert-xetile-to-xegpu
         imex-propagate-packed-layout)
