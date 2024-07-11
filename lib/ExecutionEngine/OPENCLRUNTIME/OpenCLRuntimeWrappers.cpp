@@ -22,9 +22,9 @@
 #include <vector>
 
 #ifdef _WIN32
-#define SYCL_RUNTIME_EXPORT __declspec(dllexport)
+#define OCL_RUNTIME_EXPORT __declspec(dllexport)
 #else
-#define SYCL_RUNTIME_EXPORT
+#define OCL_RUNTIME_EXPORT
 #endif // _WIN32
 
 namespace {
@@ -364,8 +364,8 @@ static GPUCLQUEUE *getDefaultQueue() {
 
 // Wrappers
 
-extern "C" SYCL_RUNTIME_EXPORT GPUCLQUEUE *gpuCreateStream(void *device,
-                                                           void *context) {
+extern "C" OCL_RUNTIME_EXPORT GPUCLQUEUE *gpuCreateStream(void *device,
+                                                          void *context) {
   // todo: this is a workaround of issue of gpux generating multiple streams
   if (!device && !context) {
     return getDefaultQueue();
@@ -374,13 +374,13 @@ extern "C" SYCL_RUNTIME_EXPORT GPUCLQUEUE *gpuCreateStream(void *device,
                         reinterpret_cast<cl_context>(context), nullptr);
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(GPUCLQUEUE *queue) {
+extern "C" OCL_RUNTIME_EXPORT void gpuStreamDestroy(GPUCLQUEUE *queue) {
   // todo: this is a workaround of issue of gpux generating multiple streams
   // should uncomment the below line to release the queue
   // delete queue;
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void *
+extern "C" OCL_RUNTIME_EXPORT void *
 gpuMemAlloc(GPUCLQUEUE *queue, size_t size, size_t alignment, bool isShared) {
   if (queue) {
     return allocDeviceMemory(queue, size, alignment, isShared);
@@ -388,13 +388,13 @@ gpuMemAlloc(GPUCLQUEUE *queue, size_t size, size_t alignment, bool isShared) {
   return nullptr;
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(GPUCLQUEUE *queue, void *ptr) {
+extern "C" OCL_RUNTIME_EXPORT void gpuMemFree(GPUCLQUEUE *queue, void *ptr) {
   if (queue && ptr) {
     deallocDeviceMemory(queue, ptr);
   }
 }
 
-extern "C" SYCL_RUNTIME_EXPORT cl_program
+extern "C" OCL_RUNTIME_EXPORT cl_program
 gpuModuleLoad(GPUCLQUEUE *queue, const unsigned char *data, size_t dataSize) {
   if (queue) {
     return loadModule(queue, data, dataSize);
@@ -402,16 +402,16 @@ gpuModuleLoad(GPUCLQUEUE *queue, const unsigned char *data, size_t dataSize) {
   return nullptr;
 }
 
-extern "C" SYCL_RUNTIME_EXPORT cl_kernel gpuKernelGet(GPUCLQUEUE *queue,
-                                                      cl_program module,
-                                                      const char *name) {
+extern "C" OCL_RUNTIME_EXPORT cl_kernel gpuKernelGet(GPUCLQUEUE *queue,
+                                                     cl_program module,
+                                                     const char *name) {
   if (queue) {
     return getKernel(queue, module, name);
   }
   return nullptr;
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void
+extern "C" OCL_RUNTIME_EXPORT void
 gpuLaunchKernel(GPUCLQUEUE *queue, cl_kernel kernel, size_t gridX, size_t gridY,
                 size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                 size_t sharedMemBytes, void *params) {
@@ -421,7 +421,7 @@ gpuLaunchKernel(GPUCLQUEUE *queue, cl_kernel kernel, size_t gridX, size_t gridY,
   }
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void gpuWait(GPUCLQUEUE *queue) {
+extern "C" OCL_RUNTIME_EXPORT void gpuWait(GPUCLQUEUE *queue) {
   if (queue) {
     CL_SAFE_CALL(clFinish(queue->queue_));
   }
