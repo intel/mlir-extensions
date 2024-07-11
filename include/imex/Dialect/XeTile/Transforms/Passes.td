@@ -81,4 +81,19 @@ def XeTileBlockAligning: Pass <"xetile-block-aligning", "::mlir::gpu::GPUModuleO
                            "mlir::vector::VectorDialect"];
 }
 
+def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
+  let summary = "Fuse tile loads and transpose operations.";
+
+  let description = [{
+    This pass fuses tile loads that are consumed by transpose operations into a single
+    load operation. Transformation uses the `order` attribute in the XeTile type to
+    perform the load and transpose together.
+  }];
+  let constructor = "imex::createXeTileOptimizeTransposePass()";
+  let dependentDialects = [
+    "::imex::xetile::XeTileDialect"
+  ];
+}
+
+
 #endif // _XeTile_PASSES_TD_INCLUDED_
