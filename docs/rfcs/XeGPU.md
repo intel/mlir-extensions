@@ -90,8 +90,6 @@ An Xe GPU target may only support loading with VNNI transformation for low-preci
   %bt = XeGPU.load_nd %tdesc2 {packed} :
      tensor_desc<16x16xbf16> into vector<8x16x2xbf16>
 
-  XeGPU.load_nd %value, %tdesc1:
-     tensor_desc<16xbf16> into vector<16xbf16>
 ```
 
 VNNI transformation and transpose can not be combined.
