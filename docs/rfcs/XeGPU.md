@@ -206,9 +206,9 @@ Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to
 The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  The number of work items (SIMD lanes) can be 1, 2, 4, 8, 16, 32.
 ```mlir
 
-  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
+  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true, chunk_size_per_lane=8>
   %scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets
-		{chunk_size_per_lane=8, mode = vc} :
+		{mode = vc} :
 		uint64, vector<16xindex> into tensor_desc<16x8xuint16, #tdesc_attr>
 ```
 Attribute `memory_scope` indicates whether the tensor is located in the global (default) or shared local memory.
@@ -222,11 +222,12 @@ Attribute `chunk_size_per_lane` specifies the size being loaded per each work it
         	  tensor_desc<16xuint8, #Scattered>, vector<16xi1> into vector<16xuint8>
 ```
 
-When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a new dimension. The consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
+When a tensor_desc with chunk_size_per_lane attribute is loaded, the output vector must be 2D vector, with the chunk being treated as a new dimension. The consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
 
 ```mlir
-%result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0], mode = vc} :
-          tensor_desc<16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16>
+  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true, chunk_size_per_lane=8>
+  %result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0], mode = vc} :
+          tensor_desc<16x8xbf16, #tdesc_attr>, vector<16xi1> -> vector<8x16xbf16>
 ```
 The mask operand masks out memory access so that it is safe to pass out-of-boundary addresses/offsets as long as they are masked. There is no modification to the result vector registers for the masked SIMD lanes.  For tensor_desc with chunk_size_per_lane attribute, the mask applies to the first dimension in memory and not the second dimension (Chunk Size).
 
