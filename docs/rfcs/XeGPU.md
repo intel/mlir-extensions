@@ -222,7 +222,7 @@ Attribute `chunk_size_per_lane` specifies the size being loaded per each work it
         	  tensor_desc<16xuint8, #Scattered>, vector<16xi1> into vector<16xuint8>
 ```
 
-When a tensor_desc with chunk_size_per_lane attribute is loaded, the output vector must be 2D vector, with the chunk being treated as a new dimension. The consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
+When a tensor_desc with chunk_size_per_lane attribute is loaded, the output vector must be 2D vector, with the chunk being treated as a new dimension. The consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension. The transpose=[1,0] attribute must be present when chunk_size_per_lane is larger than 1. 
 
 ```mlir
   #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true, chunk_size_per_lane=8>
