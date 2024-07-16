@@ -94,6 +94,9 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
     }
 
     xetile::WorkGroupMapAttr getWgMap() {
+      auto wgmap = llvm::dyn_cast_if_present<xetile::WorkGroupMapAttr>(getEncoding());
+      if (wgmap)
+            return wgmap;
       auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
       if (encoding)
         return encoding.getWgMap();

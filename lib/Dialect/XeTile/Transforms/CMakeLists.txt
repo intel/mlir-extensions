@@ -2,6 +2,7 @@ add_imex_dialect_library(IMEXXeTileTransforms
   Blocking.cpp
   InitDuplicate.cpp
   BlockAligning.cpp
+  WgToSg.cpp
   OptimizeTranspose.cpp
 
   ADDITIONAL_HEADER_DIRS

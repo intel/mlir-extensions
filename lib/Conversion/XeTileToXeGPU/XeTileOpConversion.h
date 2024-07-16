@@ -21,7 +21,7 @@ namespace imex {
 
 bool isLegalElementWiseOp(mlir::Operation *op);
 
-void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis);
 

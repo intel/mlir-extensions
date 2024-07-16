@@ -30,12 +30,12 @@ extern VectorTypedValue concat(mlir::Value v1, mlir::Value v2,
 extern mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
                                        std::function<funcTy> transFunc,
                                        mlir::Location loc,
-                                       XeGPUOneToNPatterRewriter &rewriter);
+                                       XeOneToNPatternRewriter &rewriter);
 
 static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
                                mlir::Value lhs, mlir::Value rhs,
                                mlir::Type elemTy, mlir::Location &loc,
-                               XeGPUOneToNPatterRewriter &rewriter) {
+                               XeOneToNPatternRewriter &rewriter) {
 
   // ADD and MUL are defined for both Integers and Floats,
   // need to generate code based on element data type.
@@ -91,7 +91,7 @@ static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
 llvm::SmallVector<mlir::Value>
 lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
                     mlir::vector::CombiningKind kind, mlir::Location loc,
-                    mlir::Type elemTy, XeGPUOneToNPatterRewriter &rewriter) {
+                    mlir::Type elemTy, XeOneToNPatternRewriter &rewriter) {
   assert(shape.size() == 4 && "shape should be 4D.");
   llvm::SmallVector<mlir::Value> intermediates;
   for (auto j = 0; j < shape[1]; j++) {
@@ -136,7 +136,7 @@ lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
 llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
     mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
     mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
-    XeGPUOneToNPatterRewriter &rewriter) {
+    XeOneToNPatternRewriter &rewriter) {
 
   assert(shape.size() == 4 && "shape should be 4D.");
 
@@ -235,7 +235,7 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
 llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
     mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
     mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
-    XeGPUOneToNPatterRewriter &rewriter) {
+    XeOneToNPatternRewriter &rewriter) {
 
   assert(shape.size() == 4 && "shape should be 4D.");
   // vector<ixjx1xnxf16> equals to a grid of ixj of vector<1xnxf16>
@@ -266,13 +266,13 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
 }
 
 class SgVectorMultiDimReductionOpPattern
-    : public SgXeTileToXeGPUConversion<mlir::vector::MultiDimReductionOp> {
-  using SgXeTileToXeGPUConversion<
-      mlir::vector::MultiDimReductionOp>::SgXeTileToXeGPUConversion;
+    : public XeOneToNConversion<mlir::vector::MultiDimReductionOp> {
+  using XeOneToNConversion<
+      mlir::vector::MultiDimReductionOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::vector::MultiDimReductionOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto srcTy = op.getSource().getType();
     auto elemTy = srcTy.getElementType();
     auto dims = op.getReductionDims();
@@ -331,13 +331,12 @@ class SgVectorMultiDimReductionOpPattern
 };
 
 class SgArithConstantOpPattern
-    : public SgXeTileToXeGPUConversion<mlir::arith::ConstantOp> {
-  using SgXeTileToXeGPUConversion<
-      mlir::arith::ConstantOp>::SgXeTileToXeGPUConversion;
+    : public XeOneToNConversion<mlir::arith::ConstantOp> {
+  using XeOneToNConversion<mlir::arith::ConstantOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::ConstantOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
 
@@ -392,7 +391,7 @@ bool isLegalArithOp(mlir::Operation *op) {
   return true;
 }
 
-void populateArithOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateArithOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                        mlir::RewritePatternSet &patterns,
                                        TileUsageAnalysis &analysis) {
   patterns.add<SgArithConstantOpPattern, SgVectorMultiDimReductionOpPattern>(

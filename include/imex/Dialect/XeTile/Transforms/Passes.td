@@ -81,6 +81,22 @@ def XeTileBlockAligning: Pass <"xetile-block-aligning", "::mlir::gpu::GPUModuleO
                            "mlir::vector::VectorDialect"];
 }
 
+def XeTileWgToSg : Pass<"xetile-wg-to-sg", "::mlir::gpu::GPUModuleOp">{
+  let summary = "Transform WG level XeTile code to SG XeTile";
+
+  let description = [{
+    This transform pass transforms WG level XeTile code to SG XeTile.
+  }];
+
+  let constructor = "imex::createXeTileWgToSgPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::index::IndexDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+}
+
 def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
   let summary = "Fuse tile loads and transpose operations.";
 

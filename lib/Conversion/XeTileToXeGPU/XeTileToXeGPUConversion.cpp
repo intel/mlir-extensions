@@ -9,9 +9,9 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements the SgXeTileToXeGPUConversion, the base class for
-/// XeTileToXeGPU conversion, XeGPUTypeConverter, converting types used in
-/// XeTile dialect to types used in XeGPU dialect, XeGPUOneToNPatterRewriter a
+/// This file implements the XeOneToNConversion, the base class for
+/// XeTileToXeGPU conversion, XeOneToNTypeConverter, converting types used in
+/// XeTile dialect to types used in XeGPU dialect, XeOneToNPatternRewriter a
 /// wrapper around ConversionPatterRewriter providng interface for supporting
 /// OneToN replace.
 ///
@@ -81,7 +81,7 @@ buildUnrealizedBackwardsCasts(mlir::ValueRange convertedValues,
   return recastValues;
 }
 
-XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context)
+XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
     : XeTypeConverter(context) {
   targetOp = nullptr;
 
@@ -110,7 +110,7 @@ XeGPUTypeConverter::XeGPUTypeConverter(mlir::MLIRContext &context)
       });
 }
 
-std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertTileType(
+std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertTileType(
     xetile::TileType tileTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
   llvm::dbgs()
       << "convertTileType is disabled, since there is no unique "
@@ -119,7 +119,7 @@ std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertTileType(
   return std::nullopt;
 }
 
-std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertVectorType(
+std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertVectorType(
     mlir::VectorType vectorTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
   if (vectorTy.getRank() == 4) {
     auto shape = vectorTy.getShape();
@@ -135,7 +135,7 @@ std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertVectorType(
   return std::nullopt;
 }
 
-// mlir::LogicalResult XeGPUTypeConverter::computeTypeMapping(
+// mlir::LogicalResult XeOneToNTypeConverter::computeTypeMapping(
 //                             mlir::ValueRange originalVals,
 //                             llvm::ArrayRef<mlir::ValueRange> convertedVals,
 //                             mlir::OneToNTypeMapping &resultMap) {
@@ -167,9 +167,9 @@ std::optional<mlir::LogicalResult> XeGPUTypeConverter::convertVectorType(
 // the originalTypes, which is the key, has been added into resultMap as
 // constructor
 mlir::LogicalResult
-XeGPUTypeConverter::computeTypeMapping(mlir::ValueRange original,
-                                       mlir::ValueRange converted,
-                                       mlir::OneToNTypeMapping &resultMap) {
+XeOneToNTypeConverter::computeTypeMapping(mlir::ValueRange original,
+                                          mlir::ValueRange converted,
+                                          mlir::OneToNTypeMapping &resultMap) {
   llvm::SmallVector<mlir::Type> originalTypes(original.getType());
   llvm::SmallVector<mlir::Type> convertedTypes(converted.getType());
 
@@ -226,14 +226,14 @@ XeGPUTypeConverter::computeTypeMapping(mlir::ValueRange original,
   return mlir::success();
 }
 
-mlir::Block *XeGPUOneToNPatterRewriter::applySignatureConversion(
+mlir::Block *XeOneToNPatternRewriter::applySignatureConversion(
     mlir::Region *region, mlir::TypeConverter::SignatureConversion &conversion,
     const mlir::TypeConverter *converter) {
   return rewriter.applySignatureConversion(region, conversion, converter);
 }
 
-void XeGPUOneToNPatterRewriter::replaceOp(mlir::Operation *op,
-                                          mlir::ValueRange newValues) {
+void XeOneToNPatternRewriter::replaceOp(mlir::Operation *op,
+                                        mlir::ValueRange newValues) {
   // It is one-to-one mapping, let the ConvertionPatternRewriter
   // handle it directly.
   if (newValues.size() == op->getNumResults()) {
@@ -255,6 +255,27 @@ void XeGPUOneToNPatterRewriter::replaceOp(mlir::Operation *op,
                                       "Failed to convert the result types.");
     return;
   }
+
+  auto castValues =
+      buildUnrealizedBackwardsCasts(newValues, resultMapping, rewriter);
+  rewriter.replaceOp(op, castValues);
+}
+
+void XeOneToNPatternRewriter::replaceOp(
+    mlir::Operation *op, mlir::ValueRange newValues,
+    const mlir::OneToNTypeMapping &resultMapping) {
+  // It is one-to-one mapping, let the ConvertionPatternRewriter
+  // handle it directly.
+  if (newValues.size() == op->getNumResults()) {
+    rewriter.replaceOp(op, newValues);
+    return;
+  }
+
+  // it is one-to-N mapping, so create unrealizedCasts
+  // to make it as one-to-one mapping
+  assert(newValues.size() > op->getNumResults() &&
+         "It is unexpected that the num of new op results "
+         "is less than num of orignial op results.\n");
 
   auto castValues =
       buildUnrealizedBackwardsCasts(newValues, resultMapping, rewriter);
