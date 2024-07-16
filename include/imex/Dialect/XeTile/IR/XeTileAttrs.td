@@ -78,8 +78,23 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
         return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
                       mlir::DenseI64ArrayAttr::get($_ctxt, inner_blocks),
                       mlir::DenseI32ArrayAttr::get($_ctxt, wg_data));
+    }]>,
+    AttrBuilder<(ins CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order),
+    [{
+        return $_get($_ctxt, xetile::SubGroupMapAttr(), xetile::WorkGroupMapAttr(),
+                      mlir::DenseI32ArrayAttr::get($_ctxt, order),
+                      mlir::DenseI64ArrayAttr::get($_ctxt, {}),
+                      mlir::DenseI32ArrayAttr::get($_ctxt, {}));
+    }]>,
+    AttrBuilder<(ins CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
+                      CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
+                      CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
+                      CArg<"llvm::ArrayRef<int32_t>", "{}">:$wg_data),
+    [{
+       return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
+                      mlir::DenseI64ArrayAttr::get($_ctxt, {}),
+                      mlir::DenseI32ArrayAttr::get($_ctxt, wg_data));
     }]>
-
   ];
 }
 
