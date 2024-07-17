@@ -195,7 +195,7 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
     }
 
     auto &analysis = getAnalysis<TileUsageAnalysis>();
-    XeGPUTypeConverter typeConverter(context);
+    XeOneToNTypeConverter typeConverter(context);
     XeTileConversionTarget target(context, uArchInterface);
     mlir::RewritePatternSet patterns(&context);
 
@@ -212,7 +212,7 @@ private:
 
 /// Populate the given list with patterns that convert XeTile to XeGPU
 void populateXeTileToXeGPUConversionPatterns(
-    imex::XeGPUTypeConverter &converter, mlir::RewritePatternSet &patterns,
+    imex::XeOneToNTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis) {
   populateSCFOpConversionPatterns(converter, patterns, analysis);
   populateArithOpConversionPatterns(converter, patterns, analysis);

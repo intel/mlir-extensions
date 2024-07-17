@@ -18,13 +18,12 @@
 
 namespace imex {
 
-struct SgSCFForOpBlockPattern
-    : public SgXeTileToXeGPUConversion<mlir::scf::ForOp> {
-  using SgXeTileToXeGPUConversion<mlir::scf::ForOp>::SgXeTileToXeGPUConversion;
+struct SgSCFForOpBlockPattern : public XeOneToNConversion<mlir::scf::ForOp> {
+  using XeOneToNConversion<mlir::scf::ForOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ForOp op, OpAdaptor adaptor,
-                  imex::XeGPUOneToNPatterRewriter &rewriter) const override {
+                  imex::XeOneToNPatternRewriter &rewriter) const override {
     // OpAdaptor is defined with ValueRange, so it contains results after
     // One-to-N mapping
     llvm::SmallVector<mlir::Value> convertedArgs;
@@ -42,9 +41,9 @@ struct SgSCFForOpBlockPattern
     // lowered into many different types of TensorDescType (due to different
     // setting of array_length). But typeconverter has no knowledge about when
     // to use array_lenght and when not.
-    auto typeConverter = getTypeConverter<XeGPUTypeConverter>();
+    auto typeConverter = getTypeConverter<XeOneToNTypeConverter>();
     auto argTys = op.getRegion().getArgumentTypes();
-    mlir::OneToNTypeMapping argumentMapping(argTys);
+    mlir::OneToNTypeMapping argumentMapping(argTys); // vectorty
     llvm::ArrayRef<mlir::Value> args(op.getRegion().getArguments().begin(),
                                      op.getRegion().getArguments().end());
     llvm::ArrayRef<mlir::Value> newArgs(
@@ -71,14 +70,12 @@ struct SgSCFForOpBlockPattern
   }
 };
 
-struct SgSCFYieldOpPattern
-    : public SgXeTileToXeGPUConversion<mlir::scf::YieldOp> {
-  using SgXeTileToXeGPUConversion<
-      mlir::scf::YieldOp>::SgXeTileToXeGPUConversion;
+struct SgSCFYieldOpPattern : public XeOneToNConversion<mlir::scf::YieldOp> {
+  using XeOneToNConversion<mlir::scf::YieldOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::YieldOp op, OpAdaptor adaptor,
-                  imex::XeGPUOneToNPatterRewriter &rewriter) const override {
+                  imex::XeOneToNPatternRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> convertedResults;
     for (auto &values : adaptor.getResults())
       convertedResults.append(values.begin(), values.end());
@@ -116,7 +113,7 @@ bool isLegalSCFOp(mlir::Operation *op) {
   return result;
 }
 
-void populateSCFOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateSCFOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                      mlir::RewritePatternSet &patterns,
                                      TileUsageAnalysis &analysis) {
   patterns.add<SgSCFForOpBlockPattern, SgSCFYieldOpPattern>(

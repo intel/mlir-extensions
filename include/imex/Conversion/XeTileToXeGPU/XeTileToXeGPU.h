@@ -34,10 +34,10 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-class XeGPUTypeConverter;
+class XeOneToNTypeConverter;
 
 /// Populate the given list with patterns rewrite XeTile Ops
-void populateXeTileToXeGPUConversionPatterns(XeGPUTypeConverter &converter,
+void populateXeTileToXeGPUConversionPatterns(XeOneToNTypeConverter &converter,
                                              mlir::RewritePatternSet &patterns,
                                              imex::TileUsageAnalysis &analysis);
 

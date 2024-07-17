@@ -21,7 +21,7 @@
 namespace imex {
 bool isLegalArithOp(mlir::Operation *op);
 
-void populateArithOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateArithOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                        mlir::RewritePatternSet &patterns,
                                        TileUsageAnalysis &analysis);
 

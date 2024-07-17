@@ -1,27 +1,20 @@
-// TODO: Add run commands
-// RUN:
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xetile-wg-to-func-vc.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xetile-wg-to-func-vc.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-// *** Experimental ***
-// This example works at the work grpup level. This demonstrates how the user can specify the
-// mapping for both subgroup within workgroup and work items within a single subgroup. The mapping
-// of subgroups to subtiles are specified using `wg_map` and, work items to data elements mapping is
-// specified using `sg_map`. Through this way, user has full control of how each work items works on
-// exactly which data elements. XeTile fully honor the mapping provided by users.
-//
-// Note that lowering of this code to XeGPU is not supported yet because XeTile-XeGPU lowering assumes
-// subgroup level programming at XeTile.
+#wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [32, 128]>
+#tile_attr_a = #xetile.tile_attr<wg_map = #wg_map_a>
 
-#sg_map_a = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]>
-#wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
-#xe_map_a = #xetile.xe_map<wg = #wg_map_a, sg = #sg_map_a>
+#wg_map_b = #xetile.wg_map<sg_layout = [4, 4], sg_data = [128, 32]>
+#tile_attr_b = #xetile.tile_attr<wg_map = #wg_map_b>
 
-#sg_map_b = #xetile.sg_map<mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]>
-#wg_map_b = #xetile.wg_map<sg_layout = [2, 2], sg_data = [128, 32]>
-#xe_map_b = #xetile.xe_map<wg = #wg_map_b, sg = #sg_map_b>
-
-#sg_map_c = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]>
-#wg_map_c = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 32]>
-#xe_map_c = #xetile.xe_map<wg = #wg_map_c, sg = #sg_map_c>
+#wg_map_c = #xetile.wg_map<sg_layout = [4, 4], sg_data = [32, 32]>
+#tile_attr_c = #xetile.tile_attr<wg_map = #wg_map_c>
 
 module @gemm attributes {gpu.container_module} {
   func.func @test(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: memref<1024x1024xf32>) -> memref<1024x1024xf32> attributes {llvm.emit_c_interface} {
@@ -40,7 +33,7 @@ module @gemm attributes {gpu.container_module} {
     memref.copy %B, %B_gpu : memref<1024x1024xf16> to memref<1024x1024xf16>
     %C_gpu = gpu.alloc  host_shared () : memref<1024x1024xf32>
     memref.copy %C, %C_gpu : memref<1024x1024xf32> to memref<1024x1024xf32>
-    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c8, %c8, %c1) threads in (%c2, %c2, %c1) args(%A_gpu : memref<1024x1024xf16>, %B_gpu : memref<1024x1024xf16>, %C_gpu : memref<1024x1024xf32>)
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c8, %c8, %c1) threads in (%c4, %c4, %c1) args(%A_gpu : memref<1024x1024xf16>, %B_gpu : memref<1024x1024xf16>, %C_gpu : memref<1024x1024xf32>)
     gpu.dealloc  %A_gpu : memref<1024x1024xf16>
     gpu.dealloc  %B_gpu : memref<1024x1024xf16>
     return %C_gpu : memref<1024x1024xf32>
@@ -49,57 +42,62 @@ module @gemm attributes {gpu.container_module} {
     gpu.func @test_kernel(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: memref<1024x1024xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
         %c0 = arith.constant 0 : index
         %c1 = arith.constant 1 : index
-        // %c8 = arith.constant 8 : index
-        // %c16 = arith.constant 16 : index
         %c128 = arith.constant 128 : index
         %c1024 = arith.constant 1024 : index
+
         %block_id_x = gpu.block_id x
         %block_id_y = gpu.block_id y
         %m = arith.muli %block_id_x, %c128 : index
         %n = arith.muli %block_id_y, %c128 : index
+
         // intialize C tile and load it
         %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32>
-          -> !xetile.tile<128x128xf32, #xe_map_c>
-        %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<128x128xf32, #xe_map_c>
+          -> !xetile.tile<128x128xf32, #tile_attr_c>
+        %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<128x128xf32, #tile_attr_c>
           -> vector<128x128xf32>
-        // initalize A and B tiles
+
         %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16>
-          -> !xetile.tile<128x128xf16, #xe_map_a>
+          -> !xetile.tile<128x128xf16, #tile_attr_a>
+
         %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16>
-          -> !xetile.tile<128x128xf16, #xe_map_b>
+          -> !xetile.tile<128x128xf16, #tile_attr_b>
+
         // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
         %out:3 = scf.for %k = %c0 to %c1024 step %c128
           iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
-          -> (!xetile.tile<128x128xf16, #xe_map_a>,
-              !xetile.tile<128x128xf16, #xe_map_b>,
+          -> (!xetile.tile<128x128xf16, #tile_attr_a>,
+              !xetile.tile<128x128xf16, #tile_attr_b>,
               vector<128x128xf32>) {
 
           // load A and B tiles
-          %a_value = xetile.load_tile %a_tile  : !xetile.tile<128x128xf16, #xe_map_a>
+          %a_value = xetile.load_tile %a_tile  : !xetile.tile<128x128xf16, #tile_attr_a>
             -> vector<128x128xf16>
-          %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16, #xe_map_b>
+
+          %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16, #tile_attr_b>
             -> vector<128x128xf16>
+
           // perform dpas and accumulate
-          %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value
+          %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value {wg_map_a = #wg_map_a, wg_map_b = #wg_map_b, wg_map_c = #wg_map_c}
             : vector<128x128xf16>, vector<128x128xf16>, vector<128x128xf32> -> vector<128x128xf32>
+
           // update the offsets for A and B tiles
           %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128]
-            : !xetile.tile<128x128xf16, #xe_map_a>, index, index
-            -> !xetile.tile<128x128xf16, #xe_map_a>
+            : !xetile.tile<128x128xf16, #tile_attr_a>, index, index
+            -> !xetile.tile<128x128xf16, #tile_attr_a>
           %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
-            : !xetile.tile<128x128xf16, #xe_map_b>, index, index
-            -> !xetile.tile<128x128xf16, #xe_map_b>
+            : !xetile.tile<128x128xf16, #tile_attr_b>, index, index
+            -> !xetile.tile<128x128xf16, #tile_attr_b>
           // partial C tile result
           scf.yield %a_next_tile, %b_next_tile, %c_new_value
-            : !xetile.tile<128x128xf16, #xe_map_a>,
-            !xetile.tile<128x128xf16, #xe_map_b>, vector<128x128xf32>
+            : !xetile.tile<128x128xf16, #tile_attr_a>,
+            !xetile.tile<128x128xf16, #tile_attr_b>, vector<128x128xf32>
         }
         // store the final accumulated C tile result back to memory
         xetile.store_tile %out#2, %c_init_tile : vector<128x128xf32>,
-          !xetile.tile<128x128xf32, #xe_map_c>
+          !xetile.tile<128x128xf32, #tile_attr_c>
         gpu.return
     }
-  }
+    }
   func.func @main() attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
@@ -159,6 +157,7 @@ module @gemm attributes {gpu.container_module} {
     %cast_C = memref.cast %2 : memref<1024x1024xf32> to memref<*xf32>
     %cast_C_ref = memref.cast %C_ref : memref<1024x1024xf32> to memref<*xf32>
 
+    // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF32(%cast_C, %cast_C_ref) : (memref<*xf32>, memref<*xf32>) -> ()
     memref.dealloc %A : memref<1024x1024xf16>
     memref.dealloc %B : memref<1024x1024xf16>
