@@ -7,6 +7,9 @@ builtin.module(
         imex-propagate-packed-layout)
     cse
     imex-vector-linearize
+    cse
+    imex-remove-single-elem-vector
+    cse
     gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
     bf16-to-gpu
