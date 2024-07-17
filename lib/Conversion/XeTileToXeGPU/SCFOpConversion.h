@@ -21,7 +21,7 @@
 namespace imex {
 bool isLegalSCFOp(mlir::Operation *op);
 
-void populateSCFOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateSCFOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                      mlir::RewritePatternSet &patterns,
                                      TileUsageAnalysis &analysis);
 

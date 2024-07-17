@@ -23,6 +23,7 @@
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
+#include <mlir/Conversion/IndexToSPIRV/IndexToSPIRV.h>
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
@@ -352,6 +353,7 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::populateBuiltinFuncToSPIRVPatterns(typeConverter, patterns);
     mlir::populateVectorToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+    mlir::index::populateIndexToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
     mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
     // ---------------------------------------

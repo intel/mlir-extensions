@@ -8,9 +8,9 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines the SgXeTileToXeGPUConversion, the base class for
-/// XeTileToXeGPU conversion, XeGPUTypeConverter, converting types used in
-/// XeTile dialect to types used in XeGPU dialect, XeGPUOneToNPatterRewriter a
+/// This file defines the XeOneToNConversion, the base class for
+/// XeTileToXeGPU conversion, XeOneToNTypeConverter, converting types used in
+/// XeTile dialect to types used in XeGPU dialect, XeOneToNPatternRewriter a
 /// wrapper around ConversionPatterRewriter providng interface for supporting
 /// OneToN replace.
 ///
@@ -36,9 +36,9 @@
 
 namespace imex {
 
-class XeGPUTypeConverter : public imex::XeTypeConverter {
+class XeOneToNTypeConverter : public imex::XeTypeConverter {
 public:
-  XeGPUTypeConverter(mlir::MLIRContext &context);
+  XeOneToNTypeConverter(mlir::MLIRContext &context);
 
   std::optional<mlir::LogicalResult>
   convertTileType(xetile::TileType tileTy,
@@ -56,11 +56,11 @@ private:
   mlir::Operation *targetOp;
 };
 
-class XeGPUOneToNPatterRewriter : public mlir::PatternRewriter,
-                                  public mlir::RewriterBase::Listener {
+class XeOneToNPatternRewriter : public mlir::PatternRewriter,
+                                public mlir::RewriterBase::Listener {
 public:
-  explicit XeGPUOneToNPatterRewriter(mlir::ConversionPatternRewriter &rewriter,
-                                     XeGPUTypeConverter &converter)
+  explicit XeOneToNPatternRewriter(mlir::ConversionPatternRewriter &rewriter,
+                                   XeOneToNTypeConverter &converter)
       : mlir::PatternRewriter(rewriter.getContext()), typeConverter(converter),
         rewriter(rewriter) {
     setListener(this);
@@ -94,6 +94,9 @@ public:
 
   void replaceOp(mlir::Operation *op, mlir::ValueRange newValues) override;
 
+  void replaceOp(mlir::Operation *op, mlir::ValueRange newValues,
+                 const mlir::OneToNTypeMapping &resultMapping);
+
   void eraseOp(mlir::Operation *op) override { rewriter.eraseOp(op); }
 
   void eraseBlock(mlir::Block *block) override { rewriter.eraseBlock(block); }
@@ -108,18 +111,17 @@ public:
   };
 
 private:
-  XeGPUTypeConverter &typeConverter;
+  XeOneToNTypeConverter &typeConverter;
   mlir::ConversionPatternRewriter &rewriter;
 };
 
 template <typename SourceOp>
-class SgXeTileToXeGPUConversion
-    : public XeConversionPattern<TileUsageAnalysis> {
+class XeOneToNConversion : public XeConversionPattern<TileUsageAnalysis> {
 public:
-  SgXeTileToXeGPUConversion(mlir::MLIRContext *context,
-                            XeGPUTypeConverter &typeConverter,
-                            TileUsageAnalysis &analysis,
-                            mlir::PatternBenefit benefit = 1)
+  XeOneToNConversion(mlir::MLIRContext *context,
+                     XeOneToNTypeConverter &typeConverter,
+                     TileUsageAnalysis &analysis,
+                     mlir::PatternBenefit benefit = 1)
       : XeConversionPattern(typeConverter, analysis,
                             SourceOp::getOperationName(), benefit, context) {}
 
@@ -130,7 +132,7 @@ public:
    * This overwrites the RewritePattern::matchAndRewrite as it is the entry
    * point. It will set up the OpAdaptor such that it contains the converted
    * values, and wrap the ConversionPatternRewriter with
-   * XeGPUOneToNPatterRewriter to provide a clean interface for users.
+   * XeOneToNPatternRewriter to provide a clean interface for users.
    */
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -145,7 +147,7 @@ public:
     // One-To-One mapping provided by mlir::ConversionPatternRewriter.
     // remappedValues contains new values for each operand of the operation. It
     // is supposed to be a UnrealizedConversionCastOp (created by the replaceOp
-    // of XeGPUOneToNPatternRewriter in form of cast newvalues to oldType) for
+    // of XeGPUXeOneToNPatternRewriter in form of cast newvalues to oldType) for
     // each operand that has One-to-N mapping.
     llvm::SmallVector<mlir::Value> remappedValues;
     if (mlir::failed(convertionPatternRewriter.getRemappedValues(
@@ -167,14 +169,14 @@ public:
 
     auto sourceOp = llvm::dyn_cast<SourceOp>(op);
     OpAdaptor adaptor(convertedValues, sourceOp);
-    XeGPUOneToNPatterRewriter OneToNRewriter(
-        convertionPatternRewriter, getTypeConverter<XeGPUTypeConverter>());
+    XeOneToNPatternRewriter OneToNRewriter(
+        convertionPatternRewriter, getTypeConverter<XeOneToNTypeConverter>());
     return matchAndRewrite(sourceOp, adaptor, OneToNRewriter);
   }
 
   virtual mlir::LogicalResult
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const {
+                  XeOneToNPatternRewriter &rewriter) const {
     llvm_unreachable("must override matchAndRewrite or a rewrite method");
   }
 };

@@ -16,7 +16,6 @@
 #wg_map_mma_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 #wg_map_mma_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 
-
 #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
 #wg_map_a2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
 
