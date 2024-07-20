@@ -64,7 +64,6 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      memref<128x128xbf16, affine_map=<(d0, d1)->(d1, d0)> into tile<64x32xbf16, #tile_attr>
 ```
 
-
 With the tile date type, XeTile supports load_tile, prefetch_tile, and store_tile.
 
 `load_tile` loads a tile to a 2D vector, which could be backed by a register region.
@@ -208,6 +207,22 @@ With the data being presented as 4D vector, all the vector based XeTile operatio
 ```
 The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1].
 
+## support for load_gather and store_scatter (experimental)
+`load_gather` (aka. load) load data with each element's address being explictly specified. The tile is created with a base address and offset for each element to be load. The result tile has a `scatter` attribute to different it from the regular tile.   
+```mlir
+  %tile0 = XeTile.init_tile %base_addr, %tile_offsets:
+     i64, vector<1x256xi32> into tile<1x256xbf16, #scatter>
+```
+`load_gather` (aka. load) load data with prepared tile and mask. Attribute `padding` specifies the padding value for the out-of-boundary access. The default value is zero.
+```mlir
+  %vector_a = XeTile.load_gather %tile_0, %mask, {padding = 1.0} :
+     tile<1x256xbf16, #scatter> into vector<1x256xbf16>
+```
+`store_gather` stores a 2d vector to a 2D tile with `scatter` attribute.
+```mlir
+  XeTile.store_tile %vector_a, %mask, %tile_0 :
+     vector<1x256xbf16> into tile<1x256xbf16, #scatter>
+```
 
 ## Workgroup Level XeTile extension (experimental)
 `xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. XeTile operations work by default at the subgroup level without wg_map attribute. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guides the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. It gives the user full control over the lowering process so that the user can tune the block size for both the workgroup and subgroup for optimal performance.
