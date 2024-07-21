@@ -259,11 +259,27 @@ Within the sg_map, `wi_layout` specifies the layout of WI threads, describing th
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
-We use sg_map_size to refer to the collective size by all the WI threads as specified by sg_map. Say, sg_map_size[0] = wi_layout[0] x wi_data[0], and sg_map_size[1] = wi_layout[1] x wi_data[1]. So sg_map_size represents the minimun size of 2D tensor to be distributed to WI threads. In the example above, sg_map_size is 1x16. 
 
-The tensor sepcified by tensor_desc is decomposed to many subtensor with sg_map_size in round-robin fashion and then distributed to WI threads. The tensor_desc in the example above specifies a tensor of 8x16 elements, which is decomposed to 8x1 subtensors, each with sg_map_size 1x16. 
+wi_data_size refers to the data size mapped to indiviudal WI therad, and sg_map_size to the collective size by all the WI threads as specified by sg_map. sg_map_size represents the minimun size of 2D tensor to be distributed to WI threads. tensor_desc_size refers to the size of the tensor sepcified by tensor_desc. 
+In the example above, wi_data_size is 1, sg_map_size is 16, tensor_desc_size is 128. 
+```mlir
+        wi_data_size = wi_data[0] x wi_data[1]
+	SIMD_LANE == wi_layout[0] x wi_layout[1] 
+ 	sg_maps_size = SIMD_LANE * wi_data_size 
+  	tensor_desc_size = tensor_desc[0] x tensor_desc[1]
+```
 
-With `sg_map` attribute attached to tensor_desc, XeGPU.load_nd operates in SIMT flavor and returns back a fragement associated with individual WI thread. The example below shows the return vector has shape 8x1, which is result of diving the tensor size by the sg_map_size.  
+size distribution rule can be represented as following: tensor_desc_size[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc_size[1] must be divisible by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to WI threads, so each WI thread get a 2D data fragments. 
+
+The size of the result data fragement per WI thread can be computed by the following: 
+```mlir
+	WI_data_frag[0] = tensor_desc_size/sg_maps_size
+	WI_data_frag[1] = wi_data_size
+```
+
+The result of WI dsitribution can be observed only when the data is being loaded to vectors, with shape as [WI_data_frag[0], WI_data_frag[1]].
+
+With `sg_map` attribute attached to tensor_desc, XeGPU.load_nd operates in SIMT flavor and returns back a fragement associated with individual WI thread. The tensor_desc in the example below specifies a tensor of 8x16 elements, which is decomposed to 8x1 subtensors, each with sg_map_size 1x16. As wi_data has size 1x1, the load_nd return a vector of 8x1.  
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %vector_a = XeGPU.load_nd %tdesc_a:
@@ -309,62 +325,72 @@ Below example shows that each WI loads 4 fp32 data element with the chunk_size_p
 ```
 
 
-,  From the sg_map, we can derive how the subgroup level data block is split to data fragments and assigned to WI threads. wi_data=[1,1] means that each WI thread owns a [1,1] data fragment. The sg_map describes a subtensor with the shape of [1,16] at the subgroup level, and the sg_map size is 16. The tensor descriptor created by `create_nd_tdesc`, describes a subtensor named as sg_block, which has size 8x16.
-
-The data elements can only be from either of one dimension, so either wi_data[0] or wi_data[1] must be 1.
-
-For the inner dimension, sg_block[1] must be equal to wi_layout[1] x wi_data[1]. For the outer dimension, sg_block[0] must be divisible by wi_layout[0] x wi_data[0]. The 2D subtensor is then distributed to WI threads in round-robin fashion, so each WI thread get a 2D data fragments, with the quotient (sg_block[0]/wi_layout[0] x wi_data[0]) being the first dimension, and the wi_data size being inner-dimension.
-
-The distribution rule can be represented as following:
-	WI_data_frag[0] = sg_block[0]/(wi_layout[0] x wi_data[0])
-	WI_data_frag[1] = wi_data[0] x wi_data[1]
-	Assertion:  sg_block[1] == wi_data[1] x wi_layout[1]
-
-The result of WI dsitribution can be observed only when the data is being loaded to vectors, with shape as [WI_data_frag[0], WI_data_frag[1]].
-
-
-
-## Rules of sg_map setting: user must use for the WI data distribution of 2d data on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.  
-
+## Rules of sg_map setting on PVC and ARC 
+User must use for the WI data distribution of 2d load data prepared for DPAS on PVC. Not using this sg_map defined here leads to undefined behavior.  
 ```mlir
-PVC SIMD_LANE = 16 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
+# assert (wi_layout[0] x wi_layout[1] == SIMD_LANE) // PVC SIMD_LANE = 16
+For matrix A
 #sg_map_a_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>    // WI data distribute from [8, 16] to [8, 1]
 #sg_map_a_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>    // WI data distribute from [8, 16] to [8, 1]
 #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 1]>     // WI data distribute from [8, 8] to [4, 1]
 #sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>    // WI data distribute from [8, 32] to [8, 2]
 #sg_map_a_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>    // WI data distribute from [8, 32] to [8, 2]
+For matrix B
 #sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribute from [16, 16] to [8, 2]  
 #sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>   // WI data distribute from [16, 16] to [8, 2]
 #sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>   // WI data distribute from [8, 16] to [8, 1]
 #sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4]
 #sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [4, 1]>   // WI data distribute from [32, 16] to [8, 4]
+For matrix C
 #sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
 #sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
+For matrix transpose of A*  
+#sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
+For matrix transpose of B*
+#sg_map_bt_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
+```
+*Transpose on PVC may distribute the data to different WI which is expected by DPAS, due to the difference between #sg_map_a_tf32 and #sg_map_at_tf32. Shuffle is required to before feed the transposed tensor to DPAS 
 
-ARC SIMD_LANE = 8 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
+User must use for the WI data distribution of  2d load data prepared for DPAS on ARC. Not using this sg_map defined here leads to undefined behavior.  
+```mlir
+# assert (wi_layout[0] x wi_layout[1] == SIMD_LANE) // ARC SIMD_LANE = 8 
+For matrix A
 #sg_map_a_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribute from [8, 16] to [8, 2]
 #sg_map_a_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribute from [8, 16] to [8, 2]
 #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 #sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>   // WI data distribute from [8, 32] to [8, 4]
 #sg_map_a_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>   // WI data distribute from [8, 32] to [8, 4]
+For matrix B
 #sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [2, 1]>    // WI data distribute from [16, 8] to [8, 2]
 #sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [2, 1]>    // WI data distribute from [16, 8] to [8, 2]
 #sg_map_b_tf32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>    // WI data distribute from [8, 8] to [8, 1]
 #sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribute from [32, 8] to [8, 4]
 #sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>    // WI data distribute from [32, 8] to [8, 4]
+For matrix C
 #sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 #sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
+For matrix transpose of A or B
+#sg_map_a_tf32 = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 ```
 
+user must use for the WI data distribution of  regular load data prepared for DPAS on ARC. Not using this sg_map defined here leads to undefined behavior.  
 ```mlir
-  PVC SIMD_LANE = 16 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
+  # assert (wi_layout[0] x wi_layout[1] == SIMD_LANE) // PVC SIMD_LANE = 16 
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  For chunk_size_per_lane
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
 
-  ARC SIMD_LANE = 8 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
-  #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  # assert (wi_layout[0] x wi_layout[1] == SIMD_LANE) // ARC SIMD_LANE = 8 
+  #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
+  For chunk_size_per_lane
+  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>
+
 ```
 
-## sg_map use case: An example on how to load a 2d block, perform dpas, and store back to memory.  
+## sg_map use case - 2d load
+
+An example on how to load a 2d block, perform dpas, and store back to memory.  
+
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
@@ -392,8 +418,8 @@ ARC SIMD_LANE = 8 //assert (wi_layout[0] x wi_layout[1] == SIMD_LANE)
 
 ```
 
-## sg_map use case: An example on how to perform transpose using load_gather with chunk_size_per_lane in SIMT flavor  
-
+## sg_map use case - regular load: 
+An example on how to perform transpose using load_gather with chunk_size_per_lane in SIMT flavor.
 
 ```mlir
 
