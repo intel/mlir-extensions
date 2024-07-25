@@ -134,11 +134,18 @@ static int64_t getConstantValue(mlir::Value value) {
 
 mlir::LogicalResult InitTileOp::verify() {
 
-  // number of offsets must be 2 because init_tile creates 2D tiles
-  // dynamic_offsets is always a subset of offsets, so checking this is
-  // sufficient
-  if (getStaticOffsets().size() != 2)
+  // number of offsets must be equal to the memref's rank.
+  if (auto memRefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType())) {
+    if (!memRefType.hasRank())
+      return emitOpError("unranked memref is not supported");
+    if (static_cast<size_t>(memRefType.getRank()) != getStaticOffsets().size())
+      return emitOpError("number of offsets must equal memref's rank");
+  } else if (getStaticOffsets().size() != 2) {
+    // number of offsets must be 2 because init_tile creates 2D tiles
+    // dynamic_offsets is always a subset of offsets, so checking this is
+    // sufficient
     return emitOpError("number of offsets must be 2");
+  }
 
   // if the source is a memref and has static shape, then dynamic shape and
   // strides arguments must not be present
@@ -191,11 +198,14 @@ mlir::LogicalResult InitTileOp::verify() {
     int64_t offset;
     if (mlir::succeeded(
             mlir::getStridesAndOffset(memrefType, strides, offset))) {
-      if (row_major && !((strides[0] == shape[1]) && (strides[1] == 1)))
+      int64_t rank = memrefType.getRank();
+      if (row_major &&
+          !((strides[rank - 2] == shape[rank - 1]) && (strides[rank - 1] == 1)))
         return emitOpError(
             "memref operand is expected to have a row-major layout");
 
-      if (col_major && !((strides[0] == 1) && (strides[1] == shape[0])))
+      if (col_major &&
+          !((strides[rank - 2] == 1) && (strides[rank - 1] == shape[rank - 2])))
         return emitOpError(
             "memref operand is expected to have a column-major layout");
       return mlir::success();

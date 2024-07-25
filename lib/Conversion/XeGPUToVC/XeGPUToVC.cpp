@@ -93,6 +93,45 @@ static func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
   return rewriter.create<func::CallOp>(loc, fn, resultType, operands);
 }
 
+// Given an n-dim memref, a tensor descriptor defines a 2d memory region with
+// respect to the two inner-most dimensions. Other outer dimensions affect the
+// base address. For example, given
+//   %m: memref<2x7x32x64xf16>
+// And this access
+//   %m[%a, %b, %c, %d]
+// The base address will be adjusted as follows:
+//   new_base = base(%m) + %b * (32*64*2) + %a * (7*32*64*2)
+// 2 is the number of bytes of the element type.
+static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
+                               xegpu::CreateNdDescOp op, Value base) {
+  auto loc = op.getLoc();
+
+  auto createIndexConstant = [&](unsigned index) {
+    return rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexType(),
+                                              rewriter.getIndexAttr(index));
+  };
+
+  if (auto memType = dyn_cast<MemRefType>(op.getSource().getType());
+      memType && memType.getRank() > 2) {
+    assert(memType.hasStaticShape() && "only support static shape for now");
+    auto shape = memType.getShape();
+    int64_t i = memType.getRank() - 1;
+    unsigned stride = memType.getElementType().getIntOrFloatBitWidth() / 8;
+    stride *= shape[i--];
+    stride *= shape[i--];
+    auto offsets = op.getMixedOffsets();
+    offsets.pop_back_n(2);
+    for (; i >= 0; --i) {
+      auto factor = createIndexConstant(stride);
+      auto linearOffset = rewriter.create<arith::MulIOp>(
+          loc, offsets.pop_back_val().get<Value>(), factor);
+      base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
+      stride *= shape[i];
+    }
+  }
+  return base;
+}
+
 struct CreateNdDescPattern
     : public OpConversionPattern<::mlir::xegpu::CreateNdDescOp> {
   using OpConversionPattern<::mlir::xegpu::CreateNdDescOp>::OpConversionPattern;
@@ -131,8 +170,9 @@ struct CreateNdDescPattern
           loc, i32Type, rewriter.getI32IntegerAttr(index));
     };
 
-    auto base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
+    Value base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
         loc, adaptor.getSource());
+    base = adjustBasePointer(rewriter, op, base);
     Value baseVal = rewriter.create<arith::IndexCastUIOp>(loc, i64Type, base);
 
     payLoad = rewriter.create<vector::InsertOp>(loc, baseVal, payLoad, 0);
@@ -145,13 +185,15 @@ struct CreateNdDescPattern
       auto blockHeight = tileType.getShape()[0];
       // fixme: support memref for now
       auto memType = cast<MemRefType>(op.getSource().getType());
+      auto memRank = memType.getRank();
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
       Value surfaceW, surfaceH, surfaceP;
 
       // Static memref
       if (memType.hasStaticShape()) {
-        auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
-        auto surfaceHeight = memType.getShape()[0] - 1;
+        auto surfaceWidth =
+            memType.getShape()[memRank - 1] * (bitWidth / 8) - 1;
+        auto surfaceHeight = memType.getShape()[memRank - 2] - 1;
         // fixme: pitch = width for now
         auto surfacePitch = surfaceWidth;
         surfaceW = createIntConstant(surfaceWidth);
@@ -195,8 +237,8 @@ struct CreateNdDescPattern
         }
         return val;
       };
-      auto offsetX = createOffset(1);
-      auto offsetY = createOffset(0);
+      auto offsetX = createOffset(memRank - 1);
+      auto offsetY = createOffset(memRank - 2);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetX, payLoad, 5);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetY, payLoad, 6);
       int array_length = op.getType().getArrayLength();

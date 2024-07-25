@@ -201,4 +201,18 @@ unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind) {
   return encode;
 }
 
+/// Creates the default strides for the given `shape`. Example:
+///   input shape = 2x3x4x5
+///   output strides = 60x20x5x1
+llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape) {
+  int64_t stride = 1;
+  llvm::SmallVector<int64_t> strides;
+  for (int64_t size : llvm::reverse(shape)) {
+    strides.push_back(stride);
+    stride *= size;
+  }
+  std::reverse(strides.begin(), strides.end());
+  return strides;
+}
+
 } // namespace imex

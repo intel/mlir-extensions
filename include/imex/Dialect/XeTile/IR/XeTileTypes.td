@@ -140,7 +140,7 @@ def XeTile_FloatType : AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
 def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType]>;
 
 // define a 1D or 2D memref of XeTile scalar type
-def XeTile_DynamicMemref : MemRefRankOf<[XeTile_ScalarType], [1, 2]>;
+def XeTile_DynamicMemref : Non0RankedMemRefOf<[XeTile_ScalarType]>;
 
 // define the source type for XeTile init_tile
 def XeTile_BaseAddrType : AnyTypeOf<[XeTile_DynamicMemref, UI64, UI32, I64, I32]>;

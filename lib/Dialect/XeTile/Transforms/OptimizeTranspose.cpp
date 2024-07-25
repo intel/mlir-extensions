@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <math.h>
 #include <numeric>
 
@@ -57,11 +58,15 @@ namespace imex {
 
 namespace optimizetranspose {
 
-// Helper to swap a 2D array
-template <typename T>
-llvm::SmallVector<T> swap2DShape(llvm::ArrayRef<T> shape) {
-  assert(shape.size() == 2 && "shape must be 2D");
-  return llvm::SmallVector<T>(shape.rbegin(), shape.rend());
+void addBatchStrides(llvm::SmallVectorImpl<int64_t> &strides,
+                     llvm::ArrayRef<int64_t> shape) {
+  auto innerDims = shape.take_back(strides.size());
+  int64_t stride = std::accumulate(innerDims.begin(), innerDims.end(), 1,
+                                   std::multiplies<int64_t>());
+  for (int64_t dimSize : shape.drop_back(strides.size())) {
+    strides.insert(strides.begin(), stride);
+    stride *= dimSize;
+  }
 }
 
 // This patterns rewrites the InitTileOp to traverse the source memref in a
@@ -84,23 +89,25 @@ struct InitTileOpPattern final
            "source must be a static memref");
     auto sourceTy = llvm::cast<mlir::MemRefType>(initOp.getSourceType());
     auto sourceShape = sourceTy.getShape();
+    auto sourceRank = sourceShape.size();
     auto tileTy = initOp.getType();
     // If the source memref is row-major, we need to convert it to col-major
     // else, we convert it to row-major
-    llvm::SmallVector<int64_t, 2> newStrides = {sourceShape[0],
+    llvm::SmallVector<int64_t, 2> newStrides = {sourceShape[sourceRank - 2],
                                                 1}; // to row-major
     bool sourceIsRowMajor = sourceTy.getLayout().isIdentity();
     if (sourceIsRowMajor)
-      newStrides = {1, sourceShape[1]}; // to col-major
+      newStrides = {1, sourceShape[sourceRank - 1]}; // to col-major
+    addBatchStrides(newStrides, sourceShape);
 
     // Convert the view of the source memref by creating a ReinterpretCastOp
     auto newLayout = mlir::StridedLayoutAttr::get(getContext(), 0, newStrides);
     auto newSourceTy = mlir::MemRefType::get(
-        swap2DShape(sourceShape), sourceTy.getElementType(), newLayout,
-        sourceTy.getMemorySpace());
+        imex::swapLastTwoElements(sourceShape), sourceTy.getElementType(),
+        newLayout, sourceTy.getMemorySpace());
     auto castOp = rewriter.create<mlir::memref::ReinterpretCastOp>(
         initOp.getLoc(), newSourceTy, initOp.getSource(), (int64_t)(0),
-        swap2DShape(sourceShape), newStrides);
+        imex::swapLastTwoElements(sourceShape), newStrides);
 
     // Create a new initTileOp with the new source by using the order attribute
     auto newTileAttr = imex::xetile::XeTileAttr::get(
@@ -108,13 +115,13 @@ struct InitTileOpPattern final
         (sourceIsRowMajor ? mlir::DenseI32ArrayAttr::get(getContext(), {0, 1})
                           : mlir::DenseI32ArrayAttr::get(getContext(), {1, 0})),
         tileTy.getInnerBlocks(), tileTy.getWgData());
-    auto transposedTileTy =
-        imex::xetile::TileType::get(swap2DShape(initOp.getType().getShape()),
-                                    initOp.getElementType(), newTileAttr);
+    auto transposedTileTy = imex::xetile::TileType::get(
+        imex::swapLastTwoElements(initOp.getType().getShape()),
+        initOp.getElementType(), newTileAttr);
     auto offsets = llvm::SmallVector<mlir::OpFoldResult>(
         initOp.getOffsets().begin(), initOp.getOffsets().end());
     // Offsets of the original InitTileOp must be reversed.
-    std::reverse(offsets.begin(), offsets.end());
+    std::swap(offsets[sourceRank - 1], offsets[sourceRank - 2]);
     mlir::Value newOp = rewriter.create<imex::xetile::InitTileOp>(
         initOp.getLoc(), transposedTileTy, castOp, offsets);
 
