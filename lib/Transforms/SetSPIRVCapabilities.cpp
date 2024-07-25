@@ -54,11 +54,12 @@ public:
     spirv::Capability caps_opencl[] = {
         // clang-format off
         spirv::Capability::Addresses,
+        spirv::Capability::Bfloat16ConversionINTEL,
+        spirv::Capability::BFloat16TypeKHR,
         spirv::Capability::Float16Buffer,
         spirv::Capability::Int64,
         spirv::Capability::Int16,
         spirv::Capability::Int8,
-        spirv::Capability::Bfloat16ConversionINTEL,
         spirv::Capability::Kernel,
         spirv::Capability::Linkage,
         spirv::Capability::Vector16,
@@ -77,10 +78,14 @@ public:
         // clang-format on
     };
     spirv::Extension exts_opencl[] = {
-        spirv::Extension::SPV_INTEL_bfloat16_conversion,
+        // clang-format off
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
+        spirv::Extension::SPV_KHR_bfloat16,
         spirv::Extension::SPV_KHR_expect_assume,
-        spirv::Extension::SPV_INTEL_vector_compute};
+        spirv::Extension::SPV_INTEL_bfloat16_conversion,
+        spirv::Extension::SPV_INTEL_vector_compute
+        // clang-format on
+    };
     spirv::Extension exts_vulkan[] = {
         spirv::Extension::SPV_KHR_storage_buffer_storage_class};
     if (m_clientAPI == "opencl") {
