@@ -40,7 +40,7 @@ func.func @test_create_nd_tdesc_vc_5(%input: memref<24x32x64xf32>) {
   %c1 = arith.constant 2 : index
   %c8 = arith.constant 8 : index
 
-  // expected-error@+1 {{operand #0 must be 1D/2D memref}}
+  // expected-error@+1 {{Expecting the rank of shape, strides, offsets}}
   %1 = xegpu.create_nd_tdesc %input[%c1, %c1, %c8]
                               : memref<24x32x64xf32> -> !xegpu.tensor_desc<8x16x8xf32>
   return

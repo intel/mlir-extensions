@@ -423,11 +423,9 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     if (hasColMajorTraversal) {
       array_length = 1;
       // create a memref.reinterpret_cast to convert col-major to row-major
-      auto sourceStaticShape = op.getSourceMemrefStaticShape();
-      auto rowMajorSourceShape = llvm::SmallVector<int64_t>(
-          {sourceStaticShape[1], sourceStaticShape[0]});
-      auto rowMajorSourceStrides =
-          llvm::SmallVector<int64_t>({sourceStaticShape[0], 1});
+      auto rowMajorSourceShape =
+          swapLastTwoElements(op.getSourceMemrefStaticShape());
+      auto rowMajorSourceStrides = defaultStrides(rowMajorSourceShape);
       int64_t rowMajorSourceOffset = 0;
       auto newMemRefTy = mlir::MemRefType::get(rowMajorSourceShape, elemTy);
       source = rewriter.create<mlir::memref::ReinterpretCastOp>(
@@ -453,8 +451,10 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     }
 
     // For col-major memref initial offsets need to be swapped.
-    auto offsetsX = hasColMajorTraversal ? offsets[1] : offsets[0];
-    auto offsetsY = hasColMajorTraversal ? offsets[0] : offsets[1];
+    auto offsetsY = offsets.pop_back_val();
+    auto offsetsX = offsets.pop_back_val();
+    if (hasColMajorTraversal)
+      std::swap(offsetsX, offsetsY);
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
         innerBlk, elemTy, false /*scattered*/, array_length,
@@ -477,8 +477,12 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffX, offsetsX);
         auto tDescOffsetY =
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffY, offsetsY);
-        mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{tDescOffsetX,
-                                                           tDescOffsetY};
+        mlir::SmallVector<mlir::OpFoldResult> tDescOffsets = llvm::to_vector<4>(
+            llvm::map_range(offsets, [](mlir::Value v) -> mlir::OpFoldResult {
+              return v;
+            }));
+        tDescOffsets.push_back(tDescOffsetX);
+        tDescOffsets.push_back(tDescOffsetY);
 
         // TODO: this needs improvement, it assumes the source is static
         // memeref.

@@ -1,0 +1,81 @@
+From 5ab8774b05fa1542bc72e9f73329dfc5db9bd837 Mon Sep 17 00:00:00 2001
+From: Antonio Cortes Perez <antonio.cortes.perez@intel.com>
+Date: Fri, 19 Jul 2024 02:06:16 +0300
+Subject: [PATCH 1/1] Allow nd memrefs in create_nd_tdesc.
+
+---
+ mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td   | 15 ++++++++-------
+ mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td |  2 +-
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp           |  6 +++---
+ 3 files changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+index 5025beaadf9f..5f11a9ef603f 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+@@ -53,18 +53,19 @@ def XeGPU_CreateNdDescOp: XeGPU_Op<"create_nd_tdesc", [Pure, ViewLikeOpInterface
+   let summary = "Create nd-tensor descriptor operation";
+   let description = [{
+     The "create_nd_tdesc" operation creates a TensorDescType which represents
+-    a sub-view of a 2D memory region (It can be extended to support n-D memory
++    a sub-view of a 2D memory region inside the two innermost dimensions of the
++    source. (It can be extended to support n-D memory
+     region if needed in future). Elements in the subview continuous in each
+     dimension. It encodes the following important information for supporting
+     Intel hardware features:
+
+-    * source: an object representing (starting address/pointer of) a 2D memory region.
+-        It can be either a 2D memref object, or simply a pointer represented by uint64_t type.
+-        for the later case, the shape and layout information of the 2D memory region should
++    * source: an object representing (starting address/pointer of) a memory region.
++        It can be either a memref object, or simply a pointer represented by uint64_t type.
++        for the later case, the shape and layout information of the memory region should
+         be explicitly passed via `shape` and `strides` parameters.
+-    * offsets: two index values represents offsets from the "source" at the each dimension
+-        at which the subview of the target memory will be created. It is encoded via two
+-        variables, including "offsets" and "const_offsets", such that it can
++    * offsets: index values represents offsets from the "source" at the each dimension
++        at which the subview of the target memory will be created. It is encoded via
++        "offsets" and "const_offsets", such that it can
+         accept various forms, such as, operands (e.g., [%c0, %c]) and attributes (e.g., [2, 4]).
+     * shape: the shape information of the memory region pointed by the "source".  It is
+         typically encoded via the MemRefType of the source, e.g., memref<4096x4096xf16>.
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
+index bab0e4afb1e5..7d0d51217732 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
+@@ -16,7 +16,7 @@ include "mlir/IR/BuiltinTypes.td"
+ def XeGPU_IntType: AnyTypeOf<[I1, I8, I16, I32, I64, SI1, SI8, SI16, SI32, SI64, UI1, UI8, UI16, UI32, UI64]>;
+ def XeGPU_FloatType: AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
+ def XeGPU_ScalarType: AnyTypeOf<[XeGPU_IntType, XeGPU_FloatType]>;
+-def XeGPU_BaseAddrType: AnyTypeOf<[MemRefRankOf<[XeGPU_ScalarType], [1, 2]>, UI64, UI32, I64, I32]>;
++def XeGPU_BaseAddrType: AnyTypeOf<[Non0RankedMemRefOf<[XeGPU_ScalarType]>, UI64, UI32, I64, I32]>;
+ def XeGPU_DpasOpType: VectorOfRankAndType<[2, 3], [XeGPU_ScalarType]>;
+ def XeGPU_OffsetType: VectorOfRankAndType<[1], [Index]>;
+ def XeGPU_MaskType: AnyTypeOf<[VectorOfRankAndType<[1,2], [I1]>, I1]>;
+diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
+index b2e386bf690c..85a3b93d1130 100644
+--- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
++++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
+@@ -122,7 +122,7 @@ void CreateNdDescOp::build(OpBuilder &builder, OperationState &state,
+
+ LogicalResult CreateNdDescOp::verify() {
+   auto rank = (int64_t)getMixedOffsets().size();
+-  bool invalidRank = (rank != 2);
++  bool invalidRank = false;
+   bool invalidElemTy = false;
+
+   // check source type matches the rank if it is a memref.
+@@ -133,8 +133,8 @@ LogicalResult CreateNdDescOp::verify() {
+     invalidElemTy |= memrefTy.getElementType() != getElementType();
+   }
+
+-  // check result type matches the rank
+-  invalidRank = (getType().getRank() != rank);
++  // check the rank of the result type.
++  invalidRank = (getType().getRank() > 2);
+
+   // mismatches among shape, strides, and offsets are
+   // already handeled by OffsetSizeAndStrideOpInterface.
+--
+2.34.1
