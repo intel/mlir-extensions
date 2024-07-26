@@ -517,6 +517,22 @@ protected:
     return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndStore(op);
   }
 };
+
+/// Clone `shape` with the last two elements swapped.
+template <typename T>
+llvm::SmallVector<T> swapLastTwoElements(llvm::ArrayRef<T> shape) {
+  assert(shape.size() >= 2 && "shape must be at least 2D");
+  llvm::SmallVector<T> result(shape.begin(), shape.end());
+  auto size = result.size();
+  std::swap(result[size - 1], result[size - 2]);
+  return result;
+}
+
+/// Creates the default strides for the given `shape`. Example:
+///   input shape = 2x3x4x5
+///   output strides = 60x20x5x1
+llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape);
+
 } // namespace imex
 
 #endif
