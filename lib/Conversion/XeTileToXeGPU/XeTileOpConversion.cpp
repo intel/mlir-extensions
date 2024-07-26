@@ -350,8 +350,28 @@ class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
   }
 };
 
-int getBlockArrayLength(mlir::Type elemTy, int block_width) {
-  return 64 * 8 / elemTy.getIntOrFloatBitWidth() / block_width;
+// A helper to compute the right array length given the inner block width,
+// and the tile width, as well as the element type. Both inner block width
+// and tile width are in number of elements. It is computed based on hardware
+// constraints (on PVC): array_lenght * inner_block_width * sizeof(elemTy) <=
+// 256 bits. So, if tile width is larger than 256/sizeof(elemTy), the maximum
+// supported array_length will be used.
+int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy,
+                        int inner_block_width, int tile_width) {
+  auto uArch = std::make_shared<XePVCuArch>();
+  auto elemBits = elemTy.getIntOrFloatBitWidth();
+  auto params = uArch->get2DLoadConfig(op, elemBits, false, false);
+  assert(mlir::succeeded(params) && "Invalid Config Params");
+
+  llvm::SmallVector<int> supportedArrLen = params->array_length;
+  int restriction = std::min(params->restriction, tile_width);
+
+  int result = 1;
+  for (auto len : supportedArrLen) {
+    if (len * inner_block_width <= restriction)
+      result = len;
+  }
+  return result;
 }
 
 // It rewrites a XeTile::init_tile into one or more mlir::xegpu::create_nd_desc
@@ -391,10 +411,12 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 
     // using array_length for load if dim1 of innerBlocks is smaller than
     // dim1 of shape.
+    auto elemTy = tileTy.getElementType();
     auto array_length =
         isForLoad(op) && shape[1] > innerBlk[1]
-            ? getBlockArrayLength(tileTy.getElementType(), innerBlk[1])
+            ? getBlockArrayLength(op, elemTy, innerBlk[1], shape[1])
             : 1;
+
     // If the source memref is col-major we need to convert into a row-major
     // because at XeGPU level we only support row-major memrefs. Also
     // array_length must be 1 if col-major memrefs are used as the source.
@@ -407,8 +429,7 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
       auto rowMajorSourceStrides =
           llvm::SmallVector<int64_t>({sourceStaticShape[0], 1});
       int64_t rowMajorSourceOffset = 0;
-      auto newMemRefTy =
-          mlir::MemRefType::get(rowMajorSourceShape, tileTy.getElementType());
+      auto newMemRefTy = mlir::MemRefType::get(rowMajorSourceShape, elemTy);
       source = rewriter.create<mlir::memref::ReinterpretCastOp>(
           loc, newMemRefTy, source, rowMajorSourceOffset, rowMajorSourceShape,
           rowMajorSourceStrides);
@@ -436,7 +457,7 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     auto offsetsY = hasColMajorTraversal ? offsets[0] : offsets[1];
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
-        innerBlk, tileTy.getElementType(), false /*scattered*/, array_length,
+        innerBlk, elemTy, false /*scattered*/, array_length,
         mlir::xegpu::MemoryScope::Global, true /*boundary_check*/);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
@@ -629,7 +650,7 @@ struct SgLoadTileOpPattern : public XeOneToNConversion<xetile::LoadTileOp> {
       if (array_length != 1)
         shape.insert(shape.begin(), array_length);
 
-      auto vectorTy = mlir::VectorType::get(shape, tileTy.getElementType());
+      auto vectorTy = mlir::VectorType::get(shape, elemTy);
       auto ldOp = rewriter.create<mlir::xegpu::LoadNdOp>(
           op.getLoc(), vectorTy, src, vnniAttr, transposeAttr,
           transposeBitWidthAttr, L1, L2, L3);
