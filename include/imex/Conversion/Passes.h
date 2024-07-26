@@ -25,6 +25,7 @@
 #include <imex/Conversion/NDArrayToLinalg/NDArrayToLinalg.h>
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
+#include <imex/Conversion/VectorToXeGPU/VectorToXeGPU.h>
 
 namespace imex {
 

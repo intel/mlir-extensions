@@ -118,6 +118,8 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   } else if (elemType == rewriter.getBF16Type()) {
     str += "i32";
     elemType = rewriter.getI32Type();
+  } else if (elemType == rewriter.getI32Type()) {
+    str += "i32";
   } else
     assert(0 && "add more support");
   auto newType = mlir::VectorType::get(size, elemType);

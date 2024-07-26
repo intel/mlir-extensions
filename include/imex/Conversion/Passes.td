@@ -433,4 +433,34 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
   let constructor = "imex::createConvertXeGPUToVCPass()";
 }
 
+//===----------------------------------------------------------------------===//
+// VectorToXeGPU
+//===----------------------------------------------------------------------===//
+
+def ConvertVectorToXeGPU: Pass<"convert-vector-to-xegpu", "::mlir::ModuleOp"> {
+  let summary = "Convert from the Vector dialect to the XeGPU dialect.";
+  let description = [{
+    Convert Vector dialect operations into the XeGPU dialect operations. It aims at lowering `vector.transfer_read` and `vector.transfer_write` operations to `xegpu.load_nd` and `xegpu.store_nd` operations, creating the descriptors meanwhile.
+
+    #### Input invariant
+
+    %3 = vector.transfer_read %arg1[%0, %2], %arg2 : memref<512x640xf32>, vector<2x32xf32>
+    %4 = arith.cmpf ugt, %3, %arg3 : vector<2x32xf32>
+    %5 = arith.select %4, %3, %arg3 : vector<2x32xi1>, vector<2x32xf32>
+    vector.transfer_write %5, %arg4[%0, %2] : vector<2x32xf32>, memref<512x640xf32>
+
+    #### Output IR
+
+    %desc = xegpu.create_nd_tdesc %arg1[%0, %2] {mode = vc} : memref<512x640xf32> -> !xegpu.tensor_desc<2x32xf32>
+    %3 = xegpu.load_nd %desc {mode = vc}: !xegpu.tensor_desc<2x32xf32> -> vector<2x32xf32>
+    %4 = arith.cmpf ugt, %3, %arg3 : vector<2x32xf32>
+    %5 = arith.select %4, %3, %arg3 : vector<2x32xi1>, vector<2x32xf32>
+    %desc2 = xegpu.create_nd_tdesc %arg4[%0, %2] {mode = vc} : memref<512x640xf32> -> !xegpu.tensor_desc<2x32xf32>
+    xegpu.store_nd %5, %desc2 {mode = vc} : vector<2x32xf32>, !xegpu.tensor_desc<32xf32>
+  }];
+  let constructor = "::imex::createConvertVectorToXeGPUPass()";
+  let dependentDialects = ["::mlir::xegpu::XeGPUDialect"];
+  let options = [];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
