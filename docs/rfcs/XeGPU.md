@@ -269,7 +269,7 @@ In the example above, wi_data_size is 1, sg_map_size is 16, tensor_desc_size is 
   	tensor_desc_size = tensor_desc[0] x tensor_desc[1]
 ```
 
-size distribution rule can be represented as following: tensor_desc_size[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc_size[1] must be divisible by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to WI threads, so each WI thread get a 2D data fragments. 
+size distribution rule can be represented as following: tensor_desc_size[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc_size[1] must be divisible by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to WI threads, so each WI thread gets a 2D data fragments. 
 
 The size of the result data fragement per WI thread can be computed by the following: 
 ```mlir
@@ -299,7 +299,7 @@ For load_nd with `packed` attribute, wi_layout is transposed to match with the t
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
      tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 ```
-`xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[1]` and `sg_map.wi_data[0] must be 1.
+`xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[1]` and `sg_map.wi_data[0]` must be 1.
 
 `xegpu.sg_map` is also used to describe the WI data distribution for regular load. Below example shows that each WI loads one fp32 data element. 
 ```mlir
