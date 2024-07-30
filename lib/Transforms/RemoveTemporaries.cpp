@@ -489,6 +489,8 @@ private:
     auto dst = opi.getTarget();
     auto src = opi.getSource();
     mlir::IRRewriter rewriter(op->getContext());
+    DEBUG_MSG("RemoveTemporaries", "------------------------------------------")
+    DEBUG_OP("RemoveTemporaries", "inspecting", op)
 
     auto srcAllocOp = findAllocOp(src);
     auto srcDeallocOp = findDeallocOp(src);
@@ -496,12 +498,12 @@ private:
     auto dstDefOp = dst.getDefiningOp();
     if (!srcAllocOp) {
       // src is not associated with a temp array allocation
+      DEBUG_MSG("RemoveTemporaries",
+                "src is not associated with an alloc, skipping")
       return;
     }
     auto allocOpParentReg = srcAllocOp->getParentRegion();
     auto copyOpParentReg = op->getParentRegion();
-    DEBUG_MSG("RemoveTemporaries", "------------------------------------------")
-    DEBUG_OP("RemoveTemporaries", "inspecting", op)
     DEBUG_OP("RemoveTemporaries", "  src alloc op", srcAllocOp)
 
     bool srcIsReturned = findReturn(srcAllocOp->getResult(0));
