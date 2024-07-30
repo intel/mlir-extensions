@@ -17,11 +17,14 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
@@ -31,6 +34,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include "../PassDetail.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -1270,28 +1274,18 @@ struct SCFYieldOpVCPattern final
   }
 };
 
-bool isLegalXeGPUSCFOp(mlir::Operation *op) {
-  bool result = true;
-  if (llvm::isa<mlir::scf::ForOp>(op)) {
-    auto forOp = llvm::cast<mlir::scf::ForOp>(op);
-    for (const auto &arg : forOp.getInitArgs()) {
-      auto type = arg.getType();
-      if (mlir::isa<mlir::VectorType>(type))
-        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
-    }
+bool isLegalXeGPUSCFOp(mlir::Operation *op, mlir::TypeConverter typeConverter) {
+  llvm::SmallVector<mlir::Value> args;
+  if (llvm::isa<mlir::scf::ForOp>(op))
+    args = llvm::cast<mlir::scf::ForOp>(op).getInitArgs();
+  else if (llvm::isa<mlir::scf::YieldOp>(op))
+    args = llvm::cast<mlir::scf::YieldOp>(op).getResults();
+  // Check the legality of arguments using the type converter.
+  for (const auto &arg : args) {
+    if (!typeConverter.isLegal(arg.getType()))
+      return false;
   }
-
-  if (llvm::isa<mlir::scf::YieldOp>(op)) {
-    auto yieldOp = llvm::cast<mlir::scf::YieldOp>(op);
-    for (const auto &arg : yieldOp.getResults()) {
-      auto type = arg.getType();
-
-      if (mlir::isa<mlir::VectorType>(type))
-        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
-    }
-  }
-
-  return result;
+  return true;
 }
 
 static bool isGenericVectorTy(mlir::Type type) {
@@ -1377,7 +1371,9 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addIllegalDialect<mlir::xegpu::XeGPUDialect>();
 
     target.addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
-        [&](mlir::Operation *op) { return isLegalXeGPUSCFOp(op); });
+        [&](mlir::Operation *op) {
+          return isLegalXeGPUSCFOp(op, typeConverter);
+        });
 
     target.addDynamicallyLegalOp<::mlir::arith::MaximumFOp>(
         [&](::mlir::arith::MaximumFOp op) {
