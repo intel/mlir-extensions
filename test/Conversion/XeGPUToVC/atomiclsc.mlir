@@ -22,14 +22,14 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: %[[ELEMENT_BYTEWIDTH:.*]] = arith.constant dense<4> : vector<16xindex>
       // CHECK: %[[OFFSETS_ADJUSTED:.*]] = arith.muli %[[ELEMENT_BYTEWIDTH]], %[[OFFSETS]] : vector<16xindex>
       // CHECK: %[[VEC_OFFSETS_APPLIED:.*]] = arith.addi %[[VEC_BASEPTR_SHUFFLED]], %[[OFFSETS_ADJUSTED]] : vector<16xindex>
-      %2 = xegpu.create_tdesc %arg0, %offsets {chunk_size = 1} : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true>>
+      %2 = xegpu.create_tdesc %arg0, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
 
       // CHECK: %[[cst_3:.*]] = arith.constant dense<true> : vector<16xi1>
       // CHECK: %[[cst_8:.*]] = arith.constant dense<0> : vector<16xi32>
       // CHECK: %[[SRC0:.*]] = vector.bitcast %[[cst_0]] : vector<16xf32> to vector<16xi32>
       // CHECK: %[[ATOMIC_RES:.*]] = func.call @llvm.genx.lsc.xatomic.stateless.v16i32.v16i1.v16i64({{.*}}, %[[VEC_OFFSETS_APPLIED]], %[[SRC0]], %[[cst_8]], {{.*}}, %[[cst_8]]) : ({{.*}}) -> vector<16xi32>
       // CHECK: %{{.*}} = vector.bitcast %[[ATOMIC_RES]] : vector<16xi32> to vector<16xf32>
-      %3 = xegpu.atomic_rmw "addf" %2, %mask, %1 : !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true>>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
+      %3 = xegpu.atomic_rmw "addf" %2, %mask, %1 : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
       gpu.return
     }
  }
