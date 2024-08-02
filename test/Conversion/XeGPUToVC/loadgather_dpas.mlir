@@ -19,11 +19,11 @@ module @gemm attributes {gpu.container_module} {
          // CHECK: %[[IN_ELEMENT_BYTEWIDTH:.*]] = arith.constant dense<2> : vector<16xindex>
          // CHECK: %[[IN_ELEMENTWISE_OFFSET:.*]] = arith.muli %[[IN_ELEMENT_BYTEWIDTH]], %[[IN_OFFSET]] : vector<16xindex>
          // CHECK: %[[IN_PAYLOAD:.*]] = arith.addi %[[IN_PAYLOAD_BASEPTR_SHUFFLED]], %[[IN_ELEMENTWISE_OFFSET]] : vector<16xindex>
-         %0 = xegpu.create_tdesc %arg0, %offsets {chunk_size = 8} : memref<128xf16>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf16, #xegpu.tdesc_attr<scattered = true>>
+         %0 = xegpu.create_tdesc %arg0, %offsets : memref<128xf16>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>
 
          // CHECK: %[[OLD:.*]] =  arith.constant dense<0> : vector<64xi32>
          // CHECK: %[[LOAD_RES:.*]] = func.call @llvm.genx.raw.send2.v64i32.v16i1.v16i64({{.*}}, %[[MASK]], {{.*}}, %[[IN_PAYLOAD]], %[[OLD]]) : (i8, i8, vector<16xi1>, i8, i8, i8, i32, i32, vector<16xindex>, vector<64xi32>) -> vector<64xi32>
-         %3 = xegpu.load %0, %mask : !xegpu.tensor_desc<16x8xf16, #xegpu.tdesc_attr<scattered = true>>, vector<16xi1> -> vector<16x8xf16>
+         %3 = xegpu.load %0, %mask : !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<16x8xf16>
 
          // CHECK: %[[LOADA_v128f16:.*]] = vector.bitcast %[[LOAD_RES]] : vector<64xi32> to vector<128xf16>
          %66 = vector.shape_cast %3: vector<16x8xf16> to vector<128xf16>
@@ -58,12 +58,12 @@ module @gemm attributes {gpu.container_module} {
          // CHECK: %[[OUT_ELEMENT_BYTEWIDTH:.*]] = arith.constant dense<4> : vector<16xindex>
          // CHECK: %[[OUT_ELEMENTWISE_OFFSET:.*]] = arith.muli %[[OUT_ELEMENT_BYTEWIDTH]], %[[OUT_OFFSET]] : vector<16xindex>
          // CHECK: %[[OUT_PAYLOAD:.*]] = arith.addi %[[OUT_PAYLOAD_BASEPTR_SHUFFLED]], %[[OUT_ELEMENTWISE_OFFSET]] : vector<16xindex>
-         %2 = xegpu.create_tdesc %arg2, %offsets2 {chunk_size = 8} : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>
+         %2 = xegpu.create_tdesc %arg2, %offsets2 : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<chunk_size = 8>>
          %7 = vector.shape_cast %5: vector<8x16xf32> to vector<128xf32>
          %8 = vector.shape_cast %7: vector<128xf32> to vector<16x8xf32>
 
          // CHECK: func.call @llvm.genx.raw.sends2.noresult.v16i1.v16i64.v128f32({{.*}}, %[[MASK]], {{.*}}, %[[OUT_PAYLOAD]], %[[C_ACC_v128f32]]) : (i8, i8, vector<16xi1>, i8, i8, i8, i32, i32, vector<16xindex>, vector<128xf32>) -> ()
-         xegpu.store %8, %2, %mask : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>, vector<16xi1>
+         xegpu.store %8, %2, %mask : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1>
 
          gpu.return
       }

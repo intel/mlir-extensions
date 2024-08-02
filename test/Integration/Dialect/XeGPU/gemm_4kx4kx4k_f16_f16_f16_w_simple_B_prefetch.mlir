@@ -146,12 +146,12 @@ module @gemm attributes {gpu.container_module} {
 
 
       // two 32x16 A tiles from 256x32 WG slice
-      %A_sg_init_tile_0 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c0] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length =2>>
+      %A_sg_init_tile_0 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c0] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length =2>>
       // %A_sg_init_tile_1 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c16] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16>
 
       //create B tiles
-      %B_sg_init_tile_0 = xegpu.create_nd_tdesc %B[%c0, %C_sg_tile_offset_y] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
-      %B_sg_init_tile_1 = xegpu.update_nd_offset %B_sg_init_tile_0, [%c0, %c32] :  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr< array_length = 2>>
+      %B_sg_init_tile_0 = xegpu.create_nd_tdesc %B[%c0, %C_sg_tile_offset_y] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+      %B_sg_init_tile_1 = xegpu.update_nd_offset %B_sg_init_tile_0, [%c0, %c32] :  !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr< array_length = 2>>
       // %B_sg_init_tile_2 = xegpu.update_nd_offset %B_sg_init_tile_1, [%c0, %c16] :  !xegpu.tensor_desc<32x16xf16>
       // %B_sg_init_tile_3 = xegpu.update_nd_offset %B_sg_init_tile_2, [%c0, %c16] :  !xegpu.tensor_desc<32x16xf16>
 
@@ -209,9 +209,9 @@ module @gemm attributes {gpu.container_module} {
           %A_prefetch_tile = %A_sg_prefetch_tile_iter3,
           %B_prefetch_tile = %B_sg_prefetch_tile_iter3
           ) ->
-          (!xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
-          !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
-          !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+          (!xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
+          !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
+          !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
           vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,
           !xegpu.tensor_desc<8x32xf16>, !xegpu.tensor_desc<8x32xf16>
           )
@@ -224,13 +224,13 @@ module @gemm attributes {gpu.container_module} {
           xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier
         }
         // load A tiles
-        %a_val = xegpu.load_nd %A_tile_0 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
+        %a_val = xegpu.load_nd %A_tile_0 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
         %a_val_0 = vector.extract %a_val [0] : vector<32x16xf16> from vector<2x32x16xf16>
         %a_val_1 = vector.extract %a_val [1] : vector<32x16xf16> from vector<2x32x16xf16>
 
         // load B tiles
-        %b_val_arr_0 = xegpu.load_nd %B_tile_0 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
-        %b_val_arr_1 = xegpu.load_nd %B_tile_1 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
+        %b_val_arr_0 = xegpu.load_nd %B_tile_0 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
+        %b_val_arr_1 = xegpu.load_nd %B_tile_1 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
 
         %b_val_0 = vector.extract %b_val_arr_0 [0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
         %b_val_1 = vector.extract %b_val_arr_0 [1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
@@ -250,11 +250,11 @@ module @gemm attributes {gpu.container_module} {
         %next_A_prefetch_tile = xegpu.update_nd_offset %A_prefetch_tile, [%c0, %c32] : !xegpu.tensor_desc<8x32xf16>
         %next_B_prefetch_tile = xegpu.update_nd_offset %B_prefetch_tile, [%c32, %c0] : !xegpu.tensor_desc<8x32xf16>
         // advance A and B tiles
-        %next_A_tile_0 = xegpu.update_nd_offset %A_tile_0, [%c0, %c32] : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+        %next_A_tile_0 = xegpu.update_nd_offset %A_tile_0, [%c0, %c32] : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
         // %next_A_tile_1 = xegpu.update_nd_offset %A_tile_1, [%c0, %c32] : !xegpu.tensor_desc<32x16xf16>
 
-        %next_B_tile_0 = xegpu.update_nd_offset %B_tile_0, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
-        %next_B_tile_1 = xegpu.update_nd_offset %B_tile_1, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+        %next_B_tile_0 = xegpu.update_nd_offset %B_tile_0, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+        %next_B_tile_1 = xegpu.update_nd_offset %B_tile_1, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
         // %next_B_tile_2 = xegpu.update_nd_offset %B_tile_2, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16>
         // %next_B_tile_3 = xegpu.update_nd_offset %B_tile_3, [%c32, %c0] : !xegpu.tensor_desc<32x16xf16>
 
@@ -364,9 +364,9 @@ module @gemm attributes {gpu.container_module} {
         scf.yield %next_A_tile_0, %next_B_tile_0, %next_B_tile_1,
                   %new_c_val_0_0, %new_c_val_0_1, %new_c_val_0_2, %new_c_val_0_3, %new_c_val_1_0, %new_c_val_1_1, %new_c_val_1_2, %new_c_val_1_3, %new_c_val_2_0, %new_c_val_2_1, %new_c_val_2_2, %new_c_val_2_3, %new_c_val_3_0, %new_c_val_3_1, %new_c_val_3_2, %new_c_val_3_3,
                   %next_A_prefetch_tile, %next_B_prefetch_tile
-                  : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
-                  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
-                  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+                  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
+                  !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
+                  !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>,
                   vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,
                   !xegpu.tensor_desc<8x32xf16>, !xegpu.tensor_desc<8x32xf16>
       }

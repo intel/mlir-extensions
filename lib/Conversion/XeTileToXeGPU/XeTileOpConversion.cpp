@@ -461,8 +461,7 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
       std::swap(offsetsX, offsetsY);
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
-        innerBlk, elemTy, false /*scattered*/, array_length, memoryScope,
-        true /*boundary_check*/);
+        innerBlk, elemTy, array_length, true /*boundary_check*/, memoryScope);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
