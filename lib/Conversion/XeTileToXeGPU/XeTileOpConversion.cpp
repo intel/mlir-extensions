@@ -389,6 +389,10 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     auto shape = llvm::to_vector(tileTy.getShape());
     auto indexType = rewriter.getIndexType();
 
+    auto memoryScope = op.getSourceMemorySpaceAsInt() == 3
+                           ? mlir::xegpu::MemoryScope::SLM
+                           : mlir::xegpu::MemoryScope::Global;
+
     if (tileTy.getRank() != 2)
       return op.emitOpError("The tile shape should be 2D.");
 
@@ -457,8 +461,8 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
       std::swap(offsetsX, offsetsY);
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
-        innerBlk, elemTy, false /*scattered*/, array_length,
-        mlir::xegpu::MemoryScope::Global, true /*boundary_check*/);
+        innerBlk, elemTy, false /*scattered*/, array_length, memoryScope,
+        true /*boundary_check*/);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
