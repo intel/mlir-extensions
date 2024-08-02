@@ -197,6 +197,21 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             return getDynamicStrides().size();
         }
 
+        mlir::Attribute getSourceMemorySpace() {
+          if (isSourceMemRef())
+            return mlir::cast<mlir::MemRefType>(getSourceType()).getMemorySpace();
+          return mlir::Attribute();
+        }
+
+        unsigned getSourceMemorySpaceAsInt() {
+          auto attr = getSourceMemorySpace();
+          if (attr) {
+            if (mlir::isa<mlir::IntegerAttr>(attr))
+              return static_cast<unsigned>(mlir::cast<mlir::IntegerAttr>(attr).getInt());
+          }
+          return 0;
+        }
+
         /// Returns the offsets info to the source. It consolidates
         /// information from both dynamic_offsets and static_offsets
         /// parameters. static_offsets parameter always has the expected

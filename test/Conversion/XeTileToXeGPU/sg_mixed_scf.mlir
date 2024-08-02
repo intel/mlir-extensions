@@ -99,23 +99,23 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
         //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16xf32>, vector<16xf32>
         %40 = vector.multi_reduction <add>, %39, %cst_1 [0] : vector<32x32xf32> to vector<32xf32>
         %41 = vector.shape_cast %40 : vector<32xf32> to vector<1x32xf32>
-        %alloc = memref.alloc() : memref<8x128xf32, #spirv.storage_class<Workgroup>>
+        %alloc = memref.alloc() : memref<8x128xf32, 3>
 
-        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true, scattered = false>>
         //CHECK: %{{.*}} = arith.addi %{{.*}}, %{{.*}} : index
-        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        %42 = xetile.init_tile %alloc[%17, %13] : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xetile.tile<1x32xf32>
+        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true, scattered = false>>
+        %42 = xetile.init_tile %alloc[%17, %13] : memref<8x128xf32, 3> -> !xetile.tile<1x32xf32, #xetile.tile_attr<memory_scope = 3>>
 
         //CHECK-COUNT-2: vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [1, 16], strides = [1, 1]} : vector<1x32xf32> to vector<1x16xf32>
-        //CHECK-COUNT-2: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf32>, !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        xetile.store_tile %41,  %42 : vector<1x32xf32>, !xetile.tile<1x32xf32>
+        //CHECK-COUNT-2: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf32>, !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true, scattered = false>>
+        xetile.store_tile %41,  %42 : vector<1x32xf32>, !xetile.tile<1x32xf32, #xetile.tile_attr<memory_scope = 3>>
 
-        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        //CHECK: xegpu.load_nd {{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x4xf32>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true, scattered = false>>
+        //CHECK: xegpu.load_nd {{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x4xf32>
         //CHECK-COUNT-8: vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [1, 4], strides = [1, 1]} : vector<8x4xf32> to vector<1x4xf32>
         //CHECK-COUNT-8: arith.addf %{{.*}}, %{{.*}} : vector<1x4xf32>
-        %43 = xetile.init_tile %alloc[%21, %23] : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xetile.tile<8x4xf32>
-        %44 = xetile.load_tile %43 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x4xf32> -> vector<8x4xf32>
+        %43 = xetile.init_tile %alloc[%21, %23] : memref<8x128xf32, 3> -> !xetile.tile<8x4xf32, #xetile.tile_attr<memory_scope = 3>>
+        %44 = xetile.load_tile %43 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x4xf32, #xetile.tile_attr<memory_scope = 3>> -> vector<8x4xf32>
         %45 = vector.multi_reduction <add>, %44, %cst_2 [0] : vector<8x4xf32> to vector<4xf32>
         %46 = vector.shape_cast %45 : vector<4xf32> to vector<1x4xf32>
         %47 = arith.addf %arg5, %46 : vector<1x4xf32>

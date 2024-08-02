@@ -205,7 +205,8 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), newBlockSize, tileTy.getWgData());
+        tileTy.getOrder(), newBlockSize, tileTy.getWgData(),
+        tileTy.getMemoryScope());
 
     auto newTileTy = imex::xetile::TileType::get(tileTy.getShape(),
                                                  tileTy.getElementType(), attr);

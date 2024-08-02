@@ -22,6 +22,17 @@
 #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
 #wg_map_b2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
 
+func.func @test_init_tile_for_slm(%a: memref<1024x1024xf16, 3>) {
+  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3 : i64>>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3>>
+  return
+}
+
+func.func @test_init_tile_for_global(%a: memref<1024x1024xf16, 0>) {
+  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 0> -> !xetile.tile<32x64xf16>
+  return
+}
 
 // init_tile with a static shaped memref
 // CHECK-LABEL: func @test_init_tile_using_static_memref({{.*}}) {

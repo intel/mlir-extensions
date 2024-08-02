@@ -214,6 +214,13 @@ func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
 }
 
 // -----
+func.func @test_init_tile_with_mismatch_memory_space(%a: memref<1024x1024xf16, 3>) {
+   // expected-error@+1 {{memory space of the tile doesn't match with the source}}
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16>
+  return
+}
+
+// -----
 // expected-error@+1 {{expect integer array of size 2 for wi_layout}}
 #sg_map_2 = #xetile.sg_map< wi_layout = [2, 8, 2], wi_data = [1, 2]>
 // expected-error@+1 {{expect integer array of size 2 for wi_data}}

@@ -116,7 +116,7 @@ mlir::LogicalResult XeTileAttr::verify(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     ::imex::xetile::SubGroupMapAttr sg_map, xetile::WorkGroupMapAttr wg_map,
     mlir::DenseI32ArrayAttr order, mlir::DenseI64ArrayAttr inner_blocks,
-    mlir::DenseI32ArrayAttr wg_data) {
+    mlir::DenseI32ArrayAttr wg_data, mlir::Attribute memoryScope) {
 
   if (order != mlir::DenseI32ArrayAttr() && order.size() != 2)
     emitError() << "expect integer array of size 2 for order";

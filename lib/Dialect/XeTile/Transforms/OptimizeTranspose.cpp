@@ -110,11 +110,12 @@ struct InitTileOpPattern final
         imex::swapLastTwoElements(sourceShape), newStrides);
 
     // Create a new initTileOp with the new source by using the order attribute
+    auto orderAttr = sourceIsRowMajor
+                         ? mlir::DenseI32ArrayAttr::get(getContext(), {0, 1})
+                         : mlir::DenseI32ArrayAttr::get(getContext(), {1, 0});
     auto newTileAttr = imex::xetile::XeTileAttr::get(
-        getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        (sourceIsRowMajor ? mlir::DenseI32ArrayAttr::get(getContext(), {0, 1})
-                          : mlir::DenseI32ArrayAttr::get(getContext(), {1, 0})),
-        tileTy.getInnerBlocks(), tileTy.getWgData());
+        getContext(), tileTy.getSgMap(), tileTy.getWgMap(), orderAttr,
+        tileTy.getInnerBlocks(), tileTy.getWgData(), tileTy.getMemoryScope());
     auto transposedTileTy = imex::xetile::TileType::get(
         imex::swapLastTwoElements(initOp.getType().getShape()),
         initOp.getElementType(), newTileAttr);
