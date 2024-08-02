@@ -124,6 +124,25 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return mlir::DenseI32ArrayAttr::get(getContext(), {1, 0});
     }
 
+    mlir::Attribute getMemoryScope() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getMemoryScope();
+      return mlir::Attribute();
+    }
+
+    int getMemoryScopeAsInt() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding && encoding.getMemoryScope()) {
+        auto memoryScope = encoding.getMemoryScope();
+        assert(mlir::isa<mlir::IntegerAttr>(memoryScope) &&
+              "Using `getMemorySpaceAsInt` with non-Integer attribute");
+        return mlir::cast<mlir::IntegerAttr>(memoryScope).getInt();
+      }
+      // return default value 0 indicating Global memory
+      return 0;
+    }
+
   }];
 
   let assemblyFormat = "`<` custom<XeTileType>($shape, $elementType, $encoding) `>`";

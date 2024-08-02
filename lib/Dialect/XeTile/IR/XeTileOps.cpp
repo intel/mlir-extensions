@@ -188,6 +188,10 @@ mlir::LogicalResult InitTileOp::verify() {
     row_major = false;
   }
 
+  if (getSourceMemorySpace() != tileTy.getMemoryScope())
+    return emitOpError(
+        "memory space of the tile doesn't match with the source.");
+
   if (isSourceMemRef() && sourceMemRefHasStaticShape()) {
     auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
 
