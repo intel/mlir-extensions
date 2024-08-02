@@ -1407,7 +1407,7 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
-          if (type.getScattered()) {
+          if (type.isScattered()) {
             return ::mlir::VectorType::get(
                 16, ::mlir::IndexType::get(&getContext()));
           }

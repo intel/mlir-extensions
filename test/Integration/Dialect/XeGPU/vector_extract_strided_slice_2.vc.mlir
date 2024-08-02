@@ -22,8 +22,8 @@ module @gemm attributes {gpu.container_module} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       // load tile
-      %tile = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<32x16xf32> -> !xegpu.tensor_desc<32x8xf32, #xegpu.tdesc_attr<array_length = 2>>
-      %value = xegpu.load_nd %tile : !xegpu.tensor_desc<32x8xf32, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x32x8xf32>
+      %tile = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<32x16xf32> -> !xegpu.tensor_desc<32x8xf32, #xegpu.block_tdesc_attr<array_length = 2>>
+      %value = xegpu.load_nd %tile : !xegpu.tensor_desc<32x8xf32, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x8xf32>
       // extract the bottom 8x8 part of first 32x8 block
       %sub_tile0 = vector.extract_strided_slice %value { offsets = [0, 24], strides = [1, 1], sizes = [1, 8] } : vector<2x32x8xf32> to vector<1x8x8xf32>
       // extract the bottom 8x8 part of second 32x8 block

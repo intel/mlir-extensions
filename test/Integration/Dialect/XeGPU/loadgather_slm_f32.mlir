@@ -29,10 +29,10 @@ module @gemm attributes {gpu.container_module} {
       %mask = arith.constant dense<[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]> : vector<16xi1>
       %1 = memref.reinterpret_cast %arg0 to offset: [0], sizes: [16], strides: [1] : memref<1x16xf32> to memref<16xf32>
       %2 = memref.reinterpret_cast %arg1 to offset: [0], sizes: [16], strides: [1] : memref<1x16xf32> to memref<16xf32>
-      %tdesc1 = xegpu.create_tdesc %1, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true, memory_scope=slm>>
-      %tdesc2 = xegpu.create_tdesc %2, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true, memory_scope=slm>>
-      %loaded = xegpu.load %tdesc1, %mask : !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true, memory_scope=slm>>, vector<16xi1> -> vector<16xf32>
-      xegpu.store %loaded, %tdesc2, %mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.tdesc_attr<scattered = true, memory_scope=slm>>, vector<16xi1>
+      %tdesc1 = xegpu.create_tdesc %1, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_scope=slm>>
+      %tdesc2 = xegpu.create_tdesc %2, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_scope=slm>>
+      %loaded = xegpu.load %tdesc1, %mask : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_scope=slm>>, vector<16xi1> -> vector<16xf32>
+      xegpu.store %loaded, %tdesc2, %mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_scope=slm>>, vector<16xi1>
       gpu.return
     }
   }
