@@ -111,5 +111,24 @@ def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
   ];
 }
 
+def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Collection of canonicalization patterns for XeTile dialect.";
+
+  let description = [{
+    This pass performs a set of canonicalization steps on XeTile ops that are expected by the
+    downstream passes. First, this will convert certain vector ops (transpose, broadcast,
+     multi_reduction) to equivalent XeTile ops. Next, it will convert all XeTile ops
+     consuming or producing col-major tiles to one with row-major tiles. Finally, it will
+     perform cleanup to remove redundant ops that maybe produced by the previous steps.
+  }];
+  let constructor = "imex::createXeTileCanonicalizationPass()";
+  let dependentDialects = [
+    "::imex::xetile::XeTileDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::vector::VectorDialect",
+    "::mlir::gpu::GPUDialect"
+  ];
+}
+
 
 #endif // _XeTile_PASSES_TD_INCLUDED_
