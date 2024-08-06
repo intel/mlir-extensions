@@ -485,21 +485,20 @@ bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
 mlir::LogicalResult LoadTileOp::verify() {
   auto encoding = getSource().getType().getEncoding();
   auto tileShape = getSource().getType().getShape();
-  if (!encoding)
-    return mlir::success();
+  auto vecShape = getResult().getType().getShape();
 
-  auto tileAttr = mlir::dyn_cast<xetile::XeTileAttr>(encoding);
-  auto innerBlocks = tileAttr.getInnerBlocks();
+  // inner_blocks may or maynot be present in this op.
+  auto innerBlocks = mlir::DenseI64ArrayAttr();
+  if (encoding)
+    innerBlocks = mlir::dyn_cast<xetile::XeTileAttr>(encoding).getInnerBlocks();
 
   // if inner_blocks is not present in the tile_attr, the output of the load
-  // must be 2D
-  if (innerBlocks == mlir::DenseI32ArrayAttr() &&
-      getResult().getType().getShape().size() != 2)
-    return emitOpError(
-        "output must be a 2D vector if inner_blocks is not used in tile_attr.");
+  // must be 2D and tile shape and vector output shape must match
+  if (innerBlocks == mlir::DenseI64ArrayAttr())
+    if (!vecShape.equals(tileShape))
+      return emitOpError("Output shape must match the tile shape.");
 
-  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
-    auto vecShape = getResult().getType().getShape();
+  if (innerBlocks != mlir::DenseI64ArrayAttr()) {
     // if inner_blocks is present in the tile_attr, the output of the load
     // must be 4D
     if (vecShape.size() != 4)

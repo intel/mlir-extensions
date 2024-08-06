@@ -17,6 +17,7 @@
 #define _XeTile_PASSES_H_INCLUDED_
 
 #include "imex/Utils/XeArch.h"
+#include <memory>
 #include <mlir/Pass/Pass.h>
 
 namespace mlir {
@@ -42,6 +43,7 @@ createXeTileBlockingPass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createXeTileBlockAligningPass();
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
 std::unique_ptr<mlir::Pass> createXeTileOptimizeTransposePass();
+std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
 
 ///
 void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
