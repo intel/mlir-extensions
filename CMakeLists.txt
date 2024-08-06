@@ -172,6 +172,7 @@ include(HandleLLVMOptions)
 
 set(IMEX_INCLUDE_TESTS 1 CACHE BOOL "Include targets for IMEX tests")
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
+set(IMEX_ENABLE_OPENCL_RUNTIME 0 CACHE BOOL "Enable the OpenCL Runtime")
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 set(IMEX_ENABLE_BENCHMARK 0 CACHE BOOL "Enable the IMEX Benchmark (Depending on SYCL Runtime)")
 # Useful when building IMEX as an LLVM external project.
@@ -190,6 +191,12 @@ if (IMEX_ENABLE_SYCL_RUNTIME)
     set(IMEX_ENABLE_SYCL_RUNTIME 1)
 else ()
     set(IMEX_ENABLE_SYCL_RUNTIME 0)
+endif()
+
+if (IMEX_ENABLE_OPENCL_RUNTIME)
+    set(IMEX_ENABLE_OPENCL_RUNTIME 1)
+else ()
+    set(IMEX_ENABLE_OPENCL_RUNTIME 0)
 endif()
 
 if (IMEX_ENABLE_L0_RUNTIME)

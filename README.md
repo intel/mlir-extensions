@@ -2,7 +2,7 @@
 Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for supporting MLIR lowering to Intel silicon (CPU, GPU, …). Goal of this project is to support development of MLIR enhancements for upstream contribution, and to provide a sandbox for validation independent of front end frameworks. Current project scope includes:
 
 * Dialects and passes needed to lower and execute MLIR entry dialect (linalg, CFG, and etc) on Intel GPU.
-* Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
+* Wrapper libraries to inteface with level zero runtime, sycl runtime and OpenCL runtime supporting Intel GPU.
 * Other experimental dialects: NDArray, Dist
 
 ## Requirements for building and development
@@ -44,6 +44,13 @@ cmake --build build --target install
 ```
 * Binary package for system-wide install: https://github.com/oneapi-src/level-zero/releases
 
+#### Getting OpenCL headers and libraries (For OpenCL runtime)
+ * Install using OS-provided package (Ubuntu 22.04)
+```sh
+sudo apt install -y intel-opencl-icd opencl-c-headers
+```
+ * Or, download and install package from: https://github.com/intel/compute-runtime/releases
+
 ### Example: Setting up requirements using Conda
 ```sh
 conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
@@ -79,6 +86,9 @@ cmake -G Ninja -B build -S llvm \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
+# Additional if OpenCL library is not found by CMake
+#  -DOpenCL_LIBRARY=/PATH_TO/libOpenCL.so.1  ## usually at /usr/lib/x86_64-linux-gnu/libOpenCL.so.1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
@@ -107,6 +117,9 @@ cmake -G Ninja -B build -S . \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
+# Additional if OpenCL library is not found by CMake
+#  -DOpenCL_LIBRARY=/PATH_TO/libOpenCL.so.1  ## usually at /usr/lib/x86_64-linux-gnu/libOpenCL.so.1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
@@ -127,6 +140,9 @@ cmake -G Ninja -B build -S . \
 # For GPU support pass thes cmake variables to enable the required runtime libraries
 #  -DIMEX_ENABLE_L0_RUNTIME=1
 #  -DIMEX_ENABLE_SYCL_RUNTIME=1
+#  -DIMEX_ENABLE_OPENCL_RUNTIME=1
+# Additional if OpenCL library is not found by CMake
+#  -DOpenCL_LIBRARY=/PATH_TO/libOpenCL.so.1  ## usually at /usr/lib/x86_64-linux-gnu/libOpenCL.so.1
 # Additional if using a non system wide Level Zero Loader built from source
 #  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 

@@ -10,6 +10,10 @@
 // RUN-GPU:                                        --runner imex-cpu-runner -e main \
 // RUN-GPU:                                        --entry-point-result=void \
 // RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN-GPU: %python_executable %imex_runner --requires=opencl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN-GPU:                                        --runner imex-cpu-runner -e main \
+// RUN-GPU:                                        --entry-point-result=void \
+// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%opencl_runtime --filecheck
 #map = affine_map<() -> ()>
 module @jit_true_divide.316 {
   func.func private @callee(%arg0: tensor<complex<f32>>, %arg1: tensor<i32>) -> tensor<complex<f32>> {

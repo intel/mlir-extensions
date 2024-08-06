@@ -52,13 +52,19 @@ if(IMEX_ENABLE_SYCL_RUNTIME)
         )
 endif()
 
+if(IMEX_ENABLE_OPENCL_RUNTIME)
+    list(APPEND IMEX_TEST_DEPENDS
+        opencl-runtime
+        )
+endif()
+
 if(IMEX_ENABLE_L0_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
         level-zero-runtime
         )
 endif()
 
-if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
+if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_OPENCL_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
         l0-fp64-checker
         )

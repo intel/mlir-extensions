@@ -37,6 +37,7 @@ config.imex_tools_dir = "@IMEX_TOOLS_DIR@"
 config.imex_lib_dir = "@IMEX_LIB_DIR@"
 config.imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 config.imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
+config.imex_enable_opencl_runtime = @IMEX_ENABLE_OPENCL_RUNTIME@
 config.imex_enable_bf16_tests = @IMEX_ENABLE_BF16_TESTS@
 config.imex_enable_excluded_tests = @IMEX_ENABLE_EXCLUDED_TESTS@
 config.imex_enable_ats_target = @IMEX_ENABLE_ATS_TARGET@
@@ -53,9 +54,11 @@ if config.enable_vulkan_runner:
     config.vulkan_runtime_wrappers = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "vulkan-runtime-wrappers" + config.llvm_shlib_ext))
 if config.imex_enable_sycl_runtime:
     config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
+if config.imex_enable_opencl_runtime:
+    config.opencl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "opencl-runtime" + config.llvm_shlib_ext))
 if config.imex_enable_l0_runtime:
     config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
-config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime
+config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime or config.imex_enable_opencl_runtime
 if config.imex_enable_igpu:
     config.l0_fp64_checker = os.path.normpath(os.path.join(config.imex_tools_dir, "l0-fp64-checker"))
     try:
