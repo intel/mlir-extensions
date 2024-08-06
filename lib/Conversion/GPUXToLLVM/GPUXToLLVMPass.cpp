@@ -48,6 +48,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -188,6 +189,71 @@ protected:
           llvmPointerType, /* void *stream */
           llvmPointerType  /* void *ptr */
       }};
+
+  FunctionCallBuilder memcpyCallBuilder = {
+      "gpuMemCopy",
+      llvmVoidType,
+      {
+          llvmPointerType, /* void *stream */
+          llvmPointerType, /* void *ptr dst */
+          llvmPointerType, /* void *ptr src */
+          llvmIndexType    /* intptr_t size */
+      }};
+};
+
+/// A rewrite pattern to convert gpux.memcpy operations into a GPU runtime
+/// call.
+class ConvertMemcpyOpToGpuRuntimeCallPattern
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::MemcpyOp> {
+public:
+  ConvertMemcpyOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::MemcpyOp>(typeConverter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(imex::gpux::MemcpyOp memcpyOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+
+    auto loc = memcpyOp.getLoc();
+    mlir::MemRefType srcMemRefType =
+        llvm::dyn_cast<mlir::MemRefType>(memcpyOp.getSrc().getType());
+    mlir::MemRefDescriptor srcDesc(adaptor.getSrc());
+
+    // Compute number of elements.
+    mlir::Value numElements = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, getIndexType(), rewriter.getIndexAttr(1));
+    for (int pos = 0; pos < srcMemRefType.getRank(); ++pos) {
+      auto size = srcDesc.size(rewriter, loc, pos);
+      numElements = rewriter.create<mlir::LLVM::MulOp>(loc, numElements, size);
+    }
+
+    // Get element size.
+    auto sizeInBytes =
+        getSizeInBytes(loc, srcMemRefType.getElementType(), rewriter);
+    // Compute total.
+    mlir::Value totalSize =
+        rewriter.create<mlir::LLVM::MulOp>(loc, numElements, sizeInBytes);
+
+    mlir::Type elementType =
+        typeConverter->convertType(srcMemRefType.getElementType());
+
+    mlir::Value srcBasePtr = srcDesc.alignedPtr(rewriter, loc);
+    mlir::Value srcOffset = srcDesc.offset(rewriter, loc);
+    mlir::Value srcPtr = rewriter.create<mlir::LLVM::GEPOp>(
+        loc, srcBasePtr.getType(), elementType, srcBasePtr, srcOffset);
+    mlir::MemRefDescriptor dstDesc(adaptor.getDst());
+    mlir::Value dstBasePtr = dstDesc.alignedPtr(rewriter, loc);
+    mlir::Value dstOffset = dstDesc.offset(rewriter, loc);
+    mlir::Value dstPtr = rewriter.create<mlir::LLVM::GEPOp>(
+        loc, dstBasePtr.getType(), elementType, dstBasePtr, dstOffset);
+
+    // Allocate the underlying buffer and store a pointer to it in the MemRef
+    // descriptor.
+    memcpyCallBuilder.create(
+        loc, rewriter, {adaptor.getGpuxStream(), dstPtr, srcPtr, totalSize});
+    rewriter.eraseOp(memcpyOp);
+    return mlir::success();
+  }
 };
 
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
@@ -631,7 +697,8 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       ConvertGpuStreamCreatePattern,
       ConvertGpuStreamDestroyPattern,
       ConvertAllocOpToGpuRuntimeCallPattern,
-      ConvertDeallocOpToGpuRuntimeCallPattern
+      ConvertDeallocOpToGpuRuntimeCallPattern,
+      ConvertMemcpyOpToGpuRuntimeCallPattern
       // clang-format on
       >(converter);
 
