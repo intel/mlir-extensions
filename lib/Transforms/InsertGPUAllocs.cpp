@@ -424,6 +424,15 @@ public:
             use.set(newAlloc.getResult());
           }
         }
+
+        // remove 'memref.dealloc' (it's later replaced with gpu.dealloc)
+        auto memory = alloc->getResult(0);
+        for (auto u : memory.getUsers()) {
+          if (auto dealloc = mlir::dyn_cast<mlir::memref::DeallocOp>(u)) {
+            dealloc.erase();
+          }
+        }
+
         alloc.replaceAllUsesWith(allocResult);
         builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         alloc.erase();
