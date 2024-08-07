@@ -535,8 +535,10 @@ private:
         return;
       }
       // Move copy target right after src allocation
+      // unless target is defined earlier
       auto &dom = getAnalysis<::mlir::DominanceInfo>();
-      if (!moveAfterIfPossible(dstDefOp, srcAllocOp, op, dom)) {
+      if (!dom.dominates(dstDefOp, srcAllocOp) &&
+          !moveAfterIfPossible(dstDefOp, srcAllocOp, op, dom)) {
         DEBUG_MSG("RemoveTemporaries", "cannot move dst defining op, skipping")
         return;
       }
