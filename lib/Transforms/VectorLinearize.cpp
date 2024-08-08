@@ -35,6 +35,87 @@ namespace imex {
 } // namespace imex
 
 namespace {
+struct VectorLoadOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::LoadOp> {
+  using mlir::OpConversionPattern<mlir::vector::LoadOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::LoadOp loadOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = loadOp->getLoc();
+    auto vecType = loadOp.getVectorType();
+    auto shape = vecType.getShape();
+
+    if (shape.size() != 2) {
+      return rewriter.notifyMatchFailure(loc, "Can only linearize 2D vectors.");
+    }
+    auto unrollCount = shape[0];
+    auto vecSize = shape[1];
+    auto newVecType =
+        mlir::VectorType::get({vecSize}, vecType.getElementType());
+
+    llvm::SmallVector<mlir::Value, 4> indices = adaptor.getIndices();
+    mlir::Value xBaseIndex = indices[0];
+
+    // Construct the 2D vector.
+    mlir::Value resultVec = rewriter.create<mlir::arith::ConstantOp>(
+        loc, mlir::DenseElementsAttr::get<float>(vecType, 0.0));
+    // Emit unrolled loads for each 1D vector slice.
+    for (auto i = 0; i < unrollCount; i++) {
+      mlir::Value xIndex = xBaseIndex;
+      if (i) {
+        auto increment = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        xIndex =
+            rewriter.create<mlir::arith::AddIOp>(loc, xBaseIndex, increment);
+      }
+      indices[0] = xIndex;
+      auto vec = rewriter.create<mlir::vector::LoadOp>(
+          loc, newVecType, adaptor.getBase(), indices);
+      resultVec =
+          rewriter.create<mlir::vector::InsertOp>(loc, vec, resultVec, i);
+    }
+
+    rewriter.replaceOp(loadOp, resultVec);
+    return mlir::success();
+  }
+};
+
+struct VectorStoreOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::StoreOp> {
+  using mlir::OpConversionPattern<mlir::vector::StoreOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::StoreOp storeOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = storeOp->getLoc();
+    auto vecType = storeOp.getVectorType();
+    auto shape = vecType.getShape();
+
+    if (shape.size() != 2) {
+      return rewriter.notifyMatchFailure(loc, "Can only linearize 2D vectors.");
+    }
+
+    auto unrollCount = shape[0];
+    llvm::SmallVector<mlir::Value, 4> indices = adaptor.getIndices();
+    mlir::Value xBaseIndex = indices[0];
+
+    auto vec = rewriter.create<mlir::vector::ShapeCastOp>(
+        loc, vecType, adaptor.getValueToStore());
+
+    for (auto i = 0; i < unrollCount; i++) {
+      auto vecSlice = rewriter.create<mlir::vector::ExtractOp>(loc, vec, i);
+      mlir::Value xIndex = xBaseIndex;
+      if (i) {
+        auto increment = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        xIndex =
+            rewriter.create<mlir::arith::AddIOp>(loc, xBaseIndex, increment);
+      }
+      indices[0] = xIndex;
+      rewriter.create<mlir::vector::StoreOp>(loc, vecSlice, adaptor.getBase(),
+                                             indices);
+    }
+    rewriter.eraseOp(storeOp);
+    return mlir::success();
+  }
+};
 
 struct VectorExtractStridedSliceConversion final
     : public mlir::OpConversionPattern<mlir::vector::ExtractStridedSliceOp> {
@@ -357,6 +438,16 @@ struct VectorLinearizePass final
           return op.getVector().getType().getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::vector::LoadOp>(
+        [&](mlir::vector::LoadOp op) {
+          return op.getVectorType().getRank() == 1;
+        });
+
+    target.addDynamicallyLegalOp<mlir::vector::StoreOp>(
+        [&](mlir::vector::StoreOp op) {
+          return op.getVectorType().getRank() == 1;
+        });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -368,7 +459,8 @@ struct VectorLinearizePass final
 
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
-                 VectorSplatOpConversion>(typeConverter, context);
+                 VectorSplatOpConversion, VectorLoadOpConversion,
+                 VectorStoreOpConversion>(typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

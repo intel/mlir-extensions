@@ -77,7 +77,8 @@ public:
             auto oname = lop->getName().getStringRef();
             if (oname.starts_with("arith.") || oname.starts_with("math.")) {
               // Skip bitcast operation as we cannot change width of operand
-              if (!oname.starts_with("arith.bitcast")) {
+              if (!(oname.starts_with("arith.bitcast") ||
+                    oname.starts_with("arith.extf"))) {
                 bool needWidening = false;
                 for (const auto &oper : lop->getOperands()) {
                   if (auto vecTy = mlir::dyn_cast<VectorType>(oper.getType())) {
