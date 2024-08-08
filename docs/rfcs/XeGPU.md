@@ -61,7 +61,7 @@ create_nd_tdesc creates a tensor descriptor that covers an array of 2D subtensor
      	into tensor_desc<8x16xbf16, array_length=2>
 ```
 
-create_nd_tdesc also accepts a memref as input instead of a memory address, shapes, and sizes.
+create_nd_tdesc also accepts a memref as input instead of a memory address, shapes, and sizes. The memref can be high-dimension. 
 ```mlir
  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
  %tdesc1 = XeGPU.create_nd_tdesc %mref, %offsets:2
@@ -70,6 +70,10 @@ create_nd_tdesc also accepts a memref as input instead of a memory address, shap
 
  %tdesc2 = XeGPU.create_nd_tdesc  %mref, %offsets:2 {mode =vc}
 		: memref<1024x1024xbf16>, index, index
+     	into tensor_desc<8x16xbf16>
+
+ %tdesc2 = XeGPU.create_nd_tdesc  %mref, %offsets:4 {mode =vc}
+		: memref<4x4x1024x1024xbf16>, index, index
      	into tensor_desc<8x16xbf16>
 ```
 
