@@ -21,3 +21,9 @@ jobs:
     name: Invoke main Build_GPU Workflow
     uses: ./.github/workflows/build_gpu.yml
     secrets: inherit
+
+  invoke-gpu-fs-sim-tests:
+    needs: invoke-sync
+    name: Invoke Build_GPU_FS_Sim Workflow
+    uses: ./.github/workflows/build_gpu-fs-sim.yml
+    secrets: inherit
