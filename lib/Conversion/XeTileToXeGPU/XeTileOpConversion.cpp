@@ -48,18 +48,20 @@ using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
 //                     ==>    q1, q2, q3, q4
 //  q1, q2, q3, q4            q5, q6, q7, q8
 //  q5, q6, q7, q8
-static VectorTypedValue stack(mlir::Value v1, mlir::Value v2,
+static VectorTypedValue stack(mlir::Value vecUp, mlir::Value vecDown,
                               mlir::Location loc,
                               mlir::PatternRewriter &rewriter) {
-  // LLVM requires operands of a shuffle op has the same type.
-  assert(v1.getType() == v2.getType() &&
-         "Operands of shuffle should have the same type.");
-  auto vecTy = llvm::cast<mlir::VectorType>(v1.getType());
-  assert(vecTy.getRank() == 2 && "only supports 2D vectors.");
-  auto shape = vecTy.getShape();
-  llvm::SmallVector<int64_t> mask(shape[0] + shape[0]);
+  auto vecUpTy = llvm::cast<mlir::VectorType>(vecUp.getType());
+  auto vecDownTy = llvm::cast<mlir::VectorType>(vecDown.getType());
+  assert(vecUpTy.getRank() == 2 && vecDownTy.getRank() == vecUpTy.getRank() &&
+         "only supports 2D vectors.");
+  assert(vecUpTy.getShape()[1] == vecDownTy.getShape()[1] &&
+         "Operands of stack() do not have the same number of columns.");
+
+  llvm::SmallVector<int64_t> mask(vecUpTy.getShape()[0] +
+                                  vecDownTy.getShape()[0]);
   std::iota(mask.begin(), mask.end(), 0);
-  auto op = rewriter.create<ShuffleOp>(loc, v1, v2, mask);
+  auto op = rewriter.create<ShuffleOp>(loc, vecUp, vecDown, mask);
   return op;
 }
 
@@ -98,25 +100,35 @@ getShuffleMask(llvm::ArrayRef<int64_t> shape1, llvm::ArrayRef<int64_t> shape2) {
 // cost of complex shuffle masks. the mask for the above one
 // will be like this: 0 1 2 3  8  9 10
 //                    4 5 6 7 11 12 13
-VectorTypedValue concat(mlir::Value v1, mlir::Value v2, mlir::Location loc,
-                        mlir::PatternRewriter &rewriter) {
-  // LLVM requires operands of shuffle op has the same type
-  auto vecTy = llvm::cast<mlir::VectorType>(v1.getType());
-  assert(v1.getType() == v2.getType() &&
-         "Operands doesn't have the same type!");
-  assert(vecTy.getRank() <= 2 &&
+VectorTypedValue concat(mlir::Value vecLeft, mlir::Value vecRight,
+                        mlir::Location loc, mlir::PatternRewriter &rewriter) {
+  auto vecLeftTy = llvm::cast<mlir::VectorType>(vecLeft.getType());
+  auto vecRightTy = llvm::cast<mlir::VectorType>(vecRight.getType());
+
+  assert(vecLeftTy.getShape()[0] == vecLeftTy.getShape()[0] &&
+         "Operands of concat() do not have the same number of rows.");
+  assert(vecLeftTy.getRank() <= 2 &&
+         vecRightTy.getRank() == vecLeftTy.getRank() &&
          "Currently concat only works on 1D/2D vector.");
-  auto size = vecTy.getNumElements();
-  auto shape = vecTy.getShape();
-  auto newShape = vecTy.getRank() == 1
-                      ? llvm::SmallVector<int64_t>({size * 2})
-                      : llvm::SmallVector<int64_t>({shape[0], shape[1] * 2});
-  auto elemTy = vecTy.getElementType();
-  auto flatTy = mlir::VectorType::get({size}, elemTy);
-  auto cast1 = rewriter.create<ShapeCastOp>(loc, flatTy, v1);
-  auto cast2 = rewriter.create<ShapeCastOp>(loc, flatTy, v2);
-  auto mask = getShuffleMask(shape, shape);
-  auto shuffleOp = rewriter.create<ShuffleOp>(loc, cast1, cast2, mask);
+
+  auto elemTy = vecLeftTy.getElementType();
+  auto leftSize = vecLeftTy.getNumElements();
+  auto leftShape = vecLeftTy.getShape();
+  auto leftFlatTy = mlir::VectorType::get({vecLeftTy.getNumElements()}, elemTy);
+
+  auto rightSize = vecRightTy.getNumElements();
+  auto rightShape = vecRightTy.getShape();
+  auto rightFlatTy =
+      mlir::VectorType::get({vecRightTy.getNumElements()}, elemTy);
+
+  auto newShape = vecLeftTy.getRank() == 1
+                      ? llvm::SmallVector<int64_t>({leftSize + rightSize})
+                      : llvm::SmallVector<int64_t>(
+                            {leftShape[0], leftShape[1] + rightShape[1]});
+  auto castLeft = rewriter.create<ShapeCastOp>(loc, leftFlatTy, vecLeft);
+  auto castRight = rewriter.create<ShapeCastOp>(loc, rightFlatTy, vecRight);
+  auto mask = getShuffleMask(leftShape, rightShape);
+  auto shuffleOp = rewriter.create<ShuffleOp>(loc, castLeft, castRight, mask);
   auto targetTy = mlir::VectorType::get(newShape, elemTy);
   auto newOp = rewriter.create<ShapeCastOp>(loc, targetTy, shuffleOp);
   return newOp;
@@ -132,13 +144,20 @@ mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
   llvm::SmallVector<mlir::Value> shuffleOps(ins.begin(), ins.end());
   while (shuffleOps.size() > 1) {
     auto curr = shuffleOps;
-    assert(curr.size() % 2 == 0 && "The size should be divisible by 2.");
     shuffleOps.clear();
-    for (size_t i = 0; i + 1 < curr.size(); i += 2) {
-      auto newOp = transFunc(curr[i], curr[i + 1], loc, rewriter);
+    size_t currPairStartIdx{0};
+    while (currPairStartIdx < curr.size() - 1) {
+      size_t leftIdx{currPairStartIdx++};
+      size_t rightIdx{currPairStartIdx++};
+      auto newOp = transFunc(curr[leftIdx], curr[rightIdx], loc, rewriter);
       shuffleOps.push_back(newOp);
     }
+    if (currPairStartIdx < curr.size()) {
+      assert(currPairStartIdx == curr.size() - 1);
+      shuffleOps.push_back(curr[curr.size() - 1]);
+    }
   }
+
   return shuffleOps[0];
 }
 
