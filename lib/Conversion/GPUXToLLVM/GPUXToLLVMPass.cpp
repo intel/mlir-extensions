@@ -18,6 +18,7 @@
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
 
 #include "imex/Utils/FuncUtils.hpp"
+#include "imex/Utils/GPUSerialize.h"
 #include "imex/Utils/TypeConversion.hpp"
 
 #include "../PassDetail.h"
@@ -583,6 +584,20 @@ private:
   }
 };
 
+class RemoveGPUModulePattern
+    : public mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUModuleOp> {
+public:
+  RemoveGPUModulePattern(mlir::LLVMTypeConverter &converter)
+      : mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUModuleOp>(converter) {}
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::GPUModuleOp op,
+                  mlir::gpu::GPUModuleOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 /// A rewrite pattern to convert gpux.create_stream operations into a GPU
 /// runtime call.
 class ConvertGpuStreamCreatePattern
@@ -649,19 +664,7 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
   mlir::LLVMConversionTarget target(context);
 
-  mlir::arith::populateArithToLLVMConversionPatterns(converter, patterns);
-  mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-  mlir::populateVectorToLLVMConversionPatterns(converter, patterns);
-  mlir::populateFinalizeMemRefToLLVMConversionPatterns(converter, patterns);
-  mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
-                                                          target);
-
-  mlir::populateGpuToLLVMConversionPatterns(
-      converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
-                                                           target);
+  mlir::populateGpuToLLVMConversionPatterns(converter, patterns);
 
   imex::populateGpuxToLLVMPatternsAndLegality(converter, patterns, target);
 
@@ -698,12 +701,13 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       ConvertGpuStreamDestroyPattern,
       ConvertAllocOpToGpuRuntimeCallPattern,
       ConvertDeallocOpToGpuRuntimeCallPattern,
+      RemoveGPUModulePattern,
       ConvertMemcpyOpToGpuRuntimeCallPattern
       // clang-format on
       >(converter);
 
   patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
-      converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
+      converter, imex::gpuBinaryAttrName);
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
   target.addIllegalDialect<imex::gpux::GPUXDialect>();

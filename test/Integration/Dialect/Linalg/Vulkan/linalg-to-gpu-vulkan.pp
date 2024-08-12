@@ -2,18 +2,9 @@
 // Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 builtin.module(
     convert-tensor-to-linalg
-    arith-bufferize
+    func.func(empty-tensor-to-alloc-tensor)
+    one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
     func.func(
-        empty-tensor-to-alloc-tensor
-        //eliminate-empty-tensors
-        scf-bufferize
-        shape-bufferize
-        linalg-bufferize
-        bufferization-bufferize
-        tensor-bufferize)
-    func-bufferize
-    func.func(
-        finalizing-bufferize
         convert-linalg-to-parallel-loops
         gpu-map-parallel-loops
         convert-parallel-loops-to-gpu

@@ -193,8 +193,8 @@ struct ScfForOpPattern final
       signatureConverter.addInputs(i,
                                    newOp.getRegion().getArgument(i).getType());
     }
-    rewriter.applySignatureConversion(&forOp.getRegion(), signatureConverter,
-                                      getTypeConverter());
+    rewriter.applySignatureConversion(&forOp.getRegion().getBlocks().front(),
+                                      signatureConverter, getTypeConverter());
     rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(forOp.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());
@@ -362,7 +362,8 @@ struct XeTileCanonicalizationPass final
     {
       mlir::RewritePatternSet patterns(context);
       mlir::GreedyRewriteConfig config;
-      config.enableRegionSimplification = false;
+      config.enableRegionSimplification =
+          mlir::GreedySimplifyRegionLevel::Disabled;
       config.useTopDownTraversal = true;
       config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
       patterns.add<VectorTransposeToXetileTransposeOpPattern,
@@ -460,7 +461,8 @@ struct XeTileCanonicalizationPass final
     {
       mlir::RewritePatternSet patterns(context);
       mlir::GreedyRewriteConfig config;
-      config.enableRegionSimplification = false;
+      config.enableRegionSimplification =
+          mlir::GreedySimplifyRegionLevel::Disabled;
       config.useTopDownTraversal = true;
       config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
       patterns.add<RemoveRedundantTransposeOpPattern>(context);
