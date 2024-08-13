@@ -340,7 +340,7 @@ public:
     payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
     SmallVector<int64_t, 16> indices(16, 0);
     payLoad = rewriter.create<mlir::vector::ShuffleOp>(
-        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
+        loc, payLoad, payLoad, rewriter.getDenseI64ArrayAttr(indices));
     Value offsetFactor = rewriter.create<arith::ConstantOp>(
         loc, DenseElementsAttr::get(
                  v16index, IntegerAttr::get(v16index.getElementType(),
@@ -1247,7 +1247,8 @@ struct SCFForOpBlockVCPattern final
                                    newOp.getRegion().getArgument(i).getType());
     }
 
-    rewriter.applySignatureConversion(&op.getRegion(), signatureConverter);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(),
+                                      signatureConverter);
 
     rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),

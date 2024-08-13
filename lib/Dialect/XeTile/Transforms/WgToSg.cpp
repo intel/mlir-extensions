@@ -103,7 +103,7 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 
     rewriter.setInsertionPoint(op);
     // get the subgroup Id
-    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc);
+    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
     auto indexType = rewriter.getIndexType();
     auto sgLayoutDimYConst = createIndexConstant(indexType, sgLayout[1]);
     auto sgDataDimXConst = createIndexConstant(indexType, sgTileShape[0]);
@@ -319,7 +319,7 @@ class WGToSGSCFForOpPattern : public XeOneToNConversion<mlir::scf::ForOp> {
                                        // adaptor.getInitArgs()
     }
 
-    rewriter.applySignatureConversion(&op.getRegion(), argumentMapping);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(), argumentMapping);
     newOp.getBody()->erase();
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());

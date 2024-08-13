@@ -487,10 +487,10 @@ module {
         %381 = arith.addf %46, %373 : vector<1xf32>
         %382 = arith.addf %47, %374 : vector<1xf32>
         // CHECK-COUNT=8: vector.insertelement {{.*}} : vector<2xf32>
-        %383 = vector.interleave %375, %376 : vector<1xf32>
-        %384 = vector.interleave %377, %378 : vector<1xf32>
-        %385 = vector.interleave %379, %380 : vector<1xf32>
-        %386 = vector.interleave %381, %382 : vector<1xf32>
+        %383 = vector.interleave %375, %376 : vector<1xf32> -> vector<2xf32>
+        %384 = vector.interleave %377, %378 : vector<1xf32> -> vector<2xf32>
+        %385 = vector.interleave %379, %380 : vector<1xf32> -> vector<2xf32>
+        %386 = vector.interleave %381, %382 : vector<1xf32> -> vector<2xf32>
         %387 = vector.shuffle %383, %384 [0, 1, 2, 3] : vector<2xf32>, vector<2xf32>
         %388 = vector.shuffle %385, %386 [0, 1, 2, 3] : vector<2xf32>, vector<2xf32>
         %389 = vector.shuffle %387, %388 [0, 1, 2, 3, 4, 5, 6, 7] : vector<4xf32>, vector<4xf32>
