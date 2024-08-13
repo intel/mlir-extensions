@@ -19,6 +19,7 @@ include "imex/Dialect/XeTile/IR/XeTileTypes.td"
 include "imex/Dialect/XeTile/IR/XeTileAttrs.td"
 
 include "mlir/Dialect/Vector/IR/VectorAttributes.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 
 // Base class for dialect operations. This operation inherits from the base
 // `Op` class in OpBase.td, and provides:
@@ -28,7 +29,8 @@ include "mlir/Dialect/Vector/IR/VectorAttributes.td"
 class XeTile_Op<string mnemonic, list<Trait> traits = []> :
     Op<XeTile_Dialect, mnemonic, traits>;
 
-def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]> {
+def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
+                                    ViewLikeOpInterface, OffsetSizeAndStrideOpInterface]> {
     let summary = "Describes an XeTile with reference to a base memref";
     let description = [{
         The "init_tile" operation is used to describe a 2D region (i.e. tile) in gloabl memory.
@@ -103,14 +105,25 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
 
     }];
 
-    let arguments = (ins XeTile_BaseAddrType:$source,
-                       Variadic<Index>:$offsets,
-                       DenseI64ArrayAttr:$static_offsets,
-                       Variadic<Index>:$dynamic_shape,
-                       Variadic<Index>:$dynamic_strides
+    let arguments = (ins XeTile_BaseAddrType: $source,
+                       Variadic<Index>: $offsets,
+                       Variadic<Index>: $sizes,
+                       Variadic<Index>: $strides,
+                       DenseI64ArrayAttr: $const_offsets,
+                       OptionalAttr<DenseI64ArrayAttr>: $const_sizes,
+                       OptionalAttr<DenseI64ArrayAttr>: $const_strides
                        );
 
     let results = (outs XeTile: $tile);
+
+
+    let assemblyFormat = [{
+      $source ``
+      custom<DynamicIndexList>($offsets, $const_offsets)
+      (`,` custom<DynamicIndexList>($sizes, $const_sizes)^
+       `,` custom<DynamicIndexList>($strides, $const_strides))?
+      attr-dict `:` type($source) `->` qualified(type($tile))
+    }];
 
     let builders = [
         // creating init_tile op with static memref
@@ -121,11 +134,9 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         OpBuilder<(ins "xetile::TileType":$resultType,
             "mlir::Value":$source,
             "llvm::ArrayRef<mlir::OpFoldResult>":$offsets,
-            "llvm::ArrayRef<mlir::Value>":$dynamic_shape,
-            "llvm::ArrayRef<mlir::Value>":$dynamic_strides)>
+            "llvm::ArrayRef<mlir::OpFoldResult>":$sizes,
+            "llvm::ArrayRef<mlir::OpFoldResult>":$strides)>
     ];
-
-    let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
         /// get source type, could be a memref or an integer
@@ -163,16 +174,6 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             return getType().getShape();
         }
 
-        /// check if the offsets are static
-        bool hasStaticOffsets() {
-            return !mlir::ShapedType::isDynamicShape(getStaticOffsets());
-        }
-
-        /// check if a given dim in static offsets has a static value
-        bool hasStaticOffsetAtDim(int dim) {
-            return !mlir::ShapedType::isDynamic(getStaticOffsets()[dim]);
-        }
-
         /// check if the source memref has static shape info
         /// this method will fail if the source is not a memref
         bool sourceMemRefHasStaticShape() {
@@ -187,14 +188,48 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             return mlir::cast<mlir::MemRefType>(getSourceType()).getShape();
         }
 
-        /// check if dynamic shape arguments are present
-        bool hasDynamicShape() {
-            return getDynamicShape().size();
+        /// check if dynamic size arguments are present
+        bool hasSizeArgs() {
+            auto sizes = getConstSizes().value_or(llvm::ArrayRef<int64_t>({}));
+            return sizes.size();
         }
 
         /// check if dynamic stride arguments are present
-        bool hasDynamicStrides() {
-            return getDynamicStrides().size();
+        bool hasStrideArgs() {
+            auto strides = getConstStrides().value_or(llvm::ArrayRef<int64_t>({}));
+            return strides.size();
+        }
+
+        /// Get static offsets.
+        llvm::ArrayRef<int64_t> getStaticOffsets() {
+            return getConstOffsets();
+        }
+
+        /// Get the static sizes.
+        llvm::ArrayRef<int64_t> getStaticSizes() {
+            if (getConstSizes().has_value())
+                return getConstSizes().value();
+            // At this point, the source must be a memref with static shape.
+            assert(sourceMemRefHasStaticShape() && "The source memref does not have static shape.");
+            return getSourceMemrefStaticShape();
+        }
+
+        /// Get the static strides.
+        llvm::ArrayRef<int64_t> getStaticStrides() {
+            if (getConstStrides().has_value())
+                return getConstStrides().value();
+            // At this point, the source must be a memref with static shape.
+            assert(sourceMemRefHasStaticShape() &&
+                   "The source memref does not have static shape.");
+            llvm::SmallVector<int64_t> strides;
+            int64_t offset;
+            auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
+            assert(mlir::succeeded(
+                       mlir::getStridesAndOffset(memrefType, strides, offset)) &&
+                   "Failed to get strides and offset. Invalid source memref.");
+            // Reuse the op storage.
+            setConstStrides(strides);
+            return getConstStrides().value();
         }
 
         mlir::Attribute getSourceMemorySpace() {
@@ -212,34 +247,23 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
           return 0;
         }
 
-        /// Returns the offsets info to the source. It consolidates
-        /// information from both dynamic_offsets and static_offsets
-        /// parameters. static_offsets parameter always has the expected
-        /// ranks with some dim could have mlir::ShapeType::kDynamic value
-        /// indicating the corresponding value should be from dynamic_offsets.
-        // llvm::SmallVector<mlir::OpFoldResult> getOffsets() {
-        //   llvm::SmallVector<mlir::OpFoldResult> offsets;
-        //   auto dynamicOffsets = getOffsets(); // from offsets variable
-        //   auto staticOffsets = getStaticOffsets(); // from static_offsets attribute
+        /// Return the expected rank of each of the`static_offsets`,
+        /// `static_shape` and `static_strides` attributes.
+        std::array<unsigned, 3> getArrayAttrMaxRanks() {
+          unsigned rank;
+          if (auto ty = llvm::dyn_cast<mlir::MemRefType>(getSourceType())) {
+            rank = ty.getRank();
+          } else {
+            rank = (unsigned)getMixedOffsets().size();
+          }
+          return {rank, rank, rank};
+        }
 
-        //   // in case static_offsets is missing
-        //   if (staticOffsets.size() == 0) {
-        //     offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
-        //     return offsets;
-        //   }
+        /// Return the number of leading operands before the `offsets`,
+        /// `shape` and `strides` operands.
+        static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 1; }
 
-        //   for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
-        //     if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
-        //       assert(j < dynamicOffsets.size());
-        //       offsets.push_back(dynamicOffsets[j++]);
-        //     } else {
-        //       auto ty = mlir::IndexType::get(getContext());
-        //       auto attr = mlir::IntegerAttr::get(ty, staticOffsets[i]);
-        //       offsets.push_back(attr);
-        //     }
-        //   }
-        //   return offsets;
-        // }
+        mlir::Value getViewSource() { return getSource(); }
 
     }];
 

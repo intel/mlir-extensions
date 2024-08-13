@@ -80,15 +80,6 @@ struct InitTileOpPattern final
     // Result type should have row-major `order` attribute.
     auto newTileTy = llvm::cast<imex::xetile::TileType>(
         getTypeConverter()->convertType(tileTy));
-    // Offsets can be a mix of static or dynamic values
-    llvm::SmallVector<mlir::OpFoldResult> offsets;
-    int dynamicOffsetIndex = 0;
-    for (auto offset : initOp.getStaticOffsets()) {
-      if (offset == mlir::ShapedType::kDynamic)
-        offsets.push_back(initOp.getOffsets()[dynamicOffsetIndex++]);
-      else
-        offsets.push_back(rewriter.getIndexAttr(offset));
-    }
     // If source memref is statically shaped, we create a new view of the
     // memref by create a ReinterpretCastOp.
     if (sourceTy && sourceTy.hasStaticShape()) {
@@ -111,18 +102,16 @@ struct InitTileOpPattern final
       // Create a new InitTileOp with swapped offsets
       rewriter.replaceOpWithNewOp<imex::xetile::InitTileOp>(
           initOp, newTileTy, castOp,
-          swapLastTwoElems<mlir::OpFoldResult>(offsets));
+          swapLastTwoElems<mlir::OpFoldResult>(initOp.getMixedOffsets()));
       return mlir::success();
     }
     // If the source is dynamic shaped memref, we create new InitTileOp with
     // swapped offsets, shape and strides arguments
-    llvm::SmallVector<mlir::Value> dynamicShape(initOp.getDynamicShape());
-    llvm::SmallVector<mlir::Value> dynamicStrides(initOp.getDynamicStrides());
     rewriter.replaceOpWithNewOp<imex::xetile::InitTileOp>(
         initOp, newTileTy, initOp.getSource(),
-        swapLastTwoElems<mlir::OpFoldResult>(offsets),
-        swapLastTwoElems<mlir::Value>(dynamicShape),
-        swapLastTwoElems<mlir::Value>(dynamicStrides));
+        swapLastTwoElems<mlir::OpFoldResult>(initOp.getMixedOffsets()),
+        swapLastTwoElems<mlir::OpFoldResult>(initOp.getMixedSizes()),
+        swapLastTwoElems<mlir::OpFoldResult>(initOp.getMixedStrides()));
 
     return mlir::success();
   }

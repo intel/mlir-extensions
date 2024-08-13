@@ -111,7 +111,7 @@ gpu.module @mod1 {
 gpu.module @mod2 {
   // CHECK-LABEL: gpu.func @gemm2
   // CHECK-SAME: (%[[ARG0:.*]]: memref<1024x512xf16>, %[[ARG1:.*]]: memref<1024x512xf16, #{{.*}}>, %[[ARG2:.*]]: memref<1024x1024xf32>) {
-  gpu.func @gemm2(%A: memref<1024x512xf16>, %B: memref<1024x512xf16, affine_map<(d0, d1) -> (d1, d0)>>, %C: memref<1024x1024xf32>) {
+  gpu.func @gemm2(%A: memref<1024x512xf16>, %B: memref<1024x512xf16, affine_map<(d0, d1) -> (d1*1024 + d0)>>, %C: memref<1024x1024xf32>) {
     // CHECK: %[[C0:.*]] = arith.constant 0 : index
     // CHECK: %[[C16:.*]] = arith.constant 16 : index
     %c0 = arith.constant 0 : index
@@ -130,7 +130,7 @@ gpu.module @mod2 {
     %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x512xf16> -> !xetile.tile<32x16xf16>
     // CHECK: %[[CAST:.*]] = memref.reinterpret_cast %[[ARG1]] to offset: [0], sizes: [512, 1024], strides: [1024, 1] : memref<1024x512xf16, #map> to memref<512x1024xf16, strided<[1024, 1]>>
     // CHECK-NEXT: %{{.*}} = xetile.init_tile %[[CAST]][%[[C0]], %{{.*}}] : memref<512x1024xf16, strided<[1024, 1]>> -> !xetile.tile<16x32xf16, #xetile.tile_attr<>>
-    %b_init_tile = xetile.init_tile %B[%n, %c0] : memref<1024x512xf16, affine_map<(d0, d1) -> (d1, d0)>> -> !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
+    %b_init_tile = xetile.init_tile %B[%n, %c0] : memref<1024x512xf16, affine_map<(d0, d1) -> (d1 * 1024 + d0)>> -> !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
     %out:3 = scf.for %k = %c0 to %c512 step %c16
       iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
       -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>, vector<32x32xf32>) {
