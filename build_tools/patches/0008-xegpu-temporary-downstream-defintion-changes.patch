@@ -1,26 +1,17 @@
-From 1f614b57c62be233b09d4601b7c542fdeebf360f Mon Sep 17 00:00:00 2001
-From: Chao Chen <chao.chen@intel.com>
-Date: Thu, 2 May 2024 15:12:20 +0000
-Subject: [PATCH 2/2] temporarily patch for downstream: CreateDesc, UpdateDesc,
- CompileHint, 1D support
-
----
- .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td | 58 ++++++-------------
- mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp        | 19 ++----
- 2 files changed, 23 insertions(+), 54 deletions(-)
-
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index 5f95be1c87df..008aca366633 100644
+index f84c5a9d6e38..5f6ef2e237d6 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -428,43 +428,25 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
-   }];
-
-   let arguments = (ins XeGPU_BaseAddrType: $source,
--                       Variadic<Index>: $offsets,
--                       DenseI64ArrayAttr: $const_offsets,
-+                       XeGPU_OffsetType: $offsets,
-                        DefaultValuedAttr<I64Attr, "1">: $chunk_size);
+@@ -285,6 +285,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [AllElementTypesMatch<["value", "Tensor
+   let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
+                        OptionalAttr<UnitAttr>: $packed,
+                        OptionalAttr<DenseI64ArrayAttr>: $transpose,
++		       OptionalAttr<I32Attr>: $transpose_bit_width,
+                        OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
+                        OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
+                        OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint);
+@@ -437,38 +438,21 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
+                        XeGPU_OffsetType: $offsets);
    let results = (outs XeGPU_TensorDesc:$TensorDesc);
 
 -  let builders = [
@@ -33,7 +24,7 @@ index 5f95be1c87df..008aca366633 100644
 -    $source
 -    custom<DynamicIndexList>($offsets, $const_offsets)
 -    attr-dict `:`  type($source) `->` qualified(type($TensorDesc))
-+    $source `,` $offsets attr-dict `:`  type($source) `,` type($offsets) `->` qualified(type($TensorDesc))
++  $source `,` $offsets attr-dict `:`  type($source) `,` type($offsets) `->` qualified(type($TensorDesc))
    }];
 
 -  let extraClassDeclaration = extraBaseClassDeclaration # [{
@@ -61,14 +52,13 @@ index 5f95be1c87df..008aca366633 100644
    }];
 
    let hasVerifier = 1;
-@@ -628,34 +610,23 @@ def XeGPU_UpdateOffsetOp: XeGPU_Op<"update_offset",
+@@ -632,34 +616,22 @@ def XeGPU_UpdateOffsetOp: XeGPU_Op<"update_offset",
    }];
 
    let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
 -                       Variadic<Index>: $offsets,
 -                       DenseI64ArrayAttr: $const_offsets);
 +                       XeGPU_OffsetType: $offsets);
-+
    let results = (outs XeGPU_TensorDesc: $result);
 
 -  let extraClassDeclaration = extraBaseClassDeclaration # [{
@@ -97,12 +87,12 @@ index 5f95be1c87df..008aca366633 100644
 -    $TensorDesc `,`
 -    custom<DynamicIndexList>($offsets, $const_offsets)
 -    attr-dict `:` qualified(type($TensorDesc))
-+    $TensorDesc `,` $offsets attr-dict `:`
-+    qualified(type($TensorDesc)) `,` type($offsets) `->` qualified(type($result))
++     $TensorDesc `,` $offsets attr-dict `:`
++     qualified(type($TensorDesc)) `,` type($offsets) `->` qualified(type($result))
    }];
  }
 
-@@ -808,4 +779,13 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
+@@ -810,4 +782,13 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
    let extraClassDeclaration = extraBaseClassDeclaration;
  }
 
@@ -117,32 +107,10 @@ index 5f95be1c87df..008aca366633 100644
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index e550de6a97cd..0e3ec927ee4c 100644
+index a023c616333e..222cfa9fbc00 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-@@ -182,8 +182,8 @@ LogicalResult LoadNdOp::verify() {
-   auto tdescTy = getTensorDescType();
-   auto valueTy = getType();
-
--  if (tdescTy.getRank() != 2)
--    return emitOpError("Expecting a 2D TensorDesc.\n");
-+  if (tdescTy.getRank() > 2)
-+    return emitOpError("Expecting a 1D/2D TensorDesc.\n");
-
-   if (tdescTy.getScattered())
-     return emitOpError("Expects a non-scattered TensorDesc.\n");
-@@ -249,8 +249,8 @@ LogicalResult StoreNdOp::verify() {
-   auto dstTy = getTensorDescType(); // Tile
-   auto valTy = getValueType();      // Vector
-
--  if (dstTy.getRank() != 2)
--    return emitOpError("Expecting a 2D TensorDesc.\n");
-+  if (dstTy.getRank() > 2)
-+    return emitOpError("Expecting a 1D/2D TensorDesc.\n");
-
-   if (dstTy.getScattered())
-     return emitOpError("Expects a non-scattered TensorDesc.\n");
-@@ -288,17 +288,6 @@ LogicalResult UpdateNdOffsetOp::verify() {
+@@ -293,17 +293,6 @@ LogicalResult UpdateNdOffsetOp::verify() {
  //===----------------------------------------------------------------------===//
  // XeGPU_CreateDescOp
  //===----------------------------------------------------------------------===//
@@ -159,6 +127,23 @@ index e550de6a97cd..0e3ec927ee4c 100644
 -
  LogicalResult CreateDescOp::verify() {
    auto tdescTy = getTensorDescType();
-   auto chunkSize = getChunkSize();
---
-2.34.1
+
+@@ -429,14 +418,14 @@ LogicalResult DpasOp::verify() {
+   int64_t lhsRank = getLhsType().getRank();
+   int64_t rhsRank = getRhsType().getRank();
+
+-  if (lhsRank != 2 || (rhsRank != 2 && rhsRank != 3))
+-    return emitOpError("expecting lhs to be a 2D vector, and rhs to be either "
+-                       "2D or 3D (packed) vector.");
++  // if (lhsRank != 2 || (rhsRank != 2 && rhsRank != 3))
++  //   return emitOpError("expecting lhs to be a 2D vector, and rhs to be either 2D or 3D (vnni transformed) vector.");
+
+   auto lhsShape = getLhsType().getShape();
+   auto rhsShape = getRhsType().getShape();
++  auto aK = lhsRank == 3 ? lhsShape[1] * lhsShape[2] : lhsShape[1];
+   auto bK = rhsRank == 3 ? rhsShape[0] * rhsShape[2] : rhsShape[0];
+-  if (bK != lhsShape[1])
++  if (aK != bK)
+     return emitOpError("K-dimension mismatch.");
+
+   return success();

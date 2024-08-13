@@ -219,8 +219,8 @@ struct ScfForOpPattern final
     // Signature conversion will insert UnrealizedConversionCastOp inside the
     // body of ForOp to convert the new InitTileOp type to the original
     // InitTileOp type. This is cleaned up later.
-    rewriter.applySignatureConversion(&forOp.getRegion(), signatureConverter,
-                                      getTypeConverter());
+    rewriter.applySignatureConversion(&forOp.getRegion().getBlocks().front(),
+                                      signatureConverter, getTypeConverter());
     rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(forOp.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());

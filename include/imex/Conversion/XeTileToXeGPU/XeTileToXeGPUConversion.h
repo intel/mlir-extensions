@@ -67,7 +67,7 @@ public:
   }
 
   mlir::Block *
-  applySignatureConversion(mlir::Region *region,
+  applySignatureConversion(mlir::Block *block,
                            mlir::TypeConverter::SignatureConversion &conversion,
                            const mlir::TypeConverter *converter = nullptr);
 
@@ -161,7 +161,7 @@ public:
     // UnrealizedConversionCastOp.
     for (auto &value : remappedValues) {
       auto castOp = value.getDefiningOp<mlir::UnrealizedConversionCastOp>();
-      if (castOp)
+      if (castOp && castOp.getInputs().size() > 1)
         convertedValues.push_back(castOp.getInputs());
       else
         convertedValues.push_back(value);
