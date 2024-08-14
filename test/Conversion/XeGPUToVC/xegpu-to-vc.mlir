@@ -22,7 +22,11 @@ module @gemm attributes {gpu.container_module} {
 
       // CHECK: %[[A_STRUCT:.*]] = arith.constant dense<0> : vector<4xi64>
       // CHECK: %[[A_BASEPTR:.*]] = memref.extract_aligned_pointer_as_index {{.*}} : memref<128xf16> -> index
-      // CHECK: %[[A_BASEADDR:.*]] = arith.index_castui %[[A_BASEPTR]] : index to i64
+      // CHECK: %[[A_ELEMBYTES:.*]] = arith.constant 2 : index
+      // CHECK: %[[A_OFFSET:.*]] = arith.constant 0 : index
+      // CHECK: %[[A_STRIDE:.*]] = arith.muli %[[A_OFFSET]], %[[A_ELEMBYTES]] : index
+      // CHECK: %[[A_UPDATEDBASEPTR:.*]] = arith.addi %[[A_BASEPTR]], %[[A_STRIDE]] : index
+      // CHECK: %[[A_BASEADDR:.*]] = arith.index_castui %[[A_UPDATEDBASEPTR]] : index to i64
       // CHECK: %[[A_PAYLOAD_v4i64:.*]] = vector.insert %[[A_BASEADDR]], %[[A_STRUCT]] [0] : i64 into vector<4xi64>
       // CHECK: %[[A_PAYLOAD_v8i32:.*]] = vector.bitcast %[[A_PAYLOAD_v4i64]] : vector<4xi64> to vector<8xi32>
       %0 = xegpu.create_nd_tdesc %arg00[0] : memref<128xf16> -> !xegpu.tensor_desc<128xf16>
@@ -44,7 +48,11 @@ module @gemm attributes {gpu.container_module} {
 
       // CHECK: %[[C_STRUCT:.*]] = arith.constant dense<0> : vector<4xi64>
       // CHECK: %[[C_BASEPTR:.*]] = memref.extract_aligned_pointer_as_index {{.*}} : memref<128xf32> -> index
-      // CHECK: %[[C_BASE:.*]] = arith.index_castui %[[C_BASEPTR]] : index to i64
+      // CHECK: %[[C_ELEMBYTES:.*]] = arith.constant 4 : index
+      // CHECK: %[[C_OFFSET:.*]] = arith.constant 0 : index
+      // CHECK: %[[C_STRIDE:.*]] = arith.muli %[[C_OFFSET]], %[[C_ELEMBYTES]] : index
+      // CHECK: %[[C_UPDATEDBASEPTR:.*]] = arith.addi %[[C_BASEPTR]], %[[C_STRIDE]] : index
+      // CHECK: %[[C_BASE:.*]] = arith.index_castui %[[C_UPDATEDBASEPTR]] : index to i64
       // CHECK: %[[C_PAYLOAD:.*]] = vector.insert %[[C_BASE]], %[[C_STRUCT]] [0] : i64 into vector<4xi64>
       // CHECK: %[[C_PAYLOAD_v8i32:.*]] = vector.bitcast %[[C_PAYLOAD]] : vector<4xi64> to vector<8xi32>
       %2 = xegpu.create_nd_tdesc %arg02[0] : memref<128xf32> -> !xegpu.tensor_desc<128xf32>
