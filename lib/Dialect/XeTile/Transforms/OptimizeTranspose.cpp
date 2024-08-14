@@ -39,7 +39,6 @@
 #include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
-#include "imex/Transforms/Passes.h"
 #include "imex/Utils/XeCommon.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
