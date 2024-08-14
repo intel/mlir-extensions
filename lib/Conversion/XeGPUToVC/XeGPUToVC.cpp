@@ -1378,16 +1378,17 @@ struct ElementwiseToVCPattern : public OpConversionPattern<MOp> {
     auto loc = op.getLoc();
     // This lowering pattern is needed only for spirv ops with large vector
     // lengths.
-    auto vecSize = vecTy.getNumElements();
     // for larger vector lengths, "llvm.genx.exp" returns the base 2
     // exponentiation of the input. To get the base e exponentiation, we need to
     // scale the input by log2(e)
     auto operands = adaptor.getOperands();
     SmallVector<Value> args{operands};
     if (isExpOp) {
-      SmallVector<float> log2e(vecSize, 1.442695040888963);
-      auto log2eConstVec = rewriter.create<arith::ConstantOp>(
-          op.getLoc(), vecTy, rewriter.getF32VectorAttr(log2e));
+      auto log2e = rewriter.create<arith::ConstantOp>(
+          loc,
+          rewriter.getFloatAttr(vecTy.getElementType(), 1.442695040888963));
+      auto log2eConstVec =
+          rewriter.create<vector::BroadcastOp>(loc, vecTy, log2e);
       auto input = operands[0];
       auto scaledInput =
           rewriter.create<arith::MulFOp>(op.getLoc(), input, log2eConstVec);
