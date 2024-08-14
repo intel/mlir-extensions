@@ -97,17 +97,37 @@ static func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
   return rewriter.create<func::CallOp>(loc, fn, resultType, operands);
 }
 
-// Given an n-dim memref, a tensor descriptor defines a 2d memory region with
-// respect to the two inner-most dimensions. Other outer dimensions affect the
-// base address. For example, given
+// Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a 2d
+// memory region with respect to the two inner-most dimensions. Other outer
+// dimensions affect the base address of the 2d plane.
+// For 2d, we compute the base address of 2d plane, assuming the coordinates
+// [0, 0] for the innermost 2 dimensions. The payload will record tile offset
+// within the 2d plane in separate field.
+// For example, given
 //   %m: memref<2x7x32x64xf16>
 // And this access
 //   %m[%a, %b, %c, %d]
+//
 // The base address will be adjusted as follows:
-//   new_base = base(%m) + %b * (32*64*2) + %a * (7*32*64*2)
+//   base address of plane for 2d tile = base(%m) + %b * (32*64*2) + %a *
+//                                       (7*32*64*2)
 // 2 is the number of bytes of the element type.
+//
+// For 1d, we compute the base address of the 1d tile, not the plane.
+// So the tile offset is also added to the base address.
+//
+// For tile rank of 1, the base address will be adjusted as:
+//   base address of tile for 1d tile = base(%m) + %d * (2) + %c * (64*2) +
+//                                      %b * (32*64*2) + %a * (7*32*64*2)
+
 static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
-                               xegpu::CreateNdDescOp op, Value base) {
+                               xegpu::CreateNdDescOp op, Value memrefBaseAddr) {
+  auto memType = dyn_cast<MemRefType>(op.getSource().getType());
+
+  // FIXME: Only support static shape for now
+  if (!memType || !memType.hasStaticShape())
+    return memrefBaseAddr;
+
   auto loc = op.getLoc();
 
   auto createIndexConstant = [&](unsigned index) {
@@ -115,25 +135,53 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
                                               rewriter.getIndexAttr(index));
   };
 
-  if (auto memType = dyn_cast<MemRefType>(op.getSource().getType());
-      memType && memType.getRank() > 2) {
-    assert(memType.hasStaticShape() && "only support static shape for now");
-    auto shape = memType.getShape();
-    int64_t i = memType.getRank() - 1;
-    unsigned stride = memType.getElementType().getIntOrFloatBitWidth() / 8;
-    stride *= shape[i--];
-    stride *= shape[i--];
-    auto offsets = op.getMixedOffsets();
+  auto tileRank = op.getTensorDesc().getType().getRank();
+  auto offsets = op.getMixedOffsets();
+  auto strides = mlir::getStridesAndOffset(memType).first;
+  int64_t i = memType.getRank() - 1;
+
+  auto computeBase =
+      [&](Value base) {
+        for (; i >= 0; --i) {
+          unsigned stride =
+              strides[i] * memType.getElementType().getIntOrFloatBitWidth() / 8;
+          auto factor = createIndexConstant(stride);
+          auto offset = offsets.pop_back_val();
+          Value offsetVal;
+
+          if (offset.is<Value>()) {
+            offsetVal = offset.get<Value>();
+          } else {
+            offsetVal = createIndexConstant(
+                llvm::cast<IntegerAttr>(offset.get<Attribute>()).getInt());
+          }
+          auto linearOffset =
+              rewriter.create<arith::MulIOp>(loc, offsetVal, factor);
+          base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
+        }
+
+        return base;
+      };
+
+  if (tileRank == 2 && memType.getRank() > 2) {
+    // base address of plane for 2d: base addr of memref + offsets (starting
+    // from j to i) for a given memref<ixjxkxlxf16>
+
+    i -= 2;
     offsets.pop_back_n(2);
-    for (; i >= 0; --i) {
-      auto factor = createIndexConstant(stride);
-      auto linearOffset = rewriter.create<arith::MulIOp>(
-          loc, offsets.pop_back_val().get<Value>(), factor);
-      base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
-      stride *= shape[i];
-    }
+
+    auto baseOf2dPlane = computeBase(memrefBaseAddr);
+    return baseOf2dPlane;
   }
-  return base;
+
+  if (tileRank == 1) {
+    // base address of tile for 1d: base addr of memref + offsets (starting from
+    // k to i) for a given memref<ixjxkxlxf16>
+    auto baseOf1dTile = computeBase(memrefBaseAddr);
+    return baseOf1dTile;
+  }
+
+  return memrefBaseAddr;
 }
 
 struct CreateNdDescPattern

@@ -98,5 +98,24 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: gpu.return
       gpu.return
     }
+
+    // CHECK: gpu.func @test_create_nd_tdesc_4(%[[arg0:.*]]: memref<8x16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+    gpu.func @test_create_nd_tdesc_4(%arg0: memref<8x16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
+      //CHECK: %c1 = arith.constant 1 : index
+      %c1 = arith.constant 1 : index
+
+      //CHECK: %intptr = memref.extract_aligned_pointer_as_index %arg0 : memref<8x16xf16> -> index
+      //CHECK: %c2 = arith.constant 2 : index
+      //CHECK: %0 = arith.muli %c1, %c2 : index
+      //CHECK: %1 = arith.addi %intptr, %0 : index
+      //CHECK: %c32 = arith.constant 32 : index
+      //CHECK: %2 = arith.muli %c1, %c32 : index
+      //CHECK: %3 = arith.addi %1, %2 : index
+      //CHECK: %4 = arith.index_castui %3 : index to i64
+      //CHECK: %5 = vector.insert %4, %cst [0] : i64 into vector<4xi64>
+      %0 = xegpu.create_nd_tdesc %arg0[%c1, %c1] : memref<8x16xf16> -> !xegpu.tensor_desc<16xf16>
+      //CHECK: gpu.return
+      gpu.return
+    }
   }
 }
