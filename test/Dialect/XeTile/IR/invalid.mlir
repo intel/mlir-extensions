@@ -186,12 +186,10 @@ func.func @test_init_tile_with_mismatch_memory_space(%a: memref<1024x1024xf16, 3
 #wg_map_1 = #xetile.wg_map<sg_layout = [4], sg_data = [32, 128]>
 // expected-error@+1 {{expect integer array of size 2 for sg_data}}
 #wg_map_2 = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128, 32]>
-// expected-error@+1 {{expect integer array of size 2 for inner_blocks}}
+// expected-error@+1 {{expect integer array of size 2 for non empty inner_blocks attribute}}
 #wg_map_3 = #xetile.tile_attr<inner_blocks = [8, 16, 8]>
 // expected-error@+1 {{expect integer array of size 2 for order}}
 #wg_map_4 = #xetile.tile_attr<order = [0, 1, 2]>
-// expected-error@+1 {{expect integer array of size 2 for wg_data}}
-#wg_map_5 = #xetile.tile_attr<wg_data = [32, 64, 128]>
 
 
 // -----
