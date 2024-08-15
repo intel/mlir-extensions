@@ -386,7 +386,7 @@ mlir::LogicalResult LoadTileOp::verify() {
     if (!vecShape.equals(tileShape))
       return emitOpError("Output shape must match the tile shape.");
 
-  if (innerBlocks != mlir::DenseI64ArrayAttr()) {
+  if (innerBlocks != mlir::DenseI64ArrayAttr() && innerBlocks.size() > 0) {
     // if inner_blocks is present in the tile_attr, the output of the load
     // must be 4D
     if (vecShape.size() != 4)
@@ -421,7 +421,7 @@ mlir::LogicalResult StoreTileOp::verify() {
     return emitOpError(
         "value must be a 2D vector if inner_blocks is not used in tile_attr.");
 
-  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
+  if (innerBlocks != mlir::DenseI32ArrayAttr() && innerBlocks.size() > 0) {
     auto vecShape = getValue().getType().getShape();
     // if inner_blocks is present in the tile_attr, the stored value
     // must be 4D

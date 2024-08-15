@@ -9,7 +9,6 @@
 #tile_attr = #xetile.tile_attr<wg_map = #wg_map, sg_map = #sg_map>
 #tile_attr_w_inner_blocks = #xetile.tile_attr<inner_blocks = [8, 16]>
 #tile_attr_w_order = #xetile.tile_attr<order = [0, 1]>
-#tile_attr_w_wg_data = #xetile.tile_attr<wg_map = #wg_map, wg_data = [128, 128]>
 
 
 #wg_map_mma_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
@@ -199,16 +198,15 @@ func.func @test_store_tile(%value1 : vector<64x32xf16>,
 }
 
 // CHECK-LABEL: func @test_prefetch_tile({{.*}}) {
-func.func @test_prefetch_tile(%src: !xetile.tile<64x64xf16>, %src1: !xetile.tile<128x128xf16, #tile_attr_w_wg_data>) {
+func.func @test_prefetch_tile(%src: !xetile.tile<64x64xf16>, %src1: !xetile.tile<128x128xf16>) {
 
   // CHECK: xetile.prefetch_tile
   // CHECK-SAME: !xetile.tile<64x64xf16>
   xetile.prefetch_tile %src : !xetile.tile<64x64xf16>
 
   // CHECK: xetile.prefetch_tile
-  // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 2],
-  // CHECK-SAME: sg_data = [32, 128]>, wg_data = [128, 128]>>
-  xetile.prefetch_tile %src1 : !xetile.tile<128x128xf16, #tile_attr_w_wg_data>
+  // CHECK-SAME: !xetile.tile<128x128xf16>
+  xetile.prefetch_tile %src1 : !xetile.tile<128x128xf16>
 
   return
 }
