@@ -114,7 +114,7 @@ struct InitTileOpPattern final
                          : mlir::DenseI32ArrayAttr::get(getContext(), {1, 0});
     auto newTileAttr = imex::xetile::XeTileAttr::get(
         getContext(), tileTy.getSgMap(), tileTy.getWgMap(), orderAttr,
-        tileTy.getInnerBlocks(), tileTy.getWgData(), tileTy.getMemoryScope());
+        tileTy.getInnerBlocks(), tileTy.getMemoryScope());
     auto transposedTileTy = imex::xetile::TileType::get(
         imex::swapLastTwoElements(initOp.getType().getShape()),
         initOp.getElementType(), newTileAttr);

@@ -380,8 +380,7 @@ struct XeTileCanonicalizationPass final
           auto newAttr = imex::xetile::XeTileAttr::get(
               tileTy.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
               mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
-              tileTy.getInnerBlocks(), tileTy.getWgData(),
-              tileTy.getMemoryScope());
+              tileTy.getInnerBlocks(), tileTy.getMemoryScope());
 
           return imex::xetile::TileType::get(
               swapLastTwoElems(tileTy.getShape()), tileTy.getElementType(),
