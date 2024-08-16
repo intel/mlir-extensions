@@ -260,12 +260,12 @@ Within the sg_map, `wi_layout` specifies the layout of WI threads, describing th
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
 
-wi_data_size refers to the data size mapped to indiviudal WI therad, and sg_map_size to the collective size by all the WI threads as specified by sg_map. sg_map_size represents the minimun size of 2D tensor to be distributed to WI threads. tensor_desc_size refers to the size of the tensor sepcified by tensor_desc. 
+wi_data_size refers to the data size mapped to indiviudal WI thread, and sg_map_size to the collective size by all the WI threads as specified by sg_map. sg_map_size represents the minimun size of 2D tensor to be distributed to WI threads. tensor_desc_size refers to the size of the tensor sepcified by tensor_desc. 
 In the example above, wi_data_size is 1, sg_map_size is 16, tensor_desc_size is 128. 
 ```mlir
         wi_data_size = wi_data[0] x wi_data[1]
 	SIMD_LANE == wi_layout[0] x wi_layout[1] 
- 	sg_maps_size = SIMD_LANE * wi_data_size 
+ 	sg_map_size = SIMD_LANE * wi_data_size 
   	tensor_desc_size = tensor_desc[0] x tensor_desc[1]
 ```
 
@@ -273,7 +273,7 @@ size distribution rule can be represented as following: tensor_desc_size[0] must
 
 The size of the result data fragement per WI thread can be computed by the following: 
 ```mlir
-	WI_data_frag[0] = tensor_desc_size/sg_maps_size
+	WI_data_frag[0] = tensor_desc_size/sg_map_size
 	WI_data_frag[1] = wi_data_size
 ```
 
