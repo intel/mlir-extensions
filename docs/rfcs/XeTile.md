@@ -71,7 +71,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      memref<128x128xbf16, affine_map=<(d0, d1)->(d1, d0)>> into tile<64x32xbf16, #tile_attr>
 ```
 
-The tile with `order` attribute can be created from the high-dimension memref. 
+The tile with `order` attribute can be created from the high-dimension memref.
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
   %tile0 = XeTile.init_tile %base_memref, [%tile_offset:4]:
