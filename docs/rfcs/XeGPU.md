@@ -369,6 +369,8 @@ For matrix C
 For matrix transpose of A or B
 #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 ```
+A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC. 
+Reference: https://registry.khronos.org/OpenCL/extensions/intel/cl_intel_subgroup_matrix_multiply_accumulate.html
 
 user must use for the WI data distribution of 1d block load and regular load with chunk_size on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.  
 ```mlir
@@ -388,24 +390,32 @@ user must use for the WI data distribution of 1d block load and regular load wit
 ```
 
 ## Rules of sg_map setting for DPAS on PVC and ARC 
-The sg_map setting rule for DPAS is to applied to the input and output vector operand. Most of rules of 2d block load can be reused here with one exception: for matirx B, it should use the following.  
+The sg_map setting rule for DPAS is to applied to the input and output vector operand. The sg_map setting rules of 2d block load for matrix A, B, C/D are reused. For matirx B, as the data being loaded from memory is VNNI transformed, so the wi_data needs to change accordingly so that it is consistent with the vector for operand B. It should use the following.
 
-  #sg_map_b_reg = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> // For PVC SIMD_LANE = 16 
-  #sg_map_b_reg = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]> // For ARC SIMD_LANE = 8 
-
+For PVC SIMD_LANE = 16
+#sg_map_b_reg_bf16 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>   // WI data distribute from [8, 16, 2] to [8, 1, 2]
+#sg_map_b_reg_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>   // WI data distribute from [8, 16, 2] to [8, 1, 2]
+#sg_map_b_reg_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>   // WI data distribute from [8, 16, 4] to [8, 1, 4]
+#sg_map_b_reg_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>   // WI data distribute from [8, 16, 4] to [8, 1, 4]
+  
+For ARC SIMD_LANE = 8
+#sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>    // WI data distribute from [8, 8, 2] to [8, 1, 2]
+#sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>    // WI data distribute from [8, 8, 2] to [8, 1, 2]
+#sg_map_b_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>    // WI data distribute from [8, 8, 4] to [8, 1, 4]
+#sg_map_b_si8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>    // WI data distribute from [8, 8, 4] to [8, 1, 4]
 
 ```mlir
   PVC BF16 example
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  #sg_map_b_reg = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  #sg_map_b_reg = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
 
   %vector_c = XeGPU.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x1x2xbf16> into vector<8x1xfloat> 
 
   ART int8 example
   #sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
-  #sg_map_b_ui8_reg = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
+  #sg_map_b_ui8_reg = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>
 
   %vector_c = XeGPU.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x1x4xui8> into vector<8x1xfloat> 
 ```
