@@ -17,6 +17,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/ValueRange.h"
@@ -123,108 +124,115 @@ static bool isColumnMajor(mlir::AffineMap layoutMap) {
   return false;
 }
 
-static bool isConstantIndex(mlir::Value value) {
-  return value.getDefiningOp<mlir::arith::ConstantOp>() != nullptr;
+// Helper to check if given OpFoldResult is a constant.
+static bool isConstantIndex(mlir::OpFoldResult value) {
+  // If the value is an attribute, then it is a constant.
+  if (value.is<mlir::Attribute>())
+    return true;
+  return value.get<mlir::Value>().getDefiningOp<mlir::arith::ConstantOp>() !=
+         nullptr;
 }
 
-static int64_t getConstantValue(mlir::Value value) {
-  auto constOp = value.getDefiningOp<mlir::arith::ConstantOp>();
+// Helper to get the constant value from a OpFoldResult.
+static int64_t getConstantValue(mlir::OpFoldResult value) {
+  assert(isConstantIndex(value) && "value is not a constant");
+  if (value.is<mlir::Attribute>())
+    return llvm::cast<mlir::IntegerAttr>(value.get<mlir::Attribute>()).getInt();
+  // If not, it must be a constant op.
+  auto constOp =
+      value.get<mlir::Value>().getDefiningOp<mlir::arith::ConstantOp>();
   return mlir::cast<mlir::IntegerAttr>(constOp.getValue()).getInt();
 }
 
 mlir::LogicalResult InitTileOp::verify() {
-
-  // number of offsets must be 2 because init_tile creates 2D tiles
-  // dynamic_offsets is always a subset of offsets, so checking this is
-  // sufficient
-  if (getStaticOffsets().size() != 2)
-    return emitOpError("number of offsets must be 2");
-
-  // if the source is a memref and has static shape, then dynamic shape and
-  // strides arguments must not be present
-  if (isSourceMemRef() && sourceMemRefHasStaticShape() &&
-      (hasDynamicStrides() || hasDynamicShape()))
-    return emitOpError("dynamic shape or strides are not allowed with a static "
+  // If the source is a memref and has static shape, then size and stride
+  // arguments must not be present.
+  if (isSourceMemRef() && sourceMemRefHasStaticShape() && hasSizeArgs())
+    return emitOpError("dynamic sizes are not allowed with a static "
                        "shaped memref as source");
 
-  // if the source is a memref with dynamic shape, then a 2D dynamic shape
-  // argument must be present
+  // If the source is a memref with dynamic sizes, then dynamic size
+  // arguments must be present.
   if (isSourceMemRef() && !sourceMemRefHasStaticShape() &&
-      getDynamicShape().size() != 2)
+      getMixedSizes().size() != 2)
     return emitOpError("memref with a dynamic shape is used as source but "
                        "dynamic shape argument missing or it is not 2D");
 
-  // if the source is a memref with dynamic shape, then a 2D dynamic strides
-  // argument must be present
+  // If the source is a memref with dynamic sizes, then a dynamic stride
+  // arguments must be present.
   if (isSourceMemRef() && !sourceMemRefHasStaticShape() &&
-      getDynamicStrides().size() != 2)
+      getMixedStrides().size() != 2)
     return emitOpError("memref with a dynamic shape is used as source but "
                        "dynamic strides argument missing or it is not 2D");
 
-  // if the source is an address, the dynamic shape must be 2D
-  if (isSourceInteger() && getDynamicShape().size() != 2)
+  // if the source is an address, the dynamic sizes must be 2D
+  if (isSourceInteger() && getMixedSizes().size() != 2)
     return emitOpError("address is used as source but dynamic shape argument "
                        "is missing or it is not 2D");
 
   // if the source is an address, dynamic strides must be 2D
-  if (isSourceInteger() && getDynamicStrides().size() != 2)
+  if (isSourceInteger() && getMixedStrides().size() != 2)
     return emitOpError("address is used as source but dynamic strides argument "
                        "is missing or it is not 2D");
 
-  // Check for order attribute
-  bool row_major = true;
-  bool col_major = false;
   auto tileTy = getType();
+  // Check for memory space validity.
+  if (getSourceMemorySpace() != tileTy.getMemoryScope())
+    return emitOpError(
+        "memory space of the tile doesn't match with the source.");
+
   auto order = tileTy.getOrder();
-  if (order[0] == 0 && order[1] == 1) {
-    col_major = true;
-    row_major = false;
-  }
+  bool rowMajor = (order[0] == 1 && order[1] == 0);
 
   if (isSourceMemRef() && sourceMemRefHasStaticShape()) {
     auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
 
-    // Checks for memrefs with format: memref<[shape], strided<[strides],
-    // offsets:[offset]>>
+    // Checks for memrefs with format:
+    // clang-format off
+    // memref<[shape], strided<[strides], offsets:[offset]>>
+    // clang-format on
     llvm::SmallVector<int64_t, 4> strides;
     auto shape = getSourceMemrefStaticShape();
     int64_t offset;
     if (mlir::succeeded(
             mlir::getStridesAndOffset(memrefType, strides, offset))) {
-      if (row_major && !((strides[0] == shape[1]) && (strides[1] == 1)))
+      int64_t rank = memrefType.getRank();
+      if (rowMajor &&
+          !((strides[rank - 2] == shape[rank - 1]) && (strides[rank - 1] == 1)))
         return emitOpError(
             "memref operand is expected to have a row-major layout");
 
-      if (col_major && !((strides[0] == 1) && (strides[1] == shape[0])))
+      if (!rowMajor &&
+          !((strides[rank - 2] == 1) && (strides[rank - 1] == shape[rank - 2])))
         return emitOpError(
             "memref operand is expected to have a column-major layout");
       return mlir::success();
     }
 
-    // Checks for memrefs with affine maps : memref<[shape], affine_map<(d0, d1)
-    // -> (d1, d0)>>
-    if (row_major && !(memrefType.getLayout().isIdentity())) {
+    // Checks for memrefs with affine maps :
+    // clang-format off
+    // memref<[shape], affine_map<(d0, d1) -> (d1, d0)>>
+    // clang-format on
+    if (rowMajor && !(memrefType.getLayout().isIdentity())) {
       // No affine map means it's using the default row-major layout
       return emitOpError(
           "memref operand is expected to have a row-major layout");
     }
-
-    if (col_major) {
+    if (!rowMajor) {
       auto layoutAttr =
           mlir::dyn_cast<mlir::AffineMapAttr>(memrefType.getLayout());
       if (!layoutAttr) {
         return emitOpError("expected a valid affine map in the layout");
       }
       mlir::AffineMap layoutMap = layoutAttr.getValue();
-
       if (!isColumnMajor(layoutMap)) {
         return emitOpError(
             "memref operand is expected to have a column-major layout");
       }
     }
   } else if (isSourceInteger()) {
-    auto dynamicShape = getDynamicShape();
-    auto dynamicStrides = getDynamicStrides();
+    auto dynamicShape = getMixedSizes();
+    auto dynamicStrides = getMixedStrides();
 
     if (dynamicShape.size() == 0 || dynamicStrides.size() == 0) {
       return emitOpError("dynamic shape and strides must not be empty");
@@ -242,12 +250,12 @@ mlir::LogicalResult InitTileOp::verify() {
     auto strideDim1 = getConstantValue(dynamicStrides[1]);
 
     // checks for layouts where source is not memref and just an address
-    if (row_major && (strideDim0 == 1 && strideDim1 == shapeDim1)) {
+    if (rowMajor && (strideDim0 == 1 && strideDim1 == shapeDim1)) {
       return emitOpError(
           "memref operand is expected to have a row-major layout");
     }
 
-    if (col_major && !(strideDim0 == 1 && strideDim1 == shapeDim1)) {
+    if (!rowMajor && !(strideDim0 == 1 && strideDim1 == shapeDim1)) {
       return emitOpError(
           "memref operand is expected to have a column-major layout");
     }
@@ -264,138 +272,32 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   llvm::SmallVector<mlir::Value> dynamicOffsets;
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
 
-  build(builder, state, resultType, source, dynamicOffsets, staticOffsets,
-        mlir::ValueRange({}), /* empty dynamic shape*/
-        mlir::ValueRange({})  /* empty dynamic strides*/
+  build(builder, state, resultType, source, dynamicOffsets,
+        mlir::ValueRange({}), /* empty dynamic sizes*/
+        mlir::ValueRange({}), /* empty dynamic strides*/
+        mlir::DenseI64ArrayAttr::get(builder.getContext(),
+                                     staticOffsets), /* static offsets*/
+        mlir::DenseI64ArrayAttr(),                   /* empty sttaic sizes*/
+        mlir::DenseI64ArrayAttr()                    /* empty static strides*/
   );
 }
 
 void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                        xetile::TileType resultType, mlir::Value source,
                        llvm::ArrayRef<mlir::OpFoldResult> offsets,
-                       llvm::ArrayRef<mlir::Value> dynamic_shape,
-                       llvm::ArrayRef<mlir::Value> dynamic_strides) {
-  llvm::SmallVector<int64_t> staticOffsets;
-  llvm::SmallVector<mlir::Value> dynamicOffsets;
+                       llvm::ArrayRef<mlir::OpFoldResult> sizes,
+                       llvm::ArrayRef<mlir::OpFoldResult> strides) {
+  llvm::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  llvm::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
+  dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes);
+  dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
 
-  build(builder, state, resultType, source, dynamicOffsets, staticOffsets,
-        dynamic_shape, dynamic_strides);
-}
-
-mlir::ParseResult InitTileOp::parse(mlir::OpAsmParser &parser,
-                                    mlir::OperationState &result) {
-  mlir::OpAsmParser::UnresolvedOperand sourceRawOperands[1];
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> sourceOperands(
-      sourceRawOperands);
-  llvm::SMLoc sourceOperandsLoc;
-  (void)sourceOperandsLoc;
-  llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4> offsetsOperands;
-  llvm::SMLoc offsetsOperandsLoc;
-  (void)offsetsOperandsLoc;
-  mlir::DenseI64ArrayAttr static_offsetsAttr;
-  llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4>
-      dynamic_shapeOperands;
-  llvm::SMLoc dynamic_shapeOperandsLoc;
-  (void)dynamic_shapeOperandsLoc;
-  llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4>
-      dynamic_stridesOperands;
-  llvm::SMLoc dynamic_stridesOperandsLoc;
-  (void)dynamic_stridesOperandsLoc;
-  mlir::Type sourceRawTypes[1];
-  llvm::ArrayRef<mlir::Type> sourceTypes(sourceRawTypes);
-  mlir::Type tileRawTypes[1];
-  llvm::ArrayRef<mlir::Type> tileTypes(tileRawTypes);
-
-  sourceOperandsLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(sourceRawOperands[0]))
-    return mlir::failure();
-  {
-    offsetsOperandsLoc = parser.getCurrentLocation();
-    auto odsResult =
-        parseDynamicIndexList(parser, offsetsOperands, static_offsetsAttr);
-    if (odsResult)
-      return mlir::failure();
-    result.getOrAddProperties<InitTileOp::Properties>().static_offsets =
-        static_offsetsAttr;
-  }
-  if (mlir::succeeded(parser.parseOptionalComma())) {
-    if (parser.parseLSquare())
-      return mlir::failure();
-
-    dynamic_shapeOperandsLoc = parser.getCurrentLocation();
-    if (parser.parseOperandList(dynamic_shapeOperands))
-      return mlir::failure();
-    if (parser.parseRSquare())
-      return mlir::failure();
-  }
-  if (mlir::succeeded(parser.parseOptionalComma())) {
-    if (parser.parseLSquare())
-      return mlir::failure();
-
-    dynamic_stridesOperandsLoc = parser.getCurrentLocation();
-    if (parser.parseOperandList(dynamic_stridesOperands))
-      return mlir::failure();
-    if (parser.parseRSquare())
-      return mlir::failure();
-  }
-
-  if (parser.parseColon())
-    return mlir::failure();
-
-  if (parser.parseType(sourceRawTypes[0]))
-    return mlir::failure();
-  if (parser.parseArrow())
-    return mlir::failure();
-
-  if (parser.parseType(tileRawTypes[0]))
-    return mlir::failure();
-  llvm::copy(llvm::ArrayRef<int32_t>(
-                 {1, static_cast<int32_t>(offsetsOperands.size()),
-                  static_cast<int32_t>(dynamic_shapeOperands.size()),
-                  static_cast<int32_t>(dynamic_stridesOperands.size())}),
-             result.getOrAddProperties<InitTileOp::Properties>()
-                 .operandSegmentSizes.begin());
-  mlir::Type odsBuildableType0 = parser.getBuilder().getIndexType();
-  result.addTypes(tileTypes);
-  if (parser.resolveOperands(sourceOperands, sourceTypes, sourceOperandsLoc,
-                             result.operands))
-    return mlir::failure();
-  if (parser.resolveOperands(offsetsOperands, odsBuildableType0,
-                             offsetsOperandsLoc, result.operands))
-    return mlir::failure();
-  if (parser.resolveOperands(dynamic_shapeOperands, odsBuildableType0,
-                             dynamic_shapeOperandsLoc, result.operands))
-    return mlir::failure();
-  if (parser.resolveOperands(dynamic_stridesOperands, odsBuildableType0,
-                             dynamic_stridesOperandsLoc, result.operands))
-    return mlir::failure();
-  return mlir::success();
-}
-
-void InitTileOp::print(mlir::OpAsmPrinter &printer) {
-  printer << ' ';
-  printer << getSource();
-  printDynamicIndexList(printer, *this, getOffsets(), getStaticOffsetsAttr());
-  if (!getDynamicShape().empty()) {
-    printer << ",";
-    printer << ' ' << "[";
-    printer << getDynamicShape();
-    printer << "]";
-  }
-  if (!getDynamicStrides().empty()) {
-    printer << ",";
-    printer << ' ' << "[";
-    printer << getDynamicStrides();
-    printer << "]";
-  }
-
-  printer << ' ' << ":";
-  printer << ' ';
-  printer << getSource().getType();
-  printer << ' ' << "->";
-  printer << ' ';
-  printer << getTile().getType();
+  build(builder, state, resultType, source, dynamicOffsets, dynamicSizes,
+        dynamicStrides,
+        mlir::DenseI64ArrayAttr::get(builder.getContext(), staticOffsets),
+        mlir::DenseI64ArrayAttr::get(builder.getContext(), staticSizes),
+        mlir::DenseI64ArrayAttr::get(builder.getContext(), staticStrides));
 }
 
 mlir::ParseResult LoadTileOp::parse(mlir::OpAsmParser &parser,
@@ -471,21 +373,20 @@ bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
 mlir::LogicalResult LoadTileOp::verify() {
   auto encoding = getSource().getType().getEncoding();
   auto tileShape = getSource().getType().getShape();
-  if (!encoding)
-    return mlir::success();
+  auto vecShape = getResult().getType().getShape();
 
-  auto tileAttr = mlir::dyn_cast<xetile::XeTileAttr>(encoding);
-  auto innerBlocks = tileAttr.getInnerBlocks();
+  // inner_blocks may or maynot be present in this op.
+  auto innerBlocks = mlir::DenseI64ArrayAttr();
+  if (encoding)
+    innerBlocks = mlir::dyn_cast<xetile::XeTileAttr>(encoding).getInnerBlocks();
 
   // if inner_blocks is not present in the tile_attr, the output of the load
-  // must be 2D
-  if (innerBlocks == mlir::DenseI32ArrayAttr() &&
-      getResult().getType().getShape().size() != 2)
-    return emitOpError(
-        "output must be a 2D vector if inner_blocks is not used in tile_attr.");
+  // must be 2D and tile shape and vector output shape must match
+  if (innerBlocks == mlir::DenseI64ArrayAttr())
+    if (!vecShape.equals(tileShape))
+      return emitOpError("Output shape must match the tile shape.");
 
-  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
-    auto vecShape = getResult().getType().getShape();
+  if (innerBlocks != mlir::DenseI64ArrayAttr() && innerBlocks.size() > 0) {
     // if inner_blocks is present in the tile_attr, the output of the load
     // must be 4D
     if (vecShape.size() != 4)
@@ -520,7 +421,7 @@ mlir::LogicalResult StoreTileOp::verify() {
     return emitOpError(
         "value must be a 2D vector if inner_blocks is not used in tile_attr.");
 
-  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
+  if (innerBlocks != mlir::DenseI32ArrayAttr() && innerBlocks.size() > 0) {
     auto vecShape = getValue().getType().getShape();
     // if inner_blocks is present in the tile_attr, the stored value
     // must be 4D

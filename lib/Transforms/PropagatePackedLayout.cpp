@@ -1,4 +1,4 @@
-//===- VectorLinearize.cpp - VectorLinearize Pass  --------------*- C++- *-===//
+//===- PropagatePackedLayout.cpp - PropagatePackedLayout Pass ---*- C++- *-===//
 //
 // Copyright 2024 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -330,7 +330,8 @@ makeCast(mlir::OpBuilder &builder, mlir::Value src, mlir::Type srcType,
 
   tmp = builder.create<mlir::vector::ShuffleOp>(
       loc, tmp, tmp,
-      builder.getI64ArrayAttr(getVNNIShuffleIndices(srcVecType, dstVecType)));
+      builder.getDenseI64ArrayAttr(
+          getVNNIShuffleIndices(srcVecType, dstVecType)));
 
   return {builder.create<mlir::vector::ShapeCastOp>(loc, dstVecType, tmp),
           root};

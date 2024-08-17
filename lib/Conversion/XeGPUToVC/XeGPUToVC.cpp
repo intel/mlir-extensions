@@ -15,11 +15,16 @@
 
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
@@ -29,7 +34,9 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include "../PassDetail.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 
@@ -90,6 +97,93 @@ static func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
   return rewriter.create<func::CallOp>(loc, fn, resultType, operands);
 }
 
+// Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a 2d
+// memory region with respect to the two inner-most dimensions. Other outer
+// dimensions affect the base address of the 2d plane.
+// For 2d, we compute the base address of 2d plane, assuming the coordinates
+// [0, 0] for the innermost 2 dimensions. The payload will record tile offset
+// within the 2d plane in separate field.
+// For example, given
+//   %m: memref<2x7x32x64xf16>
+// And this access
+//   %m[%a, %b, %c, %d]
+//
+// The base address will be adjusted as follows:
+//   base address of plane for 2d tile = base(%m) + %b * (32*64*2) + %a *
+//                                       (7*32*64*2)
+// 2 is the number of bytes of the element type.
+//
+// For 1d, we compute the base address of the 1d tile, not the plane.
+// So the tile offset is also added to the base address.
+//
+// For tile rank of 1, the base address will be adjusted as:
+//   base address of tile for 1d tile = base(%m) + %d * (2) + %c * (64*2) +
+//                                      %b * (32*64*2) + %a * (7*32*64*2)
+
+static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
+                               xegpu::CreateNdDescOp op, Value memrefBaseAddr) {
+  auto memType = dyn_cast<MemRefType>(op.getSource().getType());
+
+  // FIXME: Only support static shape for now
+  if (!memType || !memType.hasStaticShape())
+    return memrefBaseAddr;
+
+  auto loc = op.getLoc();
+
+  auto createIndexConstant = [&](unsigned index) {
+    return rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexType(),
+                                              rewriter.getIndexAttr(index));
+  };
+
+  auto tileRank = op.getTensorDesc().getType().getRank();
+  auto offsets = op.getMixedOffsets();
+  auto strides = mlir::getStridesAndOffset(memType).first;
+  int64_t i = memType.getRank() - 1;
+
+  auto computeBase =
+      [&](Value base) {
+        for (; i >= 0; --i) {
+          unsigned stride =
+              strides[i] * memType.getElementType().getIntOrFloatBitWidth() / 8;
+          auto factor = createIndexConstant(stride);
+          auto offset = offsets.pop_back_val();
+          Value offsetVal;
+
+          if (offset.is<Value>()) {
+            offsetVal = offset.get<Value>();
+          } else {
+            offsetVal = createIndexConstant(
+                llvm::cast<IntegerAttr>(offset.get<Attribute>()).getInt());
+          }
+          auto linearOffset =
+              rewriter.create<arith::MulIOp>(loc, offsetVal, factor);
+          base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
+        }
+
+        return base;
+      };
+
+  if (tileRank == 2 && memType.getRank() > 2) {
+    // base address of plane for 2d: base addr of memref + offsets (starting
+    // from j to i) for a given memref<ixjxkxlxf16>
+
+    i -= 2;
+    offsets.pop_back_n(2);
+
+    auto baseOf2dPlane = computeBase(memrefBaseAddr);
+    return baseOf2dPlane;
+  }
+
+  if (tileRank == 1) {
+    // base address of tile for 1d: base addr of memref + offsets (starting from
+    // k to i) for a given memref<ixjxkxlxf16>
+    auto baseOf1dTile = computeBase(memrefBaseAddr);
+    return baseOf1dTile;
+  }
+
+  return memrefBaseAddr;
+}
+
 struct CreateNdDescPattern
     : public OpConversionPattern<::mlir::xegpu::CreateNdDescOp> {
   using OpConversionPattern<::mlir::xegpu::CreateNdDescOp>::OpConversionPattern;
@@ -128,8 +222,9 @@ struct CreateNdDescPattern
           loc, i32Type, rewriter.getI32IntegerAttr(index));
     };
 
-    auto base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
+    Value base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
         loc, adaptor.getSource());
+    base = adjustBasePointer(rewriter, op, base);
     Value baseVal = rewriter.create<arith::IndexCastUIOp>(loc, i64Type, base);
 
     payLoad = rewriter.create<vector::InsertOp>(loc, baseVal, payLoad, 0);
@@ -142,13 +237,15 @@ struct CreateNdDescPattern
       auto blockHeight = tileType.getShape()[0];
       // fixme: support memref for now
       auto memType = cast<MemRefType>(op.getSource().getType());
+      auto memRank = memType.getRank();
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
       Value surfaceW, surfaceH, surfaceP;
 
       // Static memref
       if (memType.hasStaticShape()) {
-        auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
-        auto surfaceHeight = memType.getShape()[0] - 1;
+        auto surfaceWidth =
+            memType.getShape()[memRank - 1] * (bitWidth / 8) - 1;
+        auto surfaceHeight = memType.getShape()[memRank - 2] - 1;
         // fixme: pitch = width for now
         auto surfacePitch = surfaceWidth;
         surfaceW = createIntConstant(surfaceWidth);
@@ -192,8 +289,8 @@ struct CreateNdDescPattern
         }
         return val;
       };
-      auto offsetX = createOffset(1);
-      auto offsetY = createOffset(0);
+      auto offsetX = createOffset(memRank - 1);
+      auto offsetY = createOffset(memRank - 2);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetX, payLoad, 5);
       payLoad = rewriter.create<vector::InsertOp>(loc, offsetY, payLoad, 6);
       int array_length = op.getType().getArrayLength();
@@ -247,6 +344,33 @@ public:
   }
 };
 
+class UpdateOffsetOpToVCPattern
+    : public OpConversionPattern<::mlir::xegpu::UpdateOffsetOp> {
+public:
+  using OpConversionPattern<::mlir::xegpu::UpdateOffsetOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(mlir::xegpu::UpdateOffsetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto tensorDesc = adaptor.getTensorDesc();
+    auto v16index = VectorType::get(16, rewriter.getIndexType());
+
+    Value offsetFactor = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v16index, IntegerAttr::get(v16index.getElementType(),
+                                            op.getTensorDesc()
+                                                    .getType()
+                                                    .getElementType()
+                                                    .getIntOrFloatBitWidth() /
+                                                8)));
+    Value offsets =
+        rewriter.create<arith::MulIOp>(loc, offsetFactor, adaptor.getOffsets());
+    Value payLoad = rewriter.create<arith::AddIOp>(loc, tensorDesc, offsets);
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
 class CreateDescToVCPattern
     : public OpConversionPattern<::mlir::xegpu::CreateDescOp> {
 public:
@@ -254,22 +378,28 @@ public:
   LogicalResult
   matchAndRewrite(::mlir::xegpu::CreateDescOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     auto loc = op.getLoc();
-    auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v8i32 = VectorType::get(8, i32Type);
-    auto v4i64 = VectorType::get(4, i64Type);
+    auto v16index = VectorType::get(16, rewriter.getIndexType());
     Value payLoad = rewriter.create<arith::ConstantOp>(
         loc, DenseElementsAttr::get(
-                 v4i64, IntegerAttr::get(v4i64.getElementType(), 0)));
-
+                 v16index, IntegerAttr::get(v16index.getElementType(), 0)));
     auto base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
         loc, adaptor.getSource());
-    Value baseVal = rewriter.create<arith::IndexCastUIOp>(loc, i64Type, base);
-
-    payLoad = rewriter.create<vector::InsertOp>(loc, baseVal, payLoad, 0);
-    payLoad = rewriter.create<vector::BitCastOp>(loc, v8i32, payLoad);
+    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
+    SmallVector<int64_t, 16> indices(16, 0);
+    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
+        loc, payLoad, payLoad, rewriter.getDenseI64ArrayAttr(indices));
+    Value offsetFactor = rewriter.create<arith::ConstantOp>(
+        loc, DenseElementsAttr::get(
+                 v16index, IntegerAttr::get(v16index.getElementType(),
+                                            op.getTensorDesc()
+                                                    .getType()
+                                                    .getElementType()
+                                                    .getIntOrFloatBitWidth() /
+                                                8)));
+    Value offsets =
+        rewriter.create<arith::MulIOp>(loc, offsetFactor, adaptor.getOffsets());
+    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
     rewriter.replaceOp(op, payLoad);
     return success();
   }
@@ -723,25 +853,23 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     };
 
     /// collect common info
-    auto i1Type = rewriter.getI1Type();
     auto i8Type = rewriter.getI8Type();
     auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v4i64 = VectorType::get(4, i64Type);
-    auto tensorDesc = adaptor.getTensorDesc();
-    tensorDesc = rewriter.create<vector::BitCastOp>(loc, v4i64, tensorDesc);
-    auto base = rewriter.create<vector::ExtractOp>(loc, tensorDesc, 0);
-    VectorType newType = VectorType::get(1, i32Type);
     std::string funcName;
     VectorType vecType;
+    std::string_view payloadType{"v16i64"};
+    std::string_view maskType{"v16i1"};
     if constexpr (isLoad) {
       vecType = cast<VectorType>(op.getResult().getType());
       funcName = "llvm.genx.raw.send2.";
     } else {
       vecType = cast<VectorType>(op.getValue().getType());
-      funcName = "llvm.genx.raw.sends2.noresult.i1.v8i32.";
+      funcName = llvm::formatv("llvm.genx.raw.sends2.noresult.{0}.{1}.",
+                               maskType, payloadType)
+                     .str();
     }
     std::string typeStr;
+    VectorType newType = VectorType::get(1, i32Type);
     std::tie(typeStr, newType) = encodeVectorType(rewriter, vecType);
     funcName += typeStr;
     unsigned cacheHint = encodeCacheHint(op);
@@ -750,7 +878,7 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     // bit[1:0] EOT,sendc
     auto modifier = createIntConstant(i8Type, 0);
     auto execSize = createIntConstant(i8Type, 4);
-    auto pred = createIntConstant(i1Type, 1);
+    auto pred = adaptor.getMask();
     auto numSrc1 = createIntConstant(i8Type, 2);
     unsigned numDstVal = newType.getNumElements() / 16;
     auto numDst = createIntConstant(i8Type, numDstVal);
@@ -774,36 +902,23 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     rawSendMsg |= 2 << 25;
     auto msg = createIntConstant(i32Type, rawSendMsg);
     // payload
-    auto v16i64 = VectorType::get(16, i64Type);
-    Value payLoad = rewriter.create<arith::ConstantOp>(
-        loc, DenseElementsAttr::get(
-                 v16i64, IntegerAttr::get(v16i64.getElementType(), 0)));
-    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
-    SmallVector<int64_t, 16> indices(16, 0);
-    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
-        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
-    auto createDescOp =
-        op.getTensorDesc().template getDefiningOp<xegpu::CreateDescOp>();
-    auto offsets = rewriter.getRemappedValue(createDescOp.getOffsets());
-    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
+    auto payLoad = adaptor.getTensorDesc();
     SmallVector<Value> args{modifier, execSize, pred, numSrc1, numDst,
                             sfid,     extMsg,   msg,  payLoad};
     if constexpr (isLoad) {
-      funcName += ".i1.v16i64";
+      funcName += llvm::formatv(".{0}.{1}", maskType, payloadType).str();
       auto elementTy = newType.getElementType();
       Attribute initValueAttr;
       if (isa<FloatType>(elementTy))
         initValueAttr = FloatAttr::get(elementTy, 0.0);
       else
         initValueAttr = IntegerAttr::get(elementTy, 0);
-
       Value old = rewriter.create<arith::ConstantOp>(
           loc, DenseElementsAttr::get(newType, initValueAttr));
       args.push_back(old);
       auto retType = newType;
       auto funcOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                    args, false);
-
       auto *converter = this->getTypeConverter();
       auto castTy = converter->convertType(op.getType());
       auto cast =
@@ -842,8 +957,6 @@ public:
     auto i8Type = rewriter.getI8Type();
     auto i16Type = rewriter.getI16Type();
     auto i32Type = rewriter.getI32Type();
-    auto i64Type = rewriter.getI64Type();
-    auto v4i64 = VectorType::get(4, i64Type);
     VectorType vecType = cast<VectorType>(op.getResult().getType());
     std::string funcName = "llvm.genx.lsc.xatomic.stateless.";
     auto [typeStr, newType] = encodeVectorType(rewriter, vecType, false, true);
@@ -869,25 +982,10 @@ public:
     }
     auto vecSize = createIntConstant(i8Type, lscVecSize);
     auto transposed = createIntConstant(i8Type, 1);
-    auto mask = createIntConstant(i8Type, 0);
+    auto mask = adaptor.getMask();
 
-    auto tensorDesc = adaptor.getTensorDesc();
-    tensorDesc = rewriter.create<vector::BitCastOp>(loc, v4i64, tensorDesc);
-    auto base = rewriter.create<vector::ExtractOp>(loc, tensorDesc, 0);
     // payload
-    auto v16i64 = VectorType::get(16, i64Type);
-    Value payLoad = rewriter.create<arith::ConstantOp>(
-        loc, DenseElementsAttr::get(
-                 v16i64, IntegerAttr::get(v16i64.getElementType(), 0)));
-
-    payLoad = rewriter.create<vector::InsertOp>(loc, base, payLoad, 0);
-
-    SmallVector<int64_t, 16> indices(16, 0);
-    payLoad = rewriter.create<mlir::vector::ShuffleOp>(
-        loc, payLoad, payLoad, rewriter.getI64ArrayAttr(indices));
-    auto createDescOp = op.getTensorDesc().getDefiningOp<xegpu::CreateDescOp>();
-    auto offsets = rewriter.getRemappedValue(createDescOp.getOffsets());
-    payLoad = rewriter.create<arith::AddIOp>(loc, payLoad, offsets);
+    Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32 = VectorType::get(16, i32Type);
     Value undef = rewriter.create<arith::ConstantOp>(
@@ -1173,238 +1271,6 @@ struct VectorShapeCastVC final
   }
 };
 
-struct VectorExtractVC final
-    : public OpConversionPattern<mlir::vector::ExtractOp> {
-  using OpConversionPattern<mlir::vector::ExtractOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(mlir::vector::ExtractOp extractOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto *converter = getTypeConverter();
-
-    auto dstTy = converter->convertType(extractOp.getType());
-    if (!dstTy)
-      return failure();
-
-    // dynamic position is not supported
-    if (extractOp.hasDynamicPosition())
-      return failure();
-
-    auto srcTy = extractOp.getVector().getType();
-    auto shape = srcTy.getShape();
-    auto size = srcTy.getNumElements();
-    auto vec = adaptor.getVector();
-    auto vecTy = llvm::dyn_cast_if_present<mlir::VectorType>(vec.getType());
-
-    if (!vecTy)
-      return mlir::failure();
-
-    // for some cases of vector types, current VectorType Converter could
-    // convert e.g., vector of fp16/bf16 into vector of i32s, so the size
-    // and strides is reduced half. (This is partially because load_2d
-    // intrinsics handles i32 types for fp16/bf16, and current converter guess
-    // the vector type is used by load/store based on the dims of vector shape)
-    auto factor = vecTy.getElementType().getIntOrFloatBitWidth() /
-                  srcTy.getElementType().getIntOrFloatBitWidth();
-    size /= factor;
-
-    // dstTy is vector<2xf16> or f16, and srcTy is <8x16x2xf16>, but vecTy is
-    // <128xi32> because src is the result of load. it is a mismatch of ty.
-    // This is an issue raised from current desgin of type converter, and
-    // needs to be fixed.
-    auto ty = llvm::dyn_cast<mlir::VectorType>(dstTy);
-    if ((ty && ty.getElementType() != vecTy.getElementType()) ||
-        (!ty && dstTy != vecTy.getElementType()))
-      return mlir::failure();
-
-    // compute linearized offset
-    int64_t linearizedOffset = 0;
-    auto offsets = extractOp.getStaticPosition();
-    for (auto [i, off] : llvm::enumerate(offsets)) {
-      size /= shape[i];
-      linearizedOffset += offsets[i] * size;
-    }
-
-    if (ty) { // use VectorShuffer for vector result
-      llvm::SmallVector<int64_t, 2> indices(size);
-      std::iota(indices.begin(), indices.end(), linearizedOffset);
-      rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-          extractOp, vec, vec, rewriter.getI64ArrayAttr(indices));
-    } else { // use CompositExtract for scalar result
-      rewriter.replaceOpWithNewOp<mlir::vector::ExtractOp>(extractOp, vec,
-                                                           linearizedOffset);
-    }
-
-    return success();
-  }
-};
-
-static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
-  return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-}
-
-struct VectorExtractStridedSliceVC final
-    : public OpConversionPattern<vector::ExtractStridedSliceOp> {
-  using OpConversionPattern<vector::ExtractStridedSliceOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(vector::ExtractStridedSliceOp extractOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *converter = getTypeConverter();
-    auto dstType = converter->convertType(extractOp.getType());
-    if (!dstType)
-      return failure();
-
-    auto offsets = extractOp.getOffsets().getValue();
-    auto sizes = extractOp.getSizes().getValue();
-    auto strides = extractOp.getStrides().getValue();
-
-    if (mlir::cast<IntegerAttr>(strides[0]).getInt() != 1)
-      return rewriter.notifyMatchFailure(
-          extractOp, "Strided slice with stride != 1 is not supported.");
-
-    Value srcVector = adaptor.getOperands().front();
-
-    // Extract vector<1xT> case.
-    if (isa<spirv::ScalarType>(dstType)) {
-      uint64_t offset = getFirstIntValue(extractOp.getOffsets());
-      rewriter.replaceOpWithNewOp<vector::ExtractOp>(extractOp, srcVector,
-                                                     offset);
-      return success();
-    }
-
-    // if kD offsets are specified for nd source vector (n > k), the granularity
-    // of the extraction is greater than 1. In this case last (n-k) dimensions
-    // form the extraction granularity. example : %0 =
-    // vector.extract_strided_slice %src { offsets = [0, 0], sizes = [2, 2],
-    // strides = [1, 1]} : vector<4x8x8xf32> to vector<2x2x8xf32>
-    // here, extraction granularity is 8.
-    int64_t extractSliceLen = 1;
-    auto n = extractOp.getSourceVectorType().getRank();
-    auto k = (int64_t)offsets.size();
-    if (n > k) {
-      for (unsigned i = 0; i < n - k; i++) {
-        extractSliceLen *= extractOp.getSourceVectorType().getShape()[i + k];
-      }
-    }
-
-    // get total number of extracted slices
-    int64_t nExtractedSlices = 1;
-    for (auto size : sizes) {
-      nExtractedSlices *= mlir::cast<IntegerAttr>(size).getInt();
-    }
-
-    // compute the strides of the source vector considering first k dimensions
-    SmallVector<int32_t, 4> sourceStrides(k, extractSliceLen);
-    for (int i = k - 2; i >= 0; --i) {
-      sourceStrides[i] = sourceStrides[i + 1] *
-                         extractOp.getSourceVectorType().getShape()[i + 1];
-    }
-    // final shuffle indices has nExtractedElems * extractSliceLen elements
-    SmallVector<int64_t, 4> indices(nExtractedSlices * extractSliceLen);
-    // compute the strides of the extracted kD vector
-    SmallVector<int32_t, 4> extractedStrides(k, 1);
-    // compute extractedStrides
-    for (int i = k - 2; i >= 0; --i) {
-      extractedStrides[i] = extractedStrides[i + 1] *
-                            mlir::cast<IntegerAttr>(sizes[i + 1]).getInt();
-    }
-    // iterate over all extracted slices from 0 to nExtractedElems-1
-    // and compute the multi-dimensional index and the corresponding linearized
-    // index within the source vector
-    for (int64_t i = 0; i < nExtractedSlices; ++i) {
-      int64_t index = i;
-      // compute the corresponding multi-dimensional index
-      SmallVector<int32_t, 4> multiDimIndex(k, 0);
-      for (int64_t j = 0; j < k; ++j) {
-        multiDimIndex[j] = (index / extractedStrides[j]);
-        index -= multiDimIndex[j] * extractedStrides[j];
-      }
-      // compute the corresponding linearized index in the source vector
-      // i.e. shift the multiDimIndex by the offsets
-      int64_t linearizedIndex = 0;
-      for (int64_t j = 0; j < k; ++j) {
-        linearizedIndex +=
-            (mlir::cast<IntegerAttr>(offsets[j]).getInt() + multiDimIndex[j]) *
-            sourceStrides[j];
-      }
-      // fill the indices array form linearizedIndex to linearizedIndex +
-      // sliceLen
-      for (int64_t j = 0; j < extractSliceLen; ++j) {
-        indices[i * extractSliceLen + j] = linearizedIndex + j;
-      }
-    }
-    // perform a shuffle to extract the kD vector
-    rewriter.replaceOpWithNewOp<vector::ShuffleOp>(
-        extractOp, srcVector, srcVector, rewriter.getI64ArrayAttr(indices));
-
-    return success();
-  }
-};
-
-struct VectorShuffleVC final
-    : public OpConversionPattern<mlir::vector::ShuffleOp> {
-  using OpConversionPattern<mlir::vector::ShuffleOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(vector::ShuffleOp shuffleOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *converter = getTypeConverter();
-
-    auto dstType = converter->convertType(shuffleOp.getType());
-    if (!dstType)
-      return failure();
-
-    auto vec1 = adaptor.getV1();
-    auto vec2 = adaptor.getV2();
-
-    int shuffleSliceLen = 1;
-    int rank = shuffleOp.getV1().getType().getRank();
-
-    // if rank > 1, we need to do the shuffle in the granularity of slices
-    // instead of scalars. Size of the slice is equal to the rank-1 innermost
-    // dims. Mask of the shuffle op specifies which slice to take from the
-    // outermost dim.
-    if (rank > 1) {
-      auto shape = shuffleOp.getV1().getType().getShape();
-      for (unsigned i = 1; i < shape.size(); i++) {
-        shuffleSliceLen *= shape[i];
-      }
-    }
-
-    // llvm shufflevector does not support  shuffling vectors with
-    // unequal sizes. Howver if both vectors are constants this restriction
-    // does not apply.
-    // FIXME : Currently this only checks for arith::ConstantOp as the operands.
-    // Need to use constant analyis for better support.
-    bool bothConstants = isa<arith::ConstantOp>(vec1.getDefiningOp()) &&
-                         isa<arith::ConstantOp>(vec2.getDefiningOp());
-    bool sizeMismatch = shuffleOp.getV1().getType().getShape()[0] !=
-                        shuffleOp.getV2().getType().getShape()[0];
-    if (!bothConstants && sizeMismatch)
-      return rewriter.notifyMatchFailure(
-          shuffleOp, "Two source vectors must have equal number of elements.");
-
-    auto mask = shuffleOp.getMask();
-    auto totalSize = mask.size() * shuffleSliceLen;
-
-    SmallVector<int64_t, 2> indices(totalSize);
-    for (auto [i, value] :
-         llvm::enumerate(mask.getAsValueRange<IntegerAttr>())) {
-
-      int32_t v = value.getZExtValue();
-      std::iota(indices.begin() + shuffleSliceLen * i,
-                indices.begin() + shuffleSliceLen * (i + 1),
-                shuffleSliceLen * v);
-    }
-
-    rewriter.replaceOpWithNewOp<vector::ShuffleOp>(
-        shuffleOp, vec1, vec2, rewriter.getI64ArrayAttr(indices));
-
-    return success();
-  }
-};
-
 struct SCFForOpBlockVCPattern final
     : public OpConversionPattern<mlir::scf::ForOp> {
   using OpConversionPattern<mlir::scf::ForOp>::OpConversionPattern;
@@ -1429,7 +1295,8 @@ struct SCFForOpBlockVCPattern final
                                    newOp.getRegion().getArgument(i).getType());
     }
 
-    rewriter.applySignatureConversion(&op.getRegion(), signatureConverter);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(),
+                                      signatureConverter);
 
     rewriter.eraseBlock(newOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
@@ -1456,29 +1323,88 @@ struct SCFYieldOpVCPattern final
   }
 };
 
-bool isLegalXeGPUSCFOp(mlir::Operation *op) {
-  bool result = true;
-  if (llvm::isa<mlir::scf::ForOp>(op)) {
-    auto forOp = llvm::cast<mlir::scf::ForOp>(op);
-    for (const auto &arg : forOp.getInitArgs()) {
-      auto type = arg.getType();
-      if (mlir::isa<mlir::VectorType>(type))
-        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
-    }
+bool isLegalXeGPUSCFOp(mlir::Operation *op, mlir::TypeConverter typeConverter) {
+  llvm::SmallVector<mlir::Value> args;
+  if (llvm::isa<mlir::scf::ForOp>(op))
+    args = llvm::cast<mlir::scf::ForOp>(op).getInitArgs();
+  else if (llvm::isa<mlir::scf::YieldOp>(op))
+    args = llvm::cast<mlir::scf::YieldOp>(op).getResults();
+  // Check the legality of arguments using the type converter.
+  for (const auto &arg : args) {
+    if (!typeConverter.isLegal(arg.getType()))
+      return false;
   }
-
-  if (llvm::isa<mlir::scf::YieldOp>(op)) {
-    auto yieldOp = llvm::cast<mlir::scf::YieldOp>(op);
-    for (const auto &arg : yieldOp.getResults()) {
-      auto type = arg.getType();
-
-      if (mlir::isa<mlir::VectorType>(type))
-        result &= (mlir::cast<mlir::VectorType>(type).getRank() == 1);
-    }
-  }
-
-  return result;
+  return true;
 }
+
+static bool isGenericVectorTy(mlir::Type type) {
+  if (mlir::isa<mlir::spirv::ScalarType>(type))
+    return true;
+  auto vecSize = mlir::dyn_cast<mlir::VectorType>(type).getNumElements();
+  return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
+         vecSize == 16;
+}
+
+template <typename MOp> std::string getVCIntrinsicName() {
+  constexpr bool isFMaxOp = std::is_same_v<MOp, arith::MaximumFOp>;
+  constexpr bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
+  if (isFMaxOp)
+    return "llvm.genx.fmax.";
+  else if (isExpOp)
+    return "llvm.genx.exp.";
+  else
+    assert(0 && "Unsupported math Op. Add more support!");
+}
+
+template <typename MOp>
+struct ElementwiseToVCPattern : public OpConversionPattern<MOp> {
+  using OpConversionPattern<MOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(MOp op, typename MOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto vecTy = mlir::dyn_cast<::mlir::VectorType>(op.getType());
+    if (!vecTy)
+      return failure();
+    if (vecTy.getRank() != 1)
+      return failure();
+    bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
+    if (!isExpOp) {
+      bool isGenericSize = isGenericVectorTy(op.getType());
+      bool isFastmath = (op.getFastmathAttr().getValue() !=
+                         ::mlir::arith::FastMathFlags::none);
+      if (isGenericSize && (!isFastmath))
+        return failure();
+    }
+    auto loc = op.getLoc();
+    // This lowering pattern is needed only for spirv ops with large vector
+    // lengths.
+    // for larger vector lengths, "llvm.genx.exp" returns the base 2
+    // exponentiation of the input. To get the base e exponentiation, we need to
+    // scale the input by log2(e)
+    auto operands = adaptor.getOperands();
+    SmallVector<Value> args{operands};
+    if (isExpOp) {
+      auto log2e = rewriter.create<arith::ConstantOp>(
+          loc,
+          rewriter.getFloatAttr(vecTy.getElementType(), 1.442695040888963));
+      auto log2eConstVec =
+          rewriter.create<vector::BroadcastOp>(loc, vecTy, log2e);
+      auto input = operands[0];
+      auto scaledInput =
+          rewriter.create<arith::MulFOp>(op.getLoc(), input, log2eConstVec);
+      args.clear();
+      args.push_back(scaledInput);
+    }
+
+    // for large vectors, generate the corresponding VC intrinsic.
+    auto funcName = getVCIntrinsicName<MOp>();
+    funcName += encodeVectorType(rewriter, vecTy).first;
+    auto callOp =
+        createFuncCall(rewriter, loc, funcName, {op.getType()}, args, false);
+    rewriter.replaceOp(op, callOp);
+    return success();
+  }
+};
 
 struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
   using Base::Base;
@@ -1492,19 +1418,49 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addLegalDialect<
         ::mlir::func::FuncDialect, ::mlir::arith::ArithDialect,
         ::mlir::memref::MemRefDialect, ::mlir::vector::VectorDialect>();
-    // target.addIllegalDialect<mlir::xegpu::XeGPUDialect>();
+    target.addIllegalDialect<mlir::xegpu::XeGPUDialect>();
 
     target.addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
-        [&](mlir::Operation *op) { return isLegalXeGPUSCFOp(op); });
+        [&](mlir::Operation *op) {
+          return isLegalXeGPUSCFOp(op, typeConverter);
+        });
 
-    target.addIllegalOp<::mlir::vector::ShapeCastOp,
-                        ::mlir::vector::ExtractStridedSliceOp>();
+    target.addDynamicallyLegalOp<::mlir::arith::MaximumFOp>(
+        [&](::mlir::arith::MaximumFOp op) {
+          if (auto vecTy = mlir::dyn_cast<::mlir::VectorType>(op.getType())) {
+            if (vecTy.getRank() != 1)
+              return true;
+            bool isGenericSize = isGenericVectorTy(op.getType());
+            bool isFastmath = (op.getFastmathAttr().getValue() !=
+                               ::mlir::arith::FastMathFlags::none);
+            if (isGenericSize && (!isFastmath))
+              return true;
+            return false;
+          }
+          return true;
+        });
+
+    target.addDynamicallyLegalOp<::mlir::math::ExpOp>(
+        [&](::mlir::math::ExpOp op) {
+          if (auto vecTy = mlir::dyn_cast<::mlir::VectorType>(op.getType())) {
+            if (vecTy.getRank() != 1)
+              return true;
+            return false;
+          }
+          return true;
+        });
+
+    target.addIllegalOp<::mlir::vector::ShapeCastOp>();
 
     // Don't convert "index" to "i64"
     typeConverter.addConversion([&](mlir::IndexType type) { return type; });
 
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
+          if (type.isScattered()) {
+            return ::mlir::VectorType::get(
+                16, ::mlir::IndexType::get(&getContext()));
+          }
           auto i32Type = ::mlir::IntegerType::get(&getContext(), 32);
           return ::mlir::VectorType::get(8, i32Type);
         });
@@ -1543,14 +1499,13 @@ struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                  AllocNbarrierToVCPattern, InitNbarrierToVCPattern,
                  NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                  CompilerHintToVCPattern, FenceToVCPattern,
-                 UpdateNDOffsetToVCPattern, SCFYieldOpVCPattern>(
-        patterns.getContext());
-    patterns
-        .add<GatherScatterToRawSend<xegpu::LoadGatherOp>,
-             GatherScatterToRawSend<xegpu::StoreScatterOp>, AtomicToLsc,
-             VectorShapeCastVC, VectorExtractVC, VectorExtractStridedSliceVC,
-             VectorShuffleVC, SCFForOpBlockVCPattern>(typeConverter,
-                                                      patterns.getContext());
+                 UpdateNDOffsetToVCPattern, UpdateOffsetOpToVCPattern,
+                 SCFYieldOpVCPattern, ElementwiseToVCPattern<arith::MaximumFOp>,
+                 ElementwiseToVCPattern<math::ExpOp>>(patterns.getContext());
+    patterns.add<GatherScatterToRawSend<xegpu::LoadGatherOp>,
+                 GatherScatterToRawSend<xegpu::StoreScatterOp>, AtomicToLsc,
+                 VectorShapeCastVC, SCFForOpBlockVCPattern>(
+        typeConverter, patterns.getContext());
 
     if (this->useRawSend) {
       patterns.add<LoadStorePrefetchNdToRawSendPattern<xegpu::LoadNdOp>,

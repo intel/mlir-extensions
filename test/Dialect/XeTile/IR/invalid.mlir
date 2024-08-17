@@ -1,14 +1,6 @@
 // RUN: imex-opt -allow-unregistered-dialect %s -split-input-file -verify-diagnostics
 
 // -----
-func.func @init_tile_with_invalid_offsets(%source : memref<64x64xf32>, %offset : index) {
-    // the offsets of the init_tile must be 2D
-    // expected-error@+1 {{number of offsets must be 2}}
-    %1 = xetile.init_tile %source[%offset, %offset, %offset]
-        : memref<64x64xf32> -> !xetile.tile<8x8xf32>
-}
-
-// -----
 func.func @test_init_tile_invalid_order(%src: memref<1024x1024xf16>) {
    // Memref is row major but tile is column major
    // expected-error@+1 {{memref operand is expected to have a column-major layout}}
@@ -17,10 +9,10 @@ func.func @test_init_tile_invalid_order(%src: memref<1024x1024xf16>) {
 }
 
 // -----
-func.func @test_init_tile_with_invalid_order(%a: memref<1024x1024xf16, affine_map<(d0, d1) -> (d1, d0)>>) {
+func.func @test_init_tile_with_invalid_order(%a: memref<1024x1024xf16, affine_map<(d0, d1) -> (d1*1024 + d0)>>) {
    // Memref is column major but tile is row major
    // expected-error@+1 {{memref operand is expected to have a row-major layout}}
-  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, affine_map<(d0, d1) -> (d1, d0)>> -> !xetile.tile<32x64xf16>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, affine_map<(d0, d1) -> (d1*1024 + d0)>> -> !xetile.tile<32x64xf16>
   return
 }
 
@@ -61,47 +53,12 @@ func.func @test_init_tile_using_address(%src : i64) {
 // -----
 func.func @init_tile_static_memref_with_invalid_dynamic_shape(%source : memref<1024x1024xf32>,
     %dim0_size : index, %dim1_size : index) {
+    %c1 = arith.constant 1 : index
+    %c1024 = arith.constant 1024 : index
     // for source memref with static shape, dynamic shape arguments should not be present
-    // expected-error@+1 {{dynamic shape or strides are not allowed with a static shaped memref as source}}
-    %1 = xetile.init_tile %source[0, 0], [%dim0_size, %dim1_size]
+    // expected-error@+1 {{dynamic sizes are not allowed with a static shaped memref as source}}
+    %1 = xetile.init_tile %source[0, 0], [%dim0_size, %dim1_size], [%c1024, %c1]
         : memref<1024x1024xf32> -> !xetile.tile<64x64xf32>
-}
-
-// -----
-func.func @init_tile_dynamic_memref_with_invalid_dynamic_shape(%source : memref<?x?xf32>,
-    %dim0_size : index, %dim1_size : index, %dim0_stride : index, %dim1_stride : index) {
-    // for source memref with dynamic shape, dynamic shape arguments should be 2D
-    // expected-error@+1 {{memref with a dynamic shape is used as source but dynamic shape argument missing or it is not 2D}}
-    %1 = xetile.init_tile %source[0, 0], [%dim0_size], [%dim0_stride, %dim1_stride]
-        : memref<?x?xf32> -> !xetile.tile<64x64xf32>
-}
-
-// -----
-func.func @init_tile_dynamic_memref_with_invalid_dynamic_strides(%source : memref<?x?xf32>,
-    %dim0_size : index, %dim1_size : index, %dim0_stride : index, %dim1_stride : index) {
-    // for source memref with dynamic shape, dynamic strides arguments should be 2D
-    // expected-error@+1 {{memref with a dynamic shape is used as source but dynamic strides argument missing or it is not 2D}}
-    %1 = xetile.init_tile %source[0, 0], [%dim0_size, %dim1_size], [%dim0_stride]
-        : memref<?x?xf32> -> !xetile.tile<64x64xf32>
-}
-
-
-// -----
-func.func @init_tile_address_with_invalid_dynamic_shape(%source : i64, %dim0_size : index, %dim1_size : index,
-    %dim0_stride : index, %dim1_stride : index) {
-    // for source address, dynamic shape arguments should be 2D
-    // expected-error@+1 {{address is used as source but dynamic shape argument is missing or it is not 2D}}
-    %1 = xetile.init_tile %source[0, 0], [%dim0_size], [%dim0_stride, %dim1_stride]
-        : i64 -> !xetile.tile<64x64xf32>
-}
-
-// -----
-func.func @init_tile_address_with_invalid_dynamic_strides(%source : i64, %dim0_size : index, %dim1_size : index,
-    %dim0_stride : index, %dim1_stride : index) {
-    // for source address, dynamic strides arguments should be 2D
-    // expected-error@+1 {{address is used as source but dynamic strides argument is missing or it is not 2D}}
-    %1 = xetile.init_tile %source[0, 0], [%dim0_size, %dim1_size], [%dim0_stride]
-        : i64 -> !xetile.tile<64x64xf32>
 }
 
 // -----
@@ -214,6 +171,13 @@ func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
 }
 
 // -----
+func.func @test_init_tile_with_mismatch_memory_space(%a: memref<1024x1024xf16, 3>) {
+   // expected-error@+1 {{memory space of the tile doesn't match with the source}}
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16>
+  return
+}
+
+// -----
 // expected-error@+1 {{expect integer array of size 2 for wi_layout}}
 #sg_map_2 = #xetile.sg_map< wi_layout = [2, 8, 2], wi_data = [1, 2]>
 // expected-error@+1 {{expect integer array of size 2 for wi_data}}
@@ -222,12 +186,10 @@ func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
 #wg_map_1 = #xetile.wg_map<sg_layout = [4], sg_data = [32, 128]>
 // expected-error@+1 {{expect integer array of size 2 for sg_data}}
 #wg_map_2 = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128, 32]>
-// expected-error@+1 {{expect integer array of size 2 for inner_blocks}}
+// expected-error@+1 {{expect integer array of size 2 for non empty inner_blocks attribute}}
 #wg_map_3 = #xetile.tile_attr<inner_blocks = [8, 16, 8]>
 // expected-error@+1 {{expect integer array of size 2 for order}}
 #wg_map_4 = #xetile.tile_attr<order = [0, 1, 2]>
-// expected-error@+1 {{expect integer array of size 2 for wg_data}}
-#wg_map_5 = #xetile.tile_attr<wg_data = [32, 64, 128]>
 
 
 // -----

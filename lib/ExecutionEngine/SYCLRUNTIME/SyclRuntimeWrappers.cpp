@@ -194,6 +194,13 @@ static void deallocDeviceMemory(GPUSYCLQUEUE *queue, void *ptr) {
   sycl::free(ptr, queue->syclQueue_);
 }
 
+// @TODO: Add support for async copy
+// Currnetly, we only support synchrnous copy?
+static void memoryCopy(GPUSYCLQUEUE *queue, void *dstPtr, void *srcPtr,
+                       size_t size) {
+  queue->syclQueue_.memcpy(dstPtr, srcPtr, size).wait();
+}
+
 static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
                                      size_t dataSize) {
   assert(data);
@@ -419,6 +426,11 @@ extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(GPUSYCLQUEUE *queue, void *ptr) {
       deallocDeviceMemory(queue, ptr);
     }
   });
+}
+
+extern "C" SYCL_RUNTIME_EXPORT void
+gpuMemCopy(GPUSYCLQUEUE *queue, void *dstPtr, void *srcPtr, size_t size) {
+  return catchAll([&]() { memoryCopy(queue, dstPtr, srcPtr, size); });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT ze_module_handle_t

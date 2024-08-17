@@ -138,5 +138,13 @@ def PropagatePackedLayout : Pass<"imex-propagate-packed-layout"> {
   ];
 }
 
+def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
+  let summary = "Remove <1xT> vectors, and replace them with scalars.";
+  let constructor = "imex::createRemoveSingleElemVectorPass()";
+  let dependentDialects = [
+    "::mlir::vector::VectorDialect"
+  ];
+}
+
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

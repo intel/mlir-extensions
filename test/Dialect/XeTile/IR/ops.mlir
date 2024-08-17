@@ -9,13 +9,11 @@
 #tile_attr = #xetile.tile_attr<wg_map = #wg_map, sg_map = #sg_map>
 #tile_attr_w_inner_blocks = #xetile.tile_attr<inner_blocks = [8, 16]>
 #tile_attr_w_order = #xetile.tile_attr<order = [0, 1]>
-#tile_attr_w_wg_data = #xetile.tile_attr<wg_map = #wg_map, wg_data = [128, 128]>
 
 
 #wg_map_mma_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
 #wg_map_mma_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
 #wg_map_mma_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
-
 
 #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
 #wg_map_a2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
@@ -23,6 +21,17 @@
 #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
 #wg_map_b2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
 
+func.func @test_init_tile_for_slm(%a: memref<1024x1024xf16, 3>) {
+  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3 : i64>>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3>>
+  return
+}
+
+func.func @test_init_tile_for_global(%a: memref<1024x1024xf16, 0>) {
+  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 0> -> !xetile.tile<32x64xf16>
+  return
+}
 
 // init_tile with a static shaped memref
 // CHECK-LABEL: func @test_init_tile_using_static_memref({{.*}}) {
@@ -136,23 +145,8 @@ func.func @test_load_tile(%src: !xetile.tile<64x32xf16>, %src1 : !xetile.tile<12
   %1 = xetile.load_tile %src : !xetile.tile<64x32xf16> -> vector<64x32xf16>
 
   // CHECK: xetile.load_tile
-  // CHECK-SAME: { padding = 0.000000e+00 : f32 }
-  // CHECK-SAME: !xetile.tile<64x32xf16> -> vector<8x2x8x16xf16>
-  %2 = xetile.load_tile %src : !xetile.tile<64x32xf16> -> vector<8x2x8x16xf16>
-
-  // CHECK: xetile.load_tile
-  // CHECK-SAME: {  padding = 0.000000e+00 : f32 }  : !xetile.tile<64x32xf16> -> vector<32x64xf16>
-  %3 = xetile.load_tile %src : !xetile.tile<64x32xf16> -> vector<32x64xf16>
-
-  // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 1.000000e-01 : f32 }  : !xetile.tile<64x32xf16> -> vector<64x32xf16>
   %4 = xetile.load_tile %src { padding = 0.1 : f32 } : !xetile.tile<64x32xf16> -> vector<64x32xf16>
-
-  // CHECK: xetile.load_tile
-  // CHECK-SAME: {  padding = 1.000000e-01 : f32 }
-  // CHECK-SAME: !xetile.tile<64x32xf16> -> vector<2x8x16x8xf16>
-  %5 = xetile.load_tile %src {  padding = 0.1 : f32 }
-    : !xetile.tile<64x32xf16> -> vector<2x8x16x8xf16>
 
   // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 1.000000e-01 : f32 }  : !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map =
@@ -204,23 +198,25 @@ func.func @test_store_tile(%value1 : vector<64x32xf16>,
 }
 
 // CHECK-LABEL: func @test_prefetch_tile({{.*}}) {
-func.func @test_prefetch_tile(%src: !xetile.tile<64x64xf16>, %src1: !xetile.tile<128x128xf16, #tile_attr_w_wg_data>) {
+func.func @test_prefetch_tile(%src: !xetile.tile<64x64xf16>, %src1: !xetile.tile<128x128xf16>) {
 
   // CHECK: xetile.prefetch_tile
   // CHECK-SAME: !xetile.tile<64x64xf16>
   xetile.prefetch_tile %src : !xetile.tile<64x64xf16>
 
   // CHECK: xetile.prefetch_tile
-  // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 2],
-  // CHECK-SAME: sg_data = [32, 128]>, wg_data = [128, 128]>>
-  xetile.prefetch_tile %src1 : !xetile.tile<128x128xf16, #tile_attr_w_wg_data>
+  // CHECK-SAME: !xetile.tile<128x128xf16>
+  xetile.prefetch_tile %src1 : !xetile.tile<128x128xf16>
 
   return
 }
 
 
 // CHECK-LABEL: func @test_tile_mma({{.*}}) {
-func.func @test_tile_mma(%a: !xetile.tile<64x32xf16>, %b: !xetile.tile<32x128xf16>, %c : !xetile.tile<64x128xf16>) {
+func.func @test_tile_mma(%a: !xetile.tile<64x32xf16>, %b: !xetile.tile<32x128xf16>, %c : !xetile.tile<64x128xf16>,
+            %a_tiled: !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks=[8,8]>>,
+            %b_tiled: !xetile.tile<32x128xf16, #xetile.tile_attr<inner_blocks=[8, 16]>>,
+            %c_tiled: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks=[8, 16]>>) {
 
   // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 0.000000e+00 : f32 }  : !xetile.tile<64x32xf16> -> vector<64x32xf16>
@@ -246,18 +242,21 @@ func.func @test_tile_mma(%a: !xetile.tile<64x32xf16>, %b: !xetile.tile<32x128xf1
 
   // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 0.000000e+00 : f32 }
-  // CHECK-SAME: !xetile.tile<64x32xf16> -> vector<8x4x8x8xf16>
-  %a_vec_1 = xetile.load_tile %a : !xetile.tile<64x32xf16> -> vector<8x4x8x8xf16>
+  // CHECK-SAME: !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [8, 8]>> -> vector<8x4x8x8xf16>
+  %a_vec_1 = xetile.load_tile %a_tiled: !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks=[8,8]>>
+    -> vector<8x4x8x8xf16>
 
   // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 0.000000e+00 : f32 }
-  // CHECK-SAME: !xetile.tile<32x128xf16> -> vector<4x8x8x16xf16>
-  %b_vec_1 = xetile.load_tile %b : !xetile.tile<32x128xf16> -> vector<4x8x8x16xf16>
+  // CHECK-SAME: !xetile.tile<32x128xf16, #xetile.tile_attr<inner_blocks = [8, 16]>> -> vector<4x8x8x16xf16>
+  %b_vec_1 = xetile.load_tile %b_tiled: !xetile.tile<32x128xf16, #xetile.tile_attr<inner_blocks=[8, 16]>>
+   -> vector<4x8x8x16xf16>
 
   // CHECK: xetile.load_tile
   // CHECK-SAME: { padding = 0.000000e+00 : f32 }
-  // CHECK-SAME: !xetile.tile<64x128xf16> -> vector<8x8x8x16xf16>
-  %c_vec_1 = xetile.load_tile %c : !xetile.tile<64x128xf16> -> vector<8x8x8x16xf16>
+  // CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [8, 16]>> -> vector<8x8x8x16xf16>
+  %c_vec_1 = xetile.load_tile %c_tiled: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks=[8, 16]>>
+   -> vector<8x8x8x16xf16>
 
   // CHECK: xetile.tile_mma
   // CHECK-SAME: vector<8x4x8x8xf16>, vector<4x8x8x16xf16> -> vector<8x8x8x16xf16>

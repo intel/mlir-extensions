@@ -9,16 +9,8 @@ builtin.module(
     linalg-fuse-elementwise-ops
     arith-expand
     memref-expand
-    arith-bufferize
-    func-bufferize
     func.func(empty-tensor-to-alloc-tensor)
-    func.func(scf-bufferize)
-    func.func(tensor-bufferize)
-    func.func(bufferization-bufferize)
-    func.func(linalg-bufferize)
-    func.func(linalg-detensorize)
-    func.func(tensor-bufferize)
-    func.func(finalizing-bufferize)
+    one-shot-bufferize{bufferize-function-boundaries}
     imex-remove-temporaries
     func.func(convert-linalg-to-parallel-loops)
     func.func(scf-parallel-loop-fusion)
@@ -42,10 +34,10 @@ builtin.module(
     gpu.module(set-spirv-abi-attrs{client-api=opencl})
     canonicalize
     fold-memref-alias-ops
-    imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
+    imex-convert-gpu-to-spirv
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
-//    func.func(llvm-request-c-wrappers)
+//  func.func(llvm-request-c-wrappers)
     serialize-spirv
     expand-strided-metadata
     lower-affine

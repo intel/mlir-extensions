@@ -1,28 +1,11 @@
-// TODO: Add run commands
-// RUN:
-
-// *** Experimental ***
-// This example works at the work grpup level. This demonstrates how the user can specify the
-// mapping for both subgroup within workgroup and work items within a single subgroup. The mapping
-// of subgroups to subtiles are specified using `wg_map` and, work items to data elements mapping is
-// specified using `sg_map`. Through this way, user has full control of how each work items works on
-// exactly which data elements. XeTile fully honor the mapping provided by users.
-//
-// Note that lowering of this code to XeGPU is not supported yet because XeTile-XeGPU lowering assumes
-// subgroup level programming at XeTile.
-
-
-#sg_map_a = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]>
 #wg_map_a = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 256]>
-#xe_map_a = #xetile.xe_map<wg = #wg_map_a, sg = #sg_map_a>
+#tile_attr_a = #xetile.tile_attr<wg_map = #wg_map_a>
 
-#sg_map_b = #xetile.sg_map<mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]>
 #wg_map_b = #xetile.wg_map<sg_layout = [4, 4], sg_data = [256, 64]>
-#xe_map_b = #xetile.xe_map<wg = #wg_map_b, sg = #sg_map_b>
+#tile_attr_b = #xetile.tile_attr<wg_map = #wg_map_b>
 
-#sg_map_c = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]>
 #wg_map_c = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
-#xe_map_c = #xetile.xe_map<wg = #wg_map_c, sg = #sg_map_c>
+#tile_attr_c = #xetile.tile_attr<wg_map = #wg_map_c>
 
 module @gemm attributes {gpu.container_module} {
   func.func @test(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf32>) -> memref<4096x4096xf32> attributes {llvm.emit_c_interface} {
@@ -58,44 +41,44 @@ module @gemm attributes {gpu.container_module} {
         %n = arith.muli %block_id_y, %c256 : index
         // intialize C tile and load it
         %c_init_tile = xetile.init_tile %C[%m, %n] : memref<4096x4096xf32>
-          -> !xetile.tile<256x256xf32, #xe_map_c>
-        %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<256x256xf32, #xe_map_c>
+          -> !xetile.tile<256x256xf32, #tile_attr_c>
+        %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<256x256xf32, #tile_attr_c>
           -> vector<256x256xf32>
         // initalize A and B tiles
         %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<4096x4096xf16>
-          -> !xetile.tile<256x256xf16, #xe_map_a>
+          -> !xetile.tile<256x256xf16, #tile_attr_a>
         %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<4096x4096xf16>
-          -> !xetile.tile<256x256xf16, #xe_map_b>
+          -> !xetile.tile<256x256xf16, #tile_attr_b>
         // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
         %out:3 = scf.for %k = %c0 to %c4096 step %c256
           iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
-          -> (!xetile.tile<256x256xf16, #xe_map_a>,
-              !xetile.tile<256x256xf16, #xe_map_b>,
+          -> (!xetile.tile<256x256xf16, #tile_attr_a>,
+              !xetile.tile<256x256xf16, #tile_attr_b>,
               vector<256x256xf32>) {
 
           // load A and B tiles
-          %a_value = xetile.load_tile %a_tile  : !xetile.tile<256x256xf16, #xe_map_a>
+          %a_value = xetile.load_tile %a_tile  : !xetile.tile<256x256xf16, #tile_attr_a>
             -> vector<256x256xf16>
-          %b_value = xetile.load_tile %b_tile : !xetile.tile<256x256xf16, #xe_map_b>
+          %b_value = xetile.load_tile %b_tile : !xetile.tile<256x256xf16, #tile_attr_b>
             -> vector<256x256xf16>
           // perform dpas and accumulate
-          %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value
+          %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value {wg_map_a = #wg_map_a, wg_map_b = #wg_map_b, wg_map_c = #wg_map_c}
             : vector<256x256xf16>, vector<256x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
           // update the offsets for A and B tiles
           %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c256]
-            : !xetile.tile<256x256xf16, #xe_map_a>, index, index
-            -> !xetile.tile<256x256xf16, #xe_map_a>
+            : !xetile.tile<256x256xf16, #tile_attr_a>, index, index
+            -> !xetile.tile<256x256xf16, #tile_attr_a>
           %b_next_tile = xetile.update_tile_offset %b_tile, [%c256, %c0]
-            : !xetile.tile<256x256xf16, #xe_map_b>, index, index
-            -> !xetile.tile<256x256xf16, #xe_map_b>
+            : !xetile.tile<256x256xf16, #tile_attr_b>, index, index
+            -> !xetile.tile<256x256xf16, #tile_attr_b>
           // partial C tile result
           scf.yield %a_next_tile, %b_next_tile, %c_new_value
-            : !xetile.tile<256x256xf16, #xe_map_a>,
-            !xetile.tile<256x256xf16, #xe_map_b>, vector<256x256xf32>
+            : !xetile.tile<256x256xf16, #tile_attr_a>,
+            !xetile.tile<256x256xf16, #tile_attr_b>, vector<256x256xf32>
         }
         // store the final accumulated C tile result back to memory
         xetile.store_tile %out#2, %c_init_tile : vector<256x256xf32>,
-          !xetile.tile<256x256xf32, #xe_map_c>
+          !xetile.tile<256x256xf32, #tile_attr_c>
         gpu.return
     }
   }

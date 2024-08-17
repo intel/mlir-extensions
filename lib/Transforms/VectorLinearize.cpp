@@ -35,6 +35,87 @@ namespace imex {
 } // namespace imex
 
 namespace {
+struct VectorLoadOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::LoadOp> {
+  using mlir::OpConversionPattern<mlir::vector::LoadOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::LoadOp loadOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = loadOp->getLoc();
+    auto vecType = loadOp.getVectorType();
+    auto shape = vecType.getShape();
+
+    if (shape.size() != 2) {
+      return rewriter.notifyMatchFailure(loc, "Can only linearize 2D vectors.");
+    }
+    auto unrollCount = shape[0];
+    auto vecSize = shape[1];
+    auto newVecType =
+        mlir::VectorType::get({vecSize}, vecType.getElementType());
+
+    llvm::SmallVector<mlir::Value, 4> indices = adaptor.getIndices();
+    mlir::Value xBaseIndex = indices[0];
+
+    // Construct the 2D vector.
+    mlir::Value resultVec = rewriter.create<mlir::arith::ConstantOp>(
+        loc, mlir::DenseElementsAttr::get<float>(vecType, 0.0));
+    // Emit unrolled loads for each 1D vector slice.
+    for (auto i = 0; i < unrollCount; i++) {
+      mlir::Value xIndex = xBaseIndex;
+      if (i) {
+        auto increment = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        xIndex =
+            rewriter.create<mlir::arith::AddIOp>(loc, xBaseIndex, increment);
+      }
+      indices[0] = xIndex;
+      auto vec = rewriter.create<mlir::vector::LoadOp>(
+          loc, newVecType, adaptor.getBase(), indices);
+      resultVec =
+          rewriter.create<mlir::vector::InsertOp>(loc, vec, resultVec, i);
+    }
+
+    rewriter.replaceOp(loadOp, resultVec);
+    return mlir::success();
+  }
+};
+
+struct VectorStoreOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::StoreOp> {
+  using mlir::OpConversionPattern<mlir::vector::StoreOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::StoreOp storeOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = storeOp->getLoc();
+    auto vecType = storeOp.getVectorType();
+    auto shape = vecType.getShape();
+
+    if (shape.size() != 2) {
+      return rewriter.notifyMatchFailure(loc, "Can only linearize 2D vectors.");
+    }
+
+    auto unrollCount = shape[0];
+    llvm::SmallVector<mlir::Value, 4> indices = adaptor.getIndices();
+    mlir::Value xBaseIndex = indices[0];
+
+    auto vec = rewriter.create<mlir::vector::ShapeCastOp>(
+        loc, vecType, adaptor.getValueToStore());
+
+    for (auto i = 0; i < unrollCount; i++) {
+      auto vecSlice = rewriter.create<mlir::vector::ExtractOp>(loc, vec, i);
+      mlir::Value xIndex = xBaseIndex;
+      if (i) {
+        auto increment = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        xIndex =
+            rewriter.create<mlir::arith::AddIOp>(loc, xBaseIndex, increment);
+      }
+      indices[0] = xIndex;
+      rewriter.create<mlir::vector::StoreOp>(loc, vecSlice, adaptor.getBase(),
+                                             indices);
+    }
+    rewriter.eraseOp(storeOp);
+    return mlir::success();
+  }
+};
 
 struct VectorExtractStridedSliceConversion final
     : public mlir::OpConversionPattern<mlir::vector::ExtractStridedSliceOp> {
@@ -127,20 +208,19 @@ struct VectorExtractStridedSliceConversion final
       }
     }
 
-    // if indices just has one element, we will use extractElementOp
-    // to extract an element.
-    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstType);
-    if (indices.size() == 1 && (dstType.isIntOrIndexOrFloat() ||
-                                (vecTy && vecTy.getNumElements() == 1))) {
-      auto pos = rewriter.create<mlir::arith::ConstantOp>(
-          extractOp.getLoc(), rewriter.getI32IntegerAttr(indices[0]));
-      rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
-          extractOp, adaptor.getVector(), pos);
+    // If indices just has one element, we will continue to use
+    // ExtractStridedSliceOp. Avoid using vector.shuffle on <1xT>
+    // vector, as vector-to-spirv pass does not handle it well.
+    if (indices.size() == 1) {
+      int64_t sizes[] = {1};
+      int64_t strides[] = {1};
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractStridedSliceOp>(
+          extractOp, srcVector, indices, sizes, strides);
     } else {
       // perform a shuffle to extract the kD vector
       rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
           extractOp, dstType, srcVector, srcVector,
-          rewriter.getI64ArrayAttr(indices));
+          rewriter.getDenseI64ArrayAttr(indices));
     }
     return mlir::success();
   }
@@ -176,20 +256,19 @@ struct VectorShffleOpConversion final
     }
 
     auto mask = shuffleOp.getMask();
+    ;
     auto totalSize = mask.size() * shuffleSliceLen;
 
     llvm::SmallVector<int64_t, 2> indices(totalSize);
-    for (auto [i, value] :
-         llvm::enumerate(mask.getAsValueRange<mlir::IntegerAttr>())) {
+    for (auto [i, value] : llvm::enumerate(mask)) {
 
-      int64_t v = value.getZExtValue();
       std::iota(indices.begin() + shuffleSliceLen * i,
                 indices.begin() + shuffleSliceLen * (i + 1),
-                shuffleSliceLen * v);
+                shuffleSliceLen * value);
     }
 
     rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-        shuffleOp, dstType, vec1, vec2, rewriter.getI64ArrayAttr(indices));
+        shuffleOp, dstType, vec1, vec2, rewriter.getDenseI64ArrayAttr(indices));
 
     return mlir::success();
   }
@@ -221,18 +300,21 @@ struct VectorExtractOpConversion final
       linearizedOffset += offsets[i] * size;
     }
 
-    auto vecTy = mlir::dyn_cast<mlir::VectorType>(dstTy);
-    if (dstTy.isIntOrIndexOrFloat() || (vecTy && vecTy.getNumElements() == 1)) {
+    auto srcVector = adaptor.getVector();
+
+    // ExtractOp also supports a semantic with result as a scalar, in which case
+    // We need to use ExtractElementOp instead of ShuffleOp.
+    if (dstTy.isIntOrIndexOrFloat()) {
       auto pos = rewriter.create<mlir::arith::ConstantOp>(
           extractOp.getLoc(), rewriter.getI32IntegerAttr(linearizedOffset));
       rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
-          extractOp, adaptor.getVector(), pos);
+          extractOp, srcVector, pos);
     } else {
       llvm::SmallVector<int64_t, 2> indices(size);
       std::iota(indices.begin(), indices.end(), linearizedOffset);
       rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
-          extractOp, dstTy, adaptor.getVector(), adaptor.getVector(),
-          rewriter.getI64ArrayAttr(indices));
+          extractOp, dstTy, srcVector, srcVector,
+          rewriter.getDenseI64ArrayAttr(indices));
     }
 
     return mlir::success();
@@ -298,11 +380,11 @@ struct VectorInsertOpConversion final
               0);
     auto modifiedSource = rewriter.create<mlir::vector::ShuffleOp>(
         insertOp.getLoc(), dstTy, adaptor.getSource(), adaptor.getSource(),
-        rewriter.getI64ArrayAttr(modifiedSrcIndices));
+        modifiedSrcIndices);
 
     rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
         insertOp, dstTy, adaptor.getDest(), modifiedSource,
-        rewriter.getI64ArrayAttr(indices));
+        rewriter.getDenseI64ArrayAttr(indices));
 
     return mlir::success();
   }
@@ -350,6 +432,21 @@ struct VectorLinearizePass final
           return vecTy && vecTy.getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::vector::ExtractStridedSliceOp>(
+        [&](mlir::vector::ExtractStridedSliceOp op) {
+          return op.getVector().getType().getRank() == 1;
+        });
+
+    target.addDynamicallyLegalOp<mlir::vector::LoadOp>(
+        [&](mlir::vector::LoadOp op) {
+          return op.getVectorType().getRank() == 1;
+        });
+
+    target.addDynamicallyLegalOp<mlir::vector::StoreOp>(
+        [&](mlir::vector::StoreOp op) {
+          return op.getVectorType().getRank() == 1;
+        });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -361,7 +458,8 @@ struct VectorLinearizePass final
 
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
-                 VectorSplatOpConversion>(typeConverter, context);
+                 VectorSplatOpConversion, VectorLoadOpConversion,
+                 VectorStoreOpConversion>(typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

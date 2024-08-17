@@ -19,6 +19,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
+#include <mlir/Dialect/Index/IR/IndexDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Utils/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -847,7 +848,7 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), innerBlocks, tileTy.getWgData());
+        tileTy.getOrder(), innerBlocks, tileTy.getMemoryScope());
 
     auto newTileTy =
         imex::xetile::TileType::get(tileTy.getShape(), elemTy, attr);
@@ -932,17 +933,10 @@ struct StoreTileOpPattern
     auto tileTy = llvm::dyn_cast<xetile::TileType>(adaptor.getTile().getType());
     auto innerBlocks = tileTy.getInnerBlocks();
     auto value = adaptor.getValue();
-    // its inputs has not been updated yet.
-    if (innerBlocks && value.getDefiningOp<xetile::TileUnpackOp>()) {
-      value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
-      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
-                                                       adaptor.getTile());
-      return mlir::success();
-    }
+    auto valTy = mlir::dyn_cast<mlir::VectorType>(value.getType());
 
-    // TODO: Blocking is not applied on shapecast yet, so it needs special
-    // attention.
-    if (innerBlocks && value.getDefiningOp<mlir::vector::ShapeCastOp>()) {
+    // its inputs has not been updated yet.
+    if (innerBlocks && valTy.getRank() == 2) {
       value = addPackOp(value, innerBlocks.asArrayRef(), rewriter);
       rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value,
                                                        adaptor.getTile());
@@ -1124,7 +1118,7 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     { // initialize the inner block size per op.

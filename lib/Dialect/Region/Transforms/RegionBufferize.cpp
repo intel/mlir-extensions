@@ -25,6 +25,16 @@ namespace imex {
 #include "imex/Dialect/Region/Transforms/Passes.h.inc"
 } // namespace imex
 
+static ::mlir::Value materializeToTensorRestrict(::mlir::OpBuilder &builder,
+                                                 ::mlir::TensorType type,
+                                                 ::mlir::ValueRange inputs,
+                                                 ::mlir::Location loc) {
+  assert(inputs.size() == 1);
+  assert(::mlir::isa<::mlir::BaseMemRefType>(inputs[0].getType()));
+  return builder.create<::mlir::bufferization::ToTensorOp>(loc, type, inputs[0],
+                                                           /*restrict=*/true);
+}
+
 namespace {
 struct RegionBufferizePass
     : public ::imex::impl::RegionBufferizeBase<RegionBufferizePass> {
@@ -39,6 +49,8 @@ struct RegionBufferizePass
     ::mlir::RewritePatternSet patterns(context);
     ::mlir::ConversionTarget target(*context);
 
+    typeConverter.addArgumentMaterialization(materializeToTensorRestrict);
+    typeConverter.addSourceMaterialization(materializeToTensorRestrict);
     ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 
     target.addDynamicallyLegalOp<::imex::region::EnvironmentRegionOp,

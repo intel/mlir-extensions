@@ -81,4 +81,54 @@ def XeTileBlockAligning: Pass <"xetile-block-aligning", "::mlir::gpu::GPUModuleO
                            "mlir::vector::VectorDialect"];
 }
 
+def XeTileWgToSg : Pass<"xetile-wg-to-sg", "::mlir::gpu::GPUModuleOp">{
+  let summary = "Transform WG level XeTile code to SG XeTile";
+
+  let description = [{
+    This transform pass transforms WG level XeTile code to SG XeTile.
+  }];
+
+  let constructor = "imex::createXeTileWgToSgPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::index::IndexDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+}
+
+def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
+  let summary = "Fuse tile loads and transpose operations.";
+
+  let description = [{
+    This pass fuses tile loads that are consumed by transpose operations into a single
+    load operation. Transformation uses the `order` attribute in the XeTile type to
+    perform the load and transpose together.
+  }];
+  let constructor = "imex::createXeTileOptimizeTransposePass()";
+  let dependentDialects = [
+    "::imex::xetile::XeTileDialect"
+  ];
+}
+
+def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Collection of canonicalization patterns for XeTile dialect.";
+
+  let description = [{
+    This pass performs a set of canonicalization steps on XeTile ops that are expected by the
+    downstream passes. First, this will convert certain vector ops (transpose, broadcast,
+     multi_reduction) to equivalent XeTile ops. Next, it will convert all XeTile ops
+     consuming or producing col-major tiles to one with row-major tiles. Finally, it will
+     perform cleanup to remove redundant ops that maybe produced by the previous steps.
+  }];
+  let constructor = "imex::createXeTileCanonicalizationPass()";
+  let dependentDialects = [
+    "::imex::xetile::XeTileDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::vector::VectorDialect",
+    "::mlir::gpu::GPUDialect"
+  ];
+}
+
+
 #endif // _XeTile_PASSES_TD_INCLUDED_

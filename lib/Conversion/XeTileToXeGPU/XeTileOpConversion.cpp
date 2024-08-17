@@ -17,6 +17,12 @@
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "imex/Utils/XeArch.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include <algorithm>
+#include <cassert>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 #include <mlir/Dialect/Math/IR/Math.h>
@@ -42,18 +48,20 @@ using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
 //                     ==>    q1, q2, q3, q4
 //  q1, q2, q3, q4            q5, q6, q7, q8
 //  q5, q6, q7, q8
-static VectorTypedValue stack(mlir::Value v1, mlir::Value v2,
+static VectorTypedValue stack(mlir::Value vecUp, mlir::Value vecDown,
                               mlir::Location loc,
                               mlir::PatternRewriter &rewriter) {
-  // LLVM requires operands of a shuffle op has the same type.
-  assert(v1.getType() == v2.getType() &&
-         "Operands of shuffle should have the same type.");
-  auto vecTy = llvm::cast<mlir::VectorType>(v1.getType());
-  assert(vecTy.getRank() == 2 && "only supports 2D vectors.");
-  auto shape = vecTy.getShape();
-  llvm::SmallVector<int64_t> mask(shape[0] + shape[0]);
+  auto vecUpTy = llvm::cast<mlir::VectorType>(vecUp.getType());
+  auto vecDownTy = llvm::cast<mlir::VectorType>(vecDown.getType());
+  assert(vecUpTy.getRank() == 2 && vecDownTy.getRank() == vecUpTy.getRank() &&
+         "only supports 2D vectors.");
+  assert(vecUpTy.getShape()[1] == vecDownTy.getShape()[1] &&
+         "Operands of stack() do not have the same number of columns.");
+
+  llvm::SmallVector<int64_t> mask(vecUpTy.getShape()[0] +
+                                  vecDownTy.getShape()[0]);
   std::iota(mask.begin(), mask.end(), 0);
-  auto op = rewriter.create<ShuffleOp>(loc, v1, v2, mask);
+  auto op = rewriter.create<ShuffleOp>(loc, vecUp, vecDown, mask);
   return op;
 }
 
@@ -92,25 +100,35 @@ getShuffleMask(llvm::ArrayRef<int64_t> shape1, llvm::ArrayRef<int64_t> shape2) {
 // cost of complex shuffle masks. the mask for the above one
 // will be like this: 0 1 2 3  8  9 10
 //                    4 5 6 7 11 12 13
-VectorTypedValue concat(mlir::Value v1, mlir::Value v2, mlir::Location loc,
-                        mlir::PatternRewriter &rewriter) {
-  // LLVM requires operands of shuffle op has the same type
-  auto vecTy = llvm::cast<mlir::VectorType>(v1.getType());
-  assert(v1.getType() == v2.getType() &&
-         "Operands doesn't have the same type!");
-  assert(vecTy.getRank() <= 2 &&
+VectorTypedValue concat(mlir::Value vecLeft, mlir::Value vecRight,
+                        mlir::Location loc, mlir::PatternRewriter &rewriter) {
+  auto vecLeftTy = llvm::cast<mlir::VectorType>(vecLeft.getType());
+  auto vecRightTy = llvm::cast<mlir::VectorType>(vecRight.getType());
+
+  assert(vecLeftTy.getShape()[0] == vecLeftTy.getShape()[0] &&
+         "Operands of concat() do not have the same number of rows.");
+  assert(vecLeftTy.getRank() <= 2 &&
+         vecRightTy.getRank() == vecLeftTy.getRank() &&
          "Currently concat only works on 1D/2D vector.");
-  auto size = vecTy.getNumElements();
-  auto shape = vecTy.getShape();
-  auto newShape = vecTy.getRank() == 1
-                      ? llvm::SmallVector<int64_t>({size * 2})
-                      : llvm::SmallVector<int64_t>({shape[0], shape[1] * 2});
-  auto elemTy = vecTy.getElementType();
-  auto flatTy = mlir::VectorType::get({size}, elemTy);
-  auto cast1 = rewriter.create<ShapeCastOp>(loc, flatTy, v1);
-  auto cast2 = rewriter.create<ShapeCastOp>(loc, flatTy, v2);
-  auto mask = getShuffleMask(shape, shape);
-  auto shuffleOp = rewriter.create<ShuffleOp>(loc, cast1, cast2, mask);
+
+  auto elemTy = vecLeftTy.getElementType();
+  auto leftSize = vecLeftTy.getNumElements();
+  auto leftShape = vecLeftTy.getShape();
+  auto leftFlatTy = mlir::VectorType::get({vecLeftTy.getNumElements()}, elemTy);
+
+  auto rightSize = vecRightTy.getNumElements();
+  auto rightShape = vecRightTy.getShape();
+  auto rightFlatTy =
+      mlir::VectorType::get({vecRightTy.getNumElements()}, elemTy);
+
+  auto newShape = vecLeftTy.getRank() == 1
+                      ? llvm::SmallVector<int64_t>({leftSize + rightSize})
+                      : llvm::SmallVector<int64_t>(
+                            {leftShape[0], leftShape[1] + rightShape[1]});
+  auto castLeft = rewriter.create<ShapeCastOp>(loc, leftFlatTy, vecLeft);
+  auto castRight = rewriter.create<ShapeCastOp>(loc, rightFlatTy, vecRight);
+  auto mask = getShuffleMask(leftShape, rightShape);
+  auto shuffleOp = rewriter.create<ShuffleOp>(loc, castLeft, castRight, mask);
   auto targetTy = mlir::VectorType::get(newShape, elemTy);
   auto newOp = rewriter.create<ShapeCastOp>(loc, targetTy, shuffleOp);
   return newOp;
@@ -122,23 +140,30 @@ VectorTypedValue concat(mlir::Value v1, mlir::Value v2, mlir::Location loc,
 mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
                                 std::function<funcTy> transFunc,
                                 mlir::Location loc,
-                                XeGPUOneToNPatterRewriter &rewriter) {
+                                XeOneToNPatternRewriter &rewriter) {
   llvm::SmallVector<mlir::Value> shuffleOps(ins.begin(), ins.end());
   while (shuffleOps.size() > 1) {
     auto curr = shuffleOps;
-    assert(curr.size() % 2 == 0 && "The size should be divisible by 2.");
     shuffleOps.clear();
-    for (size_t i = 0; i + 1 < curr.size(); i += 2) {
-      auto newOp = transFunc(curr[i], curr[i + 1], loc, rewriter);
+    size_t currPairStartIdx{0};
+    while (currPairStartIdx < curr.size() - 1) {
+      size_t leftIdx{currPairStartIdx++};
+      size_t rightIdx{currPairStartIdx++};
+      auto newOp = transFunc(curr[leftIdx], curr[rightIdx], loc, rewriter);
       shuffleOps.push_back(newOp);
     }
+    if (currPairStartIdx < curr.size()) {
+      assert(currPairStartIdx == curr.size() - 1);
+      shuffleOps.push_back(curr[curr.size() - 1]);
+    }
   }
+
   return shuffleOps[0];
 }
 
 // a unified function lowering Unpack and Pack ops.
 static llvm::SmallVector<mlir::Value>
-lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
+lowerUnpackOrPack(XeOneToNPatternRewriter &rewriter, mlir::Operation *op,
                   mlir::ValueRange inputs, mlir::DenseI64ArrayAttr inBlkSizes,
                   mlir::DenseI64ArrayAttr outBlkSizes,
                   llvm::ArrayRef<int64_t> inGrids,
@@ -252,14 +277,12 @@ lowerUnpackOrPack(XeGPUOneToNPatterRewriter &rewriter, mlir::Operation *op,
 // looking at the target block size (innerBlock from TilePackOp)
 // directly. It requires 1-1 mapping of UnpackOp and PackOp, which
 // should be enforced by a separate pass.
-class SgTileUnpackOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::TileUnpackOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::TileUnpackOp>::SgXeTileToXeGPUConversion;
+class SgTileUnpackOpPattern : public XeOneToNConversion<xetile::TileUnpackOp> {
+  using XeOneToNConversion<xetile::TileUnpackOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::TileUnpackOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
 
     auto inputs = adaptor.getInVec();
     auto inTy = op.getInVec().getType();
@@ -315,14 +338,12 @@ class SgTileUnpackOpPattern
   }
 };
 
-class SgTilePackOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::TilePackOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::TilePackOp>::SgXeTileToXeGPUConversion;
+class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
+  using XeOneToNConversion<xetile::TilePackOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::TilePackOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto input = op.getInVec();
     auto defOp = input.getDefiningOp<xetile::TileUnpackOp>();
     // Unpack and Pack appeared as a pair, it should be handled
@@ -348,26 +369,48 @@ class SgTilePackOpPattern
   }
 };
 
-int getBlockArrayLength(mlir::Type elemTy, int block_width) {
-  return 64 * 8 / elemTy.getIntOrFloatBitWidth() / block_width;
+// A helper to compute the right array length given the inner block width,
+// and the tile width, as well as the element type. Both inner block width
+// and tile width are in number of elements. It is computed based on hardware
+// constraints (on PVC): array_lenght * inner_block_width * sizeof(elemTy) <=
+// 256 bits. So, if tile width is larger than 256/sizeof(elemTy), the maximum
+// supported array_length will be used.
+int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy,
+                        int inner_block_width, int tile_width) {
+  auto uArch = std::make_shared<XePVCuArch>();
+  auto elemBits = elemTy.getIntOrFloatBitWidth();
+  auto params = uArch->get2DLoadConfig(op, elemBits, false, false);
+  assert(mlir::succeeded(params) && "Invalid Config Params");
+
+  llvm::SmallVector<int> supportedArrLen = params->array_length;
+  int restriction = std::min(params->restriction, tile_width);
+
+  int result = 1;
+  for (auto len : supportedArrLen) {
+    if (len * inner_block_width <= restriction)
+      result = len;
+  }
+  return result;
 }
 
 // It rewrites a XeTile::init_tile into one or more mlir::xegpu::create_nd_desc
 // It is one of start points of generating 1:N values.
-class SgInitTileOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::InitTileOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::InitTileOp>::SgXeTileToXeGPUConversion;
+class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
+  using XeOneToNConversion<xetile::InitTileOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::InitTileOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto source = op.getSource();
+    mlir::Value source = op.getSource();
     auto tileTy = op.getType();
     auto innerBlocks = tileTy.getInnerBlocks();
     auto shape = llvm::to_vector(tileTy.getShape());
     auto indexType = rewriter.getIndexType();
+
+    auto memoryScope = op.getSourceMemorySpaceAsInt() == 3
+                           ? mlir::xegpu::MemoryScope::SLM
+                           : mlir::xegpu::MemoryScope::Global;
 
     if (tileTy.getRank() != 2)
       return op.emitOpError("The tile shape should be 2D.");
@@ -375,19 +418,43 @@ class SgInitTileOpPattern
     if (!innerBlocks || innerBlocks.size() != 2)
       return op.emitOpError("Missing valid innerBlock for the tile in op.");
 
+    bool hasColMajorTraversal =
+        tileTy.getOrder().asArrayRef() == mlir::ArrayRef({0, 1});
     // Need to make a copy, so we can swap values.
     auto innerBlk = llvm::to_vector(innerBlocks.asArrayRef());
-    if (tileTy.getOrder().asArrayRef() == mlir::ArrayRef({0, 1})) {
+    // If order is [1, 0] (source memref is col-major), we need to swap the
+    // shape and innerBlocks because XeGPU ops only support row-major tile
+    // creation.
+    if (hasColMajorTraversal) {
+      assert(op.isSourceMemRef() && op.sourceMemRefHasStaticShape() &&
+             "Expecting a static shape source memref.");
       std::swap(innerBlk[0], innerBlk[1]);
       std::swap(shape[0], shape[1]);
     }
 
-    // using array_length for load if dim1 of innerBlocks
-    // is smaller than dim 1 of shape.
+    // using array_length for load if dim1 of innerBlocks is smaller than
+    // dim1 of shape.
+    auto elemTy = tileTy.getElementType();
     auto array_length =
         isForLoad(op) && shape[1] > innerBlk[1]
-            ? getBlockArrayLength(tileTy.getElementType(), innerBlk[1])
+            ? getBlockArrayLength(op, elemTy, innerBlk[1], shape[1])
             : 1;
+
+    // If the source memref is col-major we need to convert into a row-major
+    // because at XeGPU level we only support row-major memrefs. Also
+    // array_length must be 1 if col-major memrefs are used as the source.
+    if (hasColMajorTraversal) {
+      array_length = 1;
+      // create a memref.reinterpret_cast to convert col-major to row-major
+      auto rowMajorSourceShape =
+          swapLastTwoElements(op.getSourceMemrefStaticShape());
+      auto rowMajorSourceStrides = defaultStrides(rowMajorSourceShape);
+      int64_t rowMajorSourceOffset = 0;
+      auto newMemRefTy = mlir::MemRefType::get(rowMajorSourceShape, elemTy);
+      source = rewriter.create<mlir::memref::ReinterpretCastOp>(
+          loc, newMemRefTy, source, rowMajorSourceOffset, rowMajorSourceShape,
+          rowMajorSourceStrides);
+    }
 
     auto width = array_length * innerBlk[1];
 
@@ -406,12 +473,14 @@ class SgInitTileOpPattern
       }
     }
 
-    auto offsetsX = offsets[0];
-    auto offsetsY = offsets[1];
+    // For col-major memref initial offsets need to be swapped.
+    auto offsetsY = offsets.pop_back_val();
+    auto offsetsX = offsets.pop_back_val();
+    if (hasColMajorTraversal)
+      std::swap(offsetsX, offsetsY);
 
     auto tDescTy = mlir::xegpu::TensorDescType::get(
-        innerBlk, tileTy.getElementType(), false /*scattered*/, array_length,
-        mlir::xegpu::MemoryScope::Global, true /*boundary_check*/);
+        innerBlk, elemTy, array_length, true /*boundary_check*/, memoryScope);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
@@ -420,7 +489,8 @@ class SgInitTileOpPattern
 
     rewriter.setInsertionPoint(op);
 
-    llvm::SmallVector<mlir::Value> xegpuOps;
+    llvm::SmallVector<mlir::Value> xegpuOps(blocks[0] * blocks[1],
+                                            mlir::Value());
     for (int i = 0; i < blocks[0]; i++) {
       for (int j = 0; j < blocks[1]; j++) {
         auto subOffX = createIndexConstant(indexType, (innerBlk[0] * i));
@@ -429,8 +499,12 @@ class SgInitTileOpPattern
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffX, offsetsX);
         auto tDescOffsetY =
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffY, offsetsY);
-        mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{tDescOffsetX,
-                                                           tDescOffsetY};
+        mlir::SmallVector<mlir::OpFoldResult> tDescOffsets = llvm::to_vector<4>(
+            llvm::map_range(offsets, [](mlir::Value v) -> mlir::OpFoldResult {
+              return v;
+            }));
+        tDescOffsets.push_back(tDescOffsetX);
+        tDescOffsets.push_back(tDescOffsetY);
 
         // TODO: this needs improvement, it assumes the source is static
         // memeref.
@@ -439,7 +513,12 @@ class SgInitTileOpPattern
           auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
               op.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
               tDescOffsets /*offsets*/);
-          xegpuOps.push_back(createNdOp);
+          // col-major source memref requires creating the tiles in transposed
+          // order
+          if (hasColMajorTraversal)
+            xegpuOps[blocks[0] * j + i] = createNdOp;
+          else
+            xegpuOps[blocks[1] * i + j] = createNdOp;
         } else {
           return mlir::failure();
         }
@@ -477,13 +556,12 @@ translateCachePolicy(imex::xetile::CachePolicyAttr val) {
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile.
 struct SgPrefetchTileOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::PrefetchTileOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::PrefetchTileOp>::SgXeTileToXeGPUConversion;
+    : public XeOneToNConversion<xetile::PrefetchTileOp> {
+  using XeOneToNConversion<xetile::PrefetchTileOp>::XeOneToNConversion;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::PrefetchTileOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto tileTy = op.getTile().getType();
     auto tiles = adaptor.getTile();
     auto innerBlocks = tileTy.getInnerBlocks();
@@ -525,14 +603,12 @@ struct SgPrefetchTileOpPattern
 // It lowers XeTile::load_tile into one or more mlir::xegpu::load_2d
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile.
-struct SgLoadTileOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::LoadTileOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::LoadTileOp>::SgXeTileToXeGPUConversion;
+struct SgLoadTileOpPattern : public XeOneToNConversion<xetile::LoadTileOp> {
+  using XeOneToNConversion<xetile::LoadTileOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::LoadTileOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto tileTy = op.getSource().getType();
     auto blockSZ = tileTy.getInnerBlocks();
 
@@ -556,6 +632,11 @@ struct SgLoadTileOpPattern
     // TODO: move these two into architecture abstracture in future.
     const int SIMD_WIDTH_IN_BITS = 32;
     int factor = SIMD_WIDTH_IN_BITS / elemTy.getIntOrFloatBitWidth();
+    // TODO: use uArch for this?
+    auto isLowPrecision = [](unsigned int width) -> bool {
+      bool isPowerOf2 = (width & (width - 1)) == 0;
+      return isPowerOf2 & (width < 32) & (width > 1);
+    };
     if (isForDPASB(op) && factor > 1)
       vnniAttr = mlir::UnitAttr::get(ctx);
 
@@ -567,7 +648,7 @@ struct SgLoadTileOpPattern
       auto elemWidth = elemTy.getIntOrFloatBitWidth();
       if (elemWidth == 32) {
         transposeAttr = rewriter.getDenseI64ArrayAttr({1, 0});
-      } else if (elemWidth == 16 && vnniAttr) {
+      } else if (isLowPrecision(elemWidth) && vnniAttr) {
         transposeAttr = rewriter.getDenseI64ArrayAttr({1, 0});
         transposeBitWidthAttr = rewriter.getI32IntegerAttr(32);
         vnniAttr = nullptr;
@@ -600,7 +681,7 @@ struct SgLoadTileOpPattern
       if (array_length != 1)
         shape.insert(shape.begin(), array_length);
 
-      auto vectorTy = mlir::VectorType::get(shape, tileTy.getElementType());
+      auto vectorTy = mlir::VectorType::get(shape, elemTy);
       auto ldOp = rewriter.create<mlir::xegpu::LoadNdOp>(
           op.getLoc(), vectorTy, src, vnniAttr, transposeAttr,
           transposeBitWidthAttr, L1, L2, L3);
@@ -622,14 +703,12 @@ struct SgLoadTileOpPattern
 // It lowers a XeTile::store_tile into one or more mlir::xegpu::store_2d
 // The adaptor will provide the set of xegpu.create_nd_desc lowered for
 // its input tile, and similar to its input vector value.
-struct SgStoreTileOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::StoreTileOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::StoreTileOp>::SgXeTileToXeGPUConversion;
+struct SgStoreTileOpPattern : public XeOneToNConversion<xetile::StoreTileOp> {
+  using XeOneToNConversion<xetile::StoreTileOp>::XeOneToNConversion;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::StoreTileOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto tiles = adaptor.getTile();
     auto values = adaptor.getValue();
 
@@ -656,13 +735,12 @@ struct SgStoreTileOpPattern
 
 // It lowers a XeTile::tile_mma into one or more mlir::xegpu::dpas
 // The adaptor provides new inputs for each old input.
-struct SgTileMMAOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::TileMMAOp> {
-  using SgXeTileToXeGPUConversion<xetile::TileMMAOp>::SgXeTileToXeGPUConversion;
+struct SgTileMMAOpPattern : public XeOneToNConversion<xetile::TileMMAOp> {
+  using XeOneToNConversion<xetile::TileMMAOp>::XeOneToNConversion;
 
   ::mlir::LogicalResult
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
 
     auto aShape = op.getAType().getShape();
     auto bShape = op.getBType().getShape();
@@ -711,23 +789,30 @@ struct SgTileMMAOpPattern
 };
 
 struct SgUpdateTileOffsetOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::UpdateTileOffsetOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::UpdateTileOffsetOp>::SgXeTileToXeGPUConversion;
+    : public XeOneToNConversion<xetile::UpdateTileOffsetOp> {
+  using XeOneToNConversion<xetile::UpdateTileOffsetOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::UpdateTileOffsetOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto offsetX = op.getOffsetX();
     auto offsetY = op.getOffsetY();
     auto tiles = adaptor.getTile();
+
+    bool hasColMajorTraversal =
+        op.getTile().getType().getOrder().asArrayRef() ==
+        mlir::ArrayRef({0, 1});
 
     llvm::SmallVector<mlir::Value> newOps;
     int64_t kDynamics[2] = {mlir::ShapedType::kDynamic,
                             mlir::ShapedType::kDynamic};
     for (const auto &tile : tiles) {
+      // if the traversal is col-major, we need to reverse the offsets at XeGPU
+      // level because only row-major traversal is supported.
       auto xegpuTile = rewriter.create<mlir::xegpu::UpdateNdOffsetOp>(
-          op.getLoc(), tile.getType(), tile, mlir::ValueRange{offsetX, offsetY},
+          op.getLoc(), tile.getType(), tile,
+          hasColMajorTraversal ? mlir::ValueRange({offsetY, offsetX})
+                               : mlir::ValueRange({offsetX, offsetY}),
           llvm::ArrayRef<int64_t>(kDynamics, 2));
       newOps.push_back(xegpuTile);
     }
@@ -739,7 +824,7 @@ struct SgUpdateTileOffsetOpPattern
 extern llvm::SmallVector<mlir::Value>
 lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
                     mlir::vector::CombiningKind kind, mlir::Location loc,
-                    mlir::Type elemTy, XeGPUOneToNPatterRewriter &rewriter);
+                    mlir::Type elemTy, XeOneToNPatternRewriter &rewriter);
 
 extern llvm::SmallVector<mlir::Value>
 lowerInnerReductionWithIntraVectorShuffles(mlir::ValueRange sources,
@@ -747,20 +832,19 @@ lowerInnerReductionWithIntraVectorShuffles(mlir::ValueRange sources,
                                            mlir::vector::CombiningKind kind,
                                            mlir::Location loc,
                                            mlir::Type elemTy,
-                                           XeGPUOneToNPatterRewriter &rewriter);
+                                           XeOneToNPatternRewriter &rewriter);
 
 extern llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
     mlir::ValueRange sources, llvm::ArrayRef<int64_t> shape,
     mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
-    XeGPUOneToNPatterRewriter &rewriter);
+    XeOneToNPatternRewriter &rewriter);
 
-struct SgTileReduceOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::ReduceOp> {
-  using SgXeTileToXeGPUConversion<xetile::ReduceOp>::SgXeTileToXeGPUConversion;
+struct SgTileReduceOpPattern : public XeOneToNConversion<xetile::ReduceOp> {
+  using XeOneToNConversion<xetile::ReduceOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto srcTy = op.getSource().getType();
     auto elemTy = srcTy.getElementType();
     auto dims = op.getReductionDim();
@@ -838,14 +922,14 @@ struct SgTileReduceOpPattern
 // (the number before `:` is the id of the block)
 
 template <typename OpTy>
-struct SgTransposeOpPattern : public SgXeTileToXeGPUConversion<OpTy> {
-  using SgXeTileToXeGPUConversion<OpTy>::SgXeTileToXeGPUConversion;
+struct SgTransposeOpPattern : public XeOneToNConversion<OpTy> {
+  using XeOneToNConversion<OpTy>::XeOneToNConversion;
   using RangeT = llvm::ArrayRef<mlir::ValueRange>;
   using OpAdaptor = typename OpTy::template GenericAdaptor<RangeT>;
 
   mlir::LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto resType = op.getResult().getType();
     if (resType.getRank() != 4)
       return ((mlir::PatternRewriter &)rewriter)
@@ -890,7 +974,7 @@ bool isLegalElementWiseOp(mlir::Operation *op) {
 }
 
 template <typename Op, int numOperands>
-Op createOp(XeGPUOneToNPatterRewriter &rewriter, mlir::Location loc,
+Op createOp(XeOneToNPatternRewriter &rewriter, mlir::Location loc,
             llvm::SmallVector<llvm::SmallVector<mlir::Value>> operands, int i) {
   static_assert(numOperands >= 1 && numOperands <= 3,
                 "Unsupported number of operands");
@@ -906,15 +990,16 @@ Op createOp(XeGPUOneToNPatterRewriter &rewriter, mlir::Location loc,
 }
 
 template <typename Op, int numOperands>
-struct ElementWiseOpPattern : public SgXeTileToXeGPUConversion<Op> {
+struct ElementWiseOpPattern : public XeOneToNConversion<Op> {
 
-  using SgXeTileToXeGPUConversion<Op>::SgXeTileToXeGPUConversion;
+  using XeOneToNConversion<Op>::XeOneToNConversion;
   using RangeT = llvm::ArrayRef<mlir::ValueRange>;
   using OpAdaptor = typename Op::template GenericAdaptor<RangeT>;
 
   mlir::LogicalResult
   matchAndRewrite(Op op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
+
     auto res = op.getResult();
     auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
     // non-vector ops, or 1D/2D vector ops generated during lowering.
@@ -959,14 +1044,14 @@ struct ElementWiseOpPattern : public SgXeTileToXeGPUConversion<Op> {
 };
 
 template <typename CastOp>
-struct TypecastOpPattern : public SgXeTileToXeGPUConversion<CastOp> {
-  using SgXeTileToXeGPUConversion<CastOp>::SgXeTileToXeGPUConversion;
+struct TypecastOpPattern : public XeOneToNConversion<CastOp> {
+  using XeOneToNConversion<CastOp>::XeOneToNConversion;
   using RangeT = llvm::ArrayRef<mlir::ValueRange>;
   using OpAdaptor = typename CastOp::template GenericAdaptor<RangeT>;
 
   mlir::LogicalResult
   matchAndRewrite(CastOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto out = mlir::dyn_cast<mlir::VectorType>(op.getType());
     if (!out || out.getRank() != 4)
       return mlir::failure();
@@ -985,14 +1070,12 @@ struct TypecastOpPattern : public SgXeTileToXeGPUConversion<CastOp> {
   }
 };
 
-struct SgBroadcastOpPattern
-    : public SgXeTileToXeGPUConversion<xetile::BroadcastOp> {
-  using SgXeTileToXeGPUConversion<
-      xetile::BroadcastOp>::SgXeTileToXeGPUConversion;
+struct SgBroadcastOpPattern : public XeOneToNConversion<xetile::BroadcastOp> {
+  using XeOneToNConversion<xetile::BroadcastOp>::XeOneToNConversion;
 
   mlir::LogicalResult
   matchAndRewrite(xetile::BroadcastOp op, OpAdaptor adaptor,
-                  XeGPUOneToNPatterRewriter &rewriter) const override {
+                  XeOneToNPatternRewriter &rewriter) const override {
     auto resultTy = op.getResult().getType();
     auto resultShape = resultTy.getShape();
     auto dstType = mlir::VectorType::get(resultShape.take_back(2),
@@ -1057,7 +1140,7 @@ struct SgBroadcastOpPattern
   }
 };
 
-void populateXeTileOpConversionPatterns(imex::XeGPUTypeConverter &converter,
+void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
   patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,

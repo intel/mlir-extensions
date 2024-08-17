@@ -1,17 +1,21 @@
 builtin.module(
     cse
     gpu.module(xetile-init-duplicate
+        xetile-optimize-transpose
         xetile-blocking
         convert-xetile-to-xegpu
         imex-propagate-packed-layout)
     cse
     imex-vector-linearize
+    cse
+    imex-remove-single-elem-vector
+    cse
     gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
     bf16-to-gpu
     gpu.module(convert-func-to-spirv)
     gpu.module(convert-vector-to-spirv)
-    imex-convert-gpu-to-spirv{enable-vc-intrinsic=true}
+    imex-convert-gpu-to-spirv
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
     func.func(llvm-request-c-wrappers)

@@ -22,6 +22,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
+#include <mlir/Dialect/Index/IR/IndexDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Utils/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -204,7 +205,7 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), newBlockSize, tileTy.getWgData());
+        tileTy.getOrder(), newBlockSize, tileTy.getMemoryScope());
 
     auto newTileTy = imex::xetile::TileType::get(tileTy.getShape(),
                                                  tileTy.getElementType(), attr);
@@ -304,7 +305,7 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     if (failed(
