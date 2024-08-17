@@ -344,12 +344,9 @@ For matrix B
 For matrix C
 #sg_map_c_f32  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
 #sg_map_c_si32 = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // WI data distribute from [8, 16] to [8, 1]
-For matrix transpose of A*  
+For matrix transpose of A or B*
 #sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
-For matrix transpose of B*
-#sg_map_bt_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
 ```
-*Transpose on PVC may distribute the data to different WI which is expected by DPAS, due to the difference between #sg_map_a_tf32 and #sg_map_at_tf32. Shuffle is required to before feed the transposed tensor to DPAS 
 
 User must use for the WI data distribution of  2d load data prepared for DPAS on ARC. Not using this sg_map defined here leads to undefined behavior.  
 ```mlir
