@@ -427,7 +427,7 @@ An example on how to perform transpose using load_gather with chunk_size_per_lan
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
 
   %result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
-          tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<16xi1> -> vector<1x4xfp32>
+          tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<16xi1> -> vector<4x1xfp32>
 
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
