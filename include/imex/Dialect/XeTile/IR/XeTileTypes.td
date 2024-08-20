@@ -146,7 +146,7 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
 def XeTile_IntType : AnyTypeOf<[I1, I8, I16, I32, I64, SI1, SI8, SI16, SI32, SI64, UI1, UI8, UI16, UI32, UI64]>;
 
 // Float types allowed in XeTile
-def XeTile_FloatType : AnyTypeOf<[F8E5M2, F16, F32, F64, BF16, TF32]>;
+def XeTile_FloatType : AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
 
 // Define the scalar type for XeTile
 def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType]>;
