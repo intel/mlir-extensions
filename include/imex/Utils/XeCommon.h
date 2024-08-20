@@ -268,8 +268,9 @@ private:
 
       auto *op = getDefineOrParentOp(value);
 
-      // stop when meet a function.
-      if (!op || llvm::isa<mlir::FunctionOpInterface>(op))
+      // stop when meet a function or ops, e.g., arith.truncf.
+      if (!op || llvm::isa<mlir::FunctionOpInterface>(op) ||
+          llvm::isa<mlir::CastOpInterface>(op))
         continue;
 
       OpAttrMap[value] = attr;
