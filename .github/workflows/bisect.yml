@@ -1,0 +1,77 @@
+name: bisect
+
+on:
+  workflow_dispatch:
+    inputs:
+      last_good_commit:
+        description: 'Last known good commit'
+        required: true
+        # ! CHANGE
+        default: 'a1c8eab588fb7c8c38175cbebdeff75334d70f5d'
+      first_bad_commit:
+        description: 'First known bad commit, default HEAD'
+        required: false
+        default: 'HEAD'
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: gpu
+    timeout-minutes: 450
+
+    env:
+      TBB_VER: 2021.6.0
+      LEVEL_ZERO_VER: v1.6.2
+      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild
+      HOME: /github/home
+      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
+      LLVM_SHA_FILE: llvm_version.txt
+
+    steps:
+      - name: Source Vars
+        run: |
+          mkdir -p $HOME_DIR
+          cd $HOME_DIR
+          rm -rf *
+          source /opt/intel/oneapi/compiler/latest/env/vars.sh
+      - uses: actions/checkout@v3
+        with:
+          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          fetch-depth: 0
+          path: ${{env.HOME_DIR}}/mlir-extensions
+
+      - name: Setup Latest Level Zero
+        shell: bash -l {0}
+        run: |
+          cd $HOME_DIR
+          git clone https://github.com/oneapi-src/level-zero.git
+          cd level-zero
+          git checkout $LEVEL_ZERO_VER
+          cd ..
+          mkdir level-zero-build
+          cd level-zero-build
+          cmake ../level-zero -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
+          ninja install
+
+      - name: Build LLVM MLIR
+        run: |
+          mkdir -p $HOME_DIR/llvm-mlir
+          # omitted for bisect
+
+      - name: Setup IMEX
+        run: |
+          cd $HOME_DIR
+          cp /home/gta/actions-runner/refactor_gpu_bisect_script.sh .
+          cd mlir-extensions
+          git bisect start
+          git bisect bad
+          git bisect good ${{ github.event.inputs.last_good_commit }}
+          git bisect run ../refactor_gpu_bisect_script.sh 2>&1 | tee output.out
+          cat output.out | grep -A 10  "first bad commit" > badcommit.log
+
+      - name: Upload the bad commit
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: bisect-results
+          path: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild/mlir-extensions/badcommit.log

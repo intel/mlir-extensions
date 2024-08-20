@@ -1,0 +1,37 @@
+name: "GPU Build with composite action"
+
+on:
+  pull_request:
+    branches:
+      - dummy
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: gpu
+    timeout-minutes: 450
+
+    env:
+      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu
+      HOME: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu/home
+
+    steps:
+      - name: Check build root
+        run: |
+          if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+
+      - name: Clear home dir
+        run: |
+          mkdir -p $HOME
+          cd $HOME
+          rm -rf *
+
+      - uses: actions/checkout@v3
+        with:
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          path: ${{env.HOME}}/frameworks.ai.mlir.mlir-extensions
+      - uses: ./build_gpu/home/frameworks.ai.mlir.mlir-extensions/.github/workflows/build-gpu-composite-action
+        with:
+          build_root: ${{env.BUILD_ROOT}}
+          home_dir: ${{env.HOME}}

@@ -1,0 +1,49 @@
+# Sync innersouce repo to upstream mlir-extensions
+
+name: Sync from Upstream Public Repo
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    paths:
+      - .github/workflows/sync.yml
+
+jobs:
+  sync-main:
+  ###
+  # Syncs main branch of this repo to open source intel/mlir-extensions
+  ###
+    runs-on: [self-hosted, icx]
+
+    steps:
+      - name: Check build root
+        run: |
+          export HOME_DIR=$(pwd)/sync
+          echo HOME_DIR=${HOME_DIR} >>$GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          ref: main
+          fetch-depth: 0
+          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+      - name: Add Upstream
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git remote add upstream https://github.com/intel/mlir-extensions.git
+      - name: Fetch Upstream
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git fetch upstream
+      - name: Merge Upstream into main
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git config --global user.email "alexei.fedotov@gmail.com"
+          git config --global user.name "Alexei Fedotov"
+          git merge upstream/main --no-edit
+      - name: Push
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git push -f origin main

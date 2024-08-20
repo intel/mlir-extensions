@@ -1,0 +1,50 @@
+name: Rebuild base docker image for FS simulator runners
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag. Recommended value to use is git hash of main branch and date-time of build.
+        type: string
+        required: true
+        default: latest
+      dont_push:
+        description: Don't push image to the registry
+        required: true
+        type: choice
+        options:
+          - false
+          - true
+        default: true
+  push:
+    paths:
+      - docker/Dockerfile.fs-sim
+      - .github/workflows/rebuild_base_docker_fs_sim.yml
+
+env:
+  DOCKER_REGISTRY: docker-registry.docker-registry.svc.cluster.local:5000
+
+jobs:
+  print_inputs:
+    runs-on: Linux
+    steps:
+      - name: Print Inputs
+        run: echo "${{ toJSON(github.event.inputs) }}"
+
+  build:
+    runs-on:
+      - self-hosted
+      - docker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag || 'latest' }}
+        run: |
+          cd docker
+          docker build . -f Dockerfile.fs-sim \
+            --tag ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag || 'latest' }}
+
+      - name: Push image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag || 'latest' }}
+        if: ${{ !inputs.dont_push }}
+        run: docker push ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag || 'latest' }}
