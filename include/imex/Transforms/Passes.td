@@ -146,5 +146,14 @@ def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
   ];
 }
 
+def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
+  let summary = "apply vnni transformation for to B operand of dpas instructions if necessary.";
+  let constructor = "imex::createVnniTransformationPass()";
+
+  let dependentDialects = [
+    "::mlir::vector::VectorDialect"
+  ];
+}
+
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
