@@ -637,6 +637,9 @@ struct SgLoadTileOpPattern : public XeOneToNConversion<xetile::LoadTileOp> {
       bool isPowerOf2 = (width & (width - 1)) == 0;
       return isPowerOf2 & (width < 32) & (width > 1);
     };
+    // vnni can only be applied when the blockSZ[0] >= factor
+    // for shape, e.g., 1xN, vnni cannot be applied, since no
+    // vnni transform available)
     if (isForDPASB(op) && factor > 1 && blockSZ[0] >= factor)
       vnniAttr = mlir::UnitAttr::get(ctx);
 
