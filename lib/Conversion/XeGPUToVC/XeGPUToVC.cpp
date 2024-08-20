@@ -140,28 +140,27 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
   auto strides = mlir::getStridesAndOffset(memType).first;
   int64_t i = memType.getRank() - 1;
 
-  auto computeBase =
-      [&](Value base) {
-        for (; i >= 0; --i) {
-          unsigned stride =
-              strides[i] * memType.getElementType().getIntOrFloatBitWidth() / 8;
-          auto factor = createIndexConstant(stride);
-          auto offset = offsets.pop_back_val();
-          Value offsetVal;
+  auto computeBase = [&](Value base) {
+    for (; i >= 0; --i) {
+      unsigned stride =
+          strides[i] * memType.getElementType().getIntOrFloatBitWidth() / 8;
+      auto factor = createIndexConstant(stride);
+      auto offset = offsets.pop_back_val();
+      Value offsetVal;
 
-          if (offset.is<Value>()) {
-            offsetVal = offset.get<Value>();
-          } else {
-            offsetVal = createIndexConstant(
-                llvm::cast<IntegerAttr>(offset.get<Attribute>()).getInt());
-          }
-          auto linearOffset =
-              rewriter.create<arith::MulIOp>(loc, offsetVal, factor);
-          base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
-        }
+      if (offset.is<Value>()) {
+        offsetVal = offset.get<Value>();
+      } else {
+        offsetVal = createIndexConstant(
+            llvm::cast<IntegerAttr>(offset.get<Attribute>()).getInt());
+      }
+      auto linearOffset =
+          rewriter.create<arith::MulIOp>(loc, offsetVal, factor);
+      base = rewriter.create<arith::AddIOp>(loc, base, linearOffset);
+    }
 
-        return base;
-      };
+    return base;
+  };
 
   if (tileRank == 2 && memType.getRank() > 2) {
     // base address of plane for 2d: base addr of memref + offsets (starting
