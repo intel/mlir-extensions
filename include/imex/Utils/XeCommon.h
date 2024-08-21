@@ -268,8 +268,11 @@ private:
 
       auto *op = getDefineOrParentOp(value);
 
-      // stop when meet a function.
-      if (!op || llvm::isa<mlir::FunctionOpInterface>(op))
+      // stop when meet a function or ops, e.g., arith.truncf.
+      // since their source and results could have different bitwidth,
+      // in which case the block size cannot be propagated.
+      if (!op || llvm::isa<mlir::FunctionOpInterface>(op) ||
+          llvm::isa<mlir::CastOpInterface>(op))
         continue;
 
       OpAttrMap[value] = attr;
