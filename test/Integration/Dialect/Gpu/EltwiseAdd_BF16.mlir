@@ -30,10 +30,12 @@ module @eltwise_add attributes {gpu.container_module} {
     gpu.func @test_kernel(%arg0: memref<10x20xbf16>, %arg1: memref<10x20xbf16>, %arg2: memref<10x20xbf16>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 10, 20, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %block_id_x = gpu.block_id  x
       %block_id_y = gpu.block_id  y
+      %cst = arith.constant 0.5 : bf16
       %0 = memref.load %arg0[%block_id_x, %block_id_y] : memref<10x20xbf16>
       %1 = memref.load %arg1[%block_id_x, %block_id_y] : memref<10x20xbf16>
       %2 = arith.addf %0, %1 : bf16
-      memref.store %2, %arg2[%block_id_x, %block_id_y] : memref<10x20xbf16>
+      %3 = arith.addf %2, %cst : bf16
+      memref.store %3, %arg2[%block_id_x, %block_id_y] : memref<10x20xbf16>
       gpu.return
     }
   }
@@ -43,7 +45,7 @@ module @eltwise_add attributes {gpu.container_module} {
     %2 = call @test(%0, %1) : (memref<10x20xbf16>, memref<10x20xbf16>) -> memref<10x20xbf16>
     %cast = memref.cast %2 : memref<10x20xbf16> to memref<*xbf16>
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-COUNT-200: 1
+    // CHECK-COUNT-200: 1.5
     call @printMemrefBF16(%cast) : (memref<*xbf16>) -> ()
     return
   }
