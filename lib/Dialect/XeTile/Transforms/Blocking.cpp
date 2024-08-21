@@ -14,7 +14,6 @@
 /// such that each pieces can be handled by a hardware instruction.
 ///
 //===----------------------------------------------------------------------===//
-
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -779,6 +778,7 @@ struct InitTileOpPattern
           op, "Skipped InitTileOp because the result tile is not rank 2.\n");
 
     auto innerBlocks = tileTy.getInnerBlocks();
+    auto memorySpace = op.getSourceMemorySpaceAsInt();
 
     // skip it if innerBlocks has been set by user or compiler.
     if (innerBlocks)
@@ -786,59 +786,75 @@ struct InitTileOpPattern
 
     auto elemTy = tileTy.getElementType();
     int elementSize = elemTy.getIntOrFloatBitWidth();
-    if (isForPrefetch(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(
-          getContext(), getInnerBlockSizes<Prefetch>(
-                            op.getOperation(), elemTy, tileTy.getShape()[0],
-                            tileTy.getShape()[1], this->uArchInterface));
-    } else if (isForLoad(op)) {
 
-      // Set transpose and vnni
-      bool vnni = false;
-      bool transpose = false;
+    if (memorySpace == 3) {                    // for shared memory
+      const unsigned int lscConstraints = 512; // 512 bytes constraint by lsc
+      const unsigned int subgroupSize = 16;
+      auto shape = tileTy.getShape();
+      int64_t innerBlockSizes[2];
+      // prefer to use gather loads with 16 simd lanes
+      innerBlockSizes[0] = shape[0] % subgroupSize == 0 ? 16 : 1;
+      innerBlockSizes[1] =
+          (lscConstraints * 8) / (elementSize * innerBlockSizes[0]);
+      innerBlockSizes[1] =
+          std::min<int64_t>(innerBlockSizes[1], tileTy.getShape()[1]);
+      innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlockSizes);
+    } else { // for global memory
+      if (isForPrefetch(op)) {
+        innerBlocks = mlir::DenseI64ArrayAttr::get(
+            getContext(), getInnerBlockSizes<Prefetch>(
+                              op.getOperation(), elemTy, tileTy.getShape()[0],
+                              tileTy.getShape()[1], this->uArchInterface));
+      } else if (isForLoad(op)) {
 
-      auto order = tileTy.getOrder();
-      if (order[0] == 0 && order[1] == 1)
-        transpose = true;
+        // Set transpose and vnni
+        bool vnni = false;
+        bool transpose = false;
 
-      for (auto user : getEffectiveUsers(op)) {
-        if (auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user)) {
-          if (isForDPASB(loadTileOp) && elementSize < 32) {
-            vnni = true;
-            break;
+        auto order = tileTy.getOrder();
+        if (order[0] == 0 && order[1] == 1)
+          transpose = true;
+
+        for (auto user : getEffectiveUsers(op)) {
+          if (auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user)) {
+            if (isForDPASB(loadTileOp) && elementSize < 32) {
+              vnni = true;
+              break;
+            }
           }
         }
-      }
 
-      if (vnni && transpose && elementSize < 32) {
-        int factor = 32 / elementSize;
-        vnni = false;
-        llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(
-            op.getOperation(), mlir::FloatType::getF32(getContext()),
-            tileTy.getShape()[1], (tileTy.getShape()[0]) / factor,
-            this->uArchInterface, vnni, transpose);
-        std::swap(innerBlock[0], innerBlock[1]);
-        innerBlock[0] *= factor;
-        innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlock);
+        if (vnni && transpose && elementSize < 32) {
+          int factor = 32 / elementSize;
+          vnni = false;
+          llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(
+              op.getOperation(), mlir::FloatType::getF32(getContext()),
+              tileTy.getShape()[1], (tileTy.getShape()[0]) / factor,
+              this->uArchInterface, vnni, transpose);
+          std::swap(innerBlock[0], innerBlock[1]);
+          innerBlock[0] *= factor;
+          innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlock);
 
-      } else if (transpose && elementSize < 32) {
-        return rewriter.notifyMatchFailure(op, "Invalid transpose.");
-      } else {
+        } else if (transpose && elementSize < 32) {
+          return rewriter.notifyMatchFailure(op, "Invalid transpose.");
+        } else {
+          innerBlocks = mlir::DenseI64ArrayAttr::get(
+              getContext(),
+              getInnerBlockSizes<Load>(
+                  op.getOperation(), elemTy, tileTy.getShape()[0],
+                  tileTy.getShape()[1], this->uArchInterface, vnni, transpose));
+        }
+      } else if (isForStore(op)) {
         innerBlocks = mlir::DenseI64ArrayAttr::get(
-            getContext(),
-            getInnerBlockSizes<Load>(op.getOperation(), elemTy,
-                                     tileTy.getShape()[0], tileTy.getShape()[1],
-                                     this->uArchInterface, vnni, transpose));
+            getContext(), getInnerBlockSizes<Store>(
+                              op.getOperation(), elemTy, tileTy.getShape()[0],
+                              tileTy.getShape()[1], this->uArchInterface));
+      } else {
+        return rewriter.notifyMatchFailure(
+            op,
+            "The tile is used for multiple purpose. The init-duplicate pass "
+            "should be run first to resolve this issue.");
       }
-    } else if (isForStore(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(
-          getContext(), getInnerBlockSizes<Store>(
-                            op.getOperation(), elemTy, tileTy.getShape()[0],
-                            tileTy.getShape()[1], this->uArchInterface));
-    } else {
-      return rewriter.notifyMatchFailure(
-          op, "The tile is used for multiple purpose. The init-duplicate pass "
-              "should be run first to resolve this issue.");
     }
 
     if (innerBlocks.empty()) {

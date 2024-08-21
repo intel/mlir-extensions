@@ -303,6 +303,10 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
   if (auto loadOp = llvm::dyn_cast<mlir::xegpu::LoadNdOp>(op)) {
     auto tdescTy = loadOp.getTensorDescType();
 
+    // TODO: need more thinking on SLM
+    if (tdescTy.getMemoryScope() == mlir::xegpu::MemoryScope::SLM)
+      return mlir::success();
+
     int elementSize = loadOp.getTensorDescType().getElementTypeBitWidth();
 
     LoadStore2DConfig loadParams;
@@ -341,6 +345,10 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
   if (auto storeOp = llvm::dyn_cast<mlir::xegpu::StoreNdOp>(op)) {
     auto tdescTy = storeOp.getTensorDescType();
     int elementSize = tdescTy.getElementTypeBitWidth();
+
+    // TODO: need more thinking on SLM
+    if (tdescTy.getMemoryScope() == mlir::xegpu::MemoryScope::SLM)
+      return mlir::success();
 
     LoadStore2DConfig storeParams;
     bool vnni = false;
