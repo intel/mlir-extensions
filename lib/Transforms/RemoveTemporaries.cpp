@@ -540,8 +540,7 @@ private:
       // Replace src alloc uses by dst defining op
       DEBUG_OP("RemoveTemporaries", "  replacing src alloc", srcAllocOp)
       DEBUG_OP("RemoveTemporaries", "   with", dstDefOp)
-      replaceUsesAndPropagateType(rewriter, srcAllocOp, dstDefOp->getResult(0),
-                                  opsToRemove);
+      replaceUsesAndPropagateType(rewriter, srcAllocOp, dst, opsToRemove);
     } else {
       if (srcIsReturned) {
         // no defining op, dst is function argument, after removing scr allow
