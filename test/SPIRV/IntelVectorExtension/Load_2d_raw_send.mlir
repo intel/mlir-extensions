@@ -6,6 +6,10 @@
 // RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%mlir_runner_utils,%irunner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=opencl-runtime -i %s --pass-pipeline-file=%p/spirv-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%irunner_utils,%mlir_c_runner_utils,%opencl_runtime --filecheck
 
 /// A simple load2d/store2d example
 /// This example loads and stores 16x16xf32 elements using raw_send2/store2d

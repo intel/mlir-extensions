@@ -6,6 +6,10 @@ if(IMEX_ENABLE_SYCL_RUNTIME)
     add_subdirectory(SYCLRUNTIME)
 endif()
 
+if(IMEX_ENABLE_OPENCL_RUNTIME)
+    add_subdirectory(OPENCLRUNTIME)
+endif()
+
 add_mlir_library(imex_runner_utils
   SHARED
   ImexRunnerUtils.cpp

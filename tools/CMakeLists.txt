@@ -1,6 +1,6 @@
 add_subdirectory(imex-runner)
 add_subdirectory(imex-opt)
-if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
+if((IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME) OR IMEX_ENABLE_OPENCL_RUNTIME)
     add_subdirectory(l0-fp64-checker)
 endif()
 add_subdirectory(imex-cpu-runner)
