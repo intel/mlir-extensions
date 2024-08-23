@@ -342,7 +342,7 @@ module {
     %mat = ndarray.linspace %i0 %i10 %i10 false : (i32, i32, i32) -> !ndarray.ndarray<?xi32>
     %src = "ndarray.reshape"(%mat, %c2, %c5) : (!ndarray.ndarray<?xi32>, index, index) -> !ndarray.ndarray<?x?xi32>
     %dst = ndarray.permute_dims %src [1, 0] : !ndarray.ndarray<?x?xi32> -> !ndarray.ndarray<?x?xi32>
-    
+
     %tensor = ndarray.to_tensor %dst : !ndarray.ndarray<?x?xi32> -> tensor<?x?xi32>
     %cast = tensor.cast %tensor : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
