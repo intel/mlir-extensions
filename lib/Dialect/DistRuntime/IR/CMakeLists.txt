@@ -2,6 +2,7 @@ add_imex_dialect_library(IMEXDistRuntimeDialect
   DistRuntimeOps.cpp
   GetHaloOp.cpp
   CopyReshapeOp.cpp
+  CopyPermuteOp.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/DistRuntime

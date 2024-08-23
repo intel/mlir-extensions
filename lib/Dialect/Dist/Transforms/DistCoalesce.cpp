@@ -99,6 +99,7 @@ struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
     if (auto op =
             isDefByAnyOf<::imex::dist::InitDistArrayOp, ::imex::dist::EWBinOp,
                          ::imex::dist::EWUnyOp, ::imex::ndarray::ReshapeOp,
+                         ::imex::ndarray::PermuteDimsOp,
                          ::mlir::UnrealizedConversionCastOp,
                          ::imex::ndarray::CopyOp>(val)) {
       return op;

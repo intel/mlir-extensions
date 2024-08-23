@@ -8,6 +8,7 @@ add_imex_dialect_library(IMEXNDArrayDialect
   DimOp.cpp
   EWBinOp.cpp
   EWUnyOp.cpp
+  PermuteDimsOp.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/mlir/Dialect/NDArray

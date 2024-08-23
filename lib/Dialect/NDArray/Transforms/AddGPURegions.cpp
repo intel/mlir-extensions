@@ -128,6 +128,7 @@ struct AddGPURegionsPass : public ::imex::AddGPURegionsBase<AddGPURegionsPass> {
                    NDArrayOpRWP<::imex::ndarray::EWBinOp>,
                    NDArrayOpRWP<::imex::ndarray::EWUnyOp>,
                    NDArrayOpRWP<::imex::ndarray::ReductionOp>,
+                   NDArrayOpRWP<::imex::ndarray::PermuteDimsOp>,
                    NDArrayOpRWP<::imex::dist::InitDistArrayOp>,
                    NDArrayOpRWP<::imex::dist::LocalOffsetsOfOp>,
                    NDArrayOpRWP<::imex::dist::PartsOfOp>,
