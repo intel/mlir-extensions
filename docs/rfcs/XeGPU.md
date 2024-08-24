@@ -251,7 +251,7 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 Attribute `xegpu.sg_map` describes the mapping between work item (WI) and the 2D tensor specified by the tensor descriptor. To distribute the XeGPU operation to work items, the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time.
 
-Within the sg_map, `wi_layout` specifies the layout of work items, describing the mapping of work items to the tensor. wi_layout[0] x wi_layout[1] must be equal to the total number of work items within a subgroup. `wi_data` specifies the data elements assigned to each work item for a single distribution. In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. 
+Within the sg_map, `wi_layout` specifies the layout of work items, describing the mapping of work items to the tensor. wi_layout[0] x wi_layout[1] must be equal to the total number of work items within a subgroup. `wi_data` specifies the minimum number of data elements assigned to each work item for one single distribution. In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. 
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -260,16 +260,19 @@ Within the sg_map, `wi_layout` specifies the layout of work items, describing th
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
 
-wi_data_size refers to the data size mapped to indiviudal work item, and sg_map_size to the collective size by all the work items as specified by sg_map. sg_map_size represents the minimun size of 2D tensor to be distributed to work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc. 
+wi_data_size refers to the data size mapped to indiviudal work item, and sg_map_size to the collective size by all the work items as specified by sg_map. distribute_unit_size represents the minimun size of 2D tensor to be distributed to work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc. 
 In the example above, wi_data_size is 1, sg_map_size is 16, tensor_size is 128. 
 ```mlir
         wi_data_size = wi_data[0] x wi_data[1]
 	subgroup_size == wi_layout[0] x wi_layout[1] 
- 	sg_map_size = subgroup_size * wi_data_size 
+ 	sg_map_size[0] = wi_layout[0] x wi_data[0]
+        sg_map_size[1] = wi_layout[1] x wi_data[1]
+ 	distribute_unit_size = sg_map_size[0] x sg_map_size[1] = subgroup_size x wi_data_size 
   	tensor_size = tensor_desc[0] x tensor_desc[1]
 ```
+wi_data_size can be larger than 1, meaning that each work item operates on multiple elements, which is eventually lowered to "SIMT-flavor" vector, like SPIR-V vector or llvm vector. The multiple elements indicated by wi_data can only be from one dimension and must be contiguous in the memory along either dimension.  
 
-Size distribution rule can be represented as following: tensor_desc[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc[1] by wi_layout[1] x wi_data[1], and tensor_size by sg_map_size. The 2D subtensor is evenly distributed to work items, so each work item gets a 2D data fragments. 
+To distribute a tensor, tensor_size must be divisible by distribute_unit_size. More specifically, tensor_desc[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc[1] by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to work items, so each work item gets a 2D data fragment, which may contain mulitple distribution of wi_data elements.  
 
 The size of the result data fragement per work item can be computed by the following: 
 ```mlir
