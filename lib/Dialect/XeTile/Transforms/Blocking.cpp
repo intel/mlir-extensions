@@ -531,8 +531,8 @@ struct VectorMultiDimReductionOpPattern
     // will be transformed to
     // multi_reduction<add>, %e, %a[1, 3]: vector<16x2x1x16xf16> to
     // vector<16x1xf16>
-    auto dim = mlir::cast<mlir::IntegerAttr>(reductionDims[0]).getInt();
-    auto newReductionDims = rewriter.getI64ArrayAttr({dim, dim + 2});
+    auto dim = reductionDims[0];
+    auto newReductionDims = rewriter.getDenseI64ArrayAttr({dim, dim + 2});
 
     auto newDestShape =
         (dim == 0)
