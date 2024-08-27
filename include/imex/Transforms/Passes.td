@@ -155,5 +155,18 @@ def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
   ];
 }
 
+def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
+  let summary = "Eliminate in-register vector transpose by fusing with load.";
+  let constructor = "imex::createOptimizeTransposePass()";
+  let dependentDialects = [
+    "::mlir::xegpu::XeGPUDialect"
+  ];
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
+}
+
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
