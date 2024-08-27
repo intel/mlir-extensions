@@ -260,7 +260,7 @@ Within the sg_map, `wi_layout` specifies the layout of work items, describing th
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
 
-wi_data_size refers to the data size mapped to indiviudal work item, and sg_map_size to the collective size by all the work items as specified by sg_map. distribute_unit_size represents the minimun size of 2D tensor to be distributed to work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc. 
+wi_data_size refers to the data size mapped to indiviudal work item, and sg_map_size to the collective size by all the work items as specified by sg_map. distribute_unit_size represents the minimun size of 2D tensor to be distributed to work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc.
 In the example above, wi_data_size is 1, sg_map_size is 16, tensor_size is 128.
 ```mlir
         wi_data_size = wi_data[0] x wi_data[1]
