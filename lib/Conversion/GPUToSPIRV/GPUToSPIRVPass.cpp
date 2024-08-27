@@ -16,6 +16,7 @@
 #include "imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h"
 
 #include "../PassDetail.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
@@ -171,6 +172,75 @@ void populateGPUPrintfToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
                                       mlir::RewritePatternSet &patterns) {
 
   patterns.add<PrintfOpPattern>(typeConverter, patterns.getContext());
+}
+
+// This op:
+//   vector.create_mask %maskVal : vector<vWidth x i1>
+// is lowered to:
+//   if maskVal < 0
+//     mask = 0
+//   else if maskVal < vWidth
+//     mask = (1 << maskVal) - 1
+//   else
+//     mask = all ones
+class VectorMaskConversionPattern final
+    : public mlir::OpConversionPattern<mlir::vector::CreateMaskOp> {
+public:
+  using OpConversionPattern<mlir::vector::CreateMaskOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp vMaskOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::VectorType vTy = vMaskOp.getVectorType();
+    if (vTy.getRank() != 1)
+      return mlir::failure();
+
+    auto vWidth = vTy.getNumElements();
+    auto vWidthConst = rewriter.create<mlir::arith::ConstantOp>(
+        vMaskOp.getLoc(), rewriter.getI32IntegerAttr(vWidth));
+    auto maskVal = adaptor.getOperands()[0];
+    maskVal = rewriter.create<mlir::arith::TruncIOp>(
+        vMaskOp.getLoc(), rewriter.getI32Type(), maskVal);
+
+    // maskVal < vWidth
+    auto cmp = rewriter.create<mlir::arith::CmpIOp>(
+        vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal,
+        vWidthConst);
+    auto one = rewriter.create<mlir::arith::ConstantOp>(
+        vMaskOp.getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
+    auto shift = rewriter.create<mlir::spirv::ShiftLeftLogicalOp>(
+        vMaskOp.getLoc(), one, maskVal);
+    auto mask1 =
+        rewriter.create<mlir::arith::SubIOp>(vMaskOp.getLoc(), shift, one);
+    auto mask2 = rewriter.create<mlir::arith::ConstantOp>(
+        vMaskOp.getLoc(), rewriter.getI32Type(),
+        rewriter.getI32IntegerAttr(0xFFFFFFFF));
+    mlir::Value sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(),
+                                                             cmp, mask1, mask2);
+
+    // maskVal < 0
+    auto zero = rewriter.create<mlir::arith::ConstantOp>(
+        vMaskOp.getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
+    auto cmp2 = rewriter.create<mlir::arith::CmpIOp>(
+        vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal, zero);
+    sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(), cmp2, zero,
+                                                 sel);
+
+    sel = rewriter.create<mlir::arith::TruncIOp>(
+        vMaskOp.getLoc(), rewriter.getIntegerType(vWidth), sel);
+    auto res = rewriter.create<mlir::spirv::BitcastOp>(
+        vMaskOp.getLoc(), mlir::VectorType::get({vWidth}, rewriter.getI1Type()),
+        sel);
+    vMaskOp->replaceAllUsesWith(res);
+    rewriter.eraseOp(vMaskOp);
+    return mlir::success();
+  }
+};
+
+void populateVectorToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
+                                   mlir::RewritePatternSet &patterns) {
+  patterns.add<VectorMaskConversionPattern>(typeConverter,
+                                            patterns.getContext());
 }
 
 static bool isGenericVectorTy(mlir::Type type) {
@@ -364,6 +434,7 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     imex::populateGPUPrintfToSPIRVPatterns(typeConverter, patterns);
+    imex::populateVectorToSPIRVPatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
