@@ -277,6 +277,79 @@ struct ArithConstantOpPattern
   }
 };
 
+// Blocks a vector.create_mask op such that, ideally, it matches its consuming
+// select op (which is an elementwise op). In this way, during the lowering to
+// XeGPU, there will be a one-to-one correspondence and an
+// unrealized_conversion_cast will not be needed.
+struct VectorCreateMaskOpPattern
+    : public XeTileConversion<mlir::vector::CreateMaskOp, TileUsageAnalysis> {
+
+  using XeTileConversion<mlir::vector::CreateMaskOp,
+                         TileUsageAnalysis>::XeTileConversion;
+
+  VectorCreateMaskOpPattern(mlir::MLIRContext *context,
+                            imex::XeTypeConverter &converter,
+                            TileUsageAnalysis &analysis,
+                            std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = res.getType();
+    if (resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    // The first operand must be a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, only masking
+    // columns within a row is supported.
+    auto shape = resType.getShape();
+    APInt cstOp0;
+    if (!matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) ||
+        cstOp0.getSExtValue() != shape[0]) {
+      op->emitOpError() << "Unsupported first operand";
+      return mlir::failure();
+    }
+
+    auto blocks = getInnerBlockSizes<Elementwise>(
+        op, resType.getElementType(), shape[0], shape[1], this->uArchInterface);
+
+    if (blocks.empty()) {
+      op->emitOpError() << "Invalid inner block sizes";
+      return mlir::failure();
+    }
+
+    // TODO: support blocking the outer dimension.
+    if (blocks[0] != 1) {
+      op->emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
+    }
+
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / blocks[0], shape[1] / blocks[1], blocks[0], blocks[1]},
+        resType.getElementType());
+    Location loc = op->getLoc();
+    rewriter.startOpModification(op);
+    // Due to the simplifications mentioned above, for now, the index operands
+    // are not adjusted. In fact, only the second index operand (masked columns)
+    // will be used during the lowering to XeGPU.
+    op->setOperands({op->getOperand(0), op->getOperand(1), op->getOperand(0),
+                     op->getOperand(1)});
+    res.setType(newTy);
+    rewriter.finalizeOpModification(op);
+    rewriter.setInsertionPointAfter(op);
+    auto unpack = rewriter.create<xetile::TileUnpackOp>(
+        loc, resType, res, mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+    rewriter.replaceAllUsesExcept(res, unpack.getResult(), unpack);
+    return mlir::success();
+  }
+};
+
 // Pattern for generic elemetwise ops. Blocks op according to
 // getInnerBlocks<Elementwise>. Pack/Unpack ops are inserted on the ops
 // boundaries if needed.
@@ -1084,12 +1157,13 @@ struct UpdateTileOffsetOpPattern
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
-  patterns.insert<ArithConstantOpPattern, VectorizableOpPattern,
-                  SCFForOpPattern, SCFYieldOpPattern, InitTileOpPattern,
-                  LoadTileOpPattern, StoreTileOpPattern, TileMMAOpPattern,
-                  UpdateTileOffsetOpPattern, VectorMultiDimReductionOpPattern,
-                  TileReduceOpPattern, TileBroadcastOpPattern>(
-      patterns.getContext(), converter, analysis, ptruArch);
+  patterns.insert<ArithConstantOpPattern, VectorCreateMaskOpPattern,
+                  VectorizableOpPattern, SCFForOpPattern, SCFYieldOpPattern,
+                  InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
+                  TileMMAOpPattern, UpdateTileOffsetOpPattern,
+                  VectorMultiDimReductionOpPattern, TileReduceOpPattern,
+                  TileBroadcastOpPattern>(patterns.getContext(), converter,
+                                          analysis, ptruArch);
   patterns.insert<TransposeOpPattern<mlir::vector::TransposeOp>,
                   TransposeOpPattern<xetile::TransposeOp>>(
       patterns.getContext(), converter, analysis, ptruArch);
