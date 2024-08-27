@@ -61,12 +61,12 @@ gpu.module @test_kernel {
       //CHECK: %[[r43:.*]] = vector.extract_strided_slice %[[r39]] {offsets = [24, 0], sizes = [8, 32], strides = [1, 1]} : vector<32x32xi8> to vector<8x32xi8>
       %a_value = xetile.load_tile %a_tile : !xetile.tile<32x32xi8> -> vector<32x32xi8>
 
-      //CHECK: %[[r44:.*]] = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xi8, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x8x16x4xi8>
-      //CHECK: %[[r45:.*]] = vector.extract %[[r44]][0] : vector<8x16x4xi8> from vector<2x8x16x4xi8>
-      //CHECK: %[[r46:.*]] = vector.extract %[[r44]][1] : vector<8x16x4xi8> from vector<2x8x16x4xi8>
+      //CHECK: %[[r44:.*]] = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xi8, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xi8>
+      //CHECK: %[[r45:.*]] = vector.extract %[[r44]][0] : vector<32x16xi8> from vector<2x32x16xi8>
+      //CHECK: %[[r46:.*]] = vector.extract %[[r44]][1] : vector<32x16xi8> from vector<2x32x16xi8>
       %b_value = xetile.load_tile %b_tile : !xetile.tile<32x32xi8> -> vector<32x32xi8>
 
-      //CHECK-COUNT-8: xegpu.dpas {{.*}} : vector<8x32xi8>, vector<8x16x4xi8>, vector<8x16xi32> -> vector<8x16xi32>
+      //CHECK-COUNT-8: xegpu.dpas {{.*}} : vector<8x32xi8>, vector<32x16xi8>, vector<8x16xi32> -> vector<8x16xi32>
       %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value : vector<32x32xi8>, vector<32x32xi8>, vector<32x32xi32> -> vector<32x32xi32>
 
       //CHECK: xegpu.update_nd_offset %{{.*}}, [%[[c0]], %[[c32]]] : !xegpu.tensor_desc<32x32xi8, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>

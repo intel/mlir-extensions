@@ -1,10 +1,10 @@
 builtin.module(
     cse
     gpu.module(xetile-init-duplicate
-        xetile-optimize-transpose
+        xetile-canonicalization
         xetile-blocking
         convert-xetile-to-xegpu
-        imex-propagate-packed-layout)
+        imex-xegpu-apply-vnni-transformation)
     cse
     imex-vector-linearize
     cse

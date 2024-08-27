@@ -71,7 +71,7 @@ module attributes {gpu.container_module} {
         %31 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
         xegpu.compile_hint
 
-        // CHECK-COUNT-16: {{.*}} = xegpu.dpas {{.*}}, {{.*}}, {{.*}} : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+        // CHECK-COUNT-16: {{.*}} = xegpu.dpas {{.*}}, {{.*}}, {{.*}} : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
         %32 = xetile.tile_mma %29, %28, %arg7 : vector<32x32xf16>, vector<32x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
         xegpu.compile_hint
         scf.yield %30, %31, %32 : !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>
