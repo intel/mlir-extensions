@@ -13,7 +13,7 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: [self-hosted, icx, fs-sim]
+    runs-on: [self-hosted, icx, fs-sim-2]
     timeout-minutes: 450
 
     env:
@@ -62,10 +62,10 @@ jobs:
           set -x
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
 
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 1 --debug --timeout=600 --filter=Integration/Dialect/Xe*/*" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
+          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a --time-tests -j 1 --debug --timeout=1500 --filter=Integration/Dialect/Xe*/*" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
           sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_rasty.sh
           export NEO_BINARIES_ROOT="$HOME"/neo
-          (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && ./run_in_a_loop_rasty.sh) &> fs-sim.log &
+          (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && run_coral_fs -r -m umd -l) &> fs-sim.log &
           SIM_PID=$!
           cmake --build build --target check-static | tee build/tests.txt
           TEST_RESULT=${PIPESTATUS[0]}
