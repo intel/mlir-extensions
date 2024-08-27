@@ -29,6 +29,16 @@ func.func @test_const_novector() -> i32 {
 }
 
 // -----
+// CHECK-LABEL: test_create_mask
+//       CHECK: vector.create_mask {{.*}} : vector<16xi1>
+func.func @test_create_mask() -> vector<1x16xi1> {
+  %c0 = arith.constant 0 : index
+  %c20 = arith.constant 20 : index
+  %0 = vector.create_mask %c0, %c20 : vector<1x16xi1>
+  return %0 : vector<1x16xi1>
+}
+
+// -----
 // CHECK-LABEL: test_extract_strided_slice
 //  CHECK-SAME: (%[[ORIG_ARG:.*]]: vector<8x16xf32>) -> vector<8x8xf32>
 //       CHECK: %[[ARG:.*]] = vector.shape_cast %[[ORIG_ARG]] : vector<8x16xf32> to vector<128xf32>

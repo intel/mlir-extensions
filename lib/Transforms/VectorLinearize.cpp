@@ -405,6 +405,32 @@ struct VectorSplatOpConversion final
   }
 };
 
+struct VectorCreateMaskOpConversion final
+    : mlir::OpConversionPattern<mlir::vector::CreateMaskOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp createMaskOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto srcTy = createMaskOp.getType();
+    auto srcShape = srcTy.getShape();
+    if (srcShape.size() != 2)
+      return rewriter.notifyMatchFailure(createMaskOp,
+                                         "only 2D mask is supported.");
+
+    if (srcShape[0] != 1)
+      return rewriter.notifyMatchFailure(
+          createMaskOp, "only unit outer dimension is supported.");
+
+    auto dstTy = getTypeConverter()->convertType(srcTy);
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(createMaskOp, "cannot convert type.");
+
+    rewriter.replaceOpWithNewOp<mlir::vector::CreateMaskOp>(
+        createMaskOp, dstTy, adaptor.getOperands().back());
+    return mlir::success();
+  }
+};
+
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -447,6 +473,11 @@ struct VectorLinearizePass final
           return op.getVectorType().getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::vector::CreateMaskOp>(
+        [&](mlir::vector::CreateMaskOp op) {
+          return op.getType().getRank() == 1;
+        });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -459,7 +490,8 @@ struct VectorLinearizePass final
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,
-                 VectorStoreOpConversion>(typeConverter, context);
+                 VectorStoreOpConversion, VectorCreateMaskOpConversion>(
+        typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

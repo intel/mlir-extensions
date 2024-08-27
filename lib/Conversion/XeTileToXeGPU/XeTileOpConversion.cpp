@@ -31,6 +31,7 @@
 
 namespace imex {
 
+using mlir::vector::CreateMaskOp;
 using mlir::vector::ExtractOp;
 using mlir::vector::ExtractStridedSliceOp;
 using mlir::vector::ShapeCastOp;
@@ -1036,17 +1037,63 @@ struct SgBroadcastOpPattern : public XeOneToNConversion<xetile::BroadcastOp> {
   }
 };
 
+struct SgVectorCreateMaskOpPattern : public XeOneToNConversion<CreateMaskOp> {
+  using XeOneToNConversion<CreateMaskOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(CreateMaskOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+    // 4D vector ops only.
+    if (resType.getRank() != 4) {
+      op.emitOpError() << "type is not 4D vector";
+      return mlir::failure();
+    }
+
+    // See assumptions about the supported create_mask op in
+    // VectorCreateMaskOpPattern in Blocking.cpp. The second and forth operands
+    // are the same. This value is the mask of the inner dimension of the
+    // original shape. Different masks are created based on the new inner
+    // dimension size.
+    mlir::Location loc = op->getLoc();
+    auto shape = resType.getShape();
+    auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+    llvm::SmallVector<llvm::SmallVector<mlir::Value>> newOperands;
+    mlir::Value mask = adaptor.getOperands()[3][0];
+    auto innerDimSize =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, shape[3]);
+    for (int j = 0; j < shape[1]; ++j) {
+      newOperands.push_back({one, mask});
+      mask = rewriter.create<mlir::arith::SubIOp>(loc, mask, innerDimSize);
+    }
+
+    llvm::SmallVector<mlir::Value> newOps;
+    auto newTy =
+        mlir::VectorType::get({shape[2], shape[3]}, resType.getElementType());
+    for (int i = 0; i < shape[0]; ++i) {
+      for (int j = 0; j < shape[1]; ++j) {
+        auto newOp =
+            rewriter.create<CreateMaskOp>(op.getLoc(), newTy, newOperands[j]);
+        newOps.push_back(newOp);
+      }
+    }
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                                         mlir::RewritePatternSet &patterns,
                                         TileUsageAnalysis &analysis) {
-  patterns.insert<SgInitTileOpPattern, SgPrefetchTileOpPattern,
-                  SgTileUnpackOpPattern, SgTilePackOpPattern,
-                  SgLoadTileOpPattern, SgStoreTileOpPattern, SgTileMMAOpPattern,
-                  SgUpdateTileOffsetOpPattern,
-                  SgTransposeOpPattern<mlir::vector::TransposeOp>,
-                  SgTransposeOpPattern<xetile::TransposeOp>,
-                  SgBroadcastOpPattern, SgTileReduceOpPattern>(
-      patterns.getContext(), converter, analysis);
+  patterns.insert<
+      SgInitTileOpPattern, SgPrefetchTileOpPattern, SgTileUnpackOpPattern,
+      SgTilePackOpPattern, SgLoadTileOpPattern, SgStoreTileOpPattern,
+      SgTileMMAOpPattern, SgUpdateTileOffsetOpPattern,
+      SgTransposeOpPattern<mlir::vector::TransposeOp>,
+      SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern,
+      SgTileReduceOpPattern, SgVectorCreateMaskOpPattern>(patterns.getContext(),
+                                                          converter, analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,
