@@ -68,7 +68,7 @@ The example below accepts a memory address and an offset and creates a 1D tensor
 
 Attribute `memory_scope` indicates whether the tensor is located in the global or shared local memory. The default value is global.
 Attribute `boundary_check` indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true.
-For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior. 
+For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior.
 
 `load_nd` works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.
 ```mlir
@@ -105,7 +105,7 @@ The `transpose_bit_width` attribute can be used to transpose B matrix and at the
 
 ```mlir
   %at = xegpu.load_nd %block_a {transpose = [1, 0], transpose_bit_width = 32} :
-     tensor_desc<16x16xfp16> into vector<8x32xfp16>
+     tensor_desc<32x16xfp16> into vector<8x64xfp16>
   %bt = vector.shape_cast %at :  vector<8x64xfp16> into vector<8x32x2xfp16>
 ```
 
@@ -159,7 +159,7 @@ Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to
   %tdesc_updated = xegpu.update_nd_offset %tdesc, %offsets:2 :
   	  tensor_desc<8x16xbf16>, index, index into tensor_desc<8x16xbf16>
 ```
-`create_tdesc` creates a tensor descriptor for a scattered load. It accepts a memory address and a vector of offsets. The element data type and size are specified in the output tensor_desc data type, and they must be known at the compile-time. 
+`create_tdesc` creates a tensor descriptor for a scattered load. It accepts a memory address and a vector of offsets. The element data type and size are specified in the output tensor_desc data type, and they must be known at the compile-time.
 ```mlir
   %scatter_tdesc0 = xegpu.create_tdesc %mem_addr, %offsets} :
      	uint64, Vector<16 x index>, into tensor_desc<16 x uint8, #scattered>
@@ -175,7 +175,7 @@ Attribute `memory_scope` indicates whether the tensor is located in the global (
 
 Attribute `chunk_size_per_lane` specifies the size being loaded per each work item (WI). Its default value is 1, but can be set to 2, 3, 4, 8. Each work item may load a consecutive chunk of data elements from the memory but put them along the column dimension.
 
-`load_gather` (aka. load) load data per each work item. The output vector size is consistent with the number of work items, as the output describes the data being loaded at the subgroup level. 
+`load_gather` (aka. load) load data per each work item. The output vector size is consistent with the number of work items, as the output describes the data being loaded at the subgroup level.
 
 ```mlir
   %result0 = xegpu.load_gather %scatter_tdesc0, %mask {L1_hint = cached, L2_hint = uncached} :
@@ -194,7 +194,7 @@ The mask operand masks out memory access so that it is safe to pass out-of-bound
 Load_gather is a slightly higher level operation than native hardware instruction. When the hardware performs load_gather, it may load each low-precision element to a uint32. In this case, the lowering uses an additional instruction to further gather the value from the registers to fully-packed vectors. Load_gather returns a vector of uint8 fully packed.
 The data type being loaded could be uint8, uint16, uint32, uint64.
 
-`store_scatter` (aka. store) stores data to the memory specified by tensor_desc. 
+`store_scatter` (aka. store) stores data to the memory specified by tensor_desc.
 ```mlir
 xegpu.store_scatter %value, %scatter_tdesc1, %mask:
      	 vector<16xuint16>, vector<16xi1>, tensor_desc<16xuint16, #scattered>
@@ -247,11 +247,11 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 `nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the `sg_map`.
 
-## XeGPU Attributes to support Work Item Level semantics  
+## XeGPU Attributes to support Work Item Level semantics
 
 Attribute `xegpu.sg_map` describes the mapping between work item (WI) and the 2D tensor specified by the tensor descriptor. To distribute the XeGPU operation to work items, the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time.
 
-Within the sg_map, `wi_layout` specifies the layout of work items, describing the mapping of work items to the tensor. wi_layout[0] x wi_layout[1] must be equal to the total number of work items within a subgroup. `wi_data` specifies the minimum number of data elements assigned to each work item for a single distribution. In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. 
+Within the sg_map, `wi_layout` specifies the layout of work items, describing the mapping of work items to the tensor. wi_layout[0] x wi_layout[1] must be equal to the total number of work items within a subgroup. `wi_data` specifies the minimum number of data elements assigned to each work item for a single distribution. In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1].
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -261,20 +261,20 @@ Within the sg_map, `wi_layout` specifies the layout of work items, describing th
 ```
 
 wi_data_size refers to the data size mapped to indiviudal work item, and sg_map_size to the collective size by all the work items as specified by sg_map. distribute_unit_size represents the minimun size of 2D tensor to be distributed to work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc. 
-In the example above, wi_data_size is 1, sg_map_size is 16, tensor_size is 128. 
+In the example above, wi_data_size is 1, sg_map_size is 16, tensor_size is 128.
 ```mlir
         wi_data_size = wi_data[0] x wi_data[1]
-	subgroup_size == wi_layout[0] x wi_layout[1] 
+	subgroup_size == wi_layout[0] x wi_layout[1]
  	sg_map_size[0] = wi_layout[0] x wi_data[0]
         sg_map_size[1] = wi_layout[1] x wi_data[1]
- 	distribute_unit_size = sg_map_size[0] x sg_map_size[1] = subgroup_size x wi_data_size 
+ 	distribute_unit_size = sg_map_size[0] x sg_map_size[1] = subgroup_size x wi_data_size
   	tensor_size = tensor_desc[0] x tensor_desc[1]
 ```
 wi_data_size can be larger than 1, meaning that each work item operates on multiple elements, which is eventually lowered to "SIMT-flavor" vector, like SPIR-V vector or llvm vector. The multiple elements indicated by wi_data can only be from one dimension and must be contiguous in the memory along either dimension.  
 
 To distribute a tensor, tensor_size must be divisible by distribute_unit_size. More specifically, tensor_desc[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc[1] by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to work items, so each work item gets a 2D data fragment, which may contain mulitple distribution of wi_data elements.  
 
-The size of the result data fragement per work item can be computed by the following: 
+The size of the result data fragement per work item can be computed by the following:
 ```mlir
 	WI_data_frag[0] = tensor_desc[0]/wi_layout[0]
 	WI_data_frag[1] = tensor_desc[1]/wi_layout[1]
@@ -289,7 +289,7 @@ With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT 
      tensor_desc<8x16xbf16, #sg_map_a> into vector<8x1xbf16>
 ```
 
-For load_nd with `packed` attribute, wi_data[0] must equal to the size required to “pack” the low-precision data into 32-bit, also known as `vnni_factor`. The result vector takes wi_data[0] as inner dimension size, to indicate the effects of layout change known as "VNNI" transformation. The data fragement <16x1xbf16> is loaded and packed as <8x1x2xbf16>. 
+For load_nd with `packed` attribute, wi_data[0] must equal to the size required to “pack” the low-precision data into 32-bit, also known as `vnni_factor`. The result vector takes wi_data[0] as inner dimension size, to indicate the effects of layout change known as "VNNI" transformation. The data fragement <16x1xbf16> is loaded and packed as <8x1x2xbf16>.
 
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
@@ -303,7 +303,7 @@ For load_nd with `transpose` attribute, wi_layout is transposed to match with th
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]} :
      tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 ```
-`xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution. 
+`xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution.
 
 `xegpu.sg_map` is also used to describe the WI data distribution for regular load. Below example shows that each WI loads one fp32 data element. The result vector <16xfp32> is loaded and distributed to each WI as <1xf32>.
 ```mlir
@@ -328,9 +328,9 @@ Below example shows that each WI loads 4 fp32 data element with the chunk_size_p
           tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<1xi1> -> vector<4x1xfp32>
 ```
 
-User must use legal sg_map value for the WI data distribution for certain operations on PVC and ARC. It includes load_nd/store_nd, load/store with chunk_size, and DPAS. 
+User must use legal sg_map value for the WI data distribution for certain operations on PVC and ARC. It includes load_nd/store_nd, load/store with chunk_size, and DPAS.
 
-## Rules of sg_map setting for load and store on PVC and ARC 
+## Rules of sg_map setting for load and store on PVC and ARC
 User must use for the WI data distribution of 2d block load and store to work with DPAS on PVC. Not using the sg_map value defined here leads to undefined behavior.
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
@@ -355,7 +355,7 @@ For matrix load with transpose of A or B*
 
 User must use for the WI data distribution of 2d block load and store to work with DPAS on ARC.  
 ```mlir
-# assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8 
+# assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
 For matrix A load
 #sg_map_a_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribute from [8, 16] to [8, 2]
 #sg_map_a_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>   // WI data distribute from [8, 16] to [8, 2]
@@ -374,27 +374,27 @@ For matrix C load or matrix load/store of any type
 For matrix load with transpose of A or B
 #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 ```
-A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC. 
+A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC.
 Reference: https://registry.khronos.org/OpenCL/extensions/intel/cl_intel_subgroup_matrix_multiply_accumulate.html
 
 user must use for the WI data distribution of 1d block load and regular load with chunk_size on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.  
 ```mlir
   For 1d block load
-  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16 
+  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 
-  For regular load with chunk_size_per_lane  // PVC subgroup_size = 16 
+  For regular load with chunk_size_per_lane  // PVC subgroup_size = 16
   #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
 
   For 1d block load
-  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8 
+  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
   #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
 
-  For regular load with chunk_size_per_lane // ARC subgroup_size = 8 
+  For regular load with chunk_size_per_lane // ARC subgroup_size = 8
   #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>
 ```
 
-## Rules of sg_map setting for DPAS on PVC and ARC 
+## Rules of sg_map setting for DPAS on PVC and ARC
 The sg_map setting rule for DPAS is applied to the input and output vector operand. The sg_map setting rules of 2d block load for matrix A, B, C/D are reused. For matirx B, as the data being loaded from memory is VNNI transformed, so the wi_data needs to change accordingly so that it is consistent with the vector for operand B. It should use the following.
 
 For PVC subgroup_size = 16
@@ -402,7 +402,7 @@ For PVC subgroup_size = 16
 #sg_map_b_reg_f16  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>   // WI data distribute from [8, 16, 2] to [8, 1, 2]
 #sg_map_b_reg_ui8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>   // WI data distribute from [8, 16, 4] to [8, 1, 4]
 #sg_map_b_reg_si8  = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>   // WI data distribute from [8, 16, 4] to [8, 1, 4]
-  
+
 For ARC subgroup_size = 8
 #sg_map_b_bf16 = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>    // WI data distribute from [8, 8, 2] to [8, 1, 2]
 #sg_map_b_f16  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>    // WI data distribute from [8, 8, 2] to [8, 1, 2]
@@ -415,14 +415,14 @@ For ARC subgroup_size = 8
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #sg_map_b_reg = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
 
-  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x1x2xbf16> into vector<8x1xfloat> 
+  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x1x2xbf16> into vector<8x1xfloat>
 
   ARC int8 example
   #sg_map_a_ui8  = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
   #sg_map_b_ui8_reg = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>
 
-  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x1x4xui8> into vector<8x1xfloat> 
+  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x1x4xui8> into vector<8x1xfloat>
 ```
 
 ## sg_map use case - 2d load
@@ -448,7 +448,7 @@ An example on how to load a 2d block, perform dpas, and store back to memory.
   %vector_b = xegpu.load_nd %tdesc1:
      tensor_desc<16x16xbf16, #sg_map_b> into vector<8x2xbf16>
 
-  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x1x2xbf16> into vector<8x1xfloat> 
+  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x1x2xbf16> into vector<8x1xfloat>
 
   xegpu.store_nd %vector_c, %tdesc2:
           vector<8x1xfloat>, tensor_desc<8x16xfloat, #sg_map_c>
@@ -476,7 +476,7 @@ An example on how to perform transpose using load_gather with chunk_size_per_lan
   #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
   %tdesc2 = xegpu.create_nd_tdesc %dest_addr, %offset:
 		uint64, index into tensor_desc<64xfp32, #tdesc_attr>
-  xegpu.store_nd %value, %tdesc2: 
+  xegpu.store_nd %value, %tdesc2:
                 vector<4xfp32>, tensor_desc<64xfp32, #tdesc_attr>
 
 ```
