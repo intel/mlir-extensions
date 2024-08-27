@@ -10,6 +10,7 @@
 #ifndef TRANSFORMS_PASSDETAIL_H_
 #define TRANSFORMS_PASSDETAIL_H_
 
+#include "mlir/Dialect/XeGPU/IR/XeGPU.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
@@ -37,6 +38,10 @@ class LinalgDialect;
 
 namespace vector {
 class VectorDialect;
+}
+
+namespace xegpu {
+class XeGPUDialect;
 }
 } // end namespace mlir
 
