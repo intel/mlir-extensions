@@ -15,6 +15,7 @@
 #define IMEX_TRANSFORMS_PASSES_H_
 
 #include "mlir/Pass/Pass.h"
+#include <memory>
 
 namespace imex {
 //===----------------------------------------------------------------------===//
@@ -31,6 +32,7 @@ std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 std::unique_ptr<mlir::Pass> createVectorLinearizePass();
 std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
+std::unique_ptr<mlir::Pass> createOptimizeTransposePass();
 std::unique_ptr<mlir::Pass> createVnniTransformationPass();
 
 #define GEN_PASS_DECL

@@ -11,6 +11,7 @@ add_mlir_library(IMEXTransforms
   SetSPIRVCapabilities.cpp
   VectorLinearize.cpp
   VnniTransformation.cpp
+  OptimizeTranspose.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms
