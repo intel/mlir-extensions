@@ -123,7 +123,7 @@ The `transpose_bit_width` attribute can be used to transpose B matrix and at the
 	   into vector<8x16xfloat>
 ```
 
-When the input matrix is a lower-precision data type (lower than 32bit), the input vectors is optionally to use 3D representation. When this variant is used, the matrix B must be in VNNI layout, and the matrix A may be in original 2D or reshaped to 3D represenation. The reshape for matrix A simply split the second dimension by `vnni_factor`, to match with matrix B.
+When the input matrix is a lower-precision data type (lower than 32bit), the input vectors may use 3D representation. When this variant is used, the matrix B must be in VNNI layout, and the matrix A may be in original 2D or reshaped to 3D represenation. The reshape for matrix A simply split the second dimension by `vnni_factor`, to match with matrix B.
 
 ```mlir
   // logically %vector_a is <8x16xbf16> and %vector_b is <16x16xbf16>
