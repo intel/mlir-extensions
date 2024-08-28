@@ -1,15 +1,12 @@
-// TODO: replace "--no-mlir-runner" with "--runner imex-cpu-runner" once xesim simulator is available in CI.
 // RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
-// RUN:                                       --no-mlir-runner -e main \
+// RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 // RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
-// RUN:                                        --no-mlir-runner -e main \
+// RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-// TODO: Remove this check and enable the check "[ALLCLOSE: TRUE]".
-// CHECK: llvm.mlir.global internal constant @b2x3_m128_n256_k96_spirv_binary
 module @gemm attributes {gpu.container_module} {
   func.func @test(%A: memref<2x3x128x96xf16>, %B: memref<2x3x256x96xf16>) -> memref<2x3x128x256xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
@@ -198,7 +195,7 @@ module @gemm attributes {gpu.container_module} {
     %cast_C = memref.cast %C : memref<2x3x128x256xf32> to memref<*xf32>
     %cast_C_ref = memref.cast %C_ref : memref<2x3x128x256xf32> to memref<*xf32>
     // call @printMemrefF32(%cast_C) : (memref<*xf32>) -> ()
-    // DISABLED-CHECK: [ALLCLOSE: TRUE]
+    // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF32(%cast_C, %cast_C_ref) : (memref<*xf32>, memref<*xf32>) -> ()
     memref.dealloc %A : memref<2x3x128x96xf16>
     memref.dealloc %B : memref<2x3x256x96xf16>
