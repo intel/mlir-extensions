@@ -19,7 +19,7 @@ gpu.module @test_kernel {
       //CHECK-COUNT-128: {{.*}} = math.exp %{{.*}} : vector<1x16xf16>
       %3 = math.exp %2: vector<32x64xf16>
       //CHECK-COUNT-124: arith.addf {{.*}}, {{.*}} : vector<1x16xf16>
-      %4 = xetile.reduce <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
+      %4 = xetile.reduction <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
       %5 = xetile.broadcast %4 [0]: vector<1x64xf16> -> vector<32x64xf16>
       //CHECK-COUNT-128: arith.divf {{.*}}, {{.*}} : vector<1x16xf16>
       %6 = arith.divf %3, %5: vector<32x64xf16>
@@ -261,7 +261,7 @@ gpu.module @test_kernel {
       //CHECK: {{.*}} = vector.splat {{.*}} : vector<1x1xf16>
       //CHECK: {{.*}} = vector.extractelement {{.*}}[{{.*}} : i32] : vector<16xf16>
       //CHECK: {{.*}} = vector.splat {{.*}} : vector<1x1xf16>
-      %4 = xetile.reduce <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
+      %4 = xetile.reduction <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
 
       //CHECK: {{.*}} = vector.extract {{.*}}[0, 0] : f16 from vector<1x1xf16>
       //CHECK: {{.*}} = vector.splat {{.*}} : vector<1x16xf16>

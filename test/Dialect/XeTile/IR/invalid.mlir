@@ -202,7 +202,7 @@ func.func @test_transpose(%source: vector<8x16xf16>) {
 // -----
 func.func @test_reduce(%source: vector<8x16xf16>) {
   // expected-error@+1 {{reduction dimension of result must have size 1}}
-  %1 = xetile.reduce <add>, %source [0] : vector<8x16xf16> -> vector<2x16xf16>
+  %1 = xetile.reduction <add>, %source [0] : vector<8x16xf16> -> vector<2x16xf16>
   return
 }
 

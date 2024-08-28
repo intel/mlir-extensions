@@ -447,6 +447,9 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
         mlir::Type getElementType() {
             return getA().getType().getElementType();
         }
+        mlir::VectorType getOutputType() {
+            return getOutput().getType();
+        }
     }];
 
     let hasVerifier = 1;
@@ -581,7 +584,7 @@ def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
     let hasVerifier = 1;
 }
 
-def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
+def XeTile_ReductionOp: XeTile_Op<"reduction", []> {
     let summary = "performs a reduction operation over a 2D vector.";
     let description = [{
         It has the same semantics as the `vector.multi_reduction`,
@@ -591,10 +594,10 @@ def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
 
     let arguments = (ins Vector_CombiningKindAttr: $kind,
                          XeTile_2DOr4DVector: $source,
-                         DenseI64ArrayAttr: $reduction_dim);
+                         DenseI64ArrayAttr: $reduction_dims);
     let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
-        $kind `,` $source $reduction_dim attr-dict `:` type($source) `->` type($result)
+        $kind `,` $source $reduction_dims attr-dict `:` type($source) `->` type($result)
     }];
 
     let hasVerifier = 1;

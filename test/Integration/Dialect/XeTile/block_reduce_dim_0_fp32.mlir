@@ -36,7 +36,7 @@ module @softmax attributes {gpu.container_module} {
       %n = arith.muli %block_id_y, %c32 : index
       %1 = xetile.init_tile %a[%m, %n] : memref<16x1024xf32> -> !xetile.tile<16x32xf32>
       %2 = xetile.load_tile %1: !xetile.tile<16x32xf32> -> vector<16x32xf32>
-      %4 = xetile.reduce <add>, %2 [0]: vector<16x32xf32> -> vector<1x32xf32>
+      %4 = xetile.reduction <add>, %2 [0]: vector<16x32xf32> -> vector<1x32xf32>
       %5 = xetile.init_tile %b[0, %n] : memref<1x1024xf32> -> !xetile.tile<1x32xf32>
       xetile.store_tile %4, %5: vector<1x32xf32>, !xetile.tile<1x32xf32>
       gpu.return

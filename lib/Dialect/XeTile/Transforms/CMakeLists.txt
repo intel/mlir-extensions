@@ -1,10 +1,12 @@
 add_imex_dialect_library(IMEXXeTileTransforms
-  Blocking.cpp
-  InitDuplicate.cpp
   BlockAligning.cpp
-  WgToSg.cpp
+  Blocking.cpp
+  BlockingAnalysis.cpp
+  BlockingRewrite.cpp
+  InitDuplicate.cpp
   OptimizeTranspose.cpp
   Canonicalization.cpp
+  WgToSg.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/XeTile
