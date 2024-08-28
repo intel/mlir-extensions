@@ -291,7 +291,7 @@ struct VectorMultiReductionToXeTileReduce
         (reduceDim == 0 ? llvm::ArrayRef<int64_t>({1, resultTy.getDimSize(0)})
                         : llvm::ArrayRef<int64_t>({resultTy.getDimSize(0), 1})),
         resultTy.getElementType());
-    auto reduceOp = rewriter.create<imex::xetile::ReduceOp>(
+    auto reduceOp = rewriter.create<imex::xetile::ReductionOp>(
         op->getLoc(), xetileResultTy, op.getKind(), op.getSource(),
         mlir::ArrayRef<int64_t>({reduceDim}));
     // Shape cast the result back to original shape.

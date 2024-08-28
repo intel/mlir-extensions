@@ -130,5 +130,31 @@ def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUMo
   ];
 }
 
+def NewXeTileBlocking : Pass<"new-xetile-blocking", "::mlir::gpu::GPUModuleOp">{
+  let summary = "transform XeTile large tiles(input) into arrays of smaller "
+                "blocks with appropriate size, such that the operator on each "
+                "of the blocks can be mapped into one hardware instruction.";
+
+  let description = [{
+    This transform pass preprocesses the xetile program by decomposing large XeTile tiles
+    into smaller ones that can be handled by a hardware instruction. It is going to replace
+    the xetile-blocking pass.
+  }];
+
+  let constructor = "imex::createNewXeTileBlockingPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::math::MathDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
+}
+
 
 #endif // _XeTile_PASSES_TD_INCLUDED_

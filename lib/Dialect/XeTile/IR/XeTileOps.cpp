@@ -859,8 +859,8 @@ mlir::LogicalResult TransposeOp::verify() {
   return mlir::success();
 }
 
-mlir::LogicalResult ReduceOp::verify() {
-  auto dims = getReductionDim();
+mlir::LogicalResult ReductionOp::verify() {
+  auto dims = getReductionDims();
   auto resShape = getResult().getType().getShape();
   for (auto i : dims)
     if (resShape[i] != 1)

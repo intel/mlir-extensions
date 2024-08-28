@@ -556,15 +556,16 @@ struct VectorMultiDimReductionOpPattern
   }
 };
 
-struct TileReduceOpPattern
-    : public XeTileConversion<xetile::ReduceOp, TileUsageAnalysis> {
+struct TileReductionOpPattern
+    : public XeTileConversion<xetile::ReductionOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::ReduceOp, TileUsageAnalysis>::XeTileConversion;
+  using XeTileConversion<xetile::ReductionOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
-  TileReduceOpPattern(mlir::MLIRContext *context,
-                      imex::XeTypeConverter &converter,
-                      TileUsageAnalysis &analysis,
-                      std::shared_ptr<XeuArchInterface> ptruArch)
+  TileReductionOpPattern(mlir::MLIRContext *context,
+                         imex::XeTypeConverter &converter,
+                         TileUsageAnalysis &analysis,
+                         std::shared_ptr<XeuArchInterface> ptruArch)
       : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
@@ -572,13 +573,13 @@ struct TileReduceOpPattern
   std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   mlir::LogicalResult
-  matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
+  matchAndRewrite(xetile::ReductionOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto srcTy = op.getSource().getType();
     auto elemTy = srcTy.getElementType();
     auto shape = srcTy.getShape();
-    auto reductionDims = op.getReductionDim();
+    auto reductionDims = op.getReductionDims();
 
     if (srcTy.getRank() != 2 || reductionDims.size() != 1)
       return rewriter.notifyMatchFailure(
@@ -611,7 +612,7 @@ struct TileReduceOpPattern
 
     auto newSource =
         addPackOp(adaptor.getSource(), {blkSizes[0], blkSizes[1]}, rewriter);
-    auto newDest = rewriter.create<xetile::ReduceOp>(
+    auto newDest = rewriter.create<xetile::ReductionOp>(
         loc, newDestType, op.getKind(), newSource, newReductionDims);
     auto unpack = addUnpackOp(newDest.getResult(), rewriter);
     rewriter.replaceOp(op, unpack);
@@ -1161,7 +1162,7 @@ void populateXeTileBlockingPatterns(
                   VectorizableOpPattern, SCFForOpPattern, SCFYieldOpPattern,
                   InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
                   TileMMAOpPattern, UpdateTileOffsetOpPattern,
-                  VectorMultiDimReductionOpPattern, TileReduceOpPattern,
+                  VectorMultiDimReductionOpPattern, TileReductionOpPattern,
                   TileBroadcastOpPattern>(patterns.getContext(), converter,
                                           analysis, ptruArch);
   patterns.insert<TransposeOpPattern<mlir::vector::TransposeOp>,
