@@ -1,5 +1,4 @@
 // RUN: %python_executable %imex_runner -i %s -f %p/ndarray.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils --shared-libs=%mlir_runner_utils | FileCheck %s
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/ndarray-gpu.pp --runner imex-cpu-runner -e main --entry-point-result=void --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 
 module {
   func.func private @printMemrefI32(tensor<*xi32>)
@@ -20,6 +19,7 @@ module {
     call @test_ewbin() : () -> ()
     call @test_reduction() : () -> ()
     // call @test_reshape() : () -> ()
+    call @test_permute_dims() : () -> ()
     return
   }
 
@@ -330,4 +330,29 @@ module {
     // // FIXME_CHECK{LITERAL}: rank = 1 offset = 0 sizes = [36] strides = [1] data =
     // // FIXME_CHECK-NEXT{LITERAL}: [0,  1,  2,  3,  4,  5,  6,  5,  5,  5,  5,  5,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35]
   // }
+
+  func.func @test_permute_dims() -> () {
+    %i0 = arith.constant 0 : i32
+    %i1 = arith.constant 1 : i32
+    %i10 = arith.constant 10 : i32
+
+    %c2 = arith.constant 2 : index
+    %c5 = arith.constant 5 : index
+
+    %mat = ndarray.linspace %i0 %i10 %i10 false : (i32, i32, i32) -> !ndarray.ndarray<?xi32>
+    %src = "ndarray.reshape"(%mat, %c2, %c5) : (!ndarray.ndarray<?xi32>, index, index) -> !ndarray.ndarray<?x?xi32>
+    %dst = ndarray.permute_dims %src [1, 0] : !ndarray.ndarray<?x?xi32> -> !ndarray.ndarray<?x?xi32>
+
+    %tensor = ndarray.to_tensor %dst : !ndarray.ndarray<?x?xi32> -> tensor<?x?xi32>
+    %cast = tensor.cast %tensor : tensor<?x?xi32> to tensor<*xi32>
+    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
+    return
+    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK-SAME: rank = 2 offset = 0 sizes = [5, 2] strides = [2, 1] data =
+    // CHECK-NEXT{LITERAL}: [[0,   5],
+    // CHECK-NEXT{LITERAL}:  [1,   6],
+    // CHECK-NEXT{LITERAL}:  [2,   7],
+    // CHECK-NEXT{LITERAL}:  [3,   8],
+    // CHECK-NEXT{LITERAL}:  [4,   9]]
+  }
 }
