@@ -736,15 +736,16 @@ extern llvm::SmallVector<mlir::Value> lowerInnerReductionWithVectorReduction(
     mlir::vector::CombiningKind kind, mlir::Location loc, mlir::Type elemTy,
     XeOneToNPatternRewriter &rewriter);
 
-struct SgTileReduceOpPattern : public XeOneToNConversion<xetile::ReduceOp> {
-  using XeOneToNConversion<xetile::ReduceOp>::XeOneToNConversion;
+struct SgTileReductionOpPattern
+    : public XeOneToNConversion<xetile::ReductionOp> {
+  using XeOneToNConversion<xetile::ReductionOp>::XeOneToNConversion;
 
   mlir::LogicalResult
-  matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
+  matchAndRewrite(xetile::ReductionOp op, OpAdaptor adaptor,
                   XeOneToNPatternRewriter &rewriter) const override {
     auto srcTy = op.getSource().getType();
     auto elemTy = srcTy.getElementType();
-    auto dims = op.getReductionDim();
+    auto dims = op.getReductionDims();
     // its input should be a 4D vector, and has 2 reduction dims,
     // otherwise run the blocking pass first.
     if (dims.size() != 2 || srcTy.getRank() != 4)
@@ -1092,8 +1093,8 @@ void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
       SgTileMMAOpPattern, SgUpdateTileOffsetOpPattern,
       SgTransposeOpPattern<mlir::vector::TransposeOp>,
       SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern,
-      SgTileReduceOpPattern, SgVectorCreateMaskOpPattern>(patterns.getContext(),
-                                                          converter, analysis);
+      SgTileReductionOpPattern, SgVectorCreateMaskOpPattern>(
+      patterns.getContext(), converter, analysis);
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,

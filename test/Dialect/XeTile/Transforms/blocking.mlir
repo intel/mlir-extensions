@@ -302,8 +302,8 @@ gpu.module @test_kernel {
       //CHECK: %[[r4:.*]] = math.exp %[[r3]] : vector<32x4x1x16xf16>
       %3 = math.exp %2: vector<32x64xf16>
 
-      //CHECK: %[[r5:.*]] = xetile.reduce <add>, %[[r4]] [0, 2] : vector<32x4x1x16xf16> -> vector<1x4x1x16xf16>
-      %4 = xetile.reduce <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
+      //CHECK: %[[r5:.*]] = xetile.reduction <add>, %[[r4]] [0, 2] : vector<32x4x1x16xf16> -> vector<1x4x1x16xf16>
+      %4 = xetile.reduction <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
 
       //CHECK: %[[r6:.*]] = xetile.broadcast %[[r5]] [0, 2] : vector<1x4x1x16xf16> -> vector<32x4x1x16xf16>
       %5 = xetile.broadcast %4 [0]: vector<1x64xf16> -> vector<32x64xf16>
@@ -336,8 +336,8 @@ gpu.module @test_kernel {
       //CHECK: %[[r4:.*]] = math.exp %[[r3]] : vector<32x4x1x16xf16>
       %3 = math.exp %2: vector<32x64xf16>
 
-      //CHECK: %[[r5:.*]] = xetile.reduce <add>, %[[r4]] [1, 3] : vector<32x4x1x16xf16> -> vector<32x1x1x1xf16>
-      %4 = xetile.reduce <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
+      //CHECK: %[[r5:.*]] = xetile.reduction <add>, %[[r4]] [1, 3] : vector<32x4x1x16xf16> -> vector<32x1x1x1xf16>
+      %4 = xetile.reduction <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
 
       //CHECK: %[[r6:.*]] = xetile.broadcast %[[r5]] [1, 3] : vector<32x1x1x1xf16> -> vector<32x4x1x16xf16>
       %5 = xetile.broadcast %4 [1]: vector<32x1xf16> -> vector<32x64xf16>
@@ -370,8 +370,8 @@ gpu.module @test_kernel {
       //CHECK: %[[r4:.*]] = math.exp %[[r3]] : vector<32x4x1x16xf16>
       %3 = math.exp %2: vector<32x64xf16>
 
-      //CHECK: %[[r5:.*]] = xetile.reduce <add>, %[[r4]] [1, 3] : vector<32x4x1x16xf16> -> vector<32x1x1x1xf16>
-      %4 = xetile.reduce <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
+      //CHECK: %[[r5:.*]] = xetile.reduction <add>, %[[r4]] [1, 3] : vector<32x4x1x16xf16> -> vector<32x1x1x1xf16>
+      %4 = xetile.reduction <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
 
       //CHECK: %[[r6:.*]] = xetile.broadcast %[[r5]] [1, 3] : vector<32x1x1x1xf16> -> vector<32x4x1x16xf16>
       %5 = xetile.broadcast %4 [1]: vector<32x1xf16> -> vector<32x64xf16>

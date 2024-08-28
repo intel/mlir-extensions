@@ -27,6 +27,10 @@ namespace arith {
 class ArithDialect;
 } // namespace arith
 
+namespace math {
+class MathDialect;
+} // namespace math
+
 // FIXME define other dependent MLIR dialects
 
 } // namespace mlir
