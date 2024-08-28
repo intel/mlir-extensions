@@ -948,4 +948,25 @@ def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
     let hasCanonicalizer = 1;
 }
 
+def PermuteDimsOp : NDArray_Op<"permute_dims", []> {
+  let summary = "Permutes the axes (dimensions) of an array to a new array.";
+  let description = [{
+      Permutes the axes (dimensions) of an array.
+      The output array is a new array.
+  }];
+
+  let arguments = (ins
+    NDArray_NDArray:$source,
+    DenseI64ArrayAttr:$axes
+  );
+  let results = (outs NDArray_NDArray);
+
+  let assemblyFormat = [{
+    $source $axes attr-dict `:` qualified(type($source)) `->` qualified(type(results))
+  }];
+
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
+}
+
 #endif // _NDARRAY_OPS_TD_INCLUDED_
