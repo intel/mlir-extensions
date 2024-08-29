@@ -12,9 +12,9 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %gpu_arg0: memre
   %c1 = arith.constant 1 : index
   %c5 = arith.constant 5 : index
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy %arg1, %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF0]], %arg1 : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy %arg0, %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF1]], %arg0 : memref<2x5xf32>, memref<2x5xf32>
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: memref.copy %arg1, %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
