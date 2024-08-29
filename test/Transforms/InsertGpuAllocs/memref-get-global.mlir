@@ -17,10 +17,10 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
 
   // OPENCL: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy [[VAR0]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF0]], [[VAR0]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: [[VAR1:%.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
   // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy [[VAR1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF1]], [[VAR1]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // VULKAN: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
