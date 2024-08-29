@@ -67,3 +67,27 @@ func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
                           : !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x8x4xf16>
   return
 }
+
+// -----
+func.func @test_create_tdesc_oversized(%src: ui64, %offsets : vector<16xindex>) {
+  // expected-error@+1 {{total access size (simd_lanes * chunk_size * sizeof(elemTy)) is upto 512 bytes}}
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
+              -> !xegpu.tensor_desc<16x16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 16>>
+  return
+}
+
+// -----
+func.func @test_create_tdesc_invalid_chunk_size(%src: ui64, %offsets : vector<16xindex>) {
+  // expected-error@+1 {{Invalid chunk_size. Supported values are 1, 2, 3, 4, 8, 16, 32, 64, 128, or 256.}}
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
+              -> !xegpu.tensor_desc<16x7xf32, #xegpu.scatter_tdesc_attr<chunk_size = 7>>
+  return
+}
+
+// -----
+func.func @test_create_tdesc_unaligned(%src: ui64, %offsets : vector<16xindex>) {
+  // expected-error@+1 {{access size (chunk_size * sizeof(elemTy)) should be 32-bit aligned}}
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
+              -> !xegpu.tensor_desc<16x3xf16, #xegpu.scatter_tdesc_attr<chunk_size = 3>>
+  return
+}
