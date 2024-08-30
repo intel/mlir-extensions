@@ -625,7 +625,9 @@ class LoadStorePrefetchNdToRawSendPattern : public OpConversionPattern<OpType> {
     auto execSize = createIntConstant(i8Type, 0);
     auto pred = createIntConstant(i1Type, 1);
     auto numSrc1 = createIntConstant(i8Type, 1);
-    unsigned numDstVal = newType.getNumElements() / 16;
+    // numDstVal: "Dest Length" is a value with the unit of a register
+    unsigned numDstVal =
+        (newType.getNumElements() + 16 - 1) / 16; // TODO: clarify 16
     if (rank == 1) {
       numDstVal *= 2;
     }
@@ -879,7 +881,7 @@ class GatherScatterToRawSend : public OpConversionPattern<OpType> {
     auto execSize = createIntConstant(i8Type, 4);
     auto pred = adaptor.getMask();
     auto numSrc1 = createIntConstant(i8Type, 2);
-    unsigned numDstVal = newType.getNumElements() / 16;
+    unsigned numDstVal = (newType.getNumElements() + 16 - 1) / 16;
     auto numDst = createIntConstant(i8Type, numDstVal);
     // 15 for ugm
     auto sfid = createIntConstant(i8Type, 15);
@@ -972,7 +974,7 @@ public:
     auto immOffset = createIntConstant(i32Type, 0);
     unsigned dataSize = encodeDataum(vecType.getElementType());
     auto dataumSize = createIntConstant(i8Type, dataSize);
-    unsigned numDstVal = newType.getNumElements() / 16;
+    unsigned numDstVal = (newType.getNumElements() + 16 - 1) / 16;
     auto lscVecSize = 0;
     if (numDstVal <= 4) {
       lscVecSize = numDstVal;
