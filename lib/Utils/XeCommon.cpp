@@ -74,6 +74,7 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
                  bool enforceInteger) {
   mlir::Type srcElemType = type.getElementType();
   assert((srcElemType.isF16() || srcElemType.isBF16() || srcElemType.isF32() ||
+          srcElemType.isInteger(8) || srcElemType.isInteger(16) ||
           srcElemType.isInteger(32) || srcElemType.isInteger(64)) &&
          "Unsupported vector element type.");
   const uint32_t srcBitWidth = srcElemType.getIntOrFloatBitWidth();
