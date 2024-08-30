@@ -135,6 +135,20 @@ struct UpdateTileOffsetOpPattern final
   }
 };
 
+struct PrefetchTilePattern final
+    : public mlir::OpConversionPattern<imex::xetile::PrefetchTileOp> {
+  using OpConversionPattern<imex::xetile::PrefetchTileOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(imex::xetile::PrefetchTileOp prefetchOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    // Create a new prefetch op.
+    rewriter.replaceOpWithNewOp<imex::xetile::PrefetchTileOp>(
+        prefetchOp, adaptor.getTile(), prefetchOp.getL1HintAttr(),
+        prefetchOp.getL2HintAttr(), prefetchOp.getL3HintAttr());
+    return mlir::success();
+  }
+};
+
 // Pattern for rewriting LoadTileOp to consume row-major tiles.
 struct LoadTileOpPattern final
     : public mlir::OpConversionPattern<imex::xetile::LoadTileOp> {
@@ -216,9 +230,13 @@ struct VectorTransposeToXetileTransposeOpPattern
                   mlir::PatternRewriter &rewriter) const override {
     if (op.getVector().getType().getRank() != 2)
       return mlir::failure();
+    // Retain discardable attributes if any.
+    llvm::SmallVector<mlir::NamedAttribute> discardableAttrs(
+        op->getDiscardableAttrs().begin(), op->getDiscardableAttrs().end());
     // Create an equivalent XeTileTransposeOp
-    rewriter.replaceOpWithNewOp<imex::xetile::TransposeOp>(
+    auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::TransposeOp>(
         op, op.getType(), op.getVector(), op.getPermutation());
+    newOp->setDiscardableAttrs(discardableAttrs);
     return mlir::success();
   }
 };
@@ -242,6 +260,9 @@ struct VectorBroadcastToXetileBroadcastOpPattern
     auto sourceVectorTy = llvm::cast<mlir::VectorType>(op.getSourceType());
     auto sourceRank = sourceVectorTy.getRank();
     auto sourceShape = sourceVectorTy.getShape();
+    // Retain the discardable attributes if any.
+    llvm::SmallVector<mlir::NamedAttribute> discardableAttrs(
+        op->getDiscardableAttrs().begin(), op->getDiscardableAttrs().end());
     // If the source rank is 1 and result rank is 2, we need to create a shape
     // cast to convert source to 2D and then create a xetile.broadcast. In this
     // case, broadcast dimension is 0 according to vector.broadcast definition.
@@ -251,14 +272,17 @@ struct VectorBroadcastToXetileBroadcastOpPattern
                                 resultTy.getElementType());
       auto source2D = rewriter.create<mlir::vector::ShapeCastOp>(
           op.getLoc(), source2DTy, op.getSource());
-      rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
+      source2D->setDiscardableAttrs(discardableAttrs);
+      auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
           op, resultTy, source2D, llvm::ArrayRef<int64_t>({0}));
+      newOp->setDiscardableAttrs(discardableAttrs);
       return mlir::success();
     }
     // If ranks are same, inner dimension is stretched in vector.broadcast. So
     // broadcast dimension is 1 for this case.
-    rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
+    auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
         op, resultTy, op.getSource(), llvm::ArrayRef<int64_t>({1}));
+    newOp->setDiscardableAttrs(discardableAttrs);
     return mlir::success();
   }
 };
@@ -281,7 +305,9 @@ struct VectorMultiReductionToXeTileReduce
     auto reductionDims = op.getReductionDims().getValue();
     if (reductionDims.size() != 1)
       return mlir::failure();
-
+    // Retain discardable attributes if any.
+    llvm::SmallVector<mlir::NamedAttribute> discardableAttrs(
+        op->getDiscardableAttrs().begin(), op->getDiscardableAttrs().end());
     // Create an equivalent XeTileReduceOp
     int64_t reduceDim = llvm::cast<mlir::IntegerAttr>(reductionDims[0])
                             .getValue()
@@ -294,16 +320,21 @@ struct VectorMultiReductionToXeTileReduce
     auto reduceOp = rewriter.create<imex::xetile::ReductionOp>(
         op->getLoc(), xetileResultTy, op.getKind(), op.getSource(),
         mlir::ArrayRef<int64_t>({reduceDim}));
+    reduceOp->setDiscardableAttrs(discardableAttrs);
     // Shape cast the result back to original shape.
     auto shapeCastOp = rewriter.create<mlir::vector::ShapeCastOp>(
         op->getLoc(), resultTy, reduceOp.getResult());
+    shapeCastOp->setDiscardableAttrs(discardableAttrs);
     // Finally add the result to the accumulator.
-    if (llvm::isa<mlir::IntegerType>(sourceTy.getElementType()))
-      rewriter.replaceOpWithNewOp<mlir::arith::AddIOp>(op, shapeCastOp,
-                                                       op.getAcc());
-    else
-      rewriter.replaceOpWithNewOp<mlir::arith::AddFOp>(op, shapeCastOp,
-                                                       op.getAcc());
+    if (llvm::isa<mlir::IntegerType>(sourceTy.getElementType())) {
+      auto accOp = rewriter.replaceOpWithNewOp<mlir::arith::AddIOp>(
+          op, shapeCastOp, op.getAcc());
+      accOp->setDiscardableAttrs(discardableAttrs);
+    } else {
+      auto accOp = rewriter.replaceOpWithNewOp<mlir::arith::AddFOp>(
+          op, shapeCastOp, op.getAcc());
+      accOp->setDiscardableAttrs(discardableAttrs);
+    }
     return mlir::success();
   }
 };
@@ -406,6 +437,12 @@ struct XeTileCanonicalizationPass final
                                                     op) {
         return op.getType().getOrder().asArrayRef() != mlir::ArrayRef({0, 1});
       });
+      // PrefetchTileOp is legal if it does not consume col-major tiles.
+      target.addDynamicallyLegalOp<imex::xetile::PrefetchTileOp>(
+          [&](imex::xetile::PrefetchTileOp op) {
+            return op.getTile().getType().getOrder().asArrayRef() !=
+                   mlir::ArrayRef({0, 1});
+          });
       // LoadTileOp is legal if it does not consume col-major tiles.
       target.addDynamicallyLegalOp<imex::xetile::LoadTileOp>(
           [&](imex::xetile::LoadTileOp op) {
@@ -437,7 +474,8 @@ struct XeTileCanonicalizationPass final
           });
       patterns
           .add<InitTileOpPattern, LoadTileOpPattern, UpdateTileOffsetOpPattern,
-               ScfForOpPattern, ScfYieldOpPattern>(typeConverter, context);
+               PrefetchTilePattern, ScfForOpPattern, ScfYieldOpPattern>(
+              typeConverter, context);
 
       if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                     std::move(patterns))))

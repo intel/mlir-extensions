@@ -3,6 +3,7 @@ gpu.module @test_module {
   gpu.func @test_static_memref(%arg0 : memref<512x128xf16, strided<[1, 512], offset:0>>, %arg1 : index, %arg2 : index) {
     %0 = xetile.init_tile %arg0 [%arg1, %arg2] : memref<512x128xf16, strided<[1, 512], offset:0>> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     %3 = xetile.load_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
+    xetile.prefetch_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     // With static offsets
     %1 = xetile.init_tile %arg0 [12, %arg1] : memref<512x128xf16, strided<[1, 512], offset:0>> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     // Update offsets
@@ -10,6 +11,7 @@ gpu.module @test_module {
     %c32 = arith.constant 32 : index
     %2 = xetile.update_tile_offset %1, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     %4 = xetile.load_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
+    xetile.prefetch_tile %1 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     gpu.return
   }
 }
@@ -23,22 +25,25 @@ gpu.module @test_module {
 // CHECK: %[[T0:.*]] = xetile.init_tile %[[RCAST]][%[[ARG2]], %[[ARG1]]] : memref<128x512xf16, strided<[512, 1]>> -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T1:.*]] = xetile.load_tile %[[T0]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T2:.*]] = xetile.transpose %[[T1]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
+// CHECK: xetile.prefetch_tile %[[T0]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[RCAST0:.*]] = memref.reinterpret_cast %[[ARG0]] to offset: [0], sizes: [128, 512], strides: [512, 1] : memref<512x128xf16, strided<[1, 512]>> to memref<128x512xf16, strided<[512, 1]>>
 // CHECK: %[[T3:.*]] = xetile.init_tile %[[RCAST0]][%[[ARG1]], 12] : memref<128x512xf16, strided<[512, 1]>> -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T4:.*]] = xetile.update_tile_offset %[[T3]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T5:.*]] = xetile.load_tile %[[T4]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T6:.*]] = xetile.transpose %[[T5]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
+// CHECK: xetile.prefetch_tile %[[T3]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 
 // -----
 gpu.module @test_module {
   gpu.func @test_dynamic_memref(%arg0 : memref<?x?xf16>, %arg1 : index, %arg2 : index, %arg3 : index, %arg4 : index, %arg5 : index, %arg6 : index) {
     %0 = xetile.init_tile %arg0 [%arg1, %arg2], [%arg3, %arg4], [%arg5, %arg6] : memref<?x?xf16> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
-    %1 = xetile.load_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
+    xetile.load_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
     // Update offsets
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
     %2 = xetile.update_tile_offset %0, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     %3 = xetile.load_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
+    xetile.prefetch_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     gpu.return
   }
 }
@@ -59,6 +64,7 @@ gpu.module @test_module {
 // CHECK: %[[T3:.*]] = xetile.update_tile_offset %[[T0]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T4:.*]] = xetile.load_tile %[[T3]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T5:.*]] = xetile.transpose %[[T4]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
+// CHECK: xetile.prefetch_tile %[[T3]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 
 // -----
 gpu.module @test_module {
@@ -272,6 +278,13 @@ gpu.module @test_module {
   }
 }
 
+// CHECK-LABEL: @test_multireduction_1
+// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: vector<64x256xf32>, %[[ARG1:[a-zA-Z0-9]+]]: vector<256xf32>) -> vector<256xf32>
+// CHECK: %[[T0:.*]] = xetile.reduction <add>, %[[ARG0]] [0] : vector<64x256xf32> -> vector<1x256xf32>
+// CHECK: %[[T1:.*]] = vector.shape_cast %[[T0]] : vector<1x256xf32> to vector<256xf32>
+// CHECK: %[[T2:.*]] = arith.addf %[[T1]], %[[ARG1]] : vector<256xf32>
+// CHECK: gpu.return %[[T2]] : vector<256xf32>
+
 // -----
 gpu.module @test_module {
   gpu.func @test_multireduction_2(%arg0 : vector<64x256xi8>, %arg1 : vector<256xi8>) -> vector<256xi8> {
@@ -279,3 +292,23 @@ gpu.module @test_module {
     gpu.return %0 : vector<256xi8>
   }
 }
+
+// CHECK-LABEL: @test_multireduction_2
+// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: vector<64x256xi8>, %[[ARG1:[a-zA-Z0-9]+]]: vector<256xi8>) -> vector<256xi8>
+// CHECK: %[[T0:.*]] = xetile.reduction <add>, %[[ARG0]] [0] : vector<64x256xi8> -> vector<1x256xi8>
+// CHECK: %[[T1:.*]] = vector.shape_cast %[[T0]] : vector<1x256xi8> to vector<256xi8>
+// CHECK: %[[T2:.*]] = arith.addi %[[T1]], %[[ARG1]] : vector<256xi8>
+// CHECK: gpu.return %[[T2]] : vector<256xi8>
+
+// -----
+gpu.module @test_module {
+  gpu.func @test_transpose_1(%arg0 : vector<16x32xf32>) -> vector<32x16xf32> {
+    %0 = vector.transpose %arg0, [1, 0] : vector<16x32xf32> to vector<32x16xf32>
+    gpu.return %0 : vector<32x16xf32>
+  }
+}
+
+// CHECK-LABEL: @test_transpose_1
+// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: vector<16x32xf32>) -> vector<32x16xf32>
+// CHECK: %[[T0:.*]] = xetile.transpose %arg0, [1, 0] : vector<16x32xf32> -> vector<32x16xf32>
+// CHECK: gpu.return %[[T0]] : vector<32x16xf32>
