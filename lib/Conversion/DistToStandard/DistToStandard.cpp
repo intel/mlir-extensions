@@ -1659,7 +1659,7 @@ struct PermuteDimsOpConverter
                                                        distLArray.getHandle());
     // finally init dist array
     rewriter.replaceOp(
-        op, createDistArray(loc, rewriter, team, srcGShape, dstLOffsets,
+        op, createDistArray(loc, rewriter, team, dstGShape, dstLOffsets,
                             ::mlir::ValueRange{distLArray.getNlArray()}));
 
     return ::mlir::success();
