@@ -256,7 +256,8 @@ struct DeleteOpConverter
 
     // apply DeleteOp to all parts
     for (auto p : lParts) {
-      (void)rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      auto newOp = rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      newOp->setAttrs(adaptor.getAttributes());
     }
 
     rewriter.eraseOp(op);

@@ -52,28 +52,9 @@ public:
       return ::mlir::failure();
     }
 
-    auto src = op.getLArray();
-    auto srcType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
-    if (!srcType) {
-      return ::mlir::failure();
-    }
-    auto srcShape = srcType.getShape();
-    if (::mlir::ShapedType::isDynamicShape(srcShape)) {
-      return ::mlir::failure();
-    }
-
-    auto axes = op.getAxes();
-    if (axes.size() != dstShape.size()) {
-      return ::mlir::failure();
-    }
-
-    ::mlir::SmallVector<int64_t> permutedShape;
-    for (auto i = 0u; i < srcShape.size(); ++i) {
-      permutedShape.push_back(srcShape[axes[i]]);
-    }
-
+    auto dstLShape = ::imex::getShapeFromValues(op.getNlShape());
     auto elType = dstType.getElementType();
-    auto nType = dstType.cloneWith(permutedShape, elType);
+    auto nType = dstType.cloneWith(dstLShape, elType);
     auto hType = ::imex::distruntime::AsyncHandleType::get(getContext());
 
     auto newOp = rewriter.create<::imex::distruntime::CopyPermuteOp>(
