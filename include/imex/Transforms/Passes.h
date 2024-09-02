@@ -26,7 +26,8 @@ std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass>
 createInsertGPUAllocsPass(const char *clientAPI = "vulkan");
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
-std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttributePass();
+std::unique_ptr<mlir::Pass>
+createSetSPIRVAbiAttributePass(const char *clientAPI = "vulkan");
 std::unique_ptr<mlir::Pass> createAddOuterParallelLoopPass();
 std::unique_ptr<mlir::Pass> createLowerMemRefCopyPass();
 std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
