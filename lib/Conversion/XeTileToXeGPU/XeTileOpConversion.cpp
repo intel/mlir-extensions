@@ -162,6 +162,30 @@ mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
   return shuffleOps[0];
 }
 
+// Check that lowerUnpackOrPack will be able to evenly combine/split the input
+// grid into the output grid.
+static bool isUnpackPackCompatible(xetile::TileUnpackOp unpackOp,
+                                   xetile::TilePackOp packOp) {
+  auto inTy = unpackOp.getInVec().getType();
+  auto inGrids = inTy.getShape().take_front(2);
+  auto inBlkSizes = unpackOp.getInnerBlocksAttr();
+
+  auto outTy = packOp.getOutVec().getType();
+  llvm::ArrayRef<int64_t> outGrids = outTy.getShape().take_front(2);
+  mlir::DenseI64ArrayAttr outBlkSizes = packOp.getInnerBlocksAttr();
+
+  if (inBlkSizes[0] < outBlkSizes[0] && inGrids[0] % outGrids[0] != 0)
+    return false;
+  if (inBlkSizes[0] > outBlkSizes[0] && outGrids[0] % inGrids[0] != 0)
+    return false;
+  if (inBlkSizes[1] < outBlkSizes[1] && inGrids[1] % outGrids[1] != 0)
+    return false;
+  if (inBlkSizes[1] > outBlkSizes[1] && outGrids[1] % inGrids[1] != 0)
+    return false;
+
+  return true;
+}
+
 // a unified function lowering Unpack and Pack ops.
 static llvm::SmallVector<mlir::Value>
 lowerUnpackOrPack(XeOneToNPatternRewriter &rewriter, mlir::Operation *op,
@@ -278,7 +302,8 @@ class SgTileUnpackOpPattern : public XeOneToNConversion<xetile::TileUnpackOp> {
     llvm::ArrayRef<int64_t> outGrids;
     mlir::DenseI64ArrayAttr outBlkSizes;
     auto packOp = llvm::dyn_cast<xetile::TilePackOp>(*(op->user_begin()));
-    if (op->hasOneUse() && packOp) { // lower the Unpack and Pack pair
+    if (op->hasOneUse() && packOp && isUnpackPackCompatible(op, packOp)) {
+      // lower the Unpack and Pack pair
       auto outTy = packOp.getOutVec().getType();
       outGrids = outTy.getShape().take_front(2);
       outBlkSizes = packOp.getInnerBlocksAttr();
@@ -293,7 +318,8 @@ class SgTileUnpackOpPattern : public XeOneToNConversion<xetile::TileUnpackOp> {
     auto newOps = lowerUnpackOrPack(rewriter, op, inputs, inBlkSizes,
                                     outBlkSizes, inGrids, outGrids);
 
-    if (op->hasOneUse() && packOp) { // lowered Unpack and Pack as pair
+    if (op->hasOneUse() && packOp && isUnpackPackCompatible(op, packOp)) {
+      // lowered Unpack and Pack as pair
       rewriter.replaceOp(packOp, newOps);
       rewriter.eraseOp(op);
     } else { // lowering unpack only
@@ -313,7 +339,7 @@ class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
     auto defOp = input.getDefiningOp<xetile::TileUnpackOp>();
     // Unpack and Pack appeared as a pair, it should be handled
     // by UnpackOpPattern in this case.
-    if (defOp && defOp->hasOneUse())
+    if (defOp && defOp->hasOneUse() && isUnpackPackCompatible(defOp, op))
       return mlir::failure();
 
     auto inTy = op.getInVec().getType();
