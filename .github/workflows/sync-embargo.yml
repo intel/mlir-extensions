@@ -10,7 +10,7 @@ on:
     paths:
       - .github/workflows/sync-embargo.yml
   schedule:
-    - cron: '30 19 * * *'        
+    - cron: '30 19 * * *'
 
 jobs:
   sync-embargo:
@@ -46,3 +46,11 @@ jobs:
         run: |
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
           git push -f
+ 
+  invoke-gpu-tests:
+    needs: sync-embargo
+    name: Invoke test on FS sim
+    uses: ./.github/workflows/build_gpu-fs-sim.yml
+    secrets: inherit
+    with:
+      ref: imex-embargo

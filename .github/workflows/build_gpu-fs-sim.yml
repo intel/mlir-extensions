@@ -9,7 +9,9 @@ on:
       - imex-embargo
   workflow_dispatch:
   workflow_call:
-
+    inputs:
+      ref:
+        type: string
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
@@ -25,11 +27,12 @@ jobs:
     steps:
       - name: Check build root
         run: |
+            echo BUILD_REF=${{ inputs.ref || github.sha }} >>$GITHUB_ENV
             export BUILD_ROOT=$(pwd)/build_gpu
-            echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
+            echo BUILD_ROOT=${BUILD_ROOT} >>$GITHUB_ENV
             export HOME_DIR=${BUILD_ROOT}/home
-            echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
-            if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+            echo HOME_DIR=${HOME_DIR} >>$GITHUB_ENV
+            mkdir -p $BUILD_ROOT
 
       - name: Clear home dir
         run: |
@@ -43,6 +46,7 @@ jobs:
           token: ${{ secrets.WORKFLOW_TOKEN }}
           fetch-depth: 0
           path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
+          ref: ${{ env.BUILD_REF }}
 
       - name: Checkout MLIR
         run: |
