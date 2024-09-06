@@ -168,5 +168,13 @@ def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
  ];
 }
 
+def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
+  let summary = "Move vector transpose ops closer to the load ops to enable load+tranpose fusion by OptimizeTranpose pass later in the pipeline.";
+  let constructor = "imex::createHoistTransposePass()";
+  let dependentDialects = [
+    "::mlir::xegpu::XeGPUDialect",
+    "::mlir::vector::VectorDialect"
+  ];
+}
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

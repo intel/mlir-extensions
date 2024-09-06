@@ -17,6 +17,8 @@
 #define _IMEX_XECOMMON_H_
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
+#include "mlir/IR/Operation.h"
+#include "llvm/ADT/SmallVector.h"
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/XeGPU/IR/XeGPU.h>
@@ -97,6 +99,11 @@ public:
 
           if (auto pack = llvm::dyn_cast_if_present<xetile::TilePackOp>(user)) {
             q.push_back(pack);
+          }
+
+          if (auto transpose =
+                  llvm::dyn_cast_if_present<xetile::TransposeOp>(user)) {
+            q.push_back(transpose);
           }
         }
       }
@@ -518,6 +525,40 @@ protected:
                 std::is_same_v<AnalysisT, TileUsageAnalysis>>>
   bool isForLoadAndStore(imex::xetile::InitTileOp op) const {
     return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndStore(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForLoadTransposeDPASB(imex::xetile::InitTileOp op) const {
+    if (!isForLoad(op))
+      return false;
+    // Walk the InitTileOp and collect all loadOps
+    llvm::SmallVector<mlir::Operation *> loadOps;
+    op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::InitTileOp op) {
+      llvm::SmallVector<mlir::Value> q({op});
+      while (q.size()) {
+        auto curr = q.pop_back_val();
+        for (mlir::Operation *user : curr.getUsers()) {
+          if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
+            loadOps.push_back(user);
+          } else if (auto forOp =
+                         llvm::dyn_cast_if_present<mlir::scf::ForOp>(user)) {
+            auto arg = getArgForOperand(forOp, curr);
+            q.push_back(arg);
+          }
+        }
+      }
+    });
+    // If more than one loadOp, return false. TODO : Handle this case
+    if (loadOps.size() > 1)
+      return false;
+    auto loadOp = llvm::dyn_cast<imex::xetile::LoadTileOp>(loadOps[0]);
+    // Check if the loadOp used only in a transposeOp.
+    if (!(loadOp->hasOneUse() &&
+          llvm::isa<mlir::vector::TransposeOp>(*loadOp->user_begin())))
+      return false;
+    // Finally check if the loadOp is propagated to DPASB
+    return isForDPASB(loadOp);
   }
 };
 
