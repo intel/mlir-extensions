@@ -17,6 +17,7 @@
 
 #include "../PassDetail.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
@@ -415,6 +416,31 @@ void GPUXToSPIRVPass::runOnOperation() {
     target->addDynamicallyLegalOp<mlir::spirv::CLFMaxOp>(
         [&](mlir::spirv::CLFMaxOp op) {
           return isGenericVectorTy(op.getType());
+        });
+
+    // Upstream SPIRVTypeConverter does not add conversion for
+    // UnrankedMemRefType.
+    // Conversion logic is the same as ranked dynamic memref type for OpenCL
+    // Kernel. unranked memref type is converted to a spirv pointer type with
+    // converted spirv scalar element type and spirv storage class.
+    // Only scalar element type is currently supported.
+    // Also vulkan should be handled differently but out of scope since this
+    // conversion pass is for lowering to OpenCL spirv kernel only.
+    typeConverter.addConversion(
+        [&](mlir::UnrankedMemRefType type) -> std::optional<mlir::Type> {
+          auto attr = mlir::dyn_cast_or_null<mlir::spirv::StorageClassAttr>(
+              type.getMemorySpace());
+          if (!attr)
+            return nullptr;
+          mlir::spirv::StorageClass storageClass = attr.getValue();
+
+          mlir::Type elementType = type.getElementType();
+          auto scalarType =
+              mlir::dyn_cast<mlir::spirv::ScalarType>(elementType);
+          if (!scalarType)
+            return nullptr;
+          mlir::Type arrayElemType = typeConverter.convertType(scalarType);
+          return mlir::spirv::PointerType::get(arrayElemType, storageClass);
         });
 
     //------- Upstream Conversion------------
