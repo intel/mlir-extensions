@@ -66,6 +66,7 @@ public:
   XeuArchInterface(mlir::StringRef uArch) {
     this->gpuArch = uArch;
 
+    oneGRFSizeBits = 512;
     // DPAS related params - default to PVC
     repeatCount = 8;
     sDepth = 8;
@@ -103,10 +104,11 @@ public:
   mlir::LogicalResult isLegalStore2dOp(mlir::Operation *op);
 
   mlir::LogicalResult isLegalPrefetch2dOp(mlir::Operation *op);
+  unsigned int getOneGRFSizeBits() const { return oneGRFSizeBits; };
 
 protected:
   ~XeuArchInterface() {}
-
+  unsigned int oneGRFSizeBits;
   unsigned int repeatCount;
   unsigned int sDepth;
   unsigned int execSize; // Maximum number of channels allowed. Number of
