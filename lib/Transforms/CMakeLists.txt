@@ -12,6 +12,7 @@ add_mlir_library(IMEXTransforms
   VectorLinearize.cpp
   VnniTransformation.cpp
   OptimizeTranspose.cpp
+  HoistTranspose.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms

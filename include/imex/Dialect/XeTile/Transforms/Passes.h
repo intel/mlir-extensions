@@ -44,7 +44,6 @@ std::unique_ptr<mlir::Pass>
 createNewXeTileBlockingPass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createXeTileBlockAligningPass();
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
-std::unique_ptr<mlir::Pass> createXeTileOptimizeTransposePass();
 std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
 
 ///

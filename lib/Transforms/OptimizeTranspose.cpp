@@ -51,9 +51,9 @@ namespace imex {
 namespace optimizetranspose {
 
 // Convenience interface for defining an op pattern.
-struct OpPatternInterface {
+struct PatternMatcherInterface {
 public:
-  virtual ~OpPatternInterface() = default;
+  virtual ~PatternMatcherInterface() = default;
   // Try to match the given op with some pattern and update the ops vector.
   virtual bool match(mlir::Operation *op,
                      llvm::SmallVectorImpl<mlir::Operation *> &ops) = 0;
@@ -66,7 +66,7 @@ public:
 // %1 = vector.shuffle %0, %0, %mask {packed}
 // %2 = vector.shape_cast %1 {packed}
 // clang-format on
-struct PackedLayoutOpPattern : public OpPatternInterface {
+struct PackedLayoutOpsMatcher : public PatternMatcherInterface {
   bool match(mlir::Operation *op,
              llvm::SmallVectorImpl<mlir::Operation *> &ops) override {
     // Check for first ShapeCastOp.
@@ -126,6 +126,10 @@ public:
       auto transposeAttr = loadOp.getTransposeAttr();
       if (transposeAttr &&
           transposeAttr.asArrayRef() == llvm::ArrayRef<int64_t>{1, 0})
+        return mlir::WalkResult::skip();
+      // Memory space of the load op must be global.
+      if (loadOp.getTensorDesc().getType().getMemoryScope() !=
+          mlir::xegpu::MemoryScope::Global)
         return mlir::WalkResult::skip();
       // Single user must be a transpose op.
       auto transposeOp = llvm::dyn_cast_if_present<mlir::vector::TransposeOp>(
@@ -232,13 +236,10 @@ struct TransposeRewritePattern
     : public mlir::OpRewritePattern<mlir::vector::TransposeOp> {
   TransposeRewritePattern(mlir::MLIRContext *context,
                           LoadTransposeAnalysis &analysis,
-                          OpPatternInterface &usagePattern,
                           std::shared_ptr<imex::XeuArchInterface> ptruArch)
       : OpRewritePattern<mlir::vector::TransposeOp>(context),
-        analysis(analysis), usagePattern(usagePattern),
-        uArchInterface(ptruArch) {}
+        analysis(analysis), uArchInterface(ptruArch) {}
   LoadTransposeAnalysis &analysis;
-  OpPatternInterface &usagePattern;
   std::shared_ptr<imex::XeuArchInterface> uArchInterface;
 
   // Check if the target HW allows doing the load+transpose together.
@@ -295,10 +296,13 @@ struct TransposeRewritePattern
       // TODO: add support for NON_PACKED usage for low-precsion.
       if (!canTranspose(loadOp, TransposeUsageType::PACKED))
         return mlir::failure();
+
       // Ceck for packed layout conversion op sequence.
       llvm::SmallVector<mlir::Operation *> packedLayoutOps;
-      if (!usagePattern.match(*op->user_begin(), packedLayoutOps))
+      PackedLayoutOpsMatcher patternMatcher;
+      if (!patternMatcher.match(*op->user_begin(), packedLayoutOps)) {
         return mlir::failure();
+      }
 
       auto factor = 32 / opElementTy.getIntOrFloatBitWidth();
       // New output type has the transposed packed layout.
@@ -353,57 +357,6 @@ struct TransposeRewritePattern
   }
 };
 
-// clang-format off
-// NOTE: This pattern is not used in the current implementation. It is kept for
-// for future performance comparison.
-// clang-format on
-// struct ExtractStridedSliceOpPattern
-//     : public mlir::OpRewritePattern<mlir::vector::ExtractStridedSliceOp> {
-//   ExtractStridedSliceOpPattern(mlir::MLIRContext *context,
-//                                LoadTransposeAnalysis &analysis)
-//       : OpRewritePattern<mlir::vector::ExtractStridedSliceOp>(context) {}
-//   mlir::LogicalResult
-//   matchAndRewrite(mlir::vector::ExtractStridedSliceOp op,
-//                   mlir::PatternRewriter &rewriter) const override {
-//     // If the source vector is not coming from a unrealized conversion cast
-//     // op, skip.
-//     auto unrealizedCastOp =
-//         llvm::dyn_cast_if_present<mlir::UnrealizedConversionCastOp>(
-//             op.getVector().getDefiningOp());
-//     if (!unrealizedCastOp)
-//       return mlir::failure();
-//     // Get the offsets, sizes and strides from the extract op.
-//     auto constructI64Array = [&](llvm::ArrayRef<mlir::Attribute> attrs) {
-//       llvm::SmallVector<int64_t> values;
-//       for (auto attr : attrs) {
-//         values.push_back(llvm::cast<mlir::IntegerAttr>(attr).getInt());
-//       }
-//       return values;
-//     };
-//     auto offsets = constructI64Array(op.getOffsets().getValue());
-//     auto sizes = constructI64Array(op.getSizes().getValue());
-//     auto strides = constructI64Array(op.getStrides().getValue());
-//     // New offsets, sizes and strides has the packed layout.
-//     auto factor = 32 /
-//     op.getType().getElementType().getIntOrFloatBitWidth();
-//     llvm::SmallVector<int64_t> newOffsets = {offsets[0], offsets[1], 0};
-//     llvm::SmallVector<int64_t> newSizes = {sizes[0] / factor, sizes[1],
-//     factor}; llvm::SmallVector<int64_t> newStrides = {strides[0],
-//     strides[1],
-//     1};
-//     // Construct a new extract op with the new offsets, sizes and strides.
-//     auto newExtractOp =
-//     rewriter.create<mlir::vector::ExtractStridedSliceOp>(
-//         op.getLoc(), unrealizedCastOp->getOperand(0), newOffsets, newSizes,
-//         newStrides);
-//     // Create a new unrealized conversion cast op.
-//     rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(
-//         op, mlir::TypeRange({op.getType()}),
-//         mlir::ValueRange({newExtractOp}));
-//     return mlir::success();
-//   }
-// };
-
 struct OptimizeTransposePass final
     : public imex::impl::OptimizeTransposeBase<OptimizeTransposePass> {
   OptimizeTransposePass() {
@@ -432,16 +385,12 @@ struct OptimizeTransposePass final
     LoadTransposeAnalysis analysis = getAnalysis<LoadTransposeAnalysis>();
     mlir::RewritePatternSet patterns(context);
 
-    // Define the packed layout conversion pattern we want to detect.
-    PackedLayoutOpPattern usagePattern;
-
     mlir::GreedyRewriteConfig config;
     config.enableRegionSimplification =
         mlir::GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
-    patterns.add<TransposeRewritePattern>(context, analysis, usagePattern,
-                                          uArchInterface);
+    patterns.add<TransposeRewritePattern>(context, analysis, uArchInterface);
     if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
                                             config))) {
       return signalPassFailure();
