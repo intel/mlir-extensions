@@ -46,7 +46,7 @@ cmake --build build --target install
 
 ### Example: Setting up requirements using Conda
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
+conda create -n imex-dev -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
 
 conda activate imex-dev
 ```
