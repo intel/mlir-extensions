@@ -33,6 +33,7 @@ std::unique_ptr<mlir::Pass> createVectorLinearizePass();
 std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
 std::unique_ptr<mlir::Pass> createOptimizeTransposePass();
+std::unique_ptr<mlir::Pass> createHoistTransposePass();
 std::unique_ptr<mlir::Pass> createVnniTransformationPass();
 
 #define GEN_PASS_DECL
