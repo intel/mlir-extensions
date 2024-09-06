@@ -363,22 +363,30 @@ class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
 // A helper to compute the right array length given the inner block width,
 // and the tile width, as well as the element type. Both inner block width
 // and tile width are in number of elements. It is computed based on hardware
-// constraints (on PVC): array_lenght * inner_block_width * sizeof(elemTy) <=
+// constraints (on PVC): array_length * inner_block_width * sizeof(elemTy) <=
 // 256 bits. So, if tile width is larger than 256/sizeof(elemTy), the maximum
 // supported array_length will be used.
-int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy,
+// When array_length > 1 is specified, sub-GRF sized blocks are loaded into
+// separate GRFs. We do not handle that yet, and we may not really "want" to:
+//  We would waste GRFs. If multiple blocks (e.g., <1x16xf16, array_length=2>)
+//  fit into one GRF, let them.
+int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy, int innerHeight,
                         int inner_block_width, int tile_width) {
   auto uArch = std::make_shared<XePVCuArch>();
   auto elemBits = elemTy.getIntOrFloatBitWidth();
   auto params = uArch->get2DLoadConfig(op, elemBits, false, false);
   assert(mlir::succeeded(params) && "Invalid Config Params");
-
+  // Do not let an inner block get array_length'ed to blocks finer than one GRF.
+  if (innerHeight * inner_block_width * elemBits <=
+      uArch->getOneGRFSizeBits()) {
+    return 1;
+  }
   llvm::SmallVector<int> supportedArrLen = params->array_length;
-  int restriction = std::min(params->restriction, tile_width);
+  const int maxBlockWidth = std::min(params->restriction, tile_width);
 
   int result = 1;
   for (auto len : supportedArrLen) {
-    if (len * inner_block_width <= restriction)
+    if (len * inner_block_width <= maxBlockWidth)
       result = len;
   }
   return result;
@@ -415,10 +423,10 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     // using array_length for load if dim1 of innerBlocks is smaller than
     // dim1 of shape.
     auto elemTy = tileTy.getElementType();
-    auto array_length =
-        isForLoad(op) && shape[1] > innerBlk[1]
-            ? getBlockArrayLength(op, elemTy, innerBlk[1], shape[1])
-            : 1;
+    auto array_length = isForLoad(op) && shape[1] > innerBlk[1]
+                            ? getBlockArrayLength(op, elemTy, innerBlk[0],
+                                                  innerBlk[1], shape[1])
+                            : 1;
 
     auto width = array_length * innerBlk[1];
 
