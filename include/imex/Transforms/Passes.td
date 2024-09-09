@@ -111,6 +111,20 @@ def BF16ToGPU : Pass<"bf16-to-gpu", "::mlir::ModuleOp"> {
     ];
 }
 
+def CastIndex : Pass<"cast-index", "::mlir::ModuleOp"> {
+  let summary = "Place cast to and from i32 for compute intense arith ops in gpu.func using index type and replace index type with i32 for such ops.";
+  let description = [{
+    This pass collects compute intense arith ops in gpu.func using index type and
+    replace with i32 type. Cast for index type to and from i32 is inserted before
+     and after.
+  }];
+  let constructor = "imex::createCastIndexPass()";
+  let dependentDialects = [
+    "::mlir::gpu::GPUDialect",
+    "::mlir::index::IndexDialect"
+    ];
+}
+
 def RemoveTemporaries : Pass<"imex-remove-temporaries"> {
   let summary = "Remove redundant memref.alloc and memref.copy operations";
   let description = [{
