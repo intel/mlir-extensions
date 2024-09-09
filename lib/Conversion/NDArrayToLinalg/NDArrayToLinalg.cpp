@@ -566,7 +566,9 @@ struct DeleteLowering
     auto inp = adaptor.getInput();
     auto inpMR = createToMemRef(op.getLoc(), rewriter, inp,
                                 inpArType.getMemRefType(inp));
-    rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    auto newOp =
+        rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    newOp->setAttrs(op->getAttrs());
 
     return ::mlir::success();
   }
