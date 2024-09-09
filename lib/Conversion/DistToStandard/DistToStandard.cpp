@@ -256,7 +256,8 @@ struct DeleteOpConverter
 
     // apply DeleteOp to all parts
     for (auto p : lParts) {
-      (void)rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      auto newOp = rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      newOp->setAttrs(adaptor.getAttributes());
     }
 
     rewriter.eraseOp(op);
@@ -1659,7 +1660,7 @@ struct PermuteDimsOpConverter
                                                        distLArray.getHandle());
     // finally init dist array
     rewriter.replaceOp(
-        op, createDistArray(loc, rewriter, team, srcGShape, dstLOffsets,
+        op, createDistArray(loc, rewriter, team, dstGShape, dstLOffsets,
                             ::mlir::ValueRange{distLArray.getNlArray()}));
 
     return ::mlir::success();
