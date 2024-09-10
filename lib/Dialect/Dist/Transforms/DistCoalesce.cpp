@@ -618,7 +618,7 @@ struct DistCoalescePass
                   }
                   continue;
                 } // if(can_move)
-              } // dominates
+              }   // dominates
               // if fOp does not dominate i or i's inputs do not dominate fOp
               // we try later with remaining unhandled ops
               unhandled.emplace_back(*i);
@@ -649,9 +649,9 @@ struct DistCoalescePass
           if (j == grpP.second.end()) {
             break;
           } // while (grp.size() > 0)
-        } // for (auto j = grpP.second.begin(); j != grpP.second.end(); ++j)
-      } // for (auto grpP : opsGroups)
-    } // !rpOps.empty()
+        }   // for (auto j = grpP.second.begin(); j != grpP.second.end(); ++j)
+      }     // for (auto grpP : opsGroups)
+    }       // !rpOps.empty()
 
     // Get rid of dummy casts
     for (auto op : dummyCasts) {

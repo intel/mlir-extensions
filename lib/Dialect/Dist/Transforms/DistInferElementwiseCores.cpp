@@ -300,7 +300,7 @@ struct DistInferEWCoresPass
       }
     }
   }; // runOnOperation()
-}; // DistInferEWCoresPass
+};   // DistInferEWCoresPass
 
 } // namespace
 } // namespace dist
