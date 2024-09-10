@@ -14,7 +14,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "imex/Transforms/Passes.h"
 #include "imex/Utils/GPUSerialize.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
@@ -22,11 +22,17 @@
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/Target/SPIRV/Serialization.h"
 
+namespace imex {
+#define GEN_PASS_DEF_SERIALIZESPIRVPASS
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
+
 using namespace mlir;
 using namespace imex;
 
 namespace {
-struct SerializeSPIRVPass : public SerializeSPIRVPassBase<SerializeSPIRVPass> {
+struct SerializeSPIRVPass
+    : public imex::impl::SerializeSPIRVPassBase<SerializeSPIRVPass> {
 public:
   void runOnOperation() override {
     auto mod = getOperation();

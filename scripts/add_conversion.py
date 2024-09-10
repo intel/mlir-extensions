@@ -96,6 +96,11 @@ class RewritePatternSet;
 }}
 
 namespace imex {{
+#define GEN_PASS_DECL_CONVERT{name}
+#include <imex/Conversion/Passes.h.inc>
+}} // namespace imex
+
+namespace imex {{
 /// Populate the given list with patterns rewrite {args.source} Ops
 void populate{name}ConversionPatterns(::mlir::LLVMTypeConverter &converter,
                                         ::mlir::RewritePatternSet &patterns);
@@ -132,8 +137,12 @@ with open(fn, "w") as f:
 #include <imex/Utils/PassWrapper.h>
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 
-#include "../PassDetail.h"
+namespace imex {{
+#define GEN_PASS_DEF_CONVERT{name}
+#include <imex/Conversion/Passes.h.inc>
+}} // namespace imex
 
 namespace imex {{
 
@@ -179,7 +188,7 @@ struct Some{args.source}OpRewriter
 
 // Full Pass
 struct Convert{name}Pass // convert {args.source} to {args.target}
-    : public ::imex::Convert{name}Base<Convert{name}Pass>
+    : public ::imex::impl::Convert{name}Base<Convert{name}Pass>
 {{
   Convert{name}Pass() = default;
 

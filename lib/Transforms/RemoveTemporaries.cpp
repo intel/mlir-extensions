@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "imex/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include <imex/Utils/PassUtils.h>
 #include <mlir/Analysis/AliasAnalysis.h>

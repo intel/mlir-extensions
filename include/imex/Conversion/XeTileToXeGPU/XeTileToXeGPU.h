@@ -34,6 +34,9 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTXETILETOXEGPU
+#include "imex/Conversion/Passes.h.inc"
+
 class XeOneToNTypeConverter;
 
 /// Populate the given list with patterns rewrite XeTile Ops

@@ -19,6 +19,7 @@
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
+#include <imex/Dialect/NDArray/Transforms/Passes.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
 #include <imex/Utils/PassUtils.h>
 #include <imex/Utils/PassWrapper.h>
@@ -36,9 +37,12 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
-#include "PassDetail.h"
-
 #include <iostream>
+
+namespace imex {
+#define GEN_PASS_DEF_NDARRAYDIST
+#include <imex/Dialect/NDArray/Transforms/Passes.h.inc>
+} // namespace imex
 
 namespace imex {
 namespace dist {
@@ -191,7 +195,7 @@ struct DistEWBinOpRWP : public DistOpRWP<::imex::ndarray::EWBinOp> {
 // *******************************
 
 // Lowering dist dialect by no-ops
-struct NDArrayDistPass : public ::imex::NDArrayDistBase<NDArrayDistPass> {
+struct NDArrayDistPass : public ::imex::impl::NDArrayDistBase<NDArrayDistPass> {
 
   NDArrayDistPass() = default;
 

@@ -33,10 +33,14 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
-#include "../PassDetail.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTXEGPUTOVC
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 using namespace mlir;
 
@@ -1407,7 +1411,7 @@ struct ElementwiseToVCPattern : public OpConversionPattern<MOp> {
   }
 };
 
-struct XeGPUToVCPass : public ::imex::ConvertXeGPUToVCBase<XeGPUToVCPass> {
+struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
   using Base::Base;
 
   void runOnOperation() override {

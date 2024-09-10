@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/Transforms/Passes.h>
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
@@ -20,8 +21,6 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "PassDetail.h"
-
 #include <algorithm>
 #include <cassert>
 #include <set>
@@ -29,12 +28,17 @@
 #include <vector>
 
 namespace imex {
+#define GEN_PASS_DEF_DISTINFEREWCORES
+#include "imex/Dialect/Dist/Transforms/Passes.h.inc"
+} // namespace imex
+
+namespace imex {
 namespace dist {
 
 namespace {
 
 struct DistInferEWCoresPass
-    : public ::imex::DistInferEWCoresBase<DistInferEWCoresPass> {
+    : public imex::impl::DistInferEWCoresBase<DistInferEWCoresPass> {
 
   DistInferEWCoresPass() = default;
 

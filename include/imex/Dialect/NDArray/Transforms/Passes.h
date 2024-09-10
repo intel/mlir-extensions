@@ -42,6 +42,9 @@ void populateNDArrayDistPatterns(::mlir::LLVMTypeConverter &converter,
 /// Create a AddGPURegions pass
 std::unique_ptr<::mlir::Pass> createAddGPURegionsPass();
 
+#define GEN_PASS_DECL
+#include <imex/Dialect/NDArray/Transforms/Passes.h.inc>
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//

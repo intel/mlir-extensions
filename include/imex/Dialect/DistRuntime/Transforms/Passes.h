@@ -36,6 +36,11 @@ std::unique_ptr<::mlir::Pass> createDistRuntimeToIDTRPass();
 std::unique_ptr<::mlir::Pass> createOverlapCommAndComputePass();
 std::unique_ptr<::mlir::Pass> createAddCommCacheKeysPass();
 
+#define GEN_PASS_DECL_OVERLAPCOMMANDCOMPUTE
+#define GEN_PASS_DECL_ADDCOMMCACHEKEYS
+#define GEN_PASS_DECL_LOWERDISTRUNTIMETOIDTR
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h.inc>
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//
