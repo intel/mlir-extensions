@@ -28,6 +28,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -45,7 +46,6 @@
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 
-#include "PassDetail.h"
 #include <iostream>
 
 using namespace mlir;
@@ -533,7 +533,7 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
 
 // Transforms WG XeTile IR to SG XeTile
 class XeTileWgToSgPass
-    : public imex::impl::XeTileWgToSgBase<imex::XeTileWgToSgPass> {
+    : public impl::XeTileWgToSgBase<XeTileWgToSgPass> {
 
 public:
   XeTileWgToSgPass() = default;

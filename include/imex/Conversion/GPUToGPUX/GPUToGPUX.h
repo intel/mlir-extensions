@@ -26,6 +26,9 @@ template <typename T> class OperationPass;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTGPUTOGPUX
+#include "imex/Conversion/Passes.h.inc"
+
 /// Create a pass to convert the GPU dialect to the GPUX dialect.
 std::unique_ptr<::mlir::OperationPass<void>> createConvertGPUToGPUXPass();
 

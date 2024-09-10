@@ -19,19 +19,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
 #include <imex/Utils/PassUtils.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 
-#include "PassDetail.h"
-
 #include <algorithm>
 #include <vector>
 
 namespace imex {
-namespace ndarray {
+#define GEN_PASS_DEF_OVERLAPCOMMANDCOMPUTE
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h.inc>
+} // namespace imex
 
+namespace imex {
+namespace ndarray {
 std::vector<::mlir::Operation *> getSortedUsers(::mlir::DominanceInfo &dom,
                                                 ::mlir::Operation *op) {
   std::vector<::mlir::Operation *> users(op->getUsers().begin(),
@@ -41,8 +44,9 @@ std::vector<::mlir::Operation *> getSortedUsers(::mlir::DominanceInfo &dom,
 }
 
 namespace {
+
 struct OverlapCommAndComputePass
-    : public ::imex::OverlapCommAndComputeBase<OverlapCommAndComputePass> {
+    : public impl::OverlapCommAndComputeBase<OverlapCommAndComputePass> {
 
   OverlapCommAndComputePass() = default;
 
@@ -195,7 +199,6 @@ struct OverlapCommAndComputePass
     waitops.clear();
   }
 };
-
 } // namespace
 } // namespace ndarray
 

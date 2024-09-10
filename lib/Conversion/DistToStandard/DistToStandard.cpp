@@ -36,6 +36,7 @@
 #include <mlir/Dialect/SCF/Transforms/Patterns.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 
 #include <array>
 #include <cstdlib>
@@ -44,7 +45,10 @@
 #include <sstream>
 #include <string>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_CONVERTDISTTOSTANDARD
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 using ::imex::ndarray::createDType;
 using ::imex::ndarray::createShapeOf;
@@ -1673,7 +1677,8 @@ struct PermuteDimsOpConverter
 
 // Full Pass
 struct ConvertDistToStandardPass
-    : public ::imex::ConvertDistToStandardBase<ConvertDistToStandardPass> {
+    : public ::imex::impl::ConvertDistToStandardBase<
+          ConvertDistToStandardPass> {
   ConvertDistToStandardPass() = default;
 
   void runOnOperation() override {

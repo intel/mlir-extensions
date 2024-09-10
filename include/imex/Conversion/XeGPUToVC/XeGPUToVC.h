@@ -37,6 +37,8 @@ class GPUModuleOp;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTXEGPUTOVC
+#include "imex/Conversion/Passes.h.inc"
 
 std::unique_ptr<::mlir::OperationPass<::mlir::gpu::GPUModuleOp>>
 createConvertXeGPUToVCPass();

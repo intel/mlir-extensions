@@ -27,6 +27,7 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -40,21 +41,18 @@
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "imex/Utils/DebugUtils.h"
 
-#include "PassDetail.h"
-
 using namespace mlir;
 using namespace imex;
 
 namespace imex {
-#define GEN_PASS_DECL_XETILEINITDUPLICATE
 #define GEN_PASS_DEF_XETILEINITDUPLICATE
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
 
 namespace imex {
 
-class XeTileInitDuplicatePass : public imex::impl::XeTileInitDuplicateBase<
-                                    imex::XeTileInitDuplicatePass> {
+class XeTileInitDuplicatePass
+    : public impl::XeTileInitDuplicateBase<XeTileInitDuplicatePass> {
 public:
   void runOnOperation() override {
     auto &usageAnalysis = getAnalysis<TileUsageAnalysis>();
