@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
+#include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -51,13 +52,11 @@
 #include <math.h>
 
 namespace imex {
-#define GEN_PASS_DECL_XETILECANONICALIZATION
 #define GEN_PASS_DEF_XETILECANONICALIZATION
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
 
 namespace canonicalization {
-
 template <typename T>
 llvm::SmallVector<T> swapLastTwoElems(llvm::ArrayRef<T> arr) {
   assert(arr.size() >= 2 && "Shape must have at least 2 elements.");
@@ -427,16 +426,17 @@ struct XeTileCanonicalizationPass final
       target.addLegalOp<mlir::memref::ReinterpretCastOp>();
       target.addLegalOp<imex::xetile::TransposeOp>();
       // Col-major tile creattion is not allowed.
-      target.addDynamicallyLegalOp<
-          imex::xetile::InitTileOp>([&](imex::xetile::InitTileOp op) {
-        return op.getType().getOrder().asArrayRef() != mlir::ArrayRef({0, 1});
-      });
+      target.addDynamicallyLegalOp<imex::xetile::InitTileOp>(
+          [&](imex::xetile::InitTileOp op) {
+            return op.getType().getOrder().asArrayRef() !=
+                   mlir::ArrayRef({0, 1});
+          });
       // UpdateTileOffsetOp is legal if it does not consume col-major tiles.
-      target.addDynamicallyLegalOp<
-          imex::xetile::UpdateTileOffsetOp>([&](imex::xetile::UpdateTileOffsetOp
-                                                    op) {
-        return op.getType().getOrder().asArrayRef() != mlir::ArrayRef({0, 1});
-      });
+      target.addDynamicallyLegalOp<imex::xetile::UpdateTileOffsetOp>(
+          [&](imex::xetile::UpdateTileOffsetOp op) {
+            return op.getType().getOrder().asArrayRef() !=
+                   mlir::ArrayRef({0, 1});
+          });
       // PrefetchTileOp is legal if it does not consume col-major tiles.
       target.addDynamicallyLegalOp<imex::xetile::PrefetchTileOp>(
           [&](imex::xetile::PrefetchTileOp op) {

@@ -13,7 +13,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Utils/PassWrapper.h>
@@ -21,6 +20,12 @@
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTGPUTOGPUX
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 
@@ -205,7 +210,7 @@ struct ConvertMemsetOp : public mlir::OpRewritePattern<mlir::gpu::MemsetOp> {
 // This pass converts the GPU dialect ops to our custom GPUX dialect ops
 // which add a stream to the gpu dialect ops. These ops are then lowered
 // LLVM dialect and eventually to stcl/l0 runtime calls.
-struct GPUToGPUXPass : public ::imex::ConvertGPUToGPUXBase<GPUToGPUXPass> {
+struct GPUToGPUXPass : public imex::impl::ConvertGPUToGPUXBase<GPUToGPUXPass> {
 
   void runOnOperation() override {
     auto *ctx = &getContext();
@@ -217,7 +222,7 @@ struct GPUToGPUXPass : public ::imex::ConvertGPUToGPUXBase<GPUToGPUXPass> {
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
-}; // namespace imex
+};
 
 // Create a pass that convert GPU to GPUX
 std::unique_ptr<::mlir::OperationPass<void>> createConvertGPUToGPUXPass() {

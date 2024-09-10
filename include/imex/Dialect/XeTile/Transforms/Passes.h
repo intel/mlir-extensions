@@ -55,6 +55,14 @@ void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
                                     mlir::RewritePatternSet &patterns,
                                     std::shared_ptr<XeuArchInterface> ptruArch);
 
+#define GEN_PASS_DECL_NEWXETILEBLOCKING
+#define GEN_PASS_DECL_XETILEBLOCKALIGNING
+#define GEN_PASS_DECL_XETILEBLOCKING
+#define GEN_PASS_DECL_XETILECANONICALIZATION
+#define GEN_PASS_DECL_XETILEINITDUPLICATE
+#define GEN_PASS_DECL_XETILEWGTOSG
+#include <imex/Dialect/XeTile/Transforms/Passes.h.inc>
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//

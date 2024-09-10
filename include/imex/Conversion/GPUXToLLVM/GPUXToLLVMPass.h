@@ -29,6 +29,8 @@ template <typename T> class OperationPass;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTGPUXTOLLVM
+#include "imex/Conversion/Passes.h.inc"
 
 /// Populates the given list with patterns that convert from GPUX dialect to
 /// LLVM.

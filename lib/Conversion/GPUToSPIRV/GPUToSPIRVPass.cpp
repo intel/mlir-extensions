@@ -15,7 +15,6 @@
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h"
 
-#include "../PassDetail.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 
@@ -42,6 +41,13 @@
 #include <mlir/Support/LLVM.h>
 #include <mlir/Transforms/DialectConversion.h>
 
+#include <mlir/Pass/Pass.h>
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTGPUXTOSPIRV
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
+
 namespace imex {
 
 /// Pass to lower GPU Dialect to SPIR-V. The pass only converts the gpu.func ops
@@ -53,7 +59,7 @@ namespace imex {
 /// replace it).
 ///
 /// 2) Lower the body of the spirv::ModuleOp.
-class GPUXToSPIRVPass : public ::imex::ConvertGPUXToSPIRVBase<GPUXToSPIRVPass> {
+class GPUXToSPIRVPass : public impl::ConvertGPUXToSPIRVBase<GPUXToSPIRVPass> {
 public:
   explicit GPUXToSPIRVPass(bool mapMemorySpace)
       : mapMemorySpace(mapMemorySpace) {}

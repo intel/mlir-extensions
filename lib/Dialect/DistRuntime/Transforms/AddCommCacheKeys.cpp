@@ -13,15 +13,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h>
 
-#include "PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_ADDCOMMCACHEKEYS
+#include "imex/Dialect/DistRuntime/Transforms/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 namespace distruntime {
 
 namespace {
+
 struct AddCommCacheKeysPass
-    : public ::imex::AddCommCacheKeysBase<AddCommCacheKeysPass> {
+    : public imex::impl::AddCommCacheKeysBase<AddCommCacheKeysPass> {
 
   AddCommCacheKeysPass() = default;
 

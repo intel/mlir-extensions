@@ -37,6 +37,9 @@ std::unique_ptr<::mlir::Pass> createDistCoalescePass();
 /// Create DistInferEWBinopPass
 std::unique_ptr<::mlir::Pass> createDistInferEWCoresPass();
 
+#define GEN_PASS_DECL
+#include <imex/Dialect/Dist/Transforms/Passes.h.inc>
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//

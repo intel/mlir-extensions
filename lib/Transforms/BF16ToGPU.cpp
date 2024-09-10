@@ -15,7 +15,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "imex/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -24,11 +24,16 @@
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
+namespace imex {
+#define GEN_PASS_DEF_BF16TOGPU
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
+
 using namespace mlir;
 using namespace imex;
 
 namespace {
-struct BF16ToGPUPass : public BF16ToGPUBase<BF16ToGPUPass> {
+struct BF16ToGPUPass : public imex::impl::BF16ToGPUBase<BF16ToGPUPass> {
 
 public:
   void runOnOperation() override {

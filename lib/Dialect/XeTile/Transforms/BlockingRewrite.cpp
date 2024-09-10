@@ -30,6 +30,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -50,13 +51,11 @@
 #include "imex/Utils/XeArch.h"
 
 #include "BlockingAnalysis.h"
-#include "PassDetail.h"
 
 using namespace mlir;
 using namespace llvm;
 using namespace imex;
 namespace imex {
-#define GEN_PASS_DECL_NEWXETILEBLOCKING
 #define GEN_PASS_DEF_NEWXETILEBLOCKING
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
@@ -763,7 +762,7 @@ void populateNewXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
 
 // Lowers XeTile to blocked layout with high-dim vector
 class NewXeTileBlockingPass
-    : public imex::impl::NewXeTileBlockingBase<imex::NewXeTileBlockingPass> {
+    : public impl::NewXeTileBlockingBase<NewXeTileBlockingPass> {
 
 public:
   NewXeTileBlockingPass() = default;
