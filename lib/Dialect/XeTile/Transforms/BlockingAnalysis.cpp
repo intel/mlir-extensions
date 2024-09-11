@@ -209,7 +209,7 @@ public:
                        std::shared_ptr<XeuArchInterface> uArch)
       : SparseBackwardDataFlowAnalysis(solver, symbolTable), uArch(uArch) {}
 
-  void visitOperation(mlir::Operation *op,
+  mlir::LogicalResult visitOperation(mlir::Operation *op,
                       mlir::ArrayRef<BlockingLattice *> operands,
                       mlir::ArrayRef<const BlockingLattice *> results) override;
 
@@ -275,7 +275,7 @@ private:
   std::shared_ptr<XeuArchInterface> uArch = nullptr;
 };
 
-void BlockingAnalysisImpl::visitOperation(
+mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
     mlir::Operation *op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
 
@@ -308,6 +308,9 @@ void BlockingAnalysisImpl::visitOperation(
 
   if (auto shapecastOp = mlir::dyn_cast<mlir::vector::ShapeCastOp>(op))
     visitShapecastOp(shapecastOp, operands, results);
+
+  // HACK: should probably add proper status handling for each 'visit*Op'
+  return mlir::success();
 }
 
 void BlockingAnalysisImpl::visitPrefetchTileOp(
