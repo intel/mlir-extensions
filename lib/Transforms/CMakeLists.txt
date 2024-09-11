@@ -2,6 +2,7 @@ add_mlir_library(IMEXTransforms
   AddOuterParallelLoop.cpp
   BF16ToGPU.cpp
   CastIndex.cpp
+  EmulateNonNativeBF16.cpp
   InsertGPUAllocs.cpp
   LowerMemRefCopy.cpp
   PropagatePackedLayout.cpp
