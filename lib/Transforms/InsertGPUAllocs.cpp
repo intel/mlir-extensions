@@ -503,7 +503,7 @@ private:
 } // namespace
 
 namespace imex {
-std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass() {
-  return std::make_unique<InsertGPUAllocsPass>();
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass(const char *clientAPI) {
+  return std::make_unique<InsertGPUAllocsPass>(clientAPI);
 }
 } // namespace imex
