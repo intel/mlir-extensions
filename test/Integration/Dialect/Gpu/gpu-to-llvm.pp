@@ -5,6 +5,7 @@
 builtin.module(
     imex-vector-linearize
     reconcile-unrealized-casts
+    bf16-to-gpu
     imex-convert-gpu-to-spirv
     spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
