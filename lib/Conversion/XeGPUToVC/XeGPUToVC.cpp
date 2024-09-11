@@ -141,7 +141,10 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
 
   auto tileRank = op.getTensorDesc().getType().getRank();
   auto offsets = op.getMixedOffsets();
+
+  // @TODO: Should we calculate offset using the XeGPU provided API?
   auto strides = mlir::getStridesAndOffset(memType).first;
+
   int64_t i = memType.getRank() - 1;
 
   auto computeBase = [&](Value base) {
@@ -238,7 +241,7 @@ struct CreateNdDescPattern
     if (rank == 2) {
       auto blockWidth = tileType.getShape()[1];
       auto blockHeight = tileType.getShape()[0];
-      // fixme: support memref for now
+      // @TODO: support memref for now
       auto memType = cast<MemRefType>(op.getSource().getType());
       auto memRank = memType.getRank();
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
@@ -249,8 +252,14 @@ struct CreateNdDescPattern
         auto surfaceWidth =
             memType.getShape()[memRank - 1] * (bitWidth / 8) - 1;
         auto surfaceHeight = memType.getShape()[memRank - 2] - 1;
-        // fixme: pitch = width for now
-        auto surfacePitch = surfaceWidth;
+        // Calculate pitch, based on strides
+        // For load/store_nd strides are only supported on non-FCDs (Fast
+        // Changing Dimension)
+        auto strides = mlir::getStridesAndOffset(memType).first;
+        assert(strides[memRank - 1] == 1 &&
+               "Fast Changing Dimension can only have stride of 1");
+        auto surfacePitch = strides[memRank - 2] * (bitWidth / 8) - 1;
+
         surfaceW = createIntConstant(surfaceWidth);
         surfaceH = createIntConstant(surfaceHeight);
         surfaceP = createIntConstant(surfacePitch);
@@ -271,7 +280,9 @@ struct CreateNdDescPattern
         auto surfaceHCast = rewriter.create<arith::IndexCastUIOp>(
             loc, i32Type, adaptor.getShape()[0]);
         surfaceH = rewriter.create<arith::SubIOp>(loc, surfaceHCast, one);
-        // fixme: pitch = width for now
+        // @FIXME: pitch = width for now
+        // @TODO: Handle strided memref, currently for dynamic memrefs,
+        // non-uniform stride is not supported
         surfaceP = surfaceW;
       }
 
@@ -484,12 +495,23 @@ class LoadStorePrefetchNdToLscPattern : public OpConversionPattern<OpType> {
       // static memref for now
       auto createDescOp =
           op.getTensorDesc().template getDefiningOp<xegpu::CreateNdDescOp>();
+      // @TODO: we are still only supporting tensor descriptor from
+      // memref type, we need to change this to support tensor descriptor
+      // created from i64 types as well
       auto memType = llvm::cast<MemRefType>(createDescOp.getSource().getType());
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
       auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
       auto surfaceHeight = memType.getShape()[0] - 1;
-      // pitch = width for now
-      auto surfacePitch = surfaceWidth;
+
+      // Calculate pitch, based on strides
+      // For load_nd strides are only supported on non-FCDs (Fast Changing
+      // Dimension)
+      auto memRank = memType.getRank();
+      auto strides = mlir::getStridesAndOffset(memType).first;
+      assert(strides[memRank - 1] == 1 &&
+             "Fast Changing Dimension can only have stride of 1");
+      auto surfacePitch = strides[memRank - 2] * (bitWidth / 8) - 1;
+
       auto surfaceW = createIntConstant(i32Type, surfaceWidth);
       auto surfaceH = createIntConstant(i32Type, surfaceHeight);
       auto surfaceP = createIntConstant(i32Type, surfacePitch);
