@@ -22,46 +22,28 @@ jobs:
       LLVM_SHA_FILE: llvm_version.txt
 
     steps:
-      - name: Check build root
-        run: |
-            export BUILD_ROOT=$(pwd)/build_gpu
-            echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
-            export HOME_DIR=${BUILD_ROOT}/home
-            echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
-            if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
-
-      - name: Clear home dir
-        run: |
-          mkdir -p $HOME_DIR
-          cd $HOME_DIR
-          rm -rf *
-
       - uses: actions/checkout@v4
-        with:
-          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-          fetch-depth: 0
-          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
+
+      - name: Collect info
+        run: |
+          sh scripts/sysinfo.sh
 
       - name: Checkout MLIR
         run: |
-          cd $BUILD_ROOT
           if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
-          cd $BUILD_ROOT/llvm-project
+          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          cd llvm-project
           git reset --hard HEAD
-          export LLVM_SHA=`cat $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
           git fetch --prune
-          git checkout $LLVM_SHA || exit 1
-          if [ -d "$HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
 
       - name: Setup IMEX and run tests
         run: |
           source /opt/intel/oneapi/setvars.sh
-          apt-cache show level-zero
-          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
 
           pip install psutil
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  \
+          cmake -S llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  \
                 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
                 -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold \
                 -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. \
@@ -72,29 +54,14 @@ jobs:
 
       - name: Run SG-level XeTile generated cases
         run: |
-          rm -rf $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen/GEMM_reports
-          rm -rf $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen/Generated_GEMM
-          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/scripts/xetile-test-gen
-          pip install pandas
-          pip install argparse
-          pip install openpyxl
+          rm -rf scripts/xetile-test-gen/GEMM_reports scripts/xetile-test-gen/Generated_GEMM
+          cd scripts/xetile-test-gen
+          pip install pandas argparse openpyxl
           ./run_tests.sh --gen_default_cases=1 --validate=1 --verbose=1 --llvm_build_dir=../../build
-
-          # /home/gta/anaconda3/envs/imex-dev/bin/python $HOME_DIR/mlir-extensions/build/bin/imex-runner.py -i $HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg_addf.mlir -e main --pass-pipeline-file=$HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg-to-gpux-opencl.pp -entry-point-result=void --shared-libs=$HOME_DIR/llvm-mlir/_mlir_install/lib/libmlir_runner_utils.so,$HOME_DIR/mlir-extensions/build/lib/liblevel-zero-runtime.so
-      #- name: Run perf script
-      #  run: |
-      #    cd ${{ env.HOME_DIR }}/mlir-extensions/scripts
-      #    ./run_perf_test.sh
 
       - name: Upload tests.txt
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: tests_gpu.txt
-          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
-
-            #- name: Upload report.txt
-            # uses: actions/upload-artifact@v2
-            #with:
-            #name: report.txt
-            #path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/scripts/report.txt
+          path: build/tests.txt
