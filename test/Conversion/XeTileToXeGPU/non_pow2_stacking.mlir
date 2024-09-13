@@ -15,11 +15,11 @@ module @test_module attributes {gpu.container_module} {
       %c_value = arith.addf %a_valuee, %b_valuee : vector<24x32xf16>
 
       // not a power-of-two (size is 6) inner block stacking reduction
-      // CHECK: %[[STACK1:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x16xf16>, vector<1x16xf16>
-      // CHECK: %[[STACK2:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x16xf16>, vector<1x16xf16>
-      // CHECK: %[[STACK3:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x16xf16>, vector<1x16xf16>
-      // CHECK: %[[STACK4:.*]] = vector.shuffle %[[STACK1]], %[[STACK2]] [0, 1, 2, 3] : vector<2x16xf16>, vector<2x16xf16>
-      // CHECK: %[[STACK5:.*]] = vector.shuffle %[[STACK4]], %[[STACK3]] [0, 1, 2, 3, 4, 5] : vector<4x16xf16>, vector<2x16xf16>
+      // CHECK: %[[STACK1:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
+      // CHECK: %[[STACK2:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
+      // CHECK: %[[STACK3:.*]] = vector.shuffle {{.*}}, {{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
+      // CHECK: %[[STACK4:.*]] = vector.shuffle %[[STACK1]], %[[STACK2]] [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
+      // CHECK: %[[STACK5:.*]] = vector.shuffle %[[STACK4]], %[[STACK3]] [0, 1, 2, 3, 4, 5] : vector<4x32xf16>, vector<2x32xf16>
 
       %c_valuee = xetile.tile_pack %c_value { inner_blocks = [6, 16] }  : vector<24x32xf16> -> vector<4x2x6x16xf16>
       xetile.store_tile %c_valuee, %b_tile  : vector<4x2x6x16xf16>, !xetile.tile<24x32xf16, #xetile.tile_attr<inner_blocks = [6, 16]>>
