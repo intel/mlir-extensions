@@ -164,8 +164,7 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
   }
 
   if (op == OpType::Elementwise) {
-    // TODO: get from uArch?
-    int64_t subgroupSize = 16;
+    int64_t subgroupSize = uArchInterface->getOneGRFSizeBits() / elementSize;
 
     maxHeight = 1;
     minHeight = 1;
