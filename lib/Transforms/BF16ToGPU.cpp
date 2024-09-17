@@ -265,30 +265,37 @@ public:
             if (!func)
               op.emitError("Callee not found!");
             auto ftype = func.getFunctionType();
-            SmallVector<Type, 8> newArgTypes;
-            bool needFuncArgUpdate = false;
-            for (auto iTy : ftype.getInputs()) {
-              if (auto vecTy = dyn_cast<VectorType>(iTy)) {
-                if (vecTy.getElementType().isBF16()) {
-                  auto newTy =
-                      vecTy.cloneWith(vecTy.getShape(), builder.getI16Type());
-                  newArgTypes.push_back(newTy);
-                  needFuncArgUpdate = true;
+            bool needFuncUpdate = false;
+
+            auto convertBF16ToI16 = [&](TypeRange types) {
+              SmallVector<Type, 8> newTypes;
+              for (Type t : types) {
+                if (auto vecTy = dyn_cast<VectorType>(t)) {
+                  if (vecTy.getElementType().isBF16()) {
+                    auto newTy =
+                        vecTy.cloneWith(vecTy.getShape(), builder.getI16Type());
+                    newTypes.push_back(newTy);
+                    needFuncUpdate = true;
+                  } else {
+                    newTypes.push_back(t);
+                  }
+                } else if (t.isBF16()) {
+                  newTypes.push_back(builder.getI16Type());
+                  needFuncUpdate = true;
                 } else {
-                  newArgTypes.push_back(iTy);
+                  // TODO: Can callee arg type be bf16 memref?
+                  newTypes.push_back(t);
                 }
-              } else if (iTy.isBF16()) {
-                newArgTypes.push_back(builder.getI16Type());
-                needFuncArgUpdate = true;
-              } else {
-                // TODO: Can callee arg type be bf16 memref?
-                newArgTypes.push_back(iTy);
               }
-            }
-            // TODO: Can callee return type be bf16?
-            if (needFuncArgUpdate) {
+              return newTypes;
+            };
+
+            auto newArgTypes = convertBF16ToI16(ftype.getInputs());
+            auto newRetTypes = convertBF16ToI16(ftype.getResults());
+
+            if (needFuncUpdate) {
               auto nftype = dyn_cast<FunctionType>(
-                  func.cloneTypeWith(newArgTypes, ftype.getResults()));
+                  func.cloneTypeWith(newArgTypes, newRetTypes));
               func.setFunctionType(nftype);
             }
           }
