@@ -907,10 +907,14 @@ public:
       for (auto ty : op->getOperandTypes()) {
         if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(ty))
           result &= (vecTy.getRank() != 2);
+        if (auto tileTy = mlir::dyn_cast<xetile::TileType>(ty))
+          result &= bool(tileTy.getInnerBlocks());
       }
       for (auto ty : op->getResultTypes()) {
         if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(ty))
           result &= (vecTy.getRank() != 2);
+        if (auto tileTy = mlir::dyn_cast<xetile::TileType>(ty))
+          result &= bool(tileTy.getInnerBlocks());
       }
       return result;
     });
