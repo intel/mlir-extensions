@@ -137,10 +137,12 @@ void BlockingRequests::print(llvm::raw_ostream &os) const {
     os << "Requests (" << requests.size() << ", "
        << "def: " << def << "): ";
     for (auto [i, iter] : llvm::enumerate(requests)) {
-      os << "(" << *(iter.first).first << ", " << (iter.first).second
-         << "): \n\t" << iter.second;
+      auto point = iter.first;
+      auto block = iter.second;
+      os << "UsePoint(" << *(point.first) << ", " << point.second << "): \t"
+         << block;
       if (i != requests.size() - 1)
-        os << ", ";
+        os << "; ";
     }
   }
 }
@@ -248,6 +250,10 @@ private:
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
 
+  void visitCreateMaskOp(mlir::vector::CreateMaskOp op,
+                         mlir::ArrayRef<BlockingLattice *> operands,
+                         mlir::ArrayRef<const BlockingLattice *> results);
+
   void visitReductionOp(xetile::ReductionOp op,
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
@@ -308,6 +314,9 @@ void BlockingAnalysisImpl::visitOperation(
 
   if (auto shapecastOp = mlir::dyn_cast<mlir::vector::ShapeCastOp>(op))
     visitShapecastOp(shapecastOp, operands, results);
+
+  if (auto createMaskOp = mlir::dyn_cast<mlir::vector::CreateMaskOp>(op))
+    visitCreateMaskOp(createMaskOp, operands, results);
 }
 
 void BlockingAnalysisImpl::visitPrefetchTileOp(
@@ -576,6 +585,21 @@ void BlockingAnalysisImpl::visitShapecastOp(
   }
 }
 
+void BlockingAnalysisImpl::visitCreateMaskOp(
+    mlir::vector::CreateMaskOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto vecTy = op.getVectorType();
+  auto shape = vecTy.getShape();
+  auto elemTy = vecTy.getElementType();
+
+  auto lattice = results[0]->getValue();
+  BlockingRequests &def = getLatticeElement(op->getResult(0))->getValue();
+  // TODO: following the Antonio's implementation and use the default size
+  // [1, subgroupSize] for CreateMaskOp, but it can be more general.
+  Block block = getInnerBlockSize(op, elemTy, shape);
+  def.updateDefBlock(block);
+}
+
 int BlockingAnalysisImpl::getMaxSLMBlockSize(int elemBitWidth, int height) {
   // TODO: use uArch to get max vec size?
   const int lscConstraint = 512; // lsc supports upto 512 bytes per load/store
@@ -608,7 +632,7 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
   } else if (op->hasTrait<mlir::OpTrait::Vectorizable>()) {
     // for elementwise operations, they are pretty flexiable
     // on the block size. But we expect its second dimension
-    // is subgroupSize aligned.
+    // is register size aligned.
     minWidth = 1;
     minHeight = 1;
     maxWidth = std::min<int>(shape[1], subgroupSize);
@@ -635,6 +659,11 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
       maxHeight = std::min<int>(params->blockHeight.max, 16);
       maxWidth = params->blockWidth.max;
     }
+  } else if (mlir::isa<mlir::vector::CreateMaskOp>(op)) {
+    minWidth = 1;
+    minHeight = 1;
+    maxWidth = std::min<int>(shape[1], subgroupSize);
+    maxHeight = 1;
   } else if (memorySpace == 3) {
     // this is supposed for load/store from/to SLM, they will use regular
     // load/store instructions with chunk size. lsc instrinsic and hardware
