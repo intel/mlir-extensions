@@ -610,8 +610,12 @@ struct VectorizableOpPattern
     mlir::OpBuilder::InsertionGuard g(rewriter);
     llvm::SmallVector<mlir::Value> newOperands;
     for (auto &&[i, arg] : llvm::enumerate(operands)) {
-      mlir::Value packOp =
-          rewriter.create<xetile::TilePackOp>(loc, newTy, arg, blockSizeAttr);
+      auto argTy = mlir::dyn_cast<mlir::VectorType>(arg.getType());
+      if (!argTy || argTy.getRank() != 2) {
+        newOperands.push_back(arg);
+        continue;
+      }
+      mlir::Value packOp = addPackOp(arg, blockSize.asArrayRef(), rewriter);
       newOperands.push_back(packOp);
     }
 
@@ -745,19 +749,74 @@ struct SCFYieldOpPattern
   }
 };
 
+struct VectorCreateMaskOpPattern
+    : public OpConversionPatternWithAnalysis<mlir::vector::CreateMaskOp,
+                                             BlockingAnalysis> {
+
+  using OpConversionPatternWithAnalysis<
+      mlir::vector::CreateMaskOp,
+      BlockingAnalysis>::OpConversionPatternWithAnalysis;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = res.getType();
+    if (resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    // The first operand must be a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, only masking
+    // columns within a row is supported.
+    auto shape = resType.getShape();
+    APInt cstOp0;
+    if (!matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) ||
+        cstOp0.getSExtValue() != shape[0]) {
+      op->emitOpError() << "Unsupported first operand";
+      return mlir::failure();
+    }
+
+    auto block = analysis.getDefBlockSize(res);
+    if (!block)
+      return rewriter.notifyMatchFailure(op, "Invalid block size.");
+
+    // TODO: support blocking the outer dimension.
+    if (block[0] != 1) {
+      op->emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
+    }
+
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / block[0], shape[1] / block[1], block[0], block[1]},
+        resType.getElementType());
+
+    // Due to the simplifications mentioned above, for now, the index operands
+    // are not adjusted. In fact, only the second index operand (masked columns)
+    // will be used during the lowering to XeGPU.
+    auto operands = op.getOperands();
+    auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
+        op.getLoc(), newTy,
+        ValueRange({operands[0], operands[1], operands[0], operands[1]}),
+        op->getAttrs());
+    auto unpack = addUnpackOp(newOp, rewriter);
+    rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
 } // namespace Blocking
 
 void populateNewXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
                                        BlockingAnalysis &analysis) {
-  patterns
-      .insert<Blocking::ArithConstantOpPattern, Blocking::InitTileOpPattern,
-              Blocking::PrefetchTileOpPattern, Blocking::LoadTileOpPattern,
-              Blocking::StoreTileOpPattern, Blocking::UpdateTileOffsetOpPattern,
-              Blocking::TileMMAOpPattern, Blocking::TileReductionOpPattern,
-              Blocking::TileBroadcastOpPattern,
-              Blocking::TileTransposeOpPattern, Blocking::VectorizableOpPattern,
-              Blocking::SCFForOpPattern, Blocking::SCFYieldOpPattern>(
-          patterns.getContext(), analysis);
+  patterns.insert<
+      Blocking::ArithConstantOpPattern, Blocking::InitTileOpPattern,
+      Blocking::PrefetchTileOpPattern, Blocking::LoadTileOpPattern,
+      Blocking::StoreTileOpPattern, Blocking::UpdateTileOffsetOpPattern,
+      Blocking::TileMMAOpPattern, Blocking::TileReductionOpPattern,
+      Blocking::TileBroadcastOpPattern, Blocking::TileTransposeOpPattern,
+      Blocking::VectorizableOpPattern, Blocking::SCFForOpPattern,
+      Blocking::SCFYieldOpPattern, Blocking::VectorCreateMaskOpPattern>(
+      patterns.getContext(), analysis);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
