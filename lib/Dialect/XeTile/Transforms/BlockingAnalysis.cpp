@@ -135,14 +135,16 @@ void BlockingRequests::print(llvm::raw_ostream &os) const {
     os << "Uninitialized";
   } else {
     os << "Requests (" << requests.size() << ", "
-       << "def: " << def << "): ";
+       << "def: " << def << "): [";
     for (auto [i, iter] : llvm::enumerate(requests)) {
       auto point = iter.first;
       auto block = iter.second;
-      os << "UsePoint(" << *(point.first) << ", " << point.second << "): \t"
-         << block;
+      os << "{Point(" << *point.first << ", " << point.second << "), blk("
+         << block << ")}";
       if (i != requests.size() - 1)
-        os << "; ";
+        os << ", ";
+      else
+        os << "]";
     }
   }
 }
