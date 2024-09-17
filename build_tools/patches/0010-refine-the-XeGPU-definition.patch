@@ -142,7 +142,7 @@ index c9e399a7149f..b35a639540aa 100644
 +  // check total size
 +  auto elemBits = tdescTy.getElementType().getIntOrFloatBitWidth();
 +  auto bitsPerLane = elemBits * chunkSize;
-+  if (bitsPerLane % 32) {
++  if (chunkSize > 1 && bitsPerLane % 32) {
 +    // For 8-bit and 16-bit data, the hardware only supports chunk size of 1.
 +    // For 32-bit data, the hardware can support larger larger chunk size. So
 +    // we can bitcast 8-bit/16-bit data to 32-bit data for better performance.

@@ -244,10 +244,47 @@ public:
   }
 };
 
+// This pattern converts vector.from_elements op to SPIR-V CompositeInsertOp
+class VectorFromElementsConversionPattern final
+    : public mlir::OpConversionPattern<mlir::vector::FromElementsOp> {
+public:
+  using OpConversionPattern<mlir::vector::FromElementsOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::FromElementsOp fromElementsOp,
+                  OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::VectorType vecTy = fromElementsOp.getType();
+    if (vecTy.getRank() > 1)
+      return rewriter.notifyMatchFailure(fromElementsOp,
+                                         "rank > 1 vectors are not supported");
+
+    mlir::Type spirvVecTy = getTypeConverter()->convertType(vecTy);
+    if (!spirvVecTy)
+      return mlir::failure();
+
+    // if the vector is just constructed from one element
+    if (mlir::isa<mlir::spirv::ScalarType>(spirvVecTy)) {
+      rewriter.replaceOp(fromElementsOp, adaptor.getElements()[0]);
+      return mlir::success();
+    }
+
+    auto loc = fromElementsOp.getLoc();
+    mlir::Value result = rewriter.create<mlir::spirv::UndefOp>(loc, spirvVecTy);
+    for (auto [idx, val] : llvm::enumerate(adaptor.getElements())) {
+      result = rewriter.create<mlir::spirv::CompositeInsertOp>(loc, val, result,
+                                                               idx);
+    }
+    rewriter.replaceOp(fromElementsOp, result);
+    return mlir::success();
+  }
+};
+
 void populateVectorToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
                                    mlir::RewritePatternSet &patterns) {
-  patterns.add<VectorMaskConversionPattern>(typeConverter,
-                                            patterns.getContext());
+  patterns
+      .add<VectorFromElementsConversionPattern, VectorMaskConversionPattern>(
+          typeConverter, patterns.getContext());
 }
 
 static bool isGenericVectorTy(mlir::Type type) {
