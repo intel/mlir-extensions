@@ -348,4 +348,76 @@ gpu.module @test_kernel {
     gpu.return
   }
 
+  gpu.func @sglevel_unregular_gemm(%arg0: memref<16384x12288xf16>, %arg1: memref<1536x12288xf16>, %arg2: memref<16384x1536xf32>) attributes {gemm_tiles_b = 1 : i64, gemm_tiles_x = dense<[8, 2, 4, 8]> : vector<4xi64>, gemm_tiles_y = dense<[1, 1, 8, 4]> : vector<4xi64>, physical_nd_range = dense<[8, 32]> : vector<2xi64>, region_partition = 0 : i64, region_size = 32 : i64, syn.fusion_successful, syn.tensor_signature = (tensor<16384x12288xf16>, tensor<1536x12288xf16>) -> tensor<16384x1536xf32>, synFusionGenOps = 6 : i64, synFusionRequiredBeamSize = 1 : i64, synFusionTotalCost = 1007562515.4 : f64} {
+    %c64 = arith.constant 64 : index
+    %cst = arith.constant dense<0.000000e+00> : vector<32x64xf32>
+    %c0 = arith.constant 0 : index
+    %c1024 = arith.constant 1024 : index
+    %c256 = arith.constant 256 : index
+    %c2048 = arith.constant 2048 : index
+    %c2 = arith.constant 2 : index
+    %c12288 = arith.constant 12288 : index
+    %c8 = arith.constant 8 : index
+    %c32 = arith.constant 32 : index
+    %c4 = arith.constant 4 : index
+    %c1 = arith.constant 1 : index
+    %block_id_x = gpu.block_id  x
+    %block_id_y = gpu.block_id  y
+    %0 = arith.divsi %block_id_y, %c8 : index
+    %1 = arith.remsi %block_id_y, %c8 : index
+    %2 = arith.muli %1, %c256 : index
+    %3 = arith.muli %block_id_x, %c2048 : index
+    %4 = arith.muli %0, %c256 : index
+    %5 = arith.addi %3, %4 : index
+    %6 = gpu.subgroup_id : index
+    %7 = index.floordivs %6, %c4
+    %8 = index.remu %6, %c4
+    %9 = index.remu %7, %c8
+    %10 = index.mul %9, %c32
+    %11 = index.add %5, %10
+    %12 = index.remu %8, %c4
+    %13 = index.mul %12, %c64
+    %14 = index.add %2, %13
+    %15 = xetile.init_tile %arg2[%11, %14] : memref<16384x1536xf32> -> !xetile.tile<32x64xf32>
+    %16 = index.remu %8, %c1
+    %17 = index.mul %16, %c32
+    %18 = xetile.init_tile %arg0[%11, %17] : memref<16384x12288xf16> -> !xetile.tile<32x32xf16>
+    %19 = index.floordivs %6, %c8
+    %20 = index.remu %6, %c8
+    %21 = index.remu %19, %c4
+    %22 = index.mul %21, %c64
+    %23 = index.add %2, %22
+    %24 = index.remu %20, %c1
+    %25 = index.mul %24, %c32
+
+    // CHECK: xetile.init_tile %{{.*}} : memref<1536x12288xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+    %26 = xetile.init_tile %arg1[%23, %25] : memref<1536x12288xf16> -> !xetile.tile<64x32xf16>
+    %27:2 = scf.for %arg15 = %c0 to %c2 step %c1 iter_args(%arg16 = %15, %arg17 = %18) -> (!xetile.tile<32x64xf32>, !xetile.tile<32x32xf16>) {
+      //CHECK: xetile.update_tile_offset %{{.*}}, [%c1024,  %c0] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index -> !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+      //CHECK: xetile.update_tile_offset %{{.*}}, [%c1024,  %c0] : !xetile.tile<32x64xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>, index, index -> !xetile.tile<32x64xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
+      %28 = xetile.update_tile_offset %arg17, [%c1024,  %c0] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+      %29 = xetile.update_tile_offset %arg16, [%c1024,  %c0] : !xetile.tile<32x64xf32>, index, index -> !xetile.tile<32x64xf32>
+      %30:3 = scf.for %arg18 = %c0 to %c12288 step %c32 iter_args(%arg19 = %cst, %arg20 = %arg17, %arg21 = %26) -> (vector<32x64xf32>, !xetile.tile<32x32xf16>, !xetile.tile<64x32xf16>) {
+        //CHECK: xetile.update_tile_offset %{{.*}}, [%c0,  %c32] : !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index -> !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+        //CHECK: xetile.update_tile_offset %{{.*}}, [%c0,  %c32] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index -> !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+        %32 = xetile.update_tile_offset %arg21, [%c0,  %c32] : !xetile.tile<64x32xf16>, index, index -> !xetile.tile<64x32xf16>
+        %33 = xetile.update_tile_offset %arg20, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+        %34 = xetile.load_tile %arg20 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %35 = math.exp %34 : vector<32x32xf16>
+        %36 = xetile.load_tile %arg21 { padding = 0.000000e+00 : f32 }  : !xetile.tile<64x32xf16> -> vector<64x32xf16>
+        %37 = xetile.transpose %36, [1, 0] : vector<64x32xf16> -> vector<32x64xf16>
+        %38 = math.exp %37 : vector<32x64xf16>
+        xegpu.compile_hint
+        %39 = xetile.tile_mma %35, %38, %cst : vector<32x32xf16>, vector<32x64xf16>, vector<32x64xf32> -> vector<32x64xf32>
+        xegpu.compile_hint
+        %40 = arith.addf %arg19, %39 : vector<32x64xf32>
+        scf.yield %40, %33, %32 : vector<32x64xf32>, !xetile.tile<32x32xf16>, !xetile.tile<64x32xf16>
+      }
+      %31 = math.exp %30#0 : vector<32x64xf32>
+      xetile.store_tile %31,  %arg16 : vector<32x64xf32>, !xetile.tile<32x64xf32>
+      scf.yield %29, %28 : !xetile.tile<32x64xf32>, !xetile.tile<32x32xf16>
+    }
+    gpu.return
+  }
+
 }
