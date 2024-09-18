@@ -88,6 +88,9 @@ public:
                   bool transpose) = 0;
 
   virtual mlir::FailureOr<LoadStore2DConfig>
+  get2DPrefetchConfig(mlir::Operation *op, int element_data_size) = 0;
+
+  virtual mlir::FailureOr<LoadStore2DConfig>
   get2DStoreConfig(int element_data_size) = 0;
 
   mlir::LogicalResult verify2dBlockRestriction(mlir::Operation *op, int width,
@@ -97,6 +100,10 @@ public:
                                                LoadStore2DConfig configParams,
                                                bool isLoad = true);
 
+  virtual mlir::LogicalResult
+  verify2dPrefetchRestriction(mlir::Operation *op, int width, int height,
+                              int array_len, int elemTyByteWidth,
+                              LoadStore2DConfig configParams) = 0;
   mlir::LogicalResult isLegalDpasOp(mlir::Operation *op);
 
   mlir::LogicalResult isLegalLoad2dOp(mlir::Operation *op);
@@ -151,7 +158,6 @@ protected:
     return configParams;
   }
 };
-
 /// This class defines PVC GPU Architecture specific HW config parameters for
 /// various dpas related operations like load2d, store2d, prefetch2d. This
 /// is used to verify XeGPU Dialect operations for legal ops definitions.
@@ -174,6 +180,20 @@ public:
   get2DLoadConfig(mlir::Operation *op, int element_data_size, bool vnni,
                   bool transpose) override;
 
+  virtual mlir::FailureOr<LoadStore2DConfig>
+  get2DPrefetchConfig(mlir::Operation *op, int element_data_size) override {
+    // Load and prefetch configs are same for PVC.
+    return get2DLoadConfig(op, element_data_size, false, false);
+  }
+
+  mlir::LogicalResult
+  verify2dPrefetchRestriction(mlir::Operation *op, int width, int height,
+                              int array_len, int elemTyByteWidth,
+                              LoadStore2DConfig configParams) override {
+    return verify2dBlockRestriction(op, width, height, array_len,
+                                    elemTyByteWidth, false, false, configParams,
+                                    true);
+  }
   virtual mlir::FailureOr<LoadStore2DConfig>
   get2DStoreConfig(int element_data_size) override;
 };
