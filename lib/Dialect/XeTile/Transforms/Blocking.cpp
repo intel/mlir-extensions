@@ -121,20 +121,35 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     return {};
   }
 
-  imex::LoadStore2DConfig configParams;
   int maxHeight, maxWidth, minHeight, minWidth;
 
-  // TODO : Separate it in future.
-  if (op == OpType::Load || op == OpType::Prefetch) {
+  if (op == OpType::Load) {
 
     mlir::FailureOr<LoadStore2DConfig> params = uArchInterface->get2DLoadConfig(
         operation, elementSize, vnni, transpose);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
+    } else {
+      llvm::dbgs() << "Invalid Config Params \n";
+      return {};
+    }
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
+  }
+
+  if (op == OpType::Prefetch) {
+
+    mlir::FailureOr<LoadStore2DConfig> params =
+        uArchInterface->get2DPrefetchConfig(operation, elementSize);
+    if (mlir::succeeded(params)) {
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
@@ -149,11 +164,10 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     mlir::FailureOr<LoadStore2DConfig> params =
         uArchInterface->get2DStoreConfig(elementSize);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
