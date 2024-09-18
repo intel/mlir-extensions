@@ -143,7 +143,8 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
 
   if (op == OpType::Prefetch) {
 
-    mlir::FailureOr<LoadStore2DConfig> params = uArchInterface->get2DPrefetchConfig(operation, elementSize);
+    mlir::FailureOr<LoadStore2DConfig> params =
+        uArchInterface->get2DPrefetchConfig(operation, elementSize);
     if (mlir::succeeded(params)) {
       maxHeight = params->blockHeight.max;
       minHeight = params->blockHeight.min;
