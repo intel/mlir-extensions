@@ -62,9 +62,9 @@ spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer,
         %B0 = xegpu.create_nd_tdesc %arg1[%arg3, %3] {boundary_check = true} : memref<32x32xf16> -> !xegpu.tensor_desc<16x16xf16>
         %B0_val = xegpu.load_nd %B0 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
-        %A0_cast = vector.shape_cast %A0_val : vector<128xf16> to vector<8x8x2xf16>
+        %A0_cast = vector.shape_cast %A0_val : vector<128xf16> to vector<8x16xf16>
 
-        %dpas0 = xegpu.dpas %A0_cast, %B0_val : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+        %dpas0 = xegpu.dpas %A0_cast, %B0_val : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
         %dpas0_cast = vector.shape_cast %dpas0: vector<8x16xf32> to vector<128xf32>
 
         scf.yield %dpas0_cast : vector<128xf32>
