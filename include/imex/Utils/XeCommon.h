@@ -298,7 +298,7 @@ private:
 std::pair<std::string, mlir::VectorType>
 encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
                  mlir::VectorType type, bool use64bitData = false,
-                 bool enforceInteger = false);
+                 bool enforceInteger = false, bool keepF16 = false);
 
 mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
                                     mlir::Type toElemType);
