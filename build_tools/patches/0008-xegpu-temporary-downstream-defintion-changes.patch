@@ -1,149 +1,48 @@
+From c5e6d0bd63d6aab004ae4e795f1466800c54b3ff Mon Sep 17 00:00:00 2001
+From: Chao Chen <chao.chen@intel.com>
+Date: Thu, 29 Aug 2024 19:18:42 +0000
+Subject: [PATCH] Add temporary changes for downstream: - add transposeBitWidth
+ for load_nd - add CompileHintOp
+
+---
+ mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td | 6 ++++++
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp         | 2 +-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index f84c5a9d6e38..5f6ef2e237d6 100644
+index 13a0bff5de1a..64b15fd1cc32 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 @@ -285,6 +285,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [AllElementTypesMatch<["value", "Tensor
    let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
-+		       OptionalAttr<I32Attr>: $transpose_bit_width,
++                       OptionalAttr<I32Attr>: $transpose_bit_width,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint);
-@@ -437,38 +438,21 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
-                        XeGPU_OffsetType: $offsets);
-   let results = (outs XeGPU_TensorDesc:$TensorDesc);
-
--  let builders = [
--    OpBuilder<(ins "xegpu::TensorDescType": $TensorDesc, "Value": $source,
--                   "llvm::ArrayRef<OpFoldResult>": $offsets,
--                   CArg<"uint32_t", "1"> : $chunk_size)>,
--  ];
--
-   let assemblyFormat = [{
--    $source
--    custom<DynamicIndexList>($offsets, $const_offsets)
--    attr-dict `:`  type($source) `->` qualified(type($TensorDesc))
-+  $source `,` $offsets attr-dict `:`  type($source) `,` type($offsets) `->` qualified(type($TensorDesc))
-   }];
-
--  let extraClassDeclaration = extraBaseClassDeclaration # [{
-+  let extraClassDeclaration = [{
-     xegpu::TensorDescType getTensorDescType() {
-       return getTensorDesc().getType();
-     }
-
--    SmallVector<OpFoldResult> getMixedOffsets() {
--      Builder b(getContext());
--      return getMixedValues(getConstOffsets(), getOffsets(), b);
--    }
--
-     size_t getNumOffsets() {
--      return getMixedOffsets().size();
-+      return getOffsets().getType().getShape()[0];
-     }
-
-     mlir::Value getViewSource() { return getSource(); }
-
--    OpFoldResult getOffset(unsigned idx) {
--      assert(idx < getNumOffsets() && "Invalid out of bound access.");
--      return getMixedOffsets()[idx];
--    }
-   }];
-
-   let hasVerifier = 1;
-@@ -632,34 +616,22 @@ def XeGPU_UpdateOffsetOp: XeGPU_Op<"update_offset",
-   }];
-
-   let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
--                       Variadic<Index>: $offsets,
--                       DenseI64ArrayAttr: $const_offsets);
-+                       XeGPU_OffsetType: $offsets);
-   let results = (outs XeGPU_TensorDesc: $result);
-
--  let extraClassDeclaration = extraBaseClassDeclaration # [{
-+  let extraClassDeclaration = [{
-     xegpu::TensorDescType getTensorDescType() {
-       return getTensorDesc().getType();
-     }
-
--    SmallVector<OpFoldResult> getMixedOffsets() {
--      Builder b(getContext());
--      return getMixedValues(getConstOffsets(), getOffsets(), b);
--    }
--
-     size_t getNumOffsets() {
--      return getMixedOffsets().size();
--    }
--
--    OpFoldResult getOffset(unsigned idx) {
--      assert(idx < getNumOffsets() && "Invalid out of bound access.");
--      return getMixedOffsets()[idx];
-+      return getOffsets().getType().getShape()[0];
-     }
-   }];
-
-   let assemblyFormat = [{
--    $TensorDesc `,`
--    custom<DynamicIndexList>($offsets, $const_offsets)
--    attr-dict `:` qualified(type($TensorDesc))
-+     $TensorDesc `,` $offsets attr-dict `:`
-+     qualified(type($TensorDesc)) `,` type($offsets) `->` qualified(type($result))
-   }];
- }
-
-@@ -810,4 +782,13 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
+@@ -805,4 +806,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
    let extraClassDeclaration = extraBaseClassDeclaration;
  }
 
-+def XeGPU_CompileHintOp
-+  : XeGPU_Op<"compile_hint", []> {
-+      let summary = "prevents the compiler from scheduling.";
-+
-+      let assemblyFormat = [{
-+        attr-dict
-+      }];
-+  }
++def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
++  let summary = "prevents the compiler from scheduling.";
++  let assemblyFormat = [{ attr-dict }];
++}
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index a023c616333e..222cfa9fbc00 100644
+index ee3834bd0d9c..98fc3308d96e 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-@@ -293,17 +293,6 @@ LogicalResult UpdateNdOffsetOp::verify() {
- //===----------------------------------------------------------------------===//
- // XeGPU_CreateDescOp
- //===----------------------------------------------------------------------===//
--void CreateDescOp::build(OpBuilder &builder, OperationState &state,
--                         TensorDescType TensorDesc, Value source,
--                         llvm::ArrayRef<OpFoldResult> offsets,
--                         uint32_t chunk_size) {
--  llvm::SmallVector<int64_t> staticOffsets;
--  llvm::SmallVector<Value> dynamicOffsets;
--  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
--  build(builder, state, TensorDesc, source, dynamicOffsets, staticOffsets,
--        chunk_size);
--}
--
- LogicalResult CreateDescOp::verify() {
-   auto tdescTy = getTensorDescType();
+@@ -222,7 +222,7 @@ LogicalResult LoadNdOp::verify() {
+       emitWarning("Invalid transpose attr. It is ignored.");
+   }
 
-@@ -429,14 +418,14 @@ LogicalResult DpasOp::verify() {
-   int64_t lhsRank = getLhsType().getRank();
-   int64_t rhsRank = getRhsType().getRank();
-
--  if (lhsRank != 2 || (rhsRank != 2 && rhsRank != 3))
--    return emitOpError("expecting lhs to be a 2D vector, and rhs to be either "
--                       "2D or 3D (packed) vector.");
-+  // if (lhsRank != 2 || (rhsRank != 2 && rhsRank != 3))
-+  //   return emitOpError("expecting lhs to be a 2D vector, and rhs to be either 2D or 3D (vnni transformed) vector.");
-
-   auto lhsShape = getLhsType().getShape();
-   auto rhsShape = getRhsType().getShape();
-+  auto aK = lhsRank == 3 ? lhsShape[1] * lhsShape[2] : lhsShape[1];
-   auto bK = rhsRank == 3 ? rhsShape[0] * rhsShape[2] : rhsShape[0];
--  if (bK != lhsShape[1])
-+  if (aK != bK)
-     return emitOpError("K-dimension mismatch.");
-
-   return success();
+-  if (getPacked()) {
++  if (getPacked() || getTransposeBitWidth() == 32) {
+     if (tdescTy.getRank() == 2) {
+       const int axis = 0;
+       auto vnni_factor = valueShape.back();
+--
+2.34.1

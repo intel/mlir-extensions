@@ -1,3 +1,16 @@
+From c1a7d459790db5335907947cf44dcbd230cec783 Mon Sep 17 00:00:00 2001
+From: Chao Chen <chao.chen@intel.com>
+Date: Thu, 29 Aug 2024 17:58:34 +0000
+Subject: [PATCH] move chunk_size into TensorDesc
+
+---
+ .../mlir/Dialect/XeGPU/IR/XeGPUAttrs.td       | 46 +++++++++++---
+ .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td | 19 ++----
+ .../mlir/Dialect/XeGPU/IR/XeGPUTypes.td       | 63 ++++++++++++-------
+ mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp    | 40 ++++++++----
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp        | 31 ++++-----
+ 5 files changed, 122 insertions(+), 77 deletions(-)
+
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
 index f3ca09a6a68e..6ffb4eb3c60f 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
@@ -85,10 +98,10 @@ index f3ca09a6a68e..6ffb4eb3c60f 100644
 \ No newline at end of file
 +#endif // MLIR_DIALECT_XEGPU_IR_XEGPUATTRS_TD
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index c32c7541c397..f84c5a9d6e38 100644
+index c32c7541c397..13a0bff5de1a 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -411,34 +411,30 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
+@@ -411,42 +411,33 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
        is fixed to the hardware supportted subgroup size, e.g., 16 on PVC,
        implying each element in the array corresponds to a work-item (SIMT lane)
        in the subgroup.
@@ -120,14 +133,22 @@ index c32c7541c397..f84c5a9d6e38 100644
    }];
 
    let arguments = (ins XeGPU_BaseAddrType: $source,
--                       Variadic<Index>: $offsets,
+                        Variadic<Index>: $offsets,
 -                       DenseI64ArrayAttr: $const_offsets,
 -                       DefaultValuedAttr<I64Attr, "1">: $chunk_size);
-+                       XeGPU_OffsetType: $offsets);
++                       DenseI64ArrayAttr: $const_offsets);
    let results = (outs XeGPU_TensorDesc:$TensorDesc);
 
-   let builders = [
-@@ -723,7 +691,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas", [Pure, AllElementTypesMatch<["lhs", "rhs"]>]
+-  let builders = [
+-    OpBuilder<(ins "xegpu::TensorDescType": $TensorDesc, "Value": $source,
+-                   "llvm::ArrayRef<OpFoldResult>": $offsets,
+-                   CArg<"uint32_t", "1"> : $chunk_size)>,
+-  ];
+-
+   let assemblyFormat = [{
+     $source
+     custom<DynamicIndexList>($offsets, $const_offsets)
+@@ -723,7 +714,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas", [Pure, AllElementTypesMatch<["lhs", "rhs"]>]
 
  def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", [Pure,
        AllElementTypesMatch<["tensorDesc", "value", "result"]>,
@@ -300,7 +321,7 @@ index 24719fe748fe..0eab601bbaac 100644
  }
 
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 8e185b8d2586..a023c616333e 100644
+index 8e185b8d2586..ee3834bd0d9c 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -153,7 +153,7 @@ LogicalResult CreateNdDescOp::verify() {
@@ -330,15 +351,6 @@ index 8e185b8d2586..a023c616333e 100644
      return emitOpError("Expects a non-scattered TensorDesc.\n");
 
    if (!valueTy)
-@@ -222,7 +222,7 @@ LogicalResult LoadNdOp::verify() {
-       emitWarning("Invalid transpose attr. It is ignored.");
-   }
-
--  if (getPacked()) {
-+  if (getPacked() || getTransposeBitWidth() == 32) {
-     if (tdescTy.getRank() == 2) {
-       const int axis = 0;
-       auto vnni_factor = valueShape.back();
 @@ -257,7 +257,7 @@ LogicalResult StoreNdOp::verify() {
    if (dstTy.getRank() > 2)
      return emitOpError("Expecting a 1D/2D TensorDesc.\n");
@@ -357,7 +369,20 @@ index 8e185b8d2586..a023c616333e 100644
      return emitOpError("Expects a non-scattered TensorDesc.\n");
 
    // number of offsets specified must match the rank of the tensor descriptor
-@@ -306,15 +306,16 @@ void CreateDescOp::build(OpBuilder &builder, OperationState &state,
+@@ -293,28 +293,19 @@ LogicalResult UpdateNdOffsetOp::verify() {
+ //===----------------------------------------------------------------------===//
+ // XeGPU_CreateDescOp
+ //===----------------------------------------------------------------------===//
+-void CreateDescOp::build(OpBuilder &builder, OperationState &state,
+-                         TensorDescType TensorDesc, Value source,
+-                         llvm::ArrayRef<OpFoldResult> offsets,
+-                         uint32_t chunk_size) {
+-  llvm::SmallVector<int64_t> staticOffsets;
+-  llvm::SmallVector<Value> dynamicOffsets;
+-  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
+-  build(builder, state, TensorDesc, source, dynamicOffsets, staticOffsets,
+-        chunk_size);
+-}
 
  LogicalResult CreateDescOp::verify() {
    auto tdescTy = getTensorDescType();
@@ -376,7 +401,7 @@ index 8e185b8d2586..a023c616333e 100644
    SmallVector<int64_t> shape({(int64_t)getNumOffsets()});
    if (chunkSize != 1)
      shape.push_back(chunkSize);
-@@ -332,7 +333,7 @@ LogicalResult CreateDescOp::verify() {
+@@ -332,7 +323,7 @@ LogicalResult CreateDescOp::verify() {
  //===----------------------------------------------------------------------===//
  LogicalResult PrefetchOp::verify() {
    auto tdescTy = getTensorDescType();
@@ -385,7 +410,7 @@ index 8e185b8d2586..a023c616333e 100644
      return emitOpError("Expects a scattered TensorDesc.\n");
 
    if (!isReadHintOrNone(getL1HintAttr()))
-@@ -355,7 +356,7 @@ LogicalResult LoadGatherOp::verify() {
+@@ -355,7 +346,7 @@ LogicalResult LoadGatherOp::verify() {
    auto maskTy = getMaskType();
    auto valueTy = getValueType();
 
@@ -394,7 +419,7 @@ index 8e185b8d2586..a023c616333e 100644
      return emitOpError("Expects a scattered TensorDesc.\n");
 
    if (!isReadHintOrNone(getL1HintAttr()))
-@@ -401,7 +402,7 @@ LogicalResult LoadGatherOp::verify() {
+@@ -401,7 +392,7 @@ LogicalResult LoadGatherOp::verify() {
  //===----------------------------------------------------------------------===//
  LogicalResult StoreScatterOp::verify() {
    auto tdescTy = getTensorDescType();
@@ -403,3 +428,5 @@ index 8e185b8d2586..a023c616333e 100644
      return emitOpError("Expects a scattered TensorDesc.\n");
 
    if (!isWriteHintOrNone(getL1HintAttr()))
+--
+2.34.1
