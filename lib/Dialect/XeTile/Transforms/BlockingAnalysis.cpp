@@ -618,9 +618,8 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
     int memorySpace) {
   assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
-  // TODO: get from uArch ?
-  const int64_t subgroupSize = 16;
   int elemSize = elemTy.getIntOrFloatBitWidth();
+  const int64_t subgroupSize = uArch->getOneGRFSizeBits() / elemSize;
 
   int maxHeight = 0, minHeight = 0, maxWidth = 0, minWidth = 0;
   if (mlir::isa<xetile::ReductionOp>(op) ||
