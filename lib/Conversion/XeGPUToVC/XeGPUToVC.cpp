@@ -523,7 +523,9 @@ public:
     // to i32
     auto [lhsName, lhsNewType] = encodeVectorType(rewriter, lhsType);
     auto [rhsName, rhsNewType] = encodeVectorType(rewriter, rhsType);
-    auto [resultName, newResultType] = encodeVectorType(rewriter, resultType);
+    auto [resultName, newResultType] =
+        encodeVectorType(rewriter, resultType, /*use64bitData=*/false,
+                         /*enforceInteger=*/false, /*keepF16=*/true);
 
     if (lhsNewType != adaptor.getLhs().getType()) {
       lhs =
