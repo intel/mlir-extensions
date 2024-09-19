@@ -33,7 +33,7 @@ module @gemm attributes {gpu.container_module} {
       %offsets = arith.constant dense<[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120]> : vector<16xindex>
 
       // store the cst into slm
-      %slm_tdesc = xegpu.create_tdesc %slm, %offsets : memref<128xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #slm>
+      %slm_tdesc = xegpu.create_tdesc %slm[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120] : memref<128xf32, 3> -> !xegpu.tensor_desc<16x8xf32, #slm>
       xegpu.store %cst, %slm_tdesc, %mask {transpose} : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #slm>, vector<16xi1>
 
       // load from slm
@@ -41,7 +41,7 @@ module @gemm attributes {gpu.container_module} {
 
       // store data to global memory
       %cast = memref.reinterpret_cast %mem to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
-      %5 = xegpu.create_tdesc %cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #global>
+      %5 = xegpu.create_tdesc %cast[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120] : memref<128xf32> -> !xegpu.tensor_desc<16x8xf32, #global>
       xegpu.store %data, %5, %mask {transpose} : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #global>, vector<16xi1>
       gpu.return
     }

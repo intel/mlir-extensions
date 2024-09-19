@@ -412,6 +412,20 @@ public:
   }
 };
 
+// converts an array of OpFoldResult into a vector of index.
+static Value convertToIndexVector(llvm::ArrayRef<OpFoldResult> ofrs,
+                                  Location loc,
+                                  ConversionPatternRewriter &rewriter) {
+  SmallVector<Value> array;
+  for (auto ofr : ofrs) {
+    auto value = getValueOrConstantOp(ofr, loc, rewriter, indexTy);
+    assert(value.getType().isIndex() && "expecting an index type value.");
+    array.push_back(value);
+  }
+  return rewriter.create<vector::FromElementsOp>(
+      loc, vecTy(ofrs.size(), indexTy), ValueRange(array));
+}
+
 class CreateDescPattern : public OpConversionPattern<CreateDescOp> {
 public:
   using OpConversionPattern<CreateDescOp>::OpConversionPattern;
@@ -441,7 +455,8 @@ public:
     // offset is represented in number of elements, need to scale it to bytes
     auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
     auto factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
-    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
+    Value offsets = convertToIndexVector(op.getMixedOffsets(), loc, rewriter);
+    offsets = castValueTo(offsets, payloadTy, loc, rewriter);
     offsets = muli(factor, offsets);
 
     // create a payload with the base address broadcasted to all simd lanes
@@ -476,7 +491,8 @@ public:
 
     auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
     Value factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
-    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
+    Value offsets = convertToIndexVector(op.getMixedOffsets(), loc, rewriter);
+    offsets = castValueTo(offsets, payloadTy, loc, rewriter);
     offsets = muli(factor, offsets);
 
     auto payload = addi(adaptor.getTensorDesc(), offsets);

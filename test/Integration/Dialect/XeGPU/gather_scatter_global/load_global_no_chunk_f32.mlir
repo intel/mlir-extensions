@@ -28,12 +28,12 @@ module @gemm attributes {gpu.container_module} {
       %offsets = arith.constant dense<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]> : vector<16xindex>
 
       // load from a using load_gather
-      %a_tdesc = xegpu.create_tdesc %a, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #scatter>
+      %a_tdesc = xegpu.create_tdesc %a[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : memref<16xf32> -> !xegpu.tensor_desc<16xf32, #scatter>
       xegpu.prefetch %a_tdesc : !xegpu.tensor_desc<16xf32, #scatter>
       %data = xegpu.load %a_tdesc, %mask : !xegpu.tensor_desc<16xf32, #scatter>, vector<16xi1> -> vector<16xf32>
 
       // store to b using store_scatter
-      %b_tdesc = xegpu.create_tdesc %b, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #scatter>
+      %b_tdesc = xegpu.create_tdesc %b[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : memref<16xf32> -> !xegpu.tensor_desc<16xf32, #scatter>
       xegpu.store %data, %b_tdesc, %mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #scatter>, vector<16xi1>
       gpu.return
     }

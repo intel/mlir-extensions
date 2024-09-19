@@ -60,8 +60,8 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r17:.*]] = vector.bitcast %[[r14]] : vector<128xf16> to vector<64xi32>
       //CHECK: %[[r18:.*]] = vector.bitcast %[[r16]] : vector<256xf16> to vector<128xi32>
       //CHECK: %[[r19:.*]] = func.call @llvm.genx.dpas.nosrc0.v128f32.v128i32.v64i32(%[[r18]], %[[r17]], %[[c134744586_i32]]) : (vector<128xi32>, vector<64xi32>, i32) -> vector<128xf32>
-      %6 = vector.shape_cast %3: vector<128xf16> to vector<8x8x2xf16>
-      %5 = xegpu.dpas %6, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      %6 = vector.shape_cast %3: vector<128xf16> to vector<8x16xf16>
+      %5 = xegpu.dpas %6, %4 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       %7 = vector.shape_cast %5: vector<8x16xf32> to vector<128xf32>
 
       //RAW: %[[c33748868_i32:.*]] = arith.constant 33748868 : i32
