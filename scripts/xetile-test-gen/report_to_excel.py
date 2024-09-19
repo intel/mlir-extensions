@@ -13,7 +13,7 @@ from openpyxl.styles import Font
 import reporter_utils
 
 DEFAULT_TEST_PARAMS = "BatchSize,M,K,N,wgm,wgn,sgm,sgn,sgk".split(',')
-DEFAULT_SPREADSHEET_NAME = "speedup_report.xlsx"
+DEFAULT_SPREADSHEET_NAME = "speedup-report.xlsx"
 
 class XLSXReporter:
     def __init__(self, reporter_args, test_cases_param_list):
