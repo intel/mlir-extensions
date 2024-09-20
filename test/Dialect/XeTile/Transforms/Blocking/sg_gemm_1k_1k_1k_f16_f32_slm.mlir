@@ -27,7 +27,7 @@ gpu.module @test_kernel {
     %3 = xetile.load_tile %2 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x16xf32> -> vector<8x16xf32>
 
     //CHECK: %[[r5:.*]] = xetile.init_tile %[[arg0]][%[[r0]], %[[c0]]] : memref<128x128xf16, 3> -> !xetile.tile<8x16xf16, #xetile.tile_attr<inner_blocks = [1, 16], memory_scope = 3 : i64>>
-    //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[r1]]] : memref<128x128xf16, 3> -> !xetile.tile<16x16xf16, #xetile.tile_attr<inner_blocks = [16, 16], memory_scope = 3 : i64>>
+    //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[r1]]] : memref<128x128xf16, 3> -> !xetile.tile<16x16xf16, #xetile.tile_attr<inner_blocks = [1, 16], memory_scope = 3 : i64>>
     %4 = xetile.init_tile %arg0[%0, %c0] : memref<128x128xf16, 3> -> !xetile.tile<8x16xf16, #slm>
     %5 = xetile.init_tile %arg1[%c0, %1] : memref<128x128xf16, 3> -> !xetile.tile<16x16xf16, #slm>
     %6:3 = scf.for %arg3 = %c0 to %c128 step %c16 iter_args(%arg4 = %4, %arg5 = %5, %arg6 = %3)
