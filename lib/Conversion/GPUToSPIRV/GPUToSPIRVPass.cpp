@@ -350,6 +350,8 @@ void GPUXToSPIRVPass::runOnOperation() {
       fop->walk([&](mlir::arith::BitcastOp bop) {
         if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(bop.getType())) {
           if (vecTy.getElementType().isInteger(16)) {
+            if (!bop.getOperand().getDefiningOp())
+              return ::mlir::WalkResult::skip();
             mlir::arith::TruncFOp inputOp =
                 llvm::dyn_cast<mlir::arith::TruncFOp>(
                     bop.getOperand().getDefiningOp());
@@ -377,6 +379,8 @@ void GPUXToSPIRVPass::runOnOperation() {
             }
           }
         } else if (bop.getType().isInteger(16)) {
+          if (!bop.getOperand().getDefiningOp())
+            return ::mlir::WalkResult::skip();
           mlir::arith::TruncFOp inputOp = llvm::dyn_cast<mlir::arith::TruncFOp>(
               bop.getOperand().getDefiningOp());
           if (inputOp) {
@@ -391,10 +395,20 @@ void GPUXToSPIRVPass::runOnOperation() {
             }
           }
         }
+        return ::mlir::WalkResult::advance();
       });
       fop->walk([&](mlir::arith::ExtFOp eop) {
         if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(eop.getType())) {
           if (vecTy.getElementType().isF32()) {
+            // Check if the extf op is preceded by a bitcast op.
+            // When native bf16 support is enabled, extf is not preceded by a
+            // bitcast op (which is the case for bf16-to-gpu pass path, or
+            // non-native path), and sometimes the operand to the extf may be
+            // coming from not an op but rather an argument passed to a
+            // function, which may cause assert. The check would circumvent that
+            // issue.
+            if (!eop.getOperand().getDefiningOp())
+              return ::mlir::WalkResult::skip();
             mlir::arith::BitcastOp inputOp =
                 llvm::dyn_cast<mlir::arith::BitcastOp>(
                     eop.getOperand().getDefiningOp());
@@ -422,6 +436,8 @@ void GPUXToSPIRVPass::runOnOperation() {
             }
           }
         } else if (eop.getType().isF32()) {
+          if (!eop.getOperand().getDefiningOp())
+            return ::mlir::WalkResult::skip();
           mlir::arith::BitcastOp inputOp =
               llvm::dyn_cast<mlir::arith::BitcastOp>(
                   eop.getOperand().getDefiningOp());
@@ -437,6 +453,7 @@ void GPUXToSPIRVPass::runOnOperation() {
             }
           }
         }
+        return ::mlir::WalkResult::advance();
       });
     });
     target->addDynamicallyLegalOp<mlir::spirv::INTELConvertBF16ToFOp>(
