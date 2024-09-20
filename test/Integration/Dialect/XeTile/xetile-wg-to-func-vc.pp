@@ -3,7 +3,9 @@ builtin.module(
     gpu.module(xetile-wg-to-sg
         cse
         xetile-init-duplicate
-        xetile-blocking
+        xetile-canonicalization
+        new-xetile-blocking
+        canonicalize
         convert-xetile-to-xegpu
         imex-propagate-packed-layout)
     cse
