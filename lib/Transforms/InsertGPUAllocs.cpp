@@ -360,8 +360,10 @@ public:
             auto newAlloc = builder.create<mlir::memref::AllocOp>(
                 loc, alloc.getType(), alloc.getDynamicSizes(),
                 alloc.getSymbolOperands());
-            builder.create<mlir::memref::CopyOp>(loc, allocResult,
-                                                 newAlloc.getResult());
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*asyncToken*/ static_cast<mlir::Type>(nullptr),
+                /*asyncDependencies*/ std::nullopt, newAlloc.getResult(),
+                allocResult);
             use.set(newAlloc.getResult());
           }
         }
@@ -401,8 +403,9 @@ public:
             /*symbolOperands*/ std::nullopt, hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         if (access.hostWrite && access.deviceRead) {
-          auto copy =
-              builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
+          auto copy = builder.create<mlir::gpu::MemcpyOp>(
+              loc, /*asyncToken*/ static_cast<mlir::Type>(nullptr),
+              /*asyncDependencies*/ std::nullopt, allocResult, op);
           filter.insert(copy);
         }
 
@@ -421,7 +424,9 @@ public:
           op.replaceAllUsesExcept(allocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
-            builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*asyncToken*/ static_cast<mlir::Type>(nullptr),
+                /*asyncDependencies*/ std::nullopt, op, allocResult);
           }
           builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         }
