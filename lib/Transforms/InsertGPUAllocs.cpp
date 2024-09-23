@@ -28,8 +28,8 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/Pass/Pass.h>
 
 #include <optional>
@@ -278,31 +278,32 @@ public:
     };
 
     // walk over the users and find xegpu.load/store ops
-    std::function<void(mlir::Operation*, bool, AccessType&)> findXeGPULoadStore;
-    findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice, AccessType& ret) {
-      if (auto tile_update = mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
+    std::function<void(mlir::Operation *, bool, AccessType &)>
+        findXeGPULoadStore;
+    findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice,
+                             AccessType &ret) {
+      if (auto tile_update =
+              mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
         auto res = tile_update->getResult(0);
         for (auto u : res.getUsers()) {
           findXeGPULoadStore(u, onDevice, ret);
         }
       }
       if (auto tile_for = mlir::dyn_cast<::mlir::scf::ForOp>(use)) {
-        for (size_t idx=0; idx<tile_for.getInits().size(); idx++) {
+        for (size_t idx = 0; idx < tile_for.getInits().size(); idx++) {
           auto a = tile_for.getRegionIterArg(idx);
           for (auto u : a.getUsers()) {
             findXeGPULoadStore(u, onDevice, ret);
           }
         }
       }
-      if (auto tile_load =
-              mlir::dyn_cast<mlir::xegpu::LoadNdOp>(use)) {
+      if (auto tile_load = mlir::dyn_cast<mlir::xegpu::LoadNdOp>(use)) {
         (onDevice ? ret.deviceRead : ret.hostRead) = true;
-      }
-      else if (auto tile_prefetch =
-                    mlir::dyn_cast<mlir::xegpu::PrefetchNdOp>(use)) {
+      } else if (auto tile_prefetch =
+                     mlir::dyn_cast<mlir::xegpu::PrefetchNdOp>(use)) {
         (onDevice ? ret.deviceRead : ret.hostRead) = true;
       } else if (auto tile_store =
-                    mlir::dyn_cast<mlir::xegpu::StoreNdOp>(use)) {
+                     mlir::dyn_cast<mlir::xegpu::StoreNdOp>(use)) {
         (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
       }
     };
@@ -346,7 +347,8 @@ public:
             continue;
           }
 
-          if (auto init_xedesc = mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(user)) {
+          if (auto init_xedesc =
+                  mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(user)) {
             bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
             auto res = init_xedesc->getResult(0);
             for (auto use : res.getUsers()) {
