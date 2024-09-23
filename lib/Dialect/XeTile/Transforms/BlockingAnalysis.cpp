@@ -209,9 +209,10 @@ public:
                        std::shared_ptr<XeuArchInterface> uArch)
       : SparseBackwardDataFlowAnalysis(solver, symbolTable), uArch(uArch) {}
 
-  mlir::LogicalResult visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<BlockingLattice *> operands,
-                      mlir::ArrayRef<const BlockingLattice *> results) override;
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op,
+                 mlir::ArrayRef<BlockingLattice *> operands,
+                 mlir::ArrayRef<const BlockingLattice *> results) override;
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
 

@@ -28,8 +28,8 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/Pass/Pass.h>
 
 #include <optional>
@@ -47,6 +47,12 @@ public:
   explicit InsertGPUAllocsPass() : m_clientAPI("vulkan") {}
   explicit InsertGPUAllocsPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
+  explicit InsertGPUAllocsPass(const imex::InsertGPUAllocsOptions &options)
+      : InsertGPUAllocsBase<InsertGPUAllocsPass>(options) {
+    if (clientAPI == "opencl") {
+      m_clientAPI = "opencl";
+    }
+  }
 
   mlir::LogicalResult
   initializeOptions(mlir::StringRef options,
@@ -278,31 +284,32 @@ public:
     };
 
     // walk over the users and find xegpu.load/store ops
-    std::function<void(mlir::Operation*, bool, AccessType&)> findXeGPULoadStore;
-    findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice, AccessType& ret) {
-      if (auto tile_update = mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
+    std::function<void(mlir::Operation *, bool, AccessType &)>
+        findXeGPULoadStore;
+    findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice,
+                             AccessType &ret) {
+      if (auto tile_update =
+              mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
         auto res = tile_update->getResult(0);
         for (auto u : res.getUsers()) {
           findXeGPULoadStore(u, onDevice, ret);
         }
       }
       if (auto tile_for = mlir::dyn_cast<::mlir::scf::ForOp>(use)) {
-        for (size_t idx=0; idx<tile_for.getInits().size(); idx++) {
+        for (size_t idx = 0; idx < tile_for.getInits().size(); idx++) {
           auto a = tile_for.getRegionIterArg(idx);
           for (auto u : a.getUsers()) {
             findXeGPULoadStore(u, onDevice, ret);
           }
         }
       }
-      if (auto tile_load =
-              mlir::dyn_cast<mlir::xegpu::LoadNdOp>(use)) {
+      if (auto tile_load = mlir::dyn_cast<mlir::xegpu::LoadNdOp>(use)) {
         (onDevice ? ret.deviceRead : ret.hostRead) = true;
-      }
-      else if (auto tile_prefetch =
-                    mlir::dyn_cast<mlir::xegpu::PrefetchNdOp>(use)) {
+      } else if (auto tile_prefetch =
+                     mlir::dyn_cast<mlir::xegpu::PrefetchNdOp>(use)) {
         (onDevice ? ret.deviceRead : ret.hostRead) = true;
       } else if (auto tile_store =
-                    mlir::dyn_cast<mlir::xegpu::StoreNdOp>(use)) {
+                     mlir::dyn_cast<mlir::xegpu::StoreNdOp>(use)) {
         (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
       }
     };
@@ -346,7 +353,8 @@ public:
             continue;
           }
 
-          if (auto init_xedesc = mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(user)) {
+          if (auto init_xedesc =
+                  mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(user)) {
             bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
             auto res = init_xedesc->getResult(0);
             for (auto use : res.getUsers()) {
@@ -543,15 +551,17 @@ public:
     // This is the case where the inputs are passed as arguments to the
     // function. This code will add the IR for memory allocation on the device
     // with gpu.alloc and insert a memref.copy from host to device
-    for (const auto &it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      if (isGpuAddrSpace(param))
-        continue;
-      auto access = getAccessType(param);
-      access.hostRead = true;
-      access.hostWrite = true;
-      builder.setInsertionPointToStart(&block);
-      add_gpu_alloc(builder, param, access, term);
+    if (!isUsmArgs.getValue()) {
+      for (const auto &it : gpuBufferParams) {
+        auto param = block.getArgument(it.first);
+        if (isGpuAddrSpace(param))
+          continue;
+        auto access = getAccessType(param);
+        access.hostRead = true;
+        access.hostWrite = true;
+        builder.setInsertionPointToStart(&block);
+        add_gpu_alloc(builder, param, access, term);
+      }
     }
 
     // CallOp Case: This is the case where the memref producer is coming
@@ -582,5 +592,9 @@ private:
 namespace imex {
 std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass(const char *clientAPI) {
   return std::make_unique<InsertGPUAllocsPass>(clientAPI);
+}
+std::unique_ptr<mlir::Pass>
+createInsertGPUAllocsPass(const InsertGPUAllocsOptions &option) {
+  return std::make_unique<InsertGPUAllocsPass>(option);
 }
 } // namespace imex

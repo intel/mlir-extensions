@@ -41,7 +41,11 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
     Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for inserting gpu allocs">,
     Option<"inRegions", "in-regions", "bool", "false",
-           "Add gpu allocs only for memref.AllocOps within GPU regions">
+           "Add gpu allocs only for memref.AllocOps within GPU regions">,
+        Option<"isUsmArgs", "is-usm-args", "bool", "false",
+           "Whether to use USM(unified shared memory) func args, in which the "
+           "host and device could access the same buffer and there is no need "
+           "to add memcpy explicitly">
   ];
 }
 

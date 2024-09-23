@@ -21,49 +21,49 @@ index 22d5afcd7738..de9e11493793 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td
 @@ -82,7 +82,7 @@ class SPIRV_ArithmeticExtendedBinaryOp<string mnemonic,
- 
+
  // -----
- 
+
 -def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_Float, [Commutative]> {
 +def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_AnyFloat, [Commutative]> {
    let summary = "Floating-point addition of Operand 1 and Operand 2.";
- 
+
    let description = [{
 @@ -104,7 +104,7 @@ def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_Float, [Commutative]>
- 
+
  // -----
- 
+
 -def SPIRV_FDivOp : SPIRV_ArithmeticBinaryOp<"FDiv", SPIRV_Float, []> {
 +def SPIRV_FDivOp : SPIRV_ArithmeticBinaryOp<"FDiv", SPIRV_AnyFloat, []> {
    let summary = "Floating-point division of Operand 1 divided by Operand 2.";
- 
+
    let description = [{
 @@ -154,7 +154,7 @@ def SPIRV_FModOp : SPIRV_ArithmeticBinaryOp<"FMod", SPIRV_Float, []> {
- 
+
  // -----
- 
+
 -def SPIRV_FMulOp : SPIRV_ArithmeticBinaryOp<"FMul", SPIRV_Float, [Commutative]> {
 +def SPIRV_FMulOp : SPIRV_ArithmeticBinaryOp<"FMul", SPIRV_AnyFloat, [Commutative]> {
    let summary = "Floating-point multiplication of Operand 1 and Operand 2.";
- 
+
    let description = [{
 @@ -229,7 +229,7 @@ def SPIRV_FRemOp : SPIRV_ArithmeticBinaryOp<"FRem", SPIRV_Float, []> {
- 
+
  // -----
- 
+
 -def SPIRV_FSubOp : SPIRV_ArithmeticBinaryOp<"FSub", SPIRV_Float, []> {
 +def SPIRV_FSubOp : SPIRV_ArithmeticBinaryOp<"FSub", SPIRV_AnyFloat, []> {
    let summary = "Floating-point subtraction of Operand 2 from Operand 1.";
- 
+
    let description = [{
 @@ -450,7 +450,7 @@ def SPIRV_DotOp : SPIRV_Op<"Dot",
    );
- 
+
    let results = (outs
 -    SPIRV_Float:$result
 +    SPIRV_AnyFloat:$result
    );
- 
+
    let assemblyFormat = "operands attr-dict `:` type($vector1) `->` type($result)";
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 index ddaeb13ef253..336bdcfb7a48 100644
@@ -74,7 +74,7 @@ index ddaeb13ef253..336bdcfb7a48 100644
  def SPV_KHR_terminate_invocation             : I32EnumAttrCase<"SPV_KHR_terminate_invocation", 30>;
  def SPV_KHR_cooperative_matrix               : I32EnumAttrCase<"SPV_KHR_cooperative_matrix", 31>;
 +def SPV_KHR_bfloat16                         : I32EnumAttrCase<"SPV_KHR_bfloat16", 32>;
- 
+
  def SPV_EXT_demote_to_helper_invocation  : I32EnumAttrCase<"SPV_EXT_demote_to_helper_invocation", 1000>;
  def SPV_EXT_descriptor_indexing          : I32EnumAttrCase<"SPV_EXT_descriptor_indexing", 1001>;
 @@ -434,7 +435,7 @@ def SPIRV_ExtensionAttr :
@@ -147,7 +147,7 @@ index ddaeb13ef253..336bdcfb7a48 100644
 @@ -4169,14 +4194,14 @@ def SPIRV_AnyStruct : DialectType<SPIRV_Dialect, SPIRV_IsStructType,
  def SPIRV_AnySampledImage : DialectType<SPIRV_Dialect, SPIRV_IsSampledImageType,
                                  "any SPIR-V sampled image type">;
- 
+
 -def SPIRV_Numerical : AnyTypeOf<[SPIRV_Integer, SPIRV_Float]>;
 +def SPIRV_Numerical : AnyTypeOf<[SPIRV_Integer, SPIRV_Float, SPIRV_BFloat16KHR]>;
  def SPIRV_Scalar : AnyTypeOf<[SPIRV_Numerical, SPIRV_Bool]>;
@@ -164,7 +164,7 @@ index ddaeb13ef253..336bdcfb7a48 100644
 @@ -4745,4 +4770,10 @@ def SPIRV_FPFastMathModeAttr :
        SPIRV_FPFMM_AllowReassocINTEL
      ]>;
- 
+
 +def SPIRV_FPE_BFloat16KHR     :  I32EnumAttrCase<"BFloat16KHR", 0>;
 +def SPIRV_FP_Encoding  :
 +     SPIRV_I32EnumAttr<"FPEncoding", "Valid floating-point encoding", "fpEncoding", [
