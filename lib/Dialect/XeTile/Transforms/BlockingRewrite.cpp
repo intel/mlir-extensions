@@ -824,16 +824,27 @@ class NewXeTileBlockingPass
     : public impl::NewXeTileBlockingBase<NewXeTileBlockingPass> {
 
 public:
-  NewXeTileBlockingPass() = default;
+  NewXeTileBlockingPass() {
+    uArchInterface = std::make_shared<imex::XePVCuArch>();
+  }
 
   NewXeTileBlockingPass(const std::string &deviceName) {
-    if (this->device.getNumOccurrences() == 0) {
-      this->device = deviceName;
-
-      if (deviceName == "pvc") {
-        uArchInterface = std::make_shared<XePVCuArch>();
-      }
+    if (deviceName == "pvc") {
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
     }
+  }
+
+  mlir::LogicalResult
+  initializeOptions(mlir::StringRef options,
+                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                        errorHandler) override {
+    if (failed(Pass::initializeOptions(options, errorHandler)))
+      return mlir::failure();
+    if (device == "pvc")
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
+    else
+      return errorHandler(llvm::Twine("Invalid device: ") + device);
+    return mlir::success();
   }
 
   void runOnOperation() override {
