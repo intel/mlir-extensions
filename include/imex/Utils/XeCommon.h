@@ -77,32 +77,36 @@ public:
     op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::LoadTileOp op) {
       Usage[op] = (uint)UsageType::None;
       llvm::SmallVector<mlir::Value> q({op});
+      bool transposeBeforeDPAS = false;
       while (q.size()) {
         auto curr = q.pop_back_val();
         for (mlir::Operation *user : curr.getUsers()) {
           if (auto mma = llvm::dyn_cast_if_present<xetile::TileMMAOp>(user)) {
             auto idx = getOperandIndex(mma, curr);
             if (idx == 0)
-              Usage[op] |= (uint)UsageType::DPAS_A;
+              Usage[op] |= transposeBeforeDPAS
+                               ? (uint)UsageType::TRANSPOSE_DPAS_A
+                               : (uint)UsageType::DPAS_A;
             else if (idx == 1)
-              Usage[op] |= (uint)UsageType::DPAS_B;
+              Usage[op] |= transposeBeforeDPAS
+                               ? (uint)UsageType::TRANSPOSE_DPAS_B
+                               : (uint)UsageType::DPAS_B;
             else if (idx == 2)
               Usage[op] |= (uint)UsageType::DPAS_C;
             else
               op->emitOpError() << "unknown usage: " << idx;
-          }
-
-          if (auto unpack =
-                  llvm::dyn_cast_if_present<xetile::TileUnpackOp>(user)) {
+          } else if (auto unpack =
+                         llvm::dyn_cast_if_present<xetile::TileUnpackOp>(
+                             user)) {
             q.push_back(unpack);
-          }
-
-          if (auto pack = llvm::dyn_cast_if_present<xetile::TilePackOp>(user)) {
+          } else if (auto pack =
+                         llvm::dyn_cast_if_present<xetile::TilePackOp>(user)) {
             q.push_back(pack);
-          }
-
-          if (auto transpose =
-                  llvm::dyn_cast_if_present<xetile::TransposeOp>(user)) {
+          } else if (auto transpose =
+                         llvm::dyn_cast_if_present<xetile::TransposeOp>(user)) {
+            // Transpose op is found in between LoadTileOp and TileMMAOp. This
+            // info is needed for downstream optimizations.
+            transposeBeforeDPAS = true;
             q.push_back(transpose);
           }
         }
@@ -120,6 +124,20 @@ public:
   bool isForDPASB(imex::xetile::LoadTileOp op) {
     if (Usage.count(op)) {
       return Usage[op] & UsageType::DPAS_B;
+    }
+    return false;
+  }
+
+  bool isForTransposeDPASA(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op)) {
+      return Usage[op] & UsageType::TRANSPOSE_DPAS_A;
+    }
+    return false;
+  }
+
+  bool isForTransposeDPASB(imex::xetile::LoadTileOp op) {
+    if (Usage.count(op)) {
+      return Usage[op] & UsageType::TRANSPOSE_DPAS_B;
     }
     return false;
   }
@@ -191,7 +209,9 @@ private:
     DPAS_A = 8,
     DPAS_B = 16,
     DPAS_C = 32,
-    OTHER = 64
+    OTHER = 64,
+    TRANSPOSE_DPAS_A = 128,
+    TRANSPOSE_DPAS_B = 256
   };
 
   llvm::DenseMap<mlir::Operation *, uint> Usage;
@@ -493,6 +513,18 @@ protected:
 
   template <typename = typename std::enable_if<
                 std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForTransposeDPASA(imex::xetile::LoadTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForTransposeDPASA(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForTransposeDPASB(imex::xetile::LoadTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForTransposeDPASB(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
   bool isForDPASC(imex::xetile::LoadTileOp op) const {
     return llvm::cast<TileUsageAnalysis>(analysis).isForDPASC(op);
   }
@@ -553,12 +585,8 @@ protected:
     if (loadOps.size() > 1)
       return false;
     auto loadOp = llvm::dyn_cast<imex::xetile::LoadTileOp>(loadOps[0]);
-    // Check if the loadOp used only in a transposeOp.
-    if (!(loadOp->hasOneUse() &&
-          llvm::isa<mlir::vector::TransposeOp>(*loadOp->user_begin())))
-      return false;
-    // Finally check if the loadOp is propagated to DPASB
-    return isForDPASB(loadOp);
+    // Finally check if the loadOp is propagated to transpose op and DPAS B
+    return isForTransposeDPASB(loadOp);
   }
 };
 
