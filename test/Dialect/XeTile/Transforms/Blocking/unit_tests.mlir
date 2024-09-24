@@ -47,6 +47,17 @@ gpu.module @test_kernel {
     gpu.return
   }
 
+  //CHECK: gpu.func @create_mask_2
+  //CHECK: %[[MASK:.*]] = vector.constant_mask [20, 1, 1, 32] : vector<32x1x1x32xi1>
+  gpu.func @create_mask_2(%a: vector<32x32xf16>, %b: vector<32x32xf16>, %c: memref<32x32xf16>) {
+    %c20 = arith.constant 20 : index
+    %c32 = arith.constant 32 : index
+    %mask = vector.create_mask %c20, %c32 : vector<32x32xi1>
+    %select = arith.select %mask, %a, %b : vector<32x32xi1>, vector<32x32xf16>
+    %tile = xetile.init_tile %c[0, 0] : memref<32x32xf16> -> !xetile.tile<32x32xf16>
+    xetile.store_tile %select, %tile: vector<32x32xf16>, !xetile.tile<32x32xf16>
+    gpu.return
+  }
 
   //CHECK: gpu.func @sg_store_tile_unaligned(%[[arg0:.*]]: memref<128x128xf32>)
   //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<11x19x4x2xf32>
