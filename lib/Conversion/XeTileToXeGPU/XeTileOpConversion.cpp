@@ -1090,33 +1090,54 @@ struct SgVectorCreateMaskOpPattern : public XeOneToNConversion<CreateMaskOp> {
       return mlir::failure();
     }
 
-    // See assumptions about the supported create_mask op in
-    // VectorCreateMaskOpPattern in Blocking.cpp. The second and forth operands
-    // are the same. This value is the mask of the inner dimension of the
-    // original shape. Different masks are created based on the new inner
-    // dimension size.
     mlir::Location loc = op->getLoc();
     auto shape = resType.getShape();
-    auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-    llvm::SmallVector<llvm::SmallVector<mlir::Value>> newOperands;
-    mlir::Value mask = adaptor.getOperands()[3][0];
-    auto innerDimSize =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, shape[3]);
-    for (int j = 0; j < shape[1]; ++j) {
-      newOperands.push_back({one, mask});
-      mask = rewriter.create<mlir::arith::SubIOp>(loc, mask, innerDimSize);
+    if (shape[2] != 1) {
+      op.emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
     }
-
-    llvm::SmallVector<mlir::Value> newOps;
     auto newTy =
         mlir::VectorType::get({shape[2], shape[3]}, resType.getElementType());
-    for (int i = 0; i < shape[0]; ++i) {
+    llvm::SmallVector<mlir::Value> newOps;
+    mlir::Value ub0 = adaptor.getOperands()[0][0];
+    auto constDef = ub0.getDefiningOp<mlir::arith::ConstantIndexOp>();
+    if (constDef && constDef.value() == shape[0]) {
+      // Case 1: all rows are enabled.
+      // See assumptions about the supported create_mask op in
+      // VectorCreateMaskOpPattern in xetile blocking pass. The second and forth
+      // operands are the same. This value is the mask of the inner dimension of
+      // the original shape. Different masks are created based on the new inner
+      // dimension size.
+      auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      llvm::SmallVector<llvm::SmallVector<mlir::Value>> newOperands;
+      mlir::Value mask = adaptor.getOperands()[3][0];
+      auto innerDimSize =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, shape[3]);
       for (int j = 0; j < shape[1]; ++j) {
-        auto newOp =
-            rewriter.create<CreateMaskOp>(op.getLoc(), newTy, newOperands[j]);
-        newOps.push_back(newOp);
+        newOperands.push_back({one, mask});
+        mask = rewriter.create<mlir::arith::SubIOp>(loc, mask, innerDimSize);
+      }
+
+      for (int i = 0; i < shape[0]; ++i) {
+        for (int j = 0; j < shape[1]; ++j) {
+          auto newOp =
+              rewriter.create<CreateMaskOp>(op.getLoc(), newTy, newOperands[j]);
+          newOps.push_back(newOp);
+        }
+      }
+
+    } else {
+      // Case 2: all columns are enabled.
+      for (int i = 0; i < shape[0]; ++i) {
+        auto elemIndex = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        auto cmp = rewriter.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::slt, elemIndex, ub0);
+        auto bcast = rewriter.create<mlir::vector::SplatOp>(loc, newTy, cmp);
+        for (int j = 0; j < shape[1]; ++j)
+          newOps.push_back(bcast);
       }
     }
+
     rewriter.replaceOp(op, newOps);
     return mlir::success();
   }
