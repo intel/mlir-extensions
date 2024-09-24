@@ -156,6 +156,21 @@ gpu.module @test_kernel {
       gpu.return
     }
 
+    //CHECK: gpu.func @create_mask_2
+    //CHECK-DAG: %[[C20:.*]] = arith.constant 20
+    //CHECK-DAG: %[[C32:.*]] = arith.constant 32
+    //CHECK: %[[MASK:.*]] = vector.create_mask %[[C20]], %[[C32]], %[[C20]], %[[C32]] : vector<32x1x1x32xi1>
+    //CHECK: arith.select %[[MASK]], {{.*}} : vector<32x1x1x32xi1>, vector<32x1x1x32xf16>
+    gpu.func @create_mask_2(%a: vector<32x32xf16>, %b: vector<32x32xf16>, %c: memref<32x32xf16>) {
+      %c20 = arith.constant 20 : index
+      %c32 = arith.constant 32 : index
+      %mask = vector.create_mask %c20, %c32 : vector<32x32xi1>
+      %select = arith.select %mask, %a, %b : vector<32x32xi1>, vector<32x32xf16>
+      %tile = xetile.init_tile %c[0, 0] : memref<32x32xf16> -> !xetile.tile<32x32xf16>
+      xetile.store_tile %select, %tile: vector<32x32xf16>, !xetile.tile<32x32xf16>
+      gpu.return
+    }
+
     ///-CHECK: gpu.func @tile_mma(%[[arg0:.*]]: memref<128x128xf16>, %[[arg1:.*]]: memref<128x128xf16>)
     ///-CHECK: %[[c0:.*]] = arith.constant 0 : index
     ///-CHECK: %[[R0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<128x128xf16> -> !xetile.tile<90x76xf16, #xetile.tile_attr<inner_blocks = [30, 19]>>
