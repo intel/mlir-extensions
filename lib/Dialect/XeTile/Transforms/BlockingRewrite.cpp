@@ -749,6 +749,10 @@ struct SCFYieldOpPattern
   }
 };
 
+// Blocks a vector.create_mask op such that, ideally, it matches its consuming
+// select op (which is an elementwise op). In this way, during the lowering to
+// XeGPU, there will be a one-to-one correspondence and an
+// unrealized_conversion_cast will not be needed.
 struct VectorCreateMaskOpPattern
     : public OpConversionPatternWithAnalysis<mlir::vector::CreateMaskOp,
                                              BlockingAnalysis> {
@@ -765,14 +769,19 @@ struct VectorCreateMaskOpPattern
     if (resType.getRank() != 2)
       return rewriter.notifyMatchFailure(op, "type is not 2D vector");
 
-    // The first operand must be a constant equal to the first dimension of the
-    // output shape (i.e., all rows are enabled). In other words, only masking
+    // Only two cases are supported for now:
+    // 1.The first operand is a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, masking
     // columns within a row is supported.
+    // 2.The second operand is a constant equal to the second dimension of the
+    // output shape (i.e., all columns are enabled).
     auto shape = resType.getShape();
-    APInt cstOp0;
-    if (!matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) ||
-        cstOp0.getSExtValue() != shape[0]) {
-      op->emitOpError() << "Unsupported first operand";
+    APInt cstOp0, cstOp1;
+    if (!(matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) &&
+          cstOp0.getSExtValue() == shape[0]) &&
+        !(matchPattern(op->getOperand(1), m_ConstantInt(&cstOp1)) &&
+          cstOp1.getSExtValue() == shape[1])) {
+      op->emitOpError() << "Unsupported operands";
       return mlir::failure();
     }
 
@@ -791,8 +800,9 @@ struct VectorCreateMaskOpPattern
         resType.getElementType());
 
     // Due to the simplifications mentioned above, for now, the index operands
-    // are not adjusted. In fact, only the second index operand (masked columns)
-    // will be used during the lowering to XeGPU.
+    // are not adjusted. In fact, only the first index operand (masked rows) or
+    // the second index operand (masked columns) will be used during the
+    // lowering to XeGPU.
     auto operands = op.getOperands();
     auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
         op.getLoc(), newTy,
