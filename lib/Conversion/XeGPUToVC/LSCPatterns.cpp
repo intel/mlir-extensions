@@ -783,7 +783,15 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         // elements we don't need to update the surface width and pitch, since
         // they are in unit of bytes.
         Value offsetX = rewriter.create<vector::ExtractOp>(loc, payload, 5);
-        offsetX = shrui(offsetX, i32_val(factor));
+        auto log2 = [&](int val) -> unsigned {
+          if (val == 2)
+            return 1;
+          else if (val == 4)
+            return 2;
+          else
+            assert(false && "invalid vnni Factor!");
+        };
+        offsetX = shrui(offsetX, i32_val(log2(factor)));
         payload = rewriter.create<vector::InsertOp>(loc, offsetX, payload, 5);
 
         // update the block width. Here we simply create a new TensorDescType
