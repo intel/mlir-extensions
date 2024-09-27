@@ -4,7 +4,8 @@
 // Ready for imex runner starting from GPU dialect.
 builtin.module(
     imex-vector-linearize
-    gpu.module(convert-xegpu-to-vc)
+    gpu.module(convert-xegpu-to-vc{useRawSend=false})
+    cse
     reconcile-unrealized-casts
     bf16-to-gpu
     imex-convert-gpu-to-spirv
