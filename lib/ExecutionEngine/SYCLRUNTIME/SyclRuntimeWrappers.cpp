@@ -25,12 +25,12 @@
 #include <tuple>
 #include <vector>
 
-#include <CL/sycl.hpp>
 #include <level_zero/ze_api.h>
 #include <map>
 #include <mutex>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/queue.hpp> // for queue
+#include <sycl/sycl.hpp>
 
 #ifdef _WIN32
 #define SYCL_RUNTIME_EXPORT __declspec(dllexport)
@@ -368,10 +368,11 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
           enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
       event.wait();
 
-      auto startTime = event.get_profiling_info<
-          cl::sycl::info::event_profiling::command_start>();
-      auto endTime = event.get_profiling_info<
-          cl::sycl::info::event_profiling::command_end>();
+      auto startTime =
+          event
+              .get_profiling_info<sycl::info::event_profiling::command_start>();
+      auto endTime =
+          event.get_profiling_info<sycl::info::event_profiling::command_end>();
       auto gap = float(endTime - startTime) / 1000000.0f;
       executionTime += gap;
       if (gap > maxTime)
