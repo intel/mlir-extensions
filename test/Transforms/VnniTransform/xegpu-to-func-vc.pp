@@ -5,7 +5,7 @@
 builtin.module(
     imex-xegpu-apply-vnni-transformation
     imex-vector-linearize
-    gpu.module(convert-xegpu-to-vc)
+    gpu.module(convert-xegpu-to-vc{useRawSend=false})
     reconcile-unrealized-casts
     bf16-to-gpu
     imex-convert-gpu-to-spirv
