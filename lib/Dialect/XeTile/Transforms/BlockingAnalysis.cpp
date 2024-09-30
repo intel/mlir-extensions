@@ -346,6 +346,7 @@ void BlockingAnalysisImpl::visitLoadTileOp(
 
   auto tileTy = op.getSource().getType();
   auto elemTy = tileTy.getElementType();
+  auto bitWidth = elemTy.getIntOrFloatBitWidth();
   auto shape = tileTy.getShape();
   auto memSpace = tileTy.getMemoryScopeAsInt();
   // initialized with a default size queried from the architecture
@@ -364,7 +365,8 @@ void BlockingAnalysisImpl::visitLoadTileOp(
     // limitations on supported width. If we align the height dimension (for
     // reducing reg data movement), it will lead to multiple smaller loads.
     for (auto rq : lattice.getRequests())
-      block[1] = std::min(block[1], rq[1]);
+      if (rq[1] && ((rq[1] * bitWidth) % 32 == 0)) // has to be 32-bit aligned
+        block[1] = std::min(block[1], rq[1]);
   }
 
   if (!block)
@@ -473,15 +475,27 @@ void BlockingAnalysisImpl::visitBroadcastOp(
   if (srcTy.getRank() != 2 || dims.size() != 1)
     return;
 
-  auto elemTy = srcTy.getElementType();
-  auto shape = srcTy.getShape();
-  // BroadcastOp is special. Its blocking size is fixed to {1,
-  // min(subgroupSize, width)}
-  auto size = getInnerBlockSize(op, elemTy, shape);
-  if (!size)
-    return; // do nothing if didnot get a valid block size
+  // broadcast is special. It is currently handled in a hacking way,
+  // and need to be generilized. It is not blocked if its users have
+  // not requested a blocking size. Otherwize, its blocking size has
+  // to be [1, 1] if broadcast along dim 1, or [1, requestedSize[1]]
+  // if broadcast along dim 0.
+  auto lattice = results[0]->getValue();
+  if (!lattice.isInitialized())
+    return;
 
-  auto blockingRequest = BlockingRequests(size, UsePoint(op, 0));
+  auto dim = dims[0];
+  Block blockSize;
+
+  if (dim == 0) {
+    auto req = lattice.getRequests()[0];
+    blockSize = Block(1, req[1]);
+  } else if (dim == 1) {
+    blockSize = Block(1, 1);
+  } else {
+    return;
+  }
+  auto blockingRequest = BlockingRequests(blockSize, UsePoint(op, 0));
   propagateIfChanged(operands[0], operands[0]->join(blockingRequest));
 }
 
@@ -502,11 +516,11 @@ void BlockingAnalysisImpl::visitTransposeOp(
     return;
 
   Block block;
+  auto srcTy = op.getVector().getType();
+  auto shape = srcTy.getShape();
 
   // use the default size if no users
   if (op->use_empty()) {
-    auto srcTy = op.getVector().getType();
-    auto shape = srcTy.getShape();
     block = getInnerBlockSize(op, srcTy.getElementType(), shape);
   }
 
@@ -516,7 +530,12 @@ void BlockingAnalysisImpl::visitTransposeOp(
     // TODO: handle multiple users
     if (lattice.getNumUniqRequests() == 1) {
       auto req = lattice.getRequests()[0];
-      block = Block(req[1], req[0]);
+      if (req[0] == 1 && req[1] == 1) {
+        // use default size if the request is [1, 1]
+        block = getInnerBlockSize(op, srcTy.getElementType(), shape);
+      } else {
+        block = Block(req[1], req[0]);
+      }
     }
   }
 
