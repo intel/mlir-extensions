@@ -10,7 +10,7 @@ builtin.module(
     cse
     imex-remove-single-elem-vector
     cse
-    gpu.module(convert-xegpu-to-vc{useRawSend=false})
+    gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
     bf16-to-gpu
     gpu.module(convert-func-to-spirv)
