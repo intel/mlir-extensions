@@ -177,7 +177,8 @@ mlir::LogicalResult InitTileOp::verify() {
 
   auto tileTy = getType();
   // Check for memory space validity.
-  if (getSourceMemorySpaceAsInt() != static_cast<unsigned int>(tileTy.getMemoryScopeAsInt()))
+  if (getSourceMemorySpaceAsInt() !=
+      static_cast<unsigned int>(tileTy.getMemoryScopeAsInt()))
     return emitOpError(
         "memory space of the tile doesn't match with the source.");
 
