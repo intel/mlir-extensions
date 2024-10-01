@@ -26,6 +26,8 @@ builtin.module(
     convert-vector-to-scf
     convert-gpu-to-gpux
     convert-scf-to-cf
+    expand-strided-metadata
+    finalize-memref-to-llvm
     convert-cf-to-llvm
     convert-vector-to-llvm
     convert-index-to-llvm
@@ -33,8 +35,5 @@ builtin.module(
     convert-func-to-llvm
     convert-math-to-llvm
     convert-gpux-to-llvm
-    convert-index-to-llvm
-    expand-strided-metadata
     lower-affine
-    finalize-memref-to-llvm
     reconcile-unrealized-casts)
