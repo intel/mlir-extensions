@@ -168,5 +168,4 @@ def XeTile_2DOr4DVector: VectorOfRankAndType<[2, 4], [XeTile_ScalarType]>;
 def XeTile_PaddingValueAttr : AnyAttrOf<[I32Attr, F32Attr]>;
 
 
-
 #endif // _XETILE_TYPES_TD_INCLUDED_

@@ -309,7 +309,7 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
     );
     let results = (outs XeTile_2DOr4DVector: $value);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `->` type($value)";
     let hasVerifier = true;
 
     let extraClassDeclaration = [{
@@ -435,7 +435,9 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     );
 
     let results = (outs XeTile_2DOr4DVector: $output);
-    let hasCustomAssemblyFormat = true;
+     let assemblyFormat = [{
+        $a `,` $b (`,` $c^)? attr-dict `:` type($a)`,` type($b) (`,` type($c)^)?  `->` type($output)
+     }];
 
     let extraClassDeclaration = [{
         mlir::VectorType getAType() {
@@ -507,7 +509,7 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
 
         Example 1:
         ```mlir
-            %1 = xetile.tile_pack %0 {inner_blocks = [16, 16]}
+            %1 = xetile.tile_pack %0 {inner_blocks = array<i64: 16, 16>}
                 : vector<64x32xf32> -> vector<4x2x16x16xf32>
         ```
     }];
@@ -515,7 +517,7 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
     let arguments = (ins XeTile_2DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
     let results = (outs XeTile_4DVector: $out_vec);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
     let hasVerifier = true;
     let hasFolder = 1;
 }
@@ -533,7 +535,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
 
         Example 1:
         ```mlir
-            %1 = xetile.tile_unpack %0 {inner_blocks = [16, 16]}
+            %1 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}
                 : vector<4x2x16x16xf16> -> vector<64x32xf16>
         ```
     }];
@@ -541,7 +543,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
     let arguments = (ins XeTile_4DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
     let results = (outs XeTile_2DVector: $out_vec);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
     let hasVerifier = true;
     let hasFolder = 1;
 }

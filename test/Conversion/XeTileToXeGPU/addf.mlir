@@ -141,8 +141,8 @@
         //CHECK: %[[SLICE62:.*]] = vector.extract_strided_slice %[[c3]] {offsets = [13, 0], sizes = [1, 16], strides = [1, 1]} : vector<16x16xf16> to vector<1x16xf16>
         //CHECK: %[[SLICE63:.*]] = vector.extract_strided_slice %[[c3]] {offsets = [14, 0], sizes = [1, 16], strides = [1, 1]} : vector<16x16xf16> to vector<1x16xf16>
         //CHECK: %[[SLICE64:.*]] = vector.extract_strided_slice %[[c3]] {offsets = [15, 0], sizes = [1, 16], strides = [1, 1]} : vector<16x16xf16> to vector<1x16xf16
-        %2 = xetile.tile_unpack %0 {inner_blocks = [16,16]}: vector<2x2x16x16xf16> -> vector<32x32xf16>
-        %3 = xetile.tile_pack %2 { inner_blocks = [1, 16] } : vector<32x32xf16> -> vector<32x2x1x16xf16>
+        %2 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}: vector<2x2x16x16xf16> -> vector<32x32xf16>
+        %3 = xetile.tile_pack %2 {inner_blocks = array<i64: 1, 16>}: vector<32x32xf16> -> vector<32x2x1x16xf16>
         //CHECK: %[[ADD1:.*]] = arith.addf %[[SLICE1]], %[[c4]] : vector<1x16xf16>
         //CHECK: %[[ADD2:.*]] = arith.addf %[[SLICE17]], %[[c5]] : vector<1x16xf16>
         //CHECK: %[[ADD3:.*]] = arith.addf %[[SLICE2]], %[[c6]] : vector<1x16xf16>

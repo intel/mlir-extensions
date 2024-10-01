@@ -46,10 +46,10 @@ gpu.module @test_gemm_postop  {
     -> (!xetile.tile<320x32xf16, #tile_attr_a>,
         !xetile.tile<32x384xf16, #tile_attr_b>,
         vector<320x384xf32>) {
-      //CHECK: %[[LOADTILE1:.*]] = xetile.load_tile {{%.*}} { padding = 0.000000e+00 : f32 }  : !xetile.tile<40x32xf16> -> vector<40x32xf16>
-      %23 = xetile.load_tile %a_tile { padding = 0.000000e+00 : f32 }  : !xetile.tile<320x32xf16, #tile_attr_a> -> vector<320x32xf16>
-      //CHECK: %[[LOADTILE2:.*]] = xetile.load_tile {{%.*}} { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x96xf16> -> vector<32x96xf16>
-      %24 = xetile.load_tile %b_tile { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x384xf16, #tile_attr_b> -> vector<32x384xf16>
+      //CHECK: %[[LOADTILE1:.*]] = xetile.load_tile {{%.*}} {padding = 0.000000e+00 : f32}  : !xetile.tile<40x32xf16> -> vector<40x32xf16>
+      %23 = xetile.load_tile %a_tile {padding = 0.000000e+00 : f32}  : !xetile.tile<320x32xf16, #tile_attr_a> -> vector<320x32xf16>
+      //CHECK: %[[LOADTILE2:.*]] = xetile.load_tile {{%.*}} {padding = 0.000000e+00 : f32}  : !xetile.tile<32x96xf16> -> vector<32x96xf16>
+      %24 = xetile.load_tile %b_tile {padding = 0.000000e+00 : f32}  : !xetile.tile<32x384xf16, #tile_attr_b> -> vector<32x384xf16>
       %25 = xetile.update_tile_offset %a_tile, [%c0,  %c32] : !xetile.tile<320x32xf16, #tile_attr_a>, index, index -> !xetile.tile<320x32xf16, #tile_attr_a>
       %26 = xetile.update_tile_offset %b_tile, [%c32,  %c0] : !xetile.tile<32x384xf16, #tile_attr_b>, index, index -> !xetile.tile<32x384xf16, #tile_attr_b>
       //CHECK: %[[TILEMMA:.*]] = xetile.tile_mma {{%.*}}, {{%.*}}, {{%.*}} : vector<40x32xf16>, vector<32x96xf16>, vector<40x96xf32> -> vector<40x96xf32>

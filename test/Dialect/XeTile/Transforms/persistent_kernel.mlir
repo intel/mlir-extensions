@@ -147,11 +147,11 @@ module @gemm attributes {gpu.container_module} {
             //CHECK: xegpu.nbarrier_arrive %[[R31]] : !xegpu.nbarrier
             xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier
           }
-          //CHECK: %[[R39:.*]] = xetile.load_tile %[[arg5]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<1x2x32x16xf16>
-          //CHECK: %[[R40:.*]] = xetile.tile_unpack %[[R39]] { inner_blocks = [32, 16] }  : vector<1x2x32x16xf16> -> vector<32x32xf16>
+          //CHECK: %[[R39:.*]] = xetile.load_tile %[[arg5]] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<1x2x32x16xf16>
+          //CHECK: %[[R40:.*]] = xetile.tile_unpack %[[R39]] {inner_blocks = array<i64: 32, 16>}  : vector<1x2x32x16xf16> -> vector<32x32xf16>
           %a_val = xetile.load_tile %A_tile : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-          //CHECK: %[[R41:.*]] = xetile.load_tile %[[arg6]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<1x4x32x16xf16>
-          //CHECK: %[[R42:.*]] = xetile.tile_unpack %[[R41]] { inner_blocks = [32, 16] }  : vector<1x4x32x16xf16> -> vector<32x64xf16>
+          //CHECK: %[[R41:.*]] = xetile.load_tile %[[arg6]] : !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<1x4x32x16xf16>
+          //CHECK: %[[R42:.*]] = xetile.tile_unpack %[[R41]] {inner_blocks = array<i64: 32, 16>}  : vector<1x4x32x16xf16> -> vector<32x64xf16>
           %b_val = xetile.load_tile %B_tile  : !xetile.tile<32x64xf16> -> vector<32x64xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
@@ -171,8 +171,8 @@ module @gemm attributes {gpu.container_module} {
           %next_B_tile = xetile.update_tile_offset %B_tile, [%c32, %c0]  : !xetile.tile<32x64xf16>, index, index -> !xetile.tile<32x64xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
-          //CHECK: %[[R47:.*]] = xetile.tile_pack %[[R40]] { inner_blocks = [8, 16] }  : vector<32x32xf16> -> vector<4x2x8x16xf16>
-          //CHECK: %[[R48:.*]] = xetile.tile_pack %[[R42]] { inner_blocks = [16, 16] }  : vector<32x64xf16> -> vector<2x4x16x16xf16>
+          //CHECK: %[[R47:.*]] = xetile.tile_pack %[[R40]] {inner_blocks = array<i64: 8, 16>}  : vector<32x32xf16> -> vector<4x2x8x16xf16>
+          //CHECK: %[[R48:.*]] = xetile.tile_pack %[[R42]] {inner_blocks = array<i64: 16, 16>}  : vector<32x64xf16> -> vector<2x4x16x16xf16>
           //CHECK: %[[R51:.*]] = xetile.tile_mma %[[R47]], %[[R48]], %[[arg7]] : vector<4x2x8x16xf16>, vector<2x4x16x16xf16>, vector<4x4x8x16xf32> -> vector<4x4x8x16xf32>
           %new_c_val = xetile.tile_mma %a_val, %b_val, %c_val : vector<32x32xf16>, vector<32x64xf16>, vector<32x64xf32> -> vector<32x64xf32>
           //CHECK: xegpu.compile_hint

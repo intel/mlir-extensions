@@ -29,7 +29,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r4:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r3]]] : memref<128x128xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[r5:.*]] = xegpu.load_nd %[[r4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<8x16xf32>
     %2 = xetile.init_tile %arg2[%0, %1] : memref<128x128xf32> -> !xetile.tile<8x16xf32>
-    %3 = xetile.load_tile %2 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x16xf32> -> vector<8x16xf32>
+    %3 = xetile.load_tile %2 {padding = 0.000000e+00 : f32}  : !xetile.tile<8x16xf32> -> vector<8x16xf32>
 
     //CHECK: %[[r6:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c0]]] : memref<128x128xf16, 3> -> !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[c1:.*]] = arith.constant 1 : index
@@ -90,10 +90,10 @@ gpu.module @test_kernel {
       //CHECK: %[[r50:.*]] = vector.shuffle %[[r46]], %[[r47]] [0, 1, 2, 3] : vector<2x16xf16>, vector<2x16xf16>
       //CHECK: %[[r51:.*]] = vector.shuffle %[[r48]], %[[r49]] [0, 1, 2, 3] : vector<2x16xf16>, vector<2x16xf16>
       //CHECK: %[[r52:.*]] = vector.shuffle %[[r50]], %[[r51]] [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x16xf16>, vector<4x16xf16>
-      %7 = xetile.load_tile %arg4 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x16xf16, #tile_attr> -> vector<8x16xf16>
+      %7 = xetile.load_tile %arg4 {padding = 0.000000e+00 : f32}  : !xetile.tile<8x16xf16, #tile_attr> -> vector<8x16xf16>
 
       //CHECK: %[[r53:.*]] = xegpu.load_nd %[[arg12]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>> -> vector<16x16xf16>
-      %8 = xetile.load_tile %arg5 { padding = 0.000000e+00 : f32 }  : !xetile.tile<16x16xf16, #tile_attr> -> vector<16x16xf16>
+      %8 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<16x16xf16, #tile_attr> -> vector<16x16xf16>
 
 
       //CHECK: %[[r84:.*]] = xegpu.dpas %[[r52]], %[[r53]], %[[arg28]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>

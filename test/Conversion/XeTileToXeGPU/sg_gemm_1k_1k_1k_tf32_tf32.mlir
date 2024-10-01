@@ -44,7 +44,7 @@ gpu.module @test_kernel {
 
     //CHECK: %[[r18:.*]] = xegpu.load_nd %[[r16]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
     //CHECK: %[[r19:.*]] = xegpu.load_nd %[[r17]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
-    %3 = xetile.load_tile %2 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+    %3 = xetile.load_tile %2 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
 
     //CHECK: %[[r20:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c0]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
     //CHECK: %[[r21:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c16]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
@@ -92,7 +92,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r52:.*]] = vector.extract_strided_slice %[[r38]] {offsets = [8, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8xtf32> to vector<8x8xtf32>
       //CHECK: %[[r53:.*]] = vector.extract_strided_slice %[[r38]] {offsets = [16, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8xtf32> to vector<8x8xtf32>
       //CHECK: %[[r54:.*]] = vector.extract_strided_slice %[[r38]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8xtf32> to vector<8x8xtf32>
-      %7 = xetile.load_tile %arg4 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
+      %7 = xetile.load_tile %arg4 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
 
       //CHECK: %[[r55:.*]] = xegpu.load_nd %[[arg6]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
       //CHECK: %[[r56:.*]] = xegpu.load_nd %[[arg7]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
@@ -105,7 +105,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r63:.*]] = vector.extract_strided_slice %[[r56]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
       //CHECK: %[[r64:.*]] = vector.extract_strided_slice %[[r56]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
 
-      %8 = xetile.load_tile %arg5 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
+      %8 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
 
       //CHECK: %[[r73:.*]] = xegpu.dpas %[[r39]], %[[r57]], %[[r65]] : vector<8x8xtf32>, vector<8x16xtf32>, vector<8x16xf32> -> vector<8x16xf32>
       //CHECK: %[[r74:.*]] = xegpu.dpas %[[r43]], %[[r58]], %[[r73]] : vector<8x8xtf32>, vector<8x16xtf32>, vector<8x16xf32> -> vector<8x16xf32>

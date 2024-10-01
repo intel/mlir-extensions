@@ -61,8 +61,8 @@ module @gemm_output_f16 attributes {gpu.container_module} {
       %10:3 = scf.for %arg4 = %c0 to %c96 step %c32 iter_args(%arg5 = %cst, %arg6 = %8, %arg7 = %9) -> (vector<32x32xf16>, !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>) {
         %15 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
         %16 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-        %17 = xetile.load_tile %arg6 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-        %18 = xetile.load_tile %arg7 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %17 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %18 = xetile.load_tile %arg7 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %19 = vector.transpose %18, [1, 0] : vector<32x32xf16> to vector<32x32xf16>
         xegpu.compile_hint
         xegpu.compile_hint
@@ -71,7 +71,7 @@ module @gemm_output_f16 attributes {gpu.container_module} {
         scf.yield %20, %16, %15 : vector<32x32xf16>, !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>
       } {lowerBoundMap = #map, operandSegmentSizes = array<i32: 0, 0, 3>, step = 32 : index, upperBoundMap = #map1}
       %11 = xetile.init_tile %arg2[%5, %7] : memref<128x256xf16> -> !xetile.tile<32x32xf16>
-      %12 = xetile.load_tile %11 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+      %12 = xetile.load_tile %11 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
       %13 = arith.addf %10#0, %12 : vector<32x32xf16>
       %14 = xetile.init_tile %arg3[%5, %7] : memref<128x256xf16> -> !xetile.tile<32x32xf16>
       xetile.store_tile %13,  %14 : vector<32x32xf16>, !xetile.tile<32x32xf16>

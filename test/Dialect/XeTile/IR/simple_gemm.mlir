@@ -34,7 +34,7 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
   // CHECK-SAME: wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 32]>>>
   %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32> -> !xetile.tile<128x128xf32, #tile_attr_c>
   // CHECK:  xetile.load_tile
-  // CHECK-SAME: { padding = 0.000000e+00 : f32 }  : !xetile.tile<128x128xf32, #xetile.tile_attr<sg_map =
+  // CHECK-SAME: : !xetile.tile<128x128xf32, #xetile.tile_attr<sg_map =
   // CHECK-SAME: <wi_layout = [1, 16], wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 32]>>> -> vector<128x128xf32>
   %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<128x128xf32, #tile_attr_c> -> vector<128x128xf32>
   // initalize A and B tiles
@@ -53,11 +53,11 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
 
     // load A and B tiles
     // CHECK: xetile.load_tile
-    // CHECK-SAME: { padding = 0.000000e+00 : f32 }  : !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map
+    // CHECK-SAME: : !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map
     // CHECK-SAME: = <wi_layout = [2, 8], wi_data = [1, 2]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>> -> vector<128x128xf16>
     %a_value = xetile.load_tile %a_tile : !xetile.tile<128x128xf16, #tile_attr_a> -> vector<128x128xf16>
     // CHECK:  xetile.load_tile
-    // CHECK-SAME: { padding = 0.000000e+00 : f32 }  : !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map
+    // CHECK-SAME: : !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map
     // CHECK-SAME: = <wi_layout = [1, 16], wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [128, 32]>>> -> vector<128x128xf16>
     %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16,  #tile_attr_b> -> vector<128x128xf16>
     // perform dpas and accumulate
