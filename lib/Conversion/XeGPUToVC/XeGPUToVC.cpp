@@ -35,6 +35,7 @@
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -125,13 +126,42 @@ static Value castValueTo(Value val, Type toType, Location loc,
 #define addi(a, b) rewriter.createOrFold<arith::AddIOp>(loc, a, b)
 #define subi(a, b) rewriter.createOrFold<arith::SubIOp>(loc, a, b)
 
-// Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a 2d
-// memory region with respect to the two inner-most dimensions. Other outer
-// dimensions affect the base address of the 2d plane.
-// For 2d, we compute the base address of 2d plane, assuming the coordinates
-// [0, 0] for the innermost 2 dimensions. The payload will record tile offset
-// within the 2d plane in separate field.
-// For example, given
+// A universal get method for strides of CreateNdDescOp op
+
+// Get the effective strides of the CreateNdDescOp op
+// Stride information provided to CreateNdDescOp is multifaceted
+// In other words strides info provided to CreateNdDescOp in multiple ways:
+// 1. For static memrefs: the strides info are inherent in the memref data type
+// 2. For dynamic memrefs and i64/i32 source: the strides info is provided via
+// the operand `strides`, however the strides operand can also take two
+// different types:
+// 2.1 Constant type: constant attribute can be passed
+// 2.2 Value type: a value type can be passed
+// This function collects these info based on different scenarios and returns
+// them in Value types.
+
+// We use getMixedStrides() to collect the strides info instead of handling
+// aforementioned cases manually, since, it already uses
+// OffsetSizeAndStrideOpInterface, getMixedStrides() already takes care of
+// memref type.
+SmallVector<Value> getStridesInValueType(ConversionPatternRewriter &rewriter,
+                                         CreateNdDescOp op) {
+  SmallVector<Value> stridesVal;
+  auto mixedStrides = op.getMixedStrides();
+  for (size_t i = 0; i < mixedStrides.size(); i++) {
+    auto stride =
+        getValueOrConstantOp(mixedStrides[i], op.getLoc(), rewriter, indexTy);
+    stridesVal.push_back(stride);
+  }
+  return stridesVal;
+}
+
+// Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a
+// 2d memory region with respect to the two inner-most dimensions. Other
+// outer dimensions affect the base address of the 2d plane. For 2d, we
+// compute the base address of 2d plane, assuming the coordinates [0, 0] for
+// the innermost 2 dimensions. The payload will record tile offset within
+// the 2d plane in separate field. For example, given
 //   %m: memref<2x7x32x64xf16>
 // And this access
 //   %m[%a, %b, %c, %d]
@@ -149,34 +179,34 @@ static Value castValueTo(Value val, Type toType, Location loc,
 //                                      %b * (32*64*2) + %a * (7*32*64*2)
 static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
                                CreateNdDescOp op, Value memrefBaseAddr) {
-  auto memType = dyn_cast<MemRefType>(op.getSource().getType());
-
-  // FIXME: Only support static shape for now
-  if (!memType || !memType.hasStaticShape())
-    return memrefBaseAddr;
-
   auto loc = op.getLoc();
   auto tileRank = op.getTensorDesc().getType().getRank();
   auto offsets = op.getMixedOffsets();
 
-  // @TODO: Should we calculate offset using the XeGPU provided API?
-  auto strides = mlir::getStridesAndOffset(memType).first;
+  auto strides = getStridesInValueType(rewriter, op);
 
-  int64_t i = memType.getRank() - 1;
-  auto factor = memType.getElementType().getIntOrFloatBitWidth() / 8;
+  // Calculate the effective rank of the source based on strides arrayref size
+  auto effectiveRank = strides.size();
+  int64_t ranksToAdjust = effectiveRank;
+  auto bytesPerElem =
+      op.getTensorDesc().getType().getElementType().getIntOrFloatBitWidth() / 8;
+  Value bytesPerElemVal = index_val(bytesPerElem);
+
+  // We only need combine ranks that are larger than tileRank (e.g., if we the
+  // source is 4-D, and the tile is 2-D, we only need to combine/adjust the base
+  // for 4-2=2 ranks/dims )
+  ranksToAdjust -= tileRank;
+  offsets.pop_back_n(tileRank);
 
   auto computeBase = [&](Value base) {
-    for (; i >= 0; --i) {
-      unsigned stride = strides[i] * factor;
-      auto factor = index_val(stride);
-      auto offset = offsets.pop_back_val();
+    for (auto i = 0; i < ranksToAdjust; i++) {
+      auto factor = muli(strides[i], bytesPerElemVal);
       Value offsetVal;
-
-      if (offset.is<Value>()) {
-        offsetVal = offset.get<Value>();
+      if (offsets[i].is<Value>()) {
+        offsetVal = offsets[i].get<Value>();
       } else {
         offsetVal = index_val(
-            llvm::cast<IntegerAttr>(offset.get<Attribute>()).getInt());
+            llvm::cast<IntegerAttr>(offsets[i].get<Attribute>()).getInt());
       }
       auto linearOffset = muli(offsetVal, factor);
       base = addi(base, linearOffset);
@@ -185,23 +215,7 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
     return base;
   };
 
-  if (tileRank == 2 && memType.getRank() > 2) {
-    // base address of plane for 2d: base addr of memref + offsets (starting
-    // from j to i) for a given memref<ixjxkxlxf16>
-    i -= 2;
-    offsets.pop_back_n(2);
-    return computeBase(memrefBaseAddr);
-  }
-
-  if (tileRank == 1) {
-    // base address of tile for 1d: base addr of memref + offsets (starting from
-    // k to i) for a given memref<ixjxkxlxf16>
-    i -= 1;
-    offsets.pop_back_n(1);
-    return computeBase(memrefBaseAddr);
-  }
-
-  return memrefBaseAddr;
+  return computeBase(memrefBaseAddr);
 }
 
 class CreateNdDescPattern : public OpConversionPattern<CreateNdDescOp> {
@@ -221,8 +235,17 @@ public:
     auto addrTy =
         (scope == xegpu::MemoryScope::SLM) ? (Type)i32Ty : (Type)i64Ty;
 
-    Value base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
-        loc, adaptor.getSource());
+    // Handle different source types: memref and i64/i32/ui64/ui32
+    auto memRefType = dyn_cast<MemRefType>(op.getSource().getType());
+    Value base;
+    if (memRefType)
+      base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
+          loc, adaptor.getSource());
+    else { // Handle i64/i32/ui64/ui32 passed as a source
+      base = rewriter.create<arith::IndexCastUIOp>(loc, rewriter.getIndexType(),
+                                                   op.getSource());
+    }
+
     base = adjustBasePointer(rewriter, op, base);
     base = rewriter.create<arith::IndexCastUIOp>(loc, addrTy, base);
 
