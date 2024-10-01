@@ -96,6 +96,7 @@ set(IMEX_CONFIG_INCLUDE_EXPORTS "include(\"\${IMEX_CMAKE_DIR}/IMEXTargets.cmake\
 set(IMEX_CONFIG_INCLUDE_DIRS
     "${IMEX_SOURCE_DIR}/include"
     "${IMEX_BINARY_DIR}/include"
+    "${IMEX_GENERATED_HEADER_DIR}/include"
 )
 
 configure_file(

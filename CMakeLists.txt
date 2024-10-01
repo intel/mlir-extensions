@@ -265,7 +265,8 @@ endif()
 # IMEX headers in source tree
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # Generated IMEX headers
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+set(IMEX_GENERATED_HEADER_DIR ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${IMEX_GENERATED_HEADER_DIR}/include)
 message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
 add_definitions(${LLVM_DEFINITIONS})
 
