@@ -19,6 +19,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
@@ -80,7 +81,9 @@ public:
       (void)op.getRegion().walk<WalkOrder::PreOrder>(
           [&](Operation *lop) -> WalkResult {
             auto oname = lop->getName().getStringRef();
-            if (oname.starts_with("arith.") || oname.starts_with("math.")) {
+            if (oname.starts_with("arith.") || oname.starts_with("math.") ||
+                oname.starts_with("scf.for") ||
+                oname.starts_with("scf.yield")) {
               // Skip bitcast operation as we cannot change width of operand
               if (!(oname.starts_with("arith.bitcast") ||
                     oname.starts_with("arith.extf"))) {
@@ -120,6 +123,23 @@ public:
           }
           idx++;
         }
+
+        // handle conversion of bf16 loop iter args
+        if (auto forOp = dyn_cast<mlir::scf::ForOp>(o)) {
+          for (auto arg : forOp.getRegionIterArgs()) {
+            Type argt = arg.getType();
+
+            // Change bf16 iter arg types to f32 type
+            if (argt.isBF16()) {
+              arg.setType(builder.getF32Type());
+            } else if (argt.isFloat8E5M2() || argt.isFloat8E4M3FN()) {
+              // TODO: Handle loop fp8 type iter args
+              llvm_unreachable(
+                  "Unhandled case when loop iter arg is of f8 type");
+            }
+          }
+        }
+
         for (mlir::OpResult res : o->getResults()) {
           if (auto vecTy = mlir::dyn_cast<VectorType>(res.getType())) {
             if (vecTy.getElementType().isBF16()) {
