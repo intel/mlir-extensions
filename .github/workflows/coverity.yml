@@ -36,6 +36,21 @@ jobs:
             /home/runner/coverity
           key: ${{ runner.os }}-${{ env.COVERITY_CACHE_NUMBER }}
 
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+          activate-environment: imex-devel
+
+      - name: Conda info
+        run: conda info
+
+      - name: Install Build tools
+        run: |
+          conda install cmake ninja conda-forge::lit conda-forge::doxygen
+          conda list
+
       - name: Download coverity
         if: steps.cache-coverity.outputs.cache-hit != 'true'
         run: |
