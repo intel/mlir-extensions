@@ -62,6 +62,7 @@ jobs:
       - name: Add coverity to PATH
         run: |
           echo "$HOME/coverity/bin" >> $GITHUB_PATH
+          ls -l $HOME/coverity/bin
 
       - name: Show coverity version
         run: |
