@@ -1,5 +1,4 @@
-// RUN: imex-opt -convert-xegpu-to-vc='enable-vc-intrinsic=true useRawSend=true' -cse %s | FileCheck %s --check-prefixes=CHECK,RAW
-// RUN: imex-opt -convert-xegpu-to-vc='enable-vc-intrinsic=true useRawSend=false' -cse  %s | FileCheck %s --check-prefixes=CHECK,LSC
+// RUN: imex-opt -convert-xegpu-to-vc -cse  %s | FileCheck %s --check-prefixes=CHECK,LSC
 module @gemm attributes {gpu.container_module} {
   gpu.module @test_kernel {
 
@@ -22,15 +21,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[c1807_i32:.*]] = arith.constant 1807 : i32
       //CHECK: %[[r8:.*]] = vector.insert %[[c1807_i32]], %[[r7]] [7] : i32 into vector<16xi32>
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c4_i8:.*]] = arith.constant 4 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c37880323_i32:.*]] = arith.constant 37880323 : i32
-      //RAW: %[[cst_0:.*]] = arith.constant dense<0> : vector<64xi32>
-      //RAW: %[[r9:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c4_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37880323_i32]], %[[r8]], %[[cst_0]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<64xi32>) -> vector<64xi32>
 
       //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
       //LSC: %[[true:.*]] = arith.constant true
@@ -63,16 +53,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[c1807_i32]] = arith.constant 1807 : i32
       //CHECK: %[[r8:.*]] = vector.insert %[[c1807_i32]], %[[r7]] [7] : i32 into vector<16xi32>
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c4_i8:.*]] = arith.constant 4 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c37880451_i32:.*]] = arith.constant 37880451 : i32
-      //RAW: %[[cst_0:.*]] = arith.constant dense<0> : vector<64xi32>
-      //RAW: %[[r9:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c4_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37880451_i32]], %[[r8]], %[[cst_0]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<64xi32>) -> vector<64xi32>
-
 
       //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
       //LSC: %[[true:.*]] = arith.constant true
@@ -108,15 +88,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r8:.*]] = vector.insert %[[c1807_i32]], %[[r7]] [7] : i32 into vector<16xi32>
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
 
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c4_i8:.*]] = arith.constant 4 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c37880323_i32:.*]] = arith.constant 37880323 : i32
-      //RAW: %[[cst_0:.*]] = arith.constant dense<0> : vector<64xi32>
-      //RAW: %[[r9:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c4_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37880323_i32]], %[[r8]], %[[cst_0]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<64xi32>) -> vector<64xi32>
-
       //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
       //LSC: %[[true:.*]] = arith.constant true
       //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
@@ -136,17 +107,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[intptr:.*]] = memref.extract_aligned_pointer_as_index %[[arg0]] : memref<32x32xf32, strided<[64, 1]>> -> index
       //CHECK: %[[r0:.*]] = arith.index_castui %[[intptr]] : index to i64
       //CHECK: %[[r1:.*]] = vector.broadcast %[[r0]] : i64 to vector<1xi64>
-
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c2_i8:.*]] = arith.constant 2 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c0_i32:.*]] = arith.constant 0 : i32
-      //RAW: %[[c37930880_i32:.*]] = arith.constant 37930880 : i32
-      //RAW: %[[cst:.*]] = arith.constant dense<0> : vector<8xi64>
-      //RAW: %[[r2:.*]] = func.call @llvm.genx.raw.send2.v8i64.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c2_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37930880_i32]], %[[r1]], %[[cst]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<1xi64>, vector<8xi64>) -> vector<8xi64>
-
 
       //LSC: %[[cst:.*]] = arith.constant dense<true> : vector<1xi1>
       //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
@@ -182,15 +142,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[c1807_i32:.*]] = arith.constant 1807 : i32
       //CHECK: %[[r8:.*]] = vector.insert %[[c1807_i32]], %[[r7]] [7] : i32 into vector<16xi32>
       %tdesc_2d = xegpu.create_nd_tdesc %arg0[0, 0] : memref<32x32xf16, strided<[64,1], offset: 0>> -> !xegpu.tensor_desc<8x16xf16>
-
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c4_i8:.*]] = arith.constant 4 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c37880323_i32:.*]] = arith.constant 37880323 : i32
-      //RAW: %[[cst_0:.*]] = arith.constant dense<0> : vector<64xi32>
-      //RAW: %[[r9:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c4_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37880323_i32]], %[[r8]], %[[cst_0]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<64xi32>) -> vector<64xi32>
 
       //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
       //LSC: %[[true:.*]] = arith.constant true

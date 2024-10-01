@@ -1,6 +1,4 @@
-
-// RUN: imex-opt -convert-xegpu-to-vc='enable-vc-intrinsic=true useRawSend=true' --cse %s | FileCheck %s --check-prefixes=CHECK,RAW
-// RUN: imex-opt -convert-xegpu-to-vc='enable-vc-intrinsic=true useRawSend=false' --cse  %s | FileCheck %s --check-prefixes=CHECK,LSC
+// RUN: imex-opt -convert-xegpu-to-vc -cse  %s | FileCheck %s --check-prefixes=CHECK,LSC
 
 module @gemm attributes {gpu.container_module} {
     gpu.module @test_kernel {
@@ -32,16 +30,6 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[c1807_i32:.*]] = arith.constant 1807 : i32
       //CHECK: %[[r12:.*]] = vector.insert %[[c1807_i32]], %[[r11]] [7] : i32 into vector<16xi32>
       %4 = xegpu.create_nd_tdesc  %arg2[%2, %3] : memref<1024x1016xf32> -> !xegpu.tensor_desc<8x16xf32>
-
-      //RAW: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //RAW: %[[true:.*]] = arith.constant true
-      //RAW: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //RAW: %[[c8_i8:.*]] = arith.constant 8 : i8
-      //RAW: %[[c15_i8:.*]] = arith.constant 15 : i8
-      //RAW: %[[c0_i32:.*]] = arith.constant 0 : i32
-      //RAW: %[[c42075139_i32:.*]] = arith.constant 42075139 : i32
-      //RAW: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf32>
-      //RAW: %[[CVALUE:.*]] = func.call @llvm.genx.raw.send2.v128f32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c8_i8]], %[[c15_i8]], %[[c0_i32]], %[[c42075139_i32]], %[[r12]], %[[cst_0]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<128xf32>) -> vector<128xf32>
 
       //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf32>
       //LSC: %[[true:.*]] = arith.constant true
@@ -84,20 +72,9 @@ module @gemm attributes {gpu.container_module} {
         //CHECK: %[[r36:.*]] = vector.insert %[[c3855_i32]], %[[r35]] [7] : i32 into vector<16xi32>
         %8 = xegpu.create_nd_tdesc %arg1[%arg3, %3] : memref<1016x1016xf16> -> !xegpu.tensor_desc<16x16xf16>
 
-        //RAW: %[[c4_i8:.*]] = arith.constant 4 : i8
-        //RAW: %[[c37880323_i32:.*]] = arith.constant 37880323 : i32
-        //RAW: %[[cst_3:.*]] = arith.constant dense<0> : vector<64xi32>
-        //RAW: %[[r37:.*]] = func.call @llvm.genx.raw.send2.v64i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c4_i8]], %[[c15_i8]], %[[c0_i32]], %[[c37880323_i32]], %[[r27]], %[[cst_3]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<64xi32>) -> vector<64xi32>
-        //RAW: %[[r39:.*]] = vector.bitcast %[[r37]] : vector<64xi32> to vector<128xf16>
-
         //LSC: %[[cst_3:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
         //LSC: %[[r39:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v128f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i8]], %[[c8_i8]], %[[r27]], %[[c0_i32]], %[[c0_i32]], %[[cst_3]]) : (i1, vector<2xi8>, i8, i8, i8, vector<16xi32>, i32, i32, vector<128xf16>) -> vector<128xf16>
         %9 = xegpu.load_nd %7 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-
-        //RAW: %[[c42074755_i32:.*]] = arith.constant 42074755 : i32
-        //RAW: %[[cst_4:.*]] = arith.constant dense<0> : vector<128xi32>
-        //RAW: %[[r37:.*]] = func.call @llvm.genx.raw.send2.v128i32.i1.v16i32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c8_i8]], %[[c15_i8]], %[[c0_i32]], %[[c42074755_i32]], %[[r36]], %[[cst_4]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<128xi32>) -> vector<128xi32>
-        //RAW: %[[r42:.*]] = vector.bitcast %[[r37]] : vector<128xi32> to vector<256xf16>
 
         //LSC: %[[cst_4:.*]] = arith.constant dense<0.000000e+00> : vector<256xf16>
         //LSC: %[[r42:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.vnni.v256f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i8]], %[[c16_i8]], %[[r36]], %[[c0_i32]], %[[c0_i32]], %[[cst_4]]) : (i1, vector<2xi8>, i8, i8, i8, vector<16xi32>, i32, i32, vector<256xf16>) -> vector<256xf16>
@@ -112,9 +89,6 @@ module @gemm attributes {gpu.container_module} {
         // CHECK: scf.yield %[[DPAS_RES]] : vector<128xf32>
         scf.yield %11 : vector<8x16xf32>
       }
-
-      //RAW: %[[c33686535_i32:.*]] = arith.constant 33686535 : i32
-      //RAW: func.call @llvm.genx.raw.sends2.noresult.i1.v16i32.v128f32(%[[c0_i8]], %[[c0_i8]], %[[true]], %[[c1_i8]], %[[c8_i8]], %[[c15_i8]], %[[c0_i32]], %[[c33686535_i32]], %[[r12]], %[[SCF_RESULT]]) : (i8, i8, i1, i8, i8, i8, i32, i32, vector<16xi32>, vector<128xf32>) -> ()
 
       // LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f32(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i8]], %[[c8_i8]], %[[r12]], %[[c0_i32]], %[[c0_i32]], %[[SCF_RESULT]]) : (i1, vector<2xi8>, i8, i8, i8, vector<16xi32>, i32, i32, vector<128xf32>) -> ()
       xegpu.store_nd %6, %4 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>

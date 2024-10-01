@@ -959,12 +959,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
 
-    // Ops with both RawSend and LSC patterns
-    if (this->useRawSend) {
-      populateLoadStoreRawSendPatterns(typeConverter, patterns);
-    } else {
-      populateLoadStoreLSCPatterns(typeConverter, patterns);
-    }
+    populateLoadStoreLSCPatterns(typeConverter, patterns);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();
