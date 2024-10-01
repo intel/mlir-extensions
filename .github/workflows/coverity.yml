@@ -12,6 +12,9 @@ jobs:
   coverity:
     name: Coverity    
     runs-on: ubuntu-latest
+    env:
+      COV_TOKEN: jQxsG_hSGU57M7A7lqyBvg
+      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
 
     defaults:
       run:
@@ -25,12 +28,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download coverity
-        env:
-          COVERITY_TOKEN: ${{ secrets.COVERITY_TOKEN }}
         run: |
           cd
           test -f coverity/bin/cov-build || {
-            curl -X POST https://scan.coverity.com/download/linux64 -d "token=jQxsG_hSGU57M7A7lqyBvg" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
+            curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
             tar zxf coverity.tgz
             mv -T cov-analysis-linux64-* coverity
           }
@@ -45,44 +46,76 @@ jobs:
 
       - name: Add coverity inputs to env
         run: |
-          version_id=$(grep 'project(GraphCompiler VERSION' CMakeLists.txt | awk '{print $3}' | tr -d '"')
-          version_local_id="$(git rev-parse --short HEAD)"
-          version="${version_id}+git${version_local_id}"
-          email="vadim.musin@intel.com"
-          project_id=30281
+          version="$(git rev-parse --short HEAD)"
+          email="alexei.fedotov@intel.com"
+          project_id=30755
 
           echo "project_id=$project_id" | tee -a $GITHUB_ENV
           echo "email=$email" | tee -a $GITHUB_ENV
           echo "version=$version" | tee -a $GITHUB_ENV
 
-      - name: Setup MLIR Python bindings
-        id: setup-mlir-python-bindings
-        uses: ./.github/actions/setup-mlir-python-bindings
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v4
+        env:
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: |
+            /home/runner/work/llvm-mlir/_mlir_install/**
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
-      - name: Run coverity build
+      - name: Build LLVM-MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
+        shell: bash -el {0}
+        timeout-minutes: 420
         run: |
-          
-          cov-build --dir $HOME/cov-int scripts/compile.sh
-          tail $HOME/cov-int/build-log.txt
+          mkdir -p /home/runner/work/llvm-mlir
+          pushd /home/runner/work/llvm-mlir
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=`nproc`
+          echo "INFO: nproc $np"
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch
+          cd llvm-project
+          git checkout ${LLVM_SHA}
+          if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
+          cmake -G Ninja -B _build -S llvm                                  \
+            -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
+            -DLLVM_ENABLE_PROJECTS=mlir                                    \
+            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+            -DLLVM_USE_LINKER=gold                                         \
+            -DLLVM_INSTALL_UTILS=ON                                        \
+            -DLLVM_TARGETS_TO_BUILD=X86                                    \
+            -DLLVM_ENABLE_BINDINGS=OFF                                     \
+            -DLLVM_ENABLE_ZSTD=OFF                                         \
+            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
+          cmake --build _build --target install
+          popd
+
+      - name: Build IMEX and run lit tests
+        shell: bash -le {0}
+        run: |
+          external_lit=`which lit`
+          echo ${external_lit}
+          cd /home/runner/work/mlir-extensions/mlir-extensions
+          cov-build --dir $HOME/cov-int cmake -S . -B _build -GNinja  \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_EXTERNAL_LIT=${external_lit} \
+            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
+            -DLLVM_LIT_ARGS=-a
+          cmake --build _build --target check-imex
 
       - name: Create coverity results tarball
         run: |
           cd $HOME
           tar zcf cov-int.tgz cov-int
 
-      - name: Version for coverity build
-        run: |
-          
-
       - name: Create coverity build
-        env:
-          COVERITY_TOKEN: ${{ secrets.COVERITY_TOKEN }}
         run: |
           cd $HOME
           curl -X POST \
             -d version="$version" \
             -d email="$email" \
-            -d token=$COVERITY_TOKEN \
+            -d token=$COV_TOKEN \
             -d file_name="cov-int.tgz" \
             https://scan.coverity.com/projects/$project_id/builds/init \
             | tee response
@@ -92,8 +125,6 @@ jobs:
           echo "build_id=$build_id" | tee -a $GITHUB_ENV
 
       - name: Upload coverity build
-        env:
-          COVERITY_TOKEN: ${{ secrets.COVERITY_TOKEN }}
         run: |
           cd $HOME
           curl -X PUT \
@@ -102,5 +133,5 @@ jobs:
             $upload_url
 
           curl -X PUT \
-            -d token=$COVERITY_TOKEN \
+            -d token=$COV_TOKEN \
             https://scan.coverity.com/projects/$project_id/builds/$build_id/enqueue
