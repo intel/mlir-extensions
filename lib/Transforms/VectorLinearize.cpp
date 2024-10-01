@@ -153,7 +153,7 @@ struct VectorExtractStridedSliceConversion final
     // here, extraction granularity is 8.
     int64_t extractSliceLen = 1;
     auto n = extractOp.getSourceVectorType().getRank();
-    auto k = (int64_t)offsets.size();
+    auto k = static_cast<int64_t>(offsets.size());
     if (n > k) {
       for (unsigned i = 0; i < n - k; i++) {
         extractSliceLen *= extractOp.getSourceVectorType().getShape()[i + k];
