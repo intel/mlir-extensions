@@ -10,7 +10,7 @@ permissions: read-all
 
 jobs:
   coverity:
-    name: Coverity    
+    name: Coverity
     runs-on: ubuntu-latest
     env:
       COV_TOKEN: jQxsG_hSGU57M7A7lqyBvg
@@ -18,23 +18,31 @@ jobs:
 
     defaults:
       run:
-        shell: bash -noprofile --norc -eo pipefail {0}
+        shell: bash -l -noprofile --norc -eo pipefail {0}
 
     timeout-minutes: 450
-
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache coverity
+        id: cache-coverity
+        uses: actions/cache@v4
+        env:
+          COVERITY_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: |
+            /home/runner/coverity
+          key: ${{ runner.os }}-${{ env.COVERITY_CACHE_NUMBER }}
+
       - name: Download coverity
+        if: steps.cache-coverity.outputs.cache-hit != 'true'
         run: |
           cd
-          test -f coverity/bin/cov-build || {
-            curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
-            tar zxf coverity.tgz
-            mv -T cov-analysis-linux64-* coverity
-          }
+          curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
+          tar zxf coverity.tgz
+          mv -T cov-analysis-linux64-* coverity
 
       - name: Add coverity to PATH
         run: |
@@ -54,6 +62,12 @@ jobs:
           echo "email=$email" | tee -a $GITHUB_ENV
           echo "version=$version" | tee -a $GITHUB_ENV
 
+      - name: Setup Cache Vars
+        run: |
+          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          cat $LLVM_SHA_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
         uses: actions/cache@v4
@@ -66,18 +80,16 @@ jobs:
 
       - name: Build LLVM-MLIR
         if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
-        shell: bash -el {0}
-        timeout-minutes: 420
         run: |
           mkdir -p /home/runner/work/llvm-mlir
-          pushd /home/runner/work/llvm-mlir
+          cd /home/runner/work/llvm-mlir
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           np=`nproc`
           echo "INFO: nproc $np"
           git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
           git checkout ${LLVM_SHA}
-          if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
+          git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch
           cmake -G Ninja -B _build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
@@ -89,20 +101,18 @@ jobs:
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
           cmake --build _build --target install
-          popd
 
       - name: Build IMEX and run lit tests
-        shell: bash -le {0}
         run: |
           external_lit=`which lit`
           echo ${external_lit}
           cd /home/runner/work/mlir-extensions/mlir-extensions
-          cov-build --dir $HOME/cov-int cmake -S . -B _build -GNinja  \
+          cmake -S . -B _build -GNinja  \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_EXTERNAL_LIT=${external_lit} \
             -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
             -DLLVM_LIT_ARGS=-a
-          cmake --build _build --target check-imex
+          cov_build $HOME/cov-int cmake --build _build --target check-imex
 
       - name: Create coverity results tarball
         run: |
