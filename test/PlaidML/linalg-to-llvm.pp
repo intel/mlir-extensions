@@ -29,11 +29,11 @@ builtin.module(convert-tensor-to-linalg
     func.func(llvm-request-c-wrappers)
     serialize-spirv
     convert-gpu-to-gpux
+    expand-strided-metadata
+    finalize-memref-to-llvm
     convert-func-to-llvm
     convert-math-to-llvm
     convert-gpux-to-llvm
-    expand-strided-metadata
     lower-affine
-    finalize-memref-to-llvm
     reconcile-unrealized-casts)
 // End
