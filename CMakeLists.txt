@@ -268,7 +268,25 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(IMEX_GENERATED_HEADER_DIR ${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${IMEX_GENERATED_HEADER_DIR}/include)
 message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
-add_definitions(${LLVM_DEFINITIONS})
+
+string(REPLACE "-D" "" CLEANED_LLVM_DEFINITION_STRING "${LLVM_DEFINITIONS}")
+string(REGEX REPLACE " " ";" LLVM_DEFINITION_LIST "${CLEANED_LLVM_DEFINITION_STRING}")
+
+get_property(existing_compile_definitions DIRECTORY PROPERTY COMPILE_DEFINITIONS)
+
+# HACK: Sometimes 'LLVM_DEFINITIONS' may contain definitions that were already added
+# by parent libraries (like openvino). Adding 'LLVM_DEFINITIONS' as is in such cases
+# may result into duplicate definitions. To avoid this, we check if the definition
+# is already in the list of existing definitions and add only if it's not found.
+foreach(definition ${LLVM_DEFINITION_LIST})
+    # Check if the definition is already in the list of existing definitions
+    list(FIND existing_compile_definitions ${definition} index)
+
+    # If it's not found (index == -1), add the compile definition
+    if(index EQUAL -1)
+        add_compile_definitions(${definition})
+    endif()
+endforeach()
 
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 if (IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_L0_RUNTIME)
