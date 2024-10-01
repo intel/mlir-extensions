@@ -1,9 +1,10 @@
 name: Cross-compile IMEX on CPUs
 
 on:
-  push:
+  # FIXME
+  #  push:
     branches:
-      - main
+      #      - main
   pull_request:
     branches:
       - main

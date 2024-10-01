@@ -28,9 +28,9 @@ jobs:
         env:
           COVERITY_TOKEN: ${{ secrets.COVERITY_TOKEN }}
         run: |
-          cd $HOME
-          test ! -f coverity/bin/cov-build && {
-            curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COVERITY_TOKEN&project=intel%2Fgraph-compiler" -o coverity.tgz
+          cd
+          test -f coverity/bin/cov-build || {
+            curl -X POST https://scan.coverity.com/download/linux64 -d "token=jQxsG_hSGU57M7A7lqyBvg" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
             tar zxf coverity.tgz
             mv -T cov-analysis-linux64-* coverity
           }
