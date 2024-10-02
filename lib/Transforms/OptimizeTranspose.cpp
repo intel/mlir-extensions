@@ -402,6 +402,7 @@ private:
 };
 } // namespace optimizetranspose
 
-std::unique_ptr<mlir::Pass> imex::createOptimizeTransposePass(const std::string &deviceName) {
+std::unique_ptr<mlir::Pass>
+imex::createOptimizeTransposePass(const std::string &deviceName) {
   return std::make_unique<optimizetranspose::OptimizeTransposePass>(deviceName);
 }

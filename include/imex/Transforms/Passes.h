@@ -36,7 +36,8 @@ std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 std::unique_ptr<mlir::Pass> createVectorLinearizePass();
 std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
-std::unique_ptr<mlir::Pass> createOptimizeTransposePass(const std::string &device = "pvc");
+std::unique_ptr<mlir::Pass>
+createOptimizeTransposePass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createHoistTransposePass();
 std::unique_ptr<mlir::Pass> createVnniTransformationPass();
 std::unique_ptr<mlir::Pass> createEmulateNonNativeBF16Pass();
