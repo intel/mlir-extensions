@@ -29,6 +29,7 @@
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/Pass/Pass.h>
 
 #include <optional>
@@ -158,6 +159,9 @@ public:
       } else if (auto init_tile =
                      mlir::dyn_cast<imex::xetile::InitTileOp>(op)) {
         return {{init_tile.getSource()}};
+      } else if (auto init_xedesc =
+                     mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(op)) {
+        return {{init_xedesc.getSource()}};
       } else {
         op->emitError("Uhhandled mem op in gpu region");
         return std::nullopt;
@@ -186,6 +190,9 @@ public:
       if (auto init_tile = mlir::dyn_cast<imex::xetile::InitTileOp>(op)) {
         // Only handle the case where the tile source is a memref
         return init_tile.isSourceMemRef();
+      }
+      if (auto init_xedesc = mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(op)) {
+        return true;
       }
       return false;
     };
@@ -270,6 +277,37 @@ public:
       return false;
     };
 
+    // walk over the users and find xegpu.load/store ops
+    std::function<void(mlir::Operation *, bool, AccessType &)>
+        findXeGPULoadStore;
+    findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice,
+                             AccessType &ret) {
+      if (auto tile_update =
+              mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
+        auto res = tile_update->getResult(0);
+        for (auto u : res.getUsers()) {
+          findXeGPULoadStore(u, onDevice, ret);
+        }
+      }
+      if (auto tile_for = mlir::dyn_cast<::mlir::scf::ForOp>(use)) {
+        for (size_t idx = 0; idx < tile_for.getInits().size(); idx++) {
+          auto a = tile_for.getRegionIterArg(idx);
+          for (auto u : a.getUsers()) {
+            findXeGPULoadStore(u, onDevice, ret);
+          }
+        }
+      }
+      if (auto tile_load = mlir::dyn_cast<mlir::xegpu::LoadNdOp>(use)) {
+        (onDevice ? ret.deviceRead : ret.hostRead) = true;
+      } else if (auto tile_prefetch =
+                     mlir::dyn_cast<mlir::xegpu::PrefetchNdOp>(use)) {
+        (onDevice ? ret.deviceRead : ret.hostRead) = true;
+      } else if (auto tile_store =
+                     mlir::dyn_cast<mlir::xegpu::StoreNdOp>(use)) {
+        (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
+      }
+    };
+
     // Checks the access type of the OP under consideration.
     auto getAccessType = [&](mlir::Value memref) {
       AccessType ret;
@@ -305,6 +343,16 @@ public:
                              mlir::dyn_cast<imex::xetile::StoreTileOp>(use)) {
                 (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
               }
+            }
+            continue;
+          }
+
+          if (auto init_xedesc =
+                  mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(user)) {
+            bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
+            auto res = init_xedesc->getResult(0);
+            for (auto use : res.getUsers()) {
+              findXeGPULoadStore(use, onDevice, ret);
             }
             continue;
           }
@@ -376,6 +424,15 @@ public:
             use.set(newAlloc.getResult());
           }
         }
+
+        // remove 'memref.dealloc' (it's later replaced with gpu.dealloc)
+        auto memory = alloc->getResult(0);
+        for (auto u : memory.getUsers()) {
+          if (auto dealloc = mlir::dyn_cast<mlir::memref::DeallocOp>(u)) {
+            dealloc.erase();
+          }
+        }
+
         alloc.replaceAllUsesWith(allocResult);
         builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         alloc.erase();
@@ -520,7 +577,7 @@ private:
 } // namespace
 
 namespace imex {
-std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass() {
-  return std::make_unique<InsertGPUAllocsPass>();
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass(const char *clientAPI) {
+  return std::make_unique<InsertGPUAllocsPass>(clientAPI);
 }
 } // namespace imex

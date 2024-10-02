@@ -384,11 +384,8 @@ mlir::LogicalResult XeuArchInterface::isLegalPrefetch2dOp(mlir::Operation *op) {
 
     int elementSize = prefetchOp.getTensorDescType().getElementTypeBitWidth();
 
-    bool vnni = false;
-    bool transpose = false;
-
     mlir::FailureOr<LoadStore2DConfig> configParams =
-        this->get2DLoadConfig(op, elementSize, vnni, transpose);
+        this->get2DPrefetchConfig(op, elementSize);
     if (mlir::succeeded(configParams)) {
 
       auto width = tdescTy.getShape()[1];
@@ -397,9 +394,8 @@ mlir::LogicalResult XeuArchInterface::isLegalPrefetch2dOp(mlir::Operation *op) {
       auto elemTyByteWidth =
           tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
 
-      return verify2dBlockRestriction(op, width, height, array_len,
-                                      elemTyByteWidth, transpose, vnni,
-                                      *configParams);
+      return verify2dPrefetchRestriction(op, width, height, array_len,
+                                         elemTyByteWidth, *configParams);
     } else {
       return prefetchOp->emitOpError()
              << "Invalid 2d block load parameters for prefetch operation!\n";

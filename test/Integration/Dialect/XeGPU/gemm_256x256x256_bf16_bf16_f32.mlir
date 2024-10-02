@@ -1,8 +1,8 @@
-// RUN: IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
+// RUN: IMEX_USE_IGC_VECTOR_BACK_END=1 IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
+// RUN: IMEX_USE_IGC_VECTOR_BACK_END=1 IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
 // RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
@@ -29,7 +29,7 @@ module @gemm attributes {gpu.container_module} {
     return %C_gpu : memref<256x256xf32>
   }
 
-  gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, BFloat16TypeKHR, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_bfloat16, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
+  gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL, Bfloat16ConversionINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute, SPV_INTEL_bfloat16_conversion]>, api=OpenCL, #spirv.resource_limits<>>} {
     gpu.func @test_kernel(%A: memref<256x256xbf16>, %B: memref<256x256xbf16>, %C: memref<256x256xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       // constants
       %c256 = arith.constant 256 : index
@@ -351,79 +351,79 @@ module @gemm attributes {gpu.container_module} {
 
         %a_val_0_0_flat = vector.extract_strided_slice %a_val_0_flat { offsets = [0], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_0_0 = vector.shape_cast %a_val_0_0_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_0_0 = vector.shape_cast %a_val_0_0_flat : vector<128xbf16> to vector<8x16xbf16>
 
         %a_val_1_0_flat = vector.extract_strided_slice %a_val_0_flat { offsets = [128], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_1_0 = vector.shape_cast %a_val_1_0_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_1_0 = vector.shape_cast %a_val_1_0_flat : vector<128xbf16> to vector<8x16xbf16>
 
         %a_val_0_1_flat = vector.extract_strided_slice %a_val_0_flat { offsets = [256], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_0_1 = vector.shape_cast %a_val_0_1_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_0_1 = vector.shape_cast %a_val_0_1_flat : vector<128xbf16> to vector<8x16xbf16>
         %a_val_1_1_flat = vector.extract_strided_slice %a_val_0_flat {offsets = [384], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_1_1 = vector.shape_cast %a_val_1_1_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_1_1 = vector.shape_cast %a_val_1_1_flat : vector<128xbf16> to vector<8x16xbf16>
 
         %a_val_2_0_flat = vector.extract_strided_slice %a_val_1_flat { offsets = [0], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_2_0 = vector.shape_cast %a_val_2_0_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_2_0 = vector.shape_cast %a_val_2_0_flat : vector<128xbf16> to vector<8x16xbf16>
 
         %a_val_3_0_flat = vector.extract_strided_slice %a_val_1_flat { offsets = [128], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_3_0 = vector.shape_cast %a_val_3_0_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_3_0 = vector.shape_cast %a_val_3_0_flat : vector<128xbf16> to vector<8x16xbf16>
 
         %a_val_2_1_flat = vector.extract_strided_slice %a_val_1_flat { offsets = [256], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_2_1 = vector.shape_cast %a_val_2_1_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_2_1 = vector.shape_cast %a_val_2_1_flat : vector<128xbf16> to vector<8x16xbf16>
         %a_val_3_1_flat = vector.extract_strided_slice %a_val_1_flat {offsets = [384], sizes = [128], strides = [1]} :
           vector<512xbf16> to vector<128xbf16>
-        %a_val_3_1 = vector.shape_cast %a_val_3_1_flat : vector<128xbf16> to vector<8x8x2xbf16>
+        %a_val_3_1 = vector.shape_cast %a_val_3_1_flat : vector<128xbf16> to vector<8x16xbf16>
 
 
         // do DPAS
         xegpu.compile_hint
 
-        %new_c_val_0_0_temp = xegpu.dpas %a_val_0_0, %b_val_0_0, %c_val_0_0 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_0_temp = xegpu.dpas %a_val_1_0, %b_val_0_0, %c_val_1_0 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_0_temp = xegpu.dpas %a_val_2_0, %b_val_0_0, %c_val_2_0 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_0_temp = xegpu.dpas %a_val_3_0, %b_val_0_0, %c_val_3_0 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_0_temp = xegpu.dpas %a_val_0_0, %b_val_0_0, %c_val_0_0 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_0_temp = xegpu.dpas %a_val_1_0, %b_val_0_0, %c_val_1_0 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_0_temp = xegpu.dpas %a_val_2_0, %b_val_0_0, %c_val_2_0 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_0_temp = xegpu.dpas %a_val_3_0, %b_val_0_0, %c_val_3_0 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_1_temp = xegpu.dpas %a_val_0_0, %b_val_0_1, %c_val_0_1 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_1_temp = xegpu.dpas %a_val_1_0, %b_val_0_1, %c_val_1_1 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_1_temp = xegpu.dpas %a_val_2_0, %b_val_0_1, %c_val_2_1 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_1_temp = xegpu.dpas %a_val_3_0, %b_val_0_1, %c_val_3_1 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_1_temp = xegpu.dpas %a_val_0_0, %b_val_0_1, %c_val_0_1 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_1_temp = xegpu.dpas %a_val_1_0, %b_val_0_1, %c_val_1_1 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_1_temp = xegpu.dpas %a_val_2_0, %b_val_0_1, %c_val_2_1 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_1_temp = xegpu.dpas %a_val_3_0, %b_val_0_1, %c_val_3_1 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_2_temp = xegpu.dpas %a_val_0_0, %b_val_0_2, %c_val_0_2 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_2_temp = xegpu.dpas %a_val_1_0, %b_val_0_2, %c_val_1_2 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_2_temp = xegpu.dpas %a_val_2_0, %b_val_0_2, %c_val_2_2 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_2_temp = xegpu.dpas %a_val_3_0, %b_val_0_2, %c_val_3_2 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_2_temp = xegpu.dpas %a_val_0_0, %b_val_0_2, %c_val_0_2 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_2_temp = xegpu.dpas %a_val_1_0, %b_val_0_2, %c_val_1_2 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_2_temp = xegpu.dpas %a_val_2_0, %b_val_0_2, %c_val_2_2 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_2_temp = xegpu.dpas %a_val_3_0, %b_val_0_2, %c_val_3_2 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_3_temp = xegpu.dpas %a_val_0_0, %b_val_0_3, %c_val_0_3 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_3_temp = xegpu.dpas %a_val_1_0, %b_val_0_3, %c_val_1_3 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_3_temp = xegpu.dpas %a_val_2_0, %b_val_0_3, %c_val_2_3 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_3_temp = xegpu.dpas %a_val_3_0, %b_val_0_3, %c_val_3_3 : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_3_temp = xegpu.dpas %a_val_0_0, %b_val_0_3, %c_val_0_3 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_3_temp = xegpu.dpas %a_val_1_0, %b_val_0_3, %c_val_1_3 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_3_temp = xegpu.dpas %a_val_2_0, %b_val_0_3, %c_val_2_3 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_3_temp = xegpu.dpas %a_val_3_0, %b_val_0_3, %c_val_3_3 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
         xegpu.compile_hint
 
-        %new_c_val_0_0 = xegpu.dpas %a_val_0_1, %b_val_1_0, %new_c_val_0_0_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_0 = xegpu.dpas %a_val_1_1, %b_val_1_0, %new_c_val_1_0_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_0 = xegpu.dpas %a_val_2_1, %b_val_1_0, %new_c_val_2_0_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_0 = xegpu.dpas %a_val_3_1, %b_val_1_0, %new_c_val_3_0_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_0 = xegpu.dpas %a_val_0_1, %b_val_1_0, %new_c_val_0_0_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_0 = xegpu.dpas %a_val_1_1, %b_val_1_0, %new_c_val_1_0_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_0 = xegpu.dpas %a_val_2_1, %b_val_1_0, %new_c_val_2_0_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_0 = xegpu.dpas %a_val_3_1, %b_val_1_0, %new_c_val_3_0_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_1 = xegpu.dpas %a_val_0_1, %b_val_1_1, %new_c_val_0_1_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_1 = xegpu.dpas %a_val_1_1, %b_val_1_1, %new_c_val_1_1_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_1 = xegpu.dpas %a_val_2_1, %b_val_1_1, %new_c_val_2_1_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_1 = xegpu.dpas %a_val_3_1, %b_val_1_1, %new_c_val_3_1_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_1 = xegpu.dpas %a_val_0_1, %b_val_1_1, %new_c_val_0_1_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_1 = xegpu.dpas %a_val_1_1, %b_val_1_1, %new_c_val_1_1_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_1 = xegpu.dpas %a_val_2_1, %b_val_1_1, %new_c_val_2_1_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_1 = xegpu.dpas %a_val_3_1, %b_val_1_1, %new_c_val_3_1_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_2 = xegpu.dpas %a_val_0_1, %b_val_1_2, %new_c_val_0_2_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_2 = xegpu.dpas %a_val_1_1, %b_val_1_2, %new_c_val_1_2_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_2 = xegpu.dpas %a_val_2_1, %b_val_1_2, %new_c_val_2_2_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_2 = xegpu.dpas %a_val_3_1, %b_val_1_2, %new_c_val_3_2_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_2 = xegpu.dpas %a_val_0_1, %b_val_1_2, %new_c_val_0_2_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_2 = xegpu.dpas %a_val_1_1, %b_val_1_2, %new_c_val_1_2_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_2 = xegpu.dpas %a_val_2_1, %b_val_1_2, %new_c_val_2_2_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_2 = xegpu.dpas %a_val_3_1, %b_val_1_2, %new_c_val_3_2_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-        %new_c_val_0_3 = xegpu.dpas %a_val_0_1, %b_val_1_3, %new_c_val_0_3_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_1_3 = xegpu.dpas %a_val_1_1, %b_val_1_3, %new_c_val_1_3_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_2_3 = xegpu.dpas %a_val_2_1, %b_val_1_3, %new_c_val_2_3_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
-        %new_c_val_3_3 = xegpu.dpas %a_val_3_1, %b_val_1_3, %new_c_val_3_3_temp : vector<8x8x2xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_0_3 = xegpu.dpas %a_val_0_1, %b_val_1_3, %new_c_val_0_3_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_1_3 = xegpu.dpas %a_val_1_1, %b_val_1_3, %new_c_val_1_3_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_2_3 = xegpu.dpas %a_val_2_1, %b_val_1_3, %new_c_val_2_3_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %new_c_val_3_3 = xegpu.dpas %a_val_3_1, %b_val_1_3, %new_c_val_3_3_temp : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
 
         //  barrier wait
         scf.if %every_8th_iter_cond {

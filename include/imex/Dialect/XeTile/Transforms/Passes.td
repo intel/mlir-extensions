@@ -97,20 +97,6 @@ def XeTileWgToSg : Pass<"xetile-wg-to-sg", "::mlir::gpu::GPUModuleOp">{
                            "mlir::vector::VectorDialect"];
 }
 
-def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
-  let summary = "Fuse tile loads and transpose operations.";
-
-  let description = [{
-    This pass fuses tile loads that are consumed by transpose operations into a single
-    load operation. Transformation uses the `order` attribute in the XeTile type to
-    perform the load and transpose together.
-  }];
-  let constructor = "imex::createXeTileOptimizeTransposePass()";
-  let dependentDialects = [
-    "::imex::xetile::XeTileDialect"
-  ];
-}
-
 def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUModuleOp"> {
   let summary = "Collection of canonicalization patterns for XeTile dialect.";
 

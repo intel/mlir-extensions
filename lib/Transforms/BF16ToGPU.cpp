@@ -15,20 +15,26 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "imex/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
+namespace imex {
+#define GEN_PASS_DEF_BF16TOGPU
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
+
 using namespace mlir;
 using namespace imex;
 
 namespace {
-struct BF16ToGPUPass : public BF16ToGPUBase<BF16ToGPUPass> {
+struct BF16ToGPUPass : public imex::impl::BF16ToGPUBase<BF16ToGPUPass> {
 
 public:
   void runOnOperation() override {
@@ -75,7 +81,9 @@ public:
       (void)op.getRegion().walk<WalkOrder::PreOrder>(
           [&](Operation *lop) -> WalkResult {
             auto oname = lop->getName().getStringRef();
-            if (oname.starts_with("arith.") || oname.starts_with("math.")) {
+            if (oname.starts_with("arith.") || oname.starts_with("math.") ||
+                oname.starts_with("scf.for") ||
+                oname.starts_with("scf.yield")) {
               // Skip bitcast operation as we cannot change width of operand
               if (!(oname.starts_with("arith.bitcast") ||
                     oname.starts_with("arith.extf"))) {
@@ -115,6 +123,23 @@ public:
           }
           idx++;
         }
+
+        // handle conversion of bf16 loop iter args
+        if (auto forOp = dyn_cast<mlir::scf::ForOp>(o)) {
+          for (auto arg : forOp.getRegionIterArgs()) {
+            Type argt = arg.getType();
+
+            // Change bf16 iter arg types to f32 type
+            if (argt.isBF16()) {
+              arg.setType(builder.getF32Type());
+            } else if (argt.isFloat8E5M2() || argt.isFloat8E4M3FN()) {
+              // TODO: Handle loop fp8 type iter args
+              llvm_unreachable(
+                  "Unhandled case when loop iter arg is of f8 type");
+            }
+          }
+        }
+
         for (mlir::OpResult res : o->getResults()) {
           if (auto vecTy = mlir::dyn_cast<VectorType>(res.getType())) {
             if (vecTy.getElementType().isBF16()) {
@@ -260,30 +285,37 @@ public:
             if (!func)
               op.emitError("Callee not found!");
             auto ftype = func.getFunctionType();
-            SmallVector<Type, 8> newArgTypes;
-            bool needFuncArgUpdate = false;
-            for (auto iTy : ftype.getInputs()) {
-              if (auto vecTy = dyn_cast<VectorType>(iTy)) {
-                if (vecTy.getElementType().isBF16()) {
-                  auto newTy =
-                      vecTy.cloneWith(vecTy.getShape(), builder.getI16Type());
-                  newArgTypes.push_back(newTy);
-                  needFuncArgUpdate = true;
+            bool needFuncUpdate = false;
+
+            auto convertBF16ToI16 = [&](TypeRange types) {
+              SmallVector<Type, 8> newTypes;
+              for (Type t : types) {
+                if (auto vecTy = dyn_cast<VectorType>(t)) {
+                  if (vecTy.getElementType().isBF16()) {
+                    auto newTy =
+                        vecTy.cloneWith(vecTy.getShape(), builder.getI16Type());
+                    newTypes.push_back(newTy);
+                    needFuncUpdate = true;
+                  } else {
+                    newTypes.push_back(t);
+                  }
+                } else if (t.isBF16()) {
+                  newTypes.push_back(builder.getI16Type());
+                  needFuncUpdate = true;
                 } else {
-                  newArgTypes.push_back(iTy);
+                  // TODO: Can callee arg type be bf16 memref?
+                  newTypes.push_back(t);
                 }
-              } else if (iTy.isBF16()) {
-                newArgTypes.push_back(builder.getI16Type());
-                needFuncArgUpdate = true;
-              } else {
-                // TODO: Can callee arg type be bf16 memref?
-                newArgTypes.push_back(iTy);
               }
-            }
-            // TODO: Can callee return type be bf16?
-            if (needFuncArgUpdate) {
+              return newTypes;
+            };
+
+            auto newArgTypes = convertBF16ToI16(ftype.getInputs());
+            auto newRetTypes = convertBF16ToI16(ftype.getResults());
+
+            if (needFuncUpdate) {
               auto nftype = dyn_cast<FunctionType>(
-                  func.cloneTypeWith(newArgTypes, ftype.getResults()));
+                  func.cloneTypeWith(newArgTypes, newRetTypes));
               func.setFunctionType(nftype);
             }
           }

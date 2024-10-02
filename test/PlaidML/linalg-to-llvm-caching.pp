@@ -30,13 +30,14 @@ builtin.module(convert-tensor-to-linalg
     serialize-spirv
     convert-gpu-to-gpux
     convert-scf-to-cf
-    convert-cf-to-llvm
-    convert-arith-to-llvm
-    convert-func-to-llvm
-    convert-math-to-llvm
-    convert-gpux-to-llvm
     expand-strided-metadata
-    lower-affine
     finalize-memref-to-llvm
+    convert-cf-to-llvm
+    convert-index-to-llvm
+    convert-arith-to-llvm
+    convert-math-to-llvm
+    convert-func-to-llvm
+    convert-gpux-to-llvm
+    lower-affine
     reconcile-unrealized-casts)
 // End

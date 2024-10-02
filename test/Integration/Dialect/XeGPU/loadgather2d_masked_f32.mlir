@@ -43,21 +43,20 @@ module @gemm attributes {gpu.container_module} {
 
       // Spirv has no lowering for memref.reinterpret_cast with different sizes (doesn't work: memref<3x16xf32> to memref<16xf32>)
       // Each row has a tdesc with offsets that determine linearized memref's values to be loaded
-      %offsets_row1 = arith.constant dense<[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]> : vector<16xindex>
-      %row_1_in_td = xegpu.create_tdesc %arg0, %offsets_row1 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
-      %row_1_out_td = xegpu.create_tdesc %arg1, %offsets_row1 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %row_1_in_td = xegpu.create_tdesc %arg0[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : memref<?xf32> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %row_1_out_td = xegpu.create_tdesc %arg1[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : memref<?xf32> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
       %row_1_loaded = xegpu.load %row_1_in_td, %row_mask : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> -> vector<16xf32>
       %row_1_store = arith.select %row_mask, %row_1_loaded, %user_val : vector<16xi1>, vector<16xf32>
       xegpu.store %row_1_store, %row_1_out_td, %store_mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>
 
-      %row_2_in_td = xegpu.update_offset %row_1_in_td, %offset_step : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
-      %row_2_out_td = xegpu.update_offset %row_1_out_td, %offset_step : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %row_2_in_td = xegpu.update_offset %row_1_in_td, [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16] : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %row_2_out_td = xegpu.update_offset %row_1_out_td, [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16] : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
       %row_2_loaded = xegpu.load %row_2_in_td, %row_mask : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> -> vector<16xf32>
       %row_2_store = arith.select %row_mask, %row_2_loaded, %user_val : vector<16xi1>, vector<16xf32>
       xegpu.store %row_2_store, %row_2_out_td, %store_mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>
 
       // The entire row is out of bounds
-      %row_3_out_td = xegpu.update_offset %row_2_out_td, %offset_step : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %row_3_out_td = xegpu.update_offset %row_2_out_td, [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16] : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
       xegpu.store %user_val, %row_3_out_td, %store_mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>
       gpu.return
     }

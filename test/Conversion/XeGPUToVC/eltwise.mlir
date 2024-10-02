@@ -1,4 +1,4 @@
-// RUN: imex-opt -convert-xegpu-to-vc='enable-vc-intrinsic=true useRawSend=true' -cse --split-input-file %s | FileCheck %s --check-prefixes=CHECK
+// RUN: imex-opt -convert-xegpu-to-vc -cse --split-input-file %s | FileCheck %s --check-prefixes=CHECK
 module @gemm attributes {gpu.container_module} {
   gpu.module @test_kernel {
 

@@ -4,7 +4,6 @@ add_imex_dialect_library(IMEXXeTileTransforms
   BlockingAnalysis.cpp
   BlockingRewrite.cpp
   InitDuplicate.cpp
-  OptimizeTranspose.cpp
   Canonicalization.cpp
   WgToSg.cpp
 

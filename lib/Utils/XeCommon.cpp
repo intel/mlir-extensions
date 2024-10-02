@@ -68,10 +68,12 @@ mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
 /// @brief
 /// We have to use flattened i32 for intrinsic calls like llvm_genx_raw_send2_*,
 /// hence we need to encode vectors with arbitrary datatypes as i32.
+/// keepF16 = true: when the vector element type is f16, it disables flattening
+/// it to i32.
 std::pair<std::string, mlir::VectorType>
 encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
-                 mlir::VectorType type, bool use64bitData,
-                 bool enforceInteger) {
+                 mlir::VectorType type, bool use64bitData, bool enforceInteger,
+                 bool keepF16) {
   mlir::Type srcElemType = type.getElementType();
   assert((srcElemType.isF16() || srcElemType.isBF16() || srcElemType.isF32() ||
           srcElemType.isInteger(8) || srcElemType.isInteger(16) ||
@@ -80,7 +82,7 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   const uint32_t srcBitWidth = srcElemType.getIntOrFloatBitWidth();
   mlir::Type resElemType = rewriter.getI32Type();
   if (!enforceInteger) {
-    if (srcElemType == rewriter.getF32Type()) {
+    if (srcElemType.isF32() || (keepF16 && srcElemType.isF16())) {
       resElemType = srcElemType;
     }
     if (use64bitData) {
@@ -93,7 +95,9 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   mlir::VectorType resVecType = mlir::VectorType::get(resVecSize, resElemType);
   std::string resStr =
       llvm::formatv("v{0}{1}{2}", resVecSize,
-                    ((resElemType == rewriter.getF32Type()) ? 'f' : 'i'),
+                    ((resElemType.isF32() || (keepF16 && resElemType.isF16()))
+                         ? 'f'
+                         : 'i'),
                     resBitWidth)
           .str();
   return {resStr, resVecType};

@@ -50,7 +50,10 @@
 #include <iostream>
 #include <optional>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_CONVERTNDARRAYTOLINALG
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 
@@ -566,7 +569,9 @@ struct DeleteLowering
     auto inp = adaptor.getInput();
     auto inpMR = createToMemRef(op.getLoc(), rewriter, inp,
                                 inpArType.getMemRefType(inp));
-    rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    auto newOp =
+        rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    newOp->setAttrs(op->getAttrs());
 
     return ::mlir::success();
   }
@@ -1258,7 +1263,8 @@ struct PermuteDimsOpLowering
 /// After success, no more NDArray should be left, replaced by Linalg & Affine
 /// & Arith. Use a type converter to get rid of NDArrayType.
 struct ConvertNDArrayToLinalgPass
-    : public ::imex::ConvertNDArrayToLinalgBase<ConvertNDArrayToLinalgPass> {
+    : public ::imex::impl::ConvertNDArrayToLinalgBase<
+          ConvertNDArrayToLinalgPass> {
 
   ConvertNDArrayToLinalgPass() = default;
 

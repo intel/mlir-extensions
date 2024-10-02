@@ -21,8 +21,6 @@
 #include "imex/Utils/GPUSerialize.h"
 #include "imex/Utils/TypeConversion.hpp"
 
-#include "../PassDetail.h"
-
 // TODO: remove
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
@@ -52,6 +50,13 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
+
+#include "mlir/Pass/Pass.h"
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTGPUXTOLLVM
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace {
 
@@ -652,7 +657,8 @@ private:
 };
 } // namespace
 
-class GPUXToLLVMPass : public ::imex::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
+class GPUXToLLVMPass
+    : public imex::impl::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
 public:
   explicit GPUXToLLVMPass() {}
   void runOnOperation() override;

@@ -60,55 +60,6 @@ static mlir::ParseResult parseAttributeHelper(mlir::OpAsmParser &parser,
   return mlir::success();
 }
 
-static mlir::ParseResult
-parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
-                      llvm::ArrayRef<llvm::StringRef> allowedKeys) {
-
-  // try to parse the left brace
-  if (mlir::failed(parser.parseOptionalLBrace()))
-    return mlir::success();
-
-  auto parseElt = [&]() -> mlir::ParseResult {
-    auto loc = parser.getCurrentLocation();
-    llvm::StringRef nameId;
-    if (parser.parseOptionalKeyword(&nameId, allowedKeys))
-      return parser.emitError(loc, "invalid ")
-             << "attribute keyword: " << nameId << ".\n";
-
-    if (parser.parseEqual())
-      return mlir::failure();
-
-    if (nameId == "inner_blocks")
-      return parseAttributeHelper<mlir::DenseI64ArrayAttr>(parser, result,
-                                                           nameId);
-    if (nameId == "padding") {
-      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
-    }
-
-    if (nameId == "wg_map_a") {
-      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
-    }
-
-    if (nameId == "wg_map_b") {
-      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
-    }
-
-    if (nameId == "wg_map_c") {
-      return parseAttributeHelper<mlir::Attribute>(parser, result, nameId);
-    }
-
-    assert(0 && "Unreachable!");
-  };
-
-  if (parser.parseCommaSeparatedList(parseElt))
-    return mlir::failure();
-
-  if (parser.parseRBrace())
-    return mlir::failure();
-
-  return mlir::success();
-}
-
 static bool isColumnMajor(mlir::AffineMap layoutMap) {
   if (layoutMap.getNumDims() != 2 || layoutMap.getNumResults() != 2) {
     return false;
@@ -177,7 +128,7 @@ mlir::LogicalResult InitTileOp::verify() {
 
   auto tileTy = getType();
   // Check for memory space validity.
-  if (getSourceMemorySpace() != tileTy.getMemoryScope())
+  if (getSourceMemorySpaceAsInt() != (unsigned int)tileTy.getMemoryScopeAsInt())
     return emitOpError(
         "memory space of the tile doesn't match with the source.");
 
@@ -300,65 +251,6 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
         mlir::DenseI64ArrayAttr::get(builder.getContext(), staticStrides));
 }
 
-mlir::ParseResult LoadTileOp::parse(mlir::OpAsmParser &parser,
-                                    mlir::OperationState &result) {
-
-  mlir::OpAsmParser::UnresolvedOperand sourceTile;
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> sourceOperands(
-      sourceTile);
-  llvm::SMLoc sourceTileOperandLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(sourceTile))
-    return mlir::failure();
-
-  // try to parse the optional dictionary attributes
-  if (parseOptionalAttrDict(parser, result, {"padding"}))
-    return mlir::failure();
-
-  if (parser.parseColon())
-    return mlir::failure();
-
-  mlir::Type sourceType;
-  llvm::ArrayRef<mlir::Type> sourceTypes(sourceType);
-  if (parser.parseType(sourceType))
-    return mlir::failure();
-
-  if (parser.parseArrow())
-    return mlir::failure();
-
-  mlir::Type valueType;
-  llvm::ArrayRef<mlir::Type> outputValueTypes(valueType);
-  if (parser.parseType(valueType))
-    return mlir::failure();
-
-  result.addTypes(outputValueTypes);
-  if (parser.resolveOperands(sourceOperands, sourceTypes, sourceTileOperandLoc,
-                             result.operands))
-    return mlir::failure();
-  return mlir::success();
-}
-
-static void printPaddingValue(mlir::Attribute paddingValue,
-                              mlir::OpAsmPrinter &printer) {
-  if (auto floatVal = llvm::dyn_cast<mlir::FloatAttr>(paddingValue)) {
-    printer << floatVal.getValue() << " : " << floatVal.getType();
-  } else if (auto intVal = llvm::dyn_cast<mlir::IntegerAttr>(paddingValue)) {
-    printer << intVal.getValue() << " : " << intVal.getType();
-  }
-}
-
-void LoadTileOp::print(mlir::OpAsmPrinter &printer) {
-  printer << ' ';
-  printer << getSource();
-  printer << " { ";
-  printer << "padding = ";
-  printPaddingValue(getPaddingValueOrDefault(), printer);
-  printer << " } ";
-  printer << " : ";
-  printer << getSource().getType();
-  printer << " -> ";
-  printer << getValue().getType();
-}
-
 bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
                                    llvm::ArrayRef<int64_t> &vecShape,
                                    llvm::ArrayRef<int64_t> &tileShape) {
@@ -442,139 +334,6 @@ mlir::LogicalResult StoreTileOp::verify() {
   return mlir::success();
 }
 
-mlir::ParseResult TileMMAOp::parse(mlir::OpAsmParser &parser,
-                                   mlir::OperationState &result) {
-
-  mlir::OpAsmParser::UnresolvedOperand aRawOperands[1];
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> aOperands(aRawOperands);
-  llvm::SMLoc aOperandsLoc;
-  mlir::OpAsmParser::UnresolvedOperand bRawOperands[1];
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> bOperands(bRawOperands);
-  llvm::SMLoc bOperandsLoc;
-  llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand> cOperands;
-  llvm::SMLoc cOperandsLoc;
-
-  mlir::Type aRawTypes[1];
-  llvm::ArrayRef<mlir::Type> aTypes(aRawTypes);
-  mlir::Type bRawTypes[1];
-  llvm::ArrayRef<mlir::Type> bTypes(bRawTypes);
-  llvm::SmallVector<mlir::Type> cTypes;
-  mlir::Type outputRawTypes[1];
-  llvm::ArrayRef<mlir::Type> outputTypes(outputRawTypes);
-
-  aOperandsLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(aRawOperands[0]))
-    return mlir::failure();
-
-  if (parser.parseComma())
-    return mlir::failure();
-
-  bOperandsLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(bRawOperands[0]))
-    return mlir::failure();
-
-  // try to parse optional C vector
-  if (mlir::succeeded(parser.parseOptionalComma())) {
-    cOperandsLoc = parser.getCurrentLocation();
-    mlir::OpAsmParser::UnresolvedOperand operand;
-    mlir::OptionalParseResult parseResult =
-        parser.parseOptionalOperand(operand);
-
-    if (parseResult.has_value()) {
-      if (failed(*parseResult))
-        return mlir::failure();
-      cOperands.push_back(operand);
-    }
-  }
-
-  // try to parse the optional dictionary attributes
-  if (parseOptionalAttrDict(parser, result,
-                            {"wg_map_a", "wg_map_b", "wg_map_c"}))
-    return mlir::failure();
-
-  if (parser.parseColon())
-    return mlir::failure();
-
-  if (parser.parseType(aRawTypes[0]))
-    return mlir::failure();
-
-  if (parser.parseComma())
-    return mlir::failure();
-
-  if (parser.parseType(bRawTypes[0]))
-    return mlir::failure();
-
-  if (mlir::succeeded(parser.parseOptionalComma())) {
-    mlir::Type optionalType;
-    mlir::OptionalParseResult parseResult =
-        parser.parseOptionalType(optionalType);
-
-    if (parseResult.has_value()) {
-      if (failed(*parseResult))
-        return mlir::failure();
-      cTypes.push_back(optionalType);
-    }
-  }
-
-  if (parser.parseArrow())
-    return mlir::failure();
-
-  if (parser.parseType(outputRawTypes[0]))
-    return mlir::failure();
-
-  result.addTypes(outputTypes);
-
-  if (parser.resolveOperands(aOperands, aTypes, aOperandsLoc, result.operands))
-    return mlir::failure();
-
-  if (parser.resolveOperands(bOperands, bTypes, bOperandsLoc, result.operands))
-    return mlir::failure();
-
-  if (parser.resolveOperands(cOperands, cTypes, cOperandsLoc, result.operands))
-    return mlir::failure();
-
-  return mlir::success();
-}
-
-void TileMMAOp::print(mlir::OpAsmPrinter &printer) {
-  printer << ' ';
-  printer << getA();
-  printer << ", ";
-  printer << getB();
-
-  if (getC()) {
-    printer << ", ";
-    printer << getC();
-  }
-
-  if (getWgMapA()) {
-    printer << " {wg_map_a =";
-    printer << getWgMapA();
-    printer << ", ";
-    printer << "wg_map_b =";
-    printer << getWgMapB();
-  }
-
-  if (getWgMapC()) {
-    printer << ", ";
-    printer << "wg_map_c =";
-    printer << getWgMapC();
-    printer << "}";
-  } else if (getWgMapA()) {
-    printer << "}";
-  }
-
-  printer << " : ";
-  printer << getA().getType() << ", ";
-  printer << getB().getType();
-  if (getC()) {
-    printer << ", ";
-    printer << getC().getType();
-  }
-  printer << " -> ";
-  printer << getOutput().getType();
-}
-
 mlir::LogicalResult TileMMAOp::verify() {
   int64_t aRank = getAType().getRank();
   int64_t bRank = getBType().getRank();
@@ -633,65 +392,6 @@ mlir::LogicalResult TileMMAOp::verify() {
   return mlir::success();
 }
 
-mlir::ParseResult TilePackOp::parse(mlir::OpAsmParser &parser,
-                                    mlir::OperationState &result) {
-  mlir::OpAsmParser::UnresolvedOperand in_vecRawOperands[1];
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> in_vecOperands(
-      in_vecRawOperands);
-  llvm::SMLoc in_vecOperandsLoc;
-  (void)in_vecOperandsLoc;
-  mlir::Type in_vecRawTypes[1];
-  llvm::ArrayRef<mlir::Type> in_vecTypes(in_vecRawTypes);
-  mlir::Type out_vecRawTypes[1];
-  llvm::ArrayRef<mlir::Type> out_vecTypes(out_vecRawTypes);
-
-  in_vecOperandsLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(in_vecRawOperands[0]))
-    return mlir::failure();
-  // try to parse the optional dictionary attributes
-  {
-    auto loc = parser.getCurrentLocation();
-    (void)loc;
-    if (parseOptionalAttrDict(parser, result, {"inner_blocks"}))
-      return ::mlir::failure();
-    if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
-          return parser.emitError(loc)
-                 << "'" << result.name.getStringRef() << "' op ";
-        })))
-      return ::mlir::failure();
-  }
-  if (parser.parseColon())
-    return mlir::failure();
-
-  if (parser.parseType(in_vecRawTypes[0]))
-    return mlir::failure();
-  if (parser.parseArrow())
-    return mlir::failure();
-
-  if (parser.parseType(out_vecRawTypes[0]))
-    return mlir::failure();
-  result.addTypes(out_vecTypes);
-  if (parser.resolveOperands(in_vecOperands, in_vecTypes, in_vecOperandsLoc,
-                             result.operands))
-    return mlir::failure();
-  return mlir::success();
-}
-
-void TilePackOp::print(mlir::OpAsmPrinter &printer) {
-  printer << ' ';
-  printer << getInVec();
-  printer << " { ";
-  printer << "inner_blocks = ";
-  getInnerBlocksAttr().print(printer);
-  printer << " } ";
-  printer << ' ' << ":";
-  printer << ' ';
-  printer << getInVec().getType();
-  printer << ' ' << "->";
-  printer << ' ';
-  printer << getOutVec().getType();
-}
-
 mlir::LogicalResult TilePackOp::verify() {
   auto inVecShape = getInVec().getType().getShape();
   auto outVecShape = getOutVec().getType().getShape();
@@ -735,65 +435,6 @@ mlir::OpFoldResult TilePackOp::fold(FoldAdaptor /*adaptor*/) {
     return src;
   }
   return nullptr;
-}
-
-mlir::ParseResult TileUnpackOp::parse(mlir::OpAsmParser &parser,
-                                      mlir::OperationState &result) {
-  mlir::OpAsmParser::UnresolvedOperand in_vecRawOperands[1];
-  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> in_vecOperands(
-      in_vecRawOperands);
-  llvm::SMLoc in_vecOperandsLoc;
-  (void)in_vecOperandsLoc;
-  mlir::Type in_vecRawTypes[1];
-  llvm::ArrayRef<mlir::Type> in_vecTypes(in_vecRawTypes);
-  mlir::Type out_vecRawTypes[1];
-  llvm::ArrayRef<mlir::Type> out_vecTypes(out_vecRawTypes);
-
-  in_vecOperandsLoc = parser.getCurrentLocation();
-  if (parser.parseOperand(in_vecRawOperands[0]))
-    return mlir::failure();
-  // try to parse the optional dictionary attributes
-  {
-    auto loc = parser.getCurrentLocation();
-    (void)loc;
-    if (parseOptionalAttrDict(parser, result, {"inner_blocks"}))
-      return ::mlir::failure();
-    if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
-          return parser.emitError(loc)
-                 << "'" << result.name.getStringRef() << "' op ";
-        })))
-      return ::mlir::failure();
-  }
-  if (parser.parseColon())
-    return mlir::failure();
-
-  if (parser.parseType(in_vecRawTypes[0]))
-    return mlir::failure();
-  if (parser.parseArrow())
-    return mlir::failure();
-
-  if (parser.parseType(out_vecRawTypes[0]))
-    return mlir::failure();
-  result.addTypes(out_vecTypes);
-  if (parser.resolveOperands(in_vecOperands, in_vecTypes, in_vecOperandsLoc,
-                             result.operands))
-    return mlir::failure();
-  return mlir::success();
-}
-
-void TileUnpackOp::print(mlir::OpAsmPrinter &printer) {
-  printer << ' ';
-  printer << getInVec();
-  printer << " { ";
-  printer << "inner_blocks = ";
-  getInnerBlocksAttr().print(printer);
-  printer << " } ";
-  printer << ' ' << ":";
-  printer << ' ';
-  printer << getInVec().getType();
-  printer << ' ' << "->";
-  printer << ' ';
-  printer << getOutVec().getType();
 }
 
 mlir::LogicalResult TileUnpackOp::verify() {

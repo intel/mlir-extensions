@@ -20,14 +20,20 @@
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "../PassDetail.h"
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
+#include "imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h"
 #include "imex/Utils/XeArch.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTXETILETOXEGPU
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 #include <memory>
 namespace imex {
@@ -168,7 +174,7 @@ private:
 
 // Full Pass
 struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
-    : public ::imex::ConvertXeTileToXeGPUBase<ConvertXeTileToXeGPUPass> {
+    : public imex::impl::ConvertXeTileToXeGPUBase<ConvertXeTileToXeGPUPass> {
   ConvertXeTileToXeGPUPass() = default;
 
   ConvertXeTileToXeGPUPass(const std::string &deviceName) {

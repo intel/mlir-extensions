@@ -36,6 +36,7 @@
 #include <mlir/Dialect/SCF/Transforms/Patterns.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 
 #include <array>
 #include <cstdlib>
@@ -44,7 +45,10 @@
 #include <sstream>
 #include <string>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_CONVERTDISTTOSTANDARD
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 using ::imex::ndarray::createDType;
 using ::imex::ndarray::createShapeOf;
@@ -256,7 +260,8 @@ struct DeleteOpConverter
 
     // apply DeleteOp to all parts
     for (auto p : lParts) {
-      (void)rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      auto newOp = rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      newOp->setAttrs(adaptor.getAttributes());
     }
 
     rewriter.eraseOp(op);
@@ -1659,7 +1664,7 @@ struct PermuteDimsOpConverter
                                                        distLArray.getHandle());
     // finally init dist array
     rewriter.replaceOp(
-        op, createDistArray(loc, rewriter, team, srcGShape, dstLOffsets,
+        op, createDistArray(loc, rewriter, team, dstGShape, dstLOffsets,
                             ::mlir::ValueRange{distLArray.getNlArray()}));
 
     return ::mlir::success();
@@ -1672,7 +1677,8 @@ struct PermuteDimsOpConverter
 
 // Full Pass
 struct ConvertDistToStandardPass
-    : public ::imex::ConvertDistToStandardBase<ConvertDistToStandardPass> {
+    : public ::imex::impl::ConvertDistToStandardBase<
+          ConvertDistToStandardPass> {
   ConvertDistToStandardPass() = default;
 
   void runOnOperation() override {

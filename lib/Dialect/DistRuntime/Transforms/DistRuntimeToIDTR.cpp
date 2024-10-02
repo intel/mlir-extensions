@@ -13,6 +13,7 @@
 
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
 #include <imex/Utils/PassUtils.h>
@@ -23,7 +24,10 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
-#include "PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_LOWERDISTRUNTIMETOIDTR
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h.inc>
+} // namespace imex
 
 namespace imex {
 namespace distruntime {
@@ -420,7 +424,7 @@ struct CopyPermuteOpPattern
 };
 
 struct DistRuntimeToIDTRPass
-    : public ::imex::LowerDistRuntimeToIDTRBase<DistRuntimeToIDTRPass> {
+    : public impl::LowerDistRuntimeToIDTRBase<DistRuntimeToIDTRPass> {
 
   DistRuntimeToIDTRPass() = default;
 

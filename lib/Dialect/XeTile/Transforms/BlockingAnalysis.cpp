@@ -135,12 +135,16 @@ void BlockingRequests::print(llvm::raw_ostream &os) const {
     os << "Uninitialized";
   } else {
     os << "Requests (" << requests.size() << ", "
-       << "def: " << def << "): ";
+       << "def: " << def << "): [";
     for (auto [i, iter] : llvm::enumerate(requests)) {
-      os << "(" << *(iter.first).first << ", " << (iter.first).second
-         << "): \n\t" << iter.second;
+      auto point = iter.first;
+      auto block = iter.second;
+      os << "{Point(" << *point.first << ", " << point.second << "), blk("
+         << block << ")}";
       if (i != requests.size() - 1)
         os << ", ";
+      else
+        os << "]";
     }
   }
 }
@@ -248,6 +252,10 @@ private:
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
 
+  void visitCreateMaskOp(mlir::vector::CreateMaskOp op,
+                         mlir::ArrayRef<BlockingLattice *> operands,
+                         mlir::ArrayRef<const BlockingLattice *> results);
+
   void visitReductionOp(xetile::ReductionOp op,
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
@@ -308,6 +316,9 @@ void BlockingAnalysisImpl::visitOperation(
 
   if (auto shapecastOp = mlir::dyn_cast<mlir::vector::ShapeCastOp>(op))
     visitShapecastOp(shapecastOp, operands, results);
+
+  if (auto createMaskOp = mlir::dyn_cast<mlir::vector::CreateMaskOp>(op))
+    visitCreateMaskOp(createMaskOp, operands, results);
 }
 
 void BlockingAnalysisImpl::visitPrefetchTileOp(
@@ -335,6 +346,7 @@ void BlockingAnalysisImpl::visitLoadTileOp(
 
   auto tileTy = op.getSource().getType();
   auto elemTy = tileTy.getElementType();
+  auto bitWidth = elemTy.getIntOrFloatBitWidth();
   auto shape = tileTy.getShape();
   auto memSpace = tileTy.getMemoryScopeAsInt();
   // initialized with a default size queried from the architecture
@@ -347,15 +359,14 @@ void BlockingAnalysisImpl::visitLoadTileOp(
 
   // adjust according to user's requirements if it is available
   if (lattice.isInitialized()) {
-    // align the height dimension if user is a transpose op,
-    // otherwise align the width dimension to minimize the
-    // in-register data movements.
-    bool hasTransposeUser = op.getValue().hasOneUse() &&
-                            mlir::isa<xetile::TransposeOp>(*(op->user_begin()));
-
-    int dim = hasTransposeUser ? 0 : 1;
+    // Always align the width dimension.
+    // NOTE: For transpose usecase, we still align the width dimension. This is
+    // because loads with transpose cannot have array_length > 1, plus it has HW
+    // limitations on supported width. If we align the height dimension (for
+    // reducing reg data movement), it will lead to multiple smaller loads.
     for (auto rq : lattice.getRequests())
-      block[dim] = std::min(block[dim], rq[dim]);
+      if (rq[1] && ((rq[1] * bitWidth) % 32 == 0)) // has to be 32-bit aligned
+        block[1] = std::min(block[1], rq[1]);
   }
 
   if (!block)
@@ -464,15 +475,27 @@ void BlockingAnalysisImpl::visitBroadcastOp(
   if (srcTy.getRank() != 2 || dims.size() != 1)
     return;
 
-  auto elemTy = srcTy.getElementType();
-  auto shape = srcTy.getShape();
-  // BroadcastOp is special. Its blocking size is fixed to {1,
-  // min(subgroupSize, width)}
-  auto size = getInnerBlockSize(op, elemTy, shape);
-  if (!size)
-    return; // do nothing if didnot get a valid block size
+  // broadcast is special. It is currently handled in a hacking way,
+  // and need to be generilized. It is not blocked if its users have
+  // not requested a blocking size. Otherwize, its blocking size has
+  // to be [1, 1] if broadcast along dim 1, or [1, requestedSize[1]]
+  // if broadcast along dim 0.
+  auto lattice = results[0]->getValue();
+  if (!lattice.isInitialized())
+    return;
 
-  auto blockingRequest = BlockingRequests(size, UsePoint(op, 0));
+  auto dim = dims[0];
+  Block blockSize;
+
+  if (dim == 0) {
+    auto req = lattice.getRequests()[0];
+    blockSize = Block(1, req[1]);
+  } else if (dim == 1) {
+    blockSize = Block(1, 1);
+  } else {
+    return;
+  }
+  auto blockingRequest = BlockingRequests(blockSize, UsePoint(op, 0));
   propagateIfChanged(operands[0], operands[0]->join(blockingRequest));
 }
 
@@ -493,11 +516,11 @@ void BlockingAnalysisImpl::visitTransposeOp(
     return;
 
   Block block;
+  auto srcTy = op.getVector().getType();
+  auto shape = srcTy.getShape();
 
   // use the default size if no users
   if (op->use_empty()) {
-    auto srcTy = op.getVector().getType();
-    auto shape = srcTy.getShape();
     block = getInnerBlockSize(op, srcTy.getElementType(), shape);
   }
 
@@ -507,7 +530,12 @@ void BlockingAnalysisImpl::visitTransposeOp(
     // TODO: handle multiple users
     if (lattice.getNumUniqRequests() == 1) {
       auto req = lattice.getRequests()[0];
-      block = Block(req[1], req[0]);
+      if (req[0] == 1 && req[1] == 1) {
+        // use default size if the request is [1, 1]
+        block = getInnerBlockSize(op, srcTy.getElementType(), shape);
+      } else {
+        block = Block(req[1], req[0]);
+      }
     }
   }
 
@@ -578,6 +606,21 @@ void BlockingAnalysisImpl::visitShapecastOp(
   }
 }
 
+void BlockingAnalysisImpl::visitCreateMaskOp(
+    mlir::vector::CreateMaskOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto vecTy = op.getVectorType();
+  auto shape = vecTy.getShape();
+  auto elemTy = vecTy.getElementType();
+
+  auto lattice = results[0]->getValue();
+  BlockingRequests &def = getLatticeElement(op->getResult(0))->getValue();
+  // TODO: following the Antonio's implementation and use the default size
+  // [1, subgroupSize] for CreateMaskOp, but it can be more general.
+  Block block = getInnerBlockSize(op, elemTy, shape);
+  def.updateDefBlock(block);
+}
+
 int BlockingAnalysisImpl::getMaxSLMBlockSize(int elemBitWidth, int height) {
   // TODO: use uArch to get max vec size?
   const int lscConstraint = 512; // lsc supports upto 512 bytes per load/store
@@ -594,9 +637,8 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
     int memorySpace) {
   assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
-  // TODO: get from uArch ?
-  const int64_t subgroupSize = 16;
   int elemSize = elemTy.getIntOrFloatBitWidth();
+  const int64_t subgroupSize = uArch->getOneGRFSizeBits() / elemSize;
 
   int maxHeight = 0, minHeight = 0, maxWidth = 0, minWidth = 0;
   if (mlir::isa<xetile::ReductionOp>(op) ||
@@ -610,7 +652,7 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
   } else if (op->hasTrait<mlir::OpTrait::Vectorizable>()) {
     // for elementwise operations, they are pretty flexiable
     // on the block size. But we expect its second dimension
-    // is subgroupSize aligned.
+    // is register size aligned.
     minWidth = 1;
     minHeight = 1;
     maxWidth = std::min<int>(shape[1], subgroupSize);
@@ -637,6 +679,11 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
       maxHeight = std::min<int>(params->blockHeight.max, 16);
       maxWidth = params->blockWidth.max;
     }
+  } else if (mlir::isa<mlir::vector::CreateMaskOp>(op)) {
+    minWidth = 1;
+    minHeight = 1;
+    maxWidth = std::min<int>(shape[1], subgroupSize);
+    maxHeight = 1;
   } else if (memorySpace == 3) {
     // this is supposed for load/store from/to SLM, they will use regular
     // load/store instructions with chunk size. lsc instrinsic and hardware

@@ -26,6 +26,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -41,12 +42,9 @@
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeArch.h"
 
-#include "PassDetail.h"
-
 using namespace mlir;
 using namespace imex;
 namespace imex {
-#define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DEF_XETILEBLOCKING
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
@@ -123,20 +121,35 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     return {};
   }
 
-  imex::LoadStore2DConfig configParams;
   int maxHeight, maxWidth, minHeight, minWidth;
 
-  // TODO : Separate it in future.
-  if (op == OpType::Load || op == OpType::Prefetch) {
+  if (op == OpType::Load) {
 
     mlir::FailureOr<LoadStore2DConfig> params = uArchInterface->get2DLoadConfig(
         operation, elementSize, vnni, transpose);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
+    } else {
+      llvm::dbgs() << "Invalid Config Params \n";
+      return {};
+    }
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
+  }
+
+  if (op == OpType::Prefetch) {
+
+    mlir::FailureOr<LoadStore2DConfig> params =
+        uArchInterface->get2DPrefetchConfig(operation, elementSize);
+    if (mlir::succeeded(params)) {
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
@@ -151,11 +164,10 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     mlir::FailureOr<LoadStore2DConfig> params =
         uArchInterface->get2DStoreConfig(elementSize);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
@@ -166,8 +178,7 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
   }
 
   if (op == OpType::Elementwise) {
-    // TODO: get from uArch?
-    int64_t subgroupSize = 16;
+    int64_t subgroupSize = uArchInterface->getOneGRFSizeBits() / elementSize;
 
     maxHeight = 1;
     minHeight = 1;
@@ -305,14 +316,19 @@ struct VectorCreateMaskOpPattern
     if (resType.getRank() != 2)
       return rewriter.notifyMatchFailure(op, "type is not 2D vector");
 
-    // The first operand must be a constant equal to the first dimension of the
-    // output shape (i.e., all rows are enabled). In other words, only masking
+    // Only two cases are supported for now:
+    // 1.The first operand is a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, masking
     // columns within a row is supported.
+    // 2.The second operand is a constant equal to the second dimension of the
+    // output shape (i.e., all columns are enabled).
     auto shape = resType.getShape();
-    APInt cstOp0;
-    if (!matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) ||
-        cstOp0.getSExtValue() != shape[0]) {
-      op->emitOpError() << "Unsupported first operand";
+    APInt cstOp0, cstOp1;
+    if (!(matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) &&
+          cstOp0.getSExtValue() == shape[0]) &&
+        !(matchPattern(op->getOperand(1), m_ConstantInt(&cstOp1)) &&
+          cstOp1.getSExtValue() == shape[1])) {
+      op->emitOpError() << "Unsupported operands";
       return mlir::failure();
     }
 
@@ -336,8 +352,9 @@ struct VectorCreateMaskOpPattern
     Location loc = op->getLoc();
     rewriter.startOpModification(op);
     // Due to the simplifications mentioned above, for now, the index operands
-    // are not adjusted. In fact, only the second index operand (masked columns)
-    // will be used during the lowering to XeGPU.
+    // are not adjusted. In fact, only the first index operand (masked rows) or
+    // the second index operand (masked columns) will be used during the
+    // lowering to XeGPU.
     op->setOperands({op->getOperand(0), op->getOperand(1), op->getOperand(0),
                      op->getOperand(1)});
     res.setType(newTy);
@@ -1171,8 +1188,7 @@ void populateXeTileBlockingPatterns(
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
-class XeTileBlockingPass
-    : public imex::impl::XeTileBlockingBase<imex::XeTileBlockingPass> {
+class XeTileBlockingPass : public impl::XeTileBlockingBase<XeTileBlockingPass> {
 
 public:
   XeTileBlockingPass() = default;

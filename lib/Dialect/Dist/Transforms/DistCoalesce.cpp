@@ -34,6 +34,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/Transforms/Passes.h>
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
@@ -45,11 +46,14 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Interfaces/ShapedOpInterfaces.h>
 
-#include "PassDetail.h"
-
 #include <iostream>
 #include <set>
 #include <unordered_map>
+
+namespace imex {
+#define GEN_PASS_DEF_DISTCOALESCE
+#include "imex/Dialect/Dist/Transforms/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 namespace dist {
@@ -61,7 +65,8 @@ namespace {
 // *******************************
 
 // Lowering dist dialect by no-ops
-struct DistCoalescePass : public ::imex::DistCoalesceBase<DistCoalescePass> {
+struct DistCoalescePass
+    : public imex::impl::DistCoalesceBase<DistCoalescePass> {
 
   DistCoalescePass() = default;
 

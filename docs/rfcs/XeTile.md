@@ -29,8 +29,8 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |tile_transpose	| operation ::=XeTile.tile_transpose $vec $permuation_dims attr_dict: type($vec) -> type($res)	 | %vector_a = XeTile.tile_transpose %vector_b [1, 0]: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_reduce	| operation ::=XeTile.tile_reduce \<$kind\> $src  $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_reduce \<add\> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>  |
 |tile_broadcast	| operation ::=XeTile.tile_broadcast $src $broadcast_dims attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_broadcast %vector_b[0]: vector<1x32xfloat> into vector<64x32xfloat>  |
-|tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
-|tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b inner_blocks=[16, 16] : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
+|tile_pack*	| operation ::=XeTile.tile_pack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=array<i64: 16, 16> : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
+|tile_unpack*	| operation ::=XeTile.tile_upack $matA attr_dict: type($value) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b inner_blocks=array<i64: 16, 16> : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
 
 *Operations only used to support internal lowering.
 
@@ -197,13 +197,13 @@ With the data being presented as 4D vector, all the vector based XeTile operatio
 `tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute.
 
 ```mlir
-  %0 = XeTile.tile_pack %1 inner_blocks = [16, 16]
+  %0 = XeTile.tile_pack %1 {inner_blocks = array<i64: 16, 16>}
     : vector<64x32xf32> -> vector<4x2x16x16xf32>
 ```
 `tile_unpack` unpacks a 4D blocked vector back to original unpacked 2D vector.
 `tile_unpack`
 ```mlir
-  %0 = XeTile.tile_unpack %1 inner_blocks = [64, 16]
+  %0 = XeTile.tile_unpack %1 {inner_blocks = array<i64: 64, 16>}
     : vector<1x2x64x16xf32> -> vector<64x32xf32>
 ```
 The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1].

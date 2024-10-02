@@ -256,8 +256,8 @@ def CopyPermuteOp : DistRuntime_Op<"copy_permute",
                        AnyType:$lArray,
                        Variadic<Index>:$gShape,
                        Variadic<Index>:$lOffsets,
-                       Variadic<Index>:$nlShape,
                        Variadic<Index>:$nlOffsets,
+                       Variadic<Index>:$nlShape,
                        DenseI64ArrayAttr:$axes);
   let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
   let assemblyFormat = [{

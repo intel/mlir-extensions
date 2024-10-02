@@ -27,8 +27,8 @@ builtin.module(convert-tensor-to-linalg
     func.func(llvm-request-c-wrappers)
     serialize-spirv
     convert-gpu-to-gpux
+    finalize-memref-to-llvm
     convert-func-to-llvm
     convert-gpux-to-llvm
-    finalize-memref-to-llvm
     reconcile-unrealized-casts)
 // End

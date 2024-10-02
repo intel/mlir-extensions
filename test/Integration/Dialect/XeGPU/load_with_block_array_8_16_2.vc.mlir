@@ -22,7 +22,7 @@ module @gemm attributes {gpu.container_module} {
       %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
       %2 = xegpu.create_nd_tdesc %arg1[0, 16] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %3 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x8x16xf16>
+      %3 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x8x16xf16>
       %4 = vector.extract %3[0]: vector<8x16xf16> from vector<2x8x16xf16>
       %5 = vector.extract %3[1]: vector<8x16xf16> from vector<2x8x16xf16>
       %8 = arith.extf %4: vector<8x16xf16> to vector<8x16xf32>

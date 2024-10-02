@@ -29,6 +29,7 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -42,12 +43,9 @@
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "imex/Utils/DebugUtils.h"
 
-#include "PassDetail.h"
-
 using namespace mlir;
 using namespace imex;
 namespace imex {
-#define GEN_PASS_DECL_XETILEBLOCKALIGNING
 #define GEN_PASS_DEF_XETILEBLOCKALIGNING
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
@@ -283,8 +281,8 @@ void populateXeTileBlockAligningPatterns(imex::XeTypeConverter &converter,
 // TODO: [block-aligning] remove the following code when upstreaming the pass.
 // The pass is not supposed to be exposed to users. Temporary keep in case we
 // need debug it for down stream development.
-class XeTileBlockAligningPass : public imex::impl::XeTileBlockAligningBase<
-                                    imex::XeTileBlockAligningPass> {
+class XeTileBlockAligningPass
+    : public impl::XeTileBlockAligningBase<XeTileBlockAligningPass> {
 public:
   void runOnOperation() override {
     mlir::MLIRContext &context = getContext();

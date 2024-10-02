@@ -14,6 +14,7 @@
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
+#include <imex/Dialect/NDArray/Transforms/Passes.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/Region/RegionUtils.h>
 #include <imex/Utils/PassUtils.h>
@@ -22,9 +23,12 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
-#include "PassDetail.h"
-
 #include <iostream>
+
+namespace imex {
+#define GEN_PASS_DEF_ADDGPUREGIONS
+#include <imex/Dialect/NDArray/Transforms/Passes.h.inc>
+} // namespace imex
 
 namespace imex {
 namespace {
@@ -102,7 +106,8 @@ struct NDArrayOpRWP : public RecOpRewritePattern<PTOP> {
   }
 };
 
-struct AddGPURegionsPass : public ::imex::AddGPURegionsBase<AddGPURegionsPass> {
+struct AddGPURegionsPass
+    : public ::imex::impl::AddGPURegionsBase<AddGPURegionsPass> {
 
   AddGPURegionsPass() = default;
 

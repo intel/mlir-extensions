@@ -30,6 +30,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -50,13 +51,11 @@
 #include "imex/Utils/XeArch.h"
 
 #include "BlockingAnalysis.h"
-#include "PassDetail.h"
 
 using namespace mlir;
 using namespace llvm;
 using namespace imex;
 namespace imex {
-#define GEN_PASS_DECL_NEWXETILEBLOCKING
 #define GEN_PASS_DEF_NEWXETILEBLOCKING
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
@@ -611,8 +610,12 @@ struct VectorizableOpPattern
     mlir::OpBuilder::InsertionGuard g(rewriter);
     llvm::SmallVector<mlir::Value> newOperands;
     for (auto &&[i, arg] : llvm::enumerate(operands)) {
-      mlir::Value packOp =
-          rewriter.create<xetile::TilePackOp>(loc, newTy, arg, blockSizeAttr);
+      auto argTy = mlir::dyn_cast<mlir::VectorType>(arg.getType());
+      if (!argTy || argTy.getRank() != 2) {
+        newOperands.push_back(arg);
+        continue;
+      }
+      mlir::Value packOp = addPackOp(arg, blockSize.asArrayRef(), rewriter);
       newOperands.push_back(packOp);
     }
 
@@ -746,36 +749,112 @@ struct SCFYieldOpPattern
   }
 };
 
+// Blocks a vector.create_mask op such that, ideally, it matches its consuming
+// select op (which is an elementwise op). In this way, during the lowering to
+// XeGPU, there will be a one-to-one correspondence and an
+// unrealized_conversion_cast will not be needed.
+struct VectorCreateMaskOpPattern
+    : public OpConversionPatternWithAnalysis<mlir::vector::CreateMaskOp,
+                                             BlockingAnalysis> {
+
+  using OpConversionPatternWithAnalysis<
+      mlir::vector::CreateMaskOp,
+      BlockingAnalysis>::OpConversionPatternWithAnalysis;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = res.getType();
+    if (resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    // Only two cases are supported for now:
+    // 1.The first operand is a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, masking
+    // columns within a row is supported.
+    // 2.The second operand is a constant equal to the second dimension of the
+    // output shape (i.e., all columns are enabled).
+    auto shape = resType.getShape();
+    APInt cstOp0, cstOp1;
+    if (!(matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) &&
+          cstOp0.getSExtValue() == shape[0]) &&
+        !(matchPattern(op->getOperand(1), m_ConstantInt(&cstOp1)) &&
+          cstOp1.getSExtValue() == shape[1])) {
+      op->emitOpError() << "Unsupported operands";
+      return mlir::failure();
+    }
+
+    auto block = analysis.getDefBlockSize(res);
+    if (!block)
+      return rewriter.notifyMatchFailure(op, "Invalid block size.");
+
+    // TODO: support blocking the outer dimension.
+    if (block[0] != 1) {
+      op->emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
+    }
+
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / block[0], shape[1] / block[1], block[0], block[1]},
+        resType.getElementType());
+
+    // Due to the simplifications mentioned above, for now, the index operands
+    // are not adjusted. In fact, only the first index operand (masked rows) or
+    // the second index operand (masked columns) will be used during the
+    // lowering to XeGPU.
+    auto operands = op.getOperands();
+    auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
+        op.getLoc(), newTy,
+        ValueRange({operands[0], operands[1], operands[0], operands[1]}),
+        op->getAttrs());
+    auto unpack = addUnpackOp(newOp, rewriter);
+    rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
 } // namespace Blocking
 
 void populateNewXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
                                        BlockingAnalysis &analysis) {
-  patterns
-      .insert<Blocking::ArithConstantOpPattern, Blocking::InitTileOpPattern,
-              Blocking::PrefetchTileOpPattern, Blocking::LoadTileOpPattern,
-              Blocking::StoreTileOpPattern, Blocking::UpdateTileOffsetOpPattern,
-              Blocking::TileMMAOpPattern, Blocking::TileReductionOpPattern,
-              Blocking::TileBroadcastOpPattern,
-              Blocking::TileTransposeOpPattern, Blocking::VectorizableOpPattern,
-              Blocking::SCFForOpPattern, Blocking::SCFYieldOpPattern>(
-          patterns.getContext(), analysis);
+  patterns.insert<
+      Blocking::ArithConstantOpPattern, Blocking::InitTileOpPattern,
+      Blocking::PrefetchTileOpPattern, Blocking::LoadTileOpPattern,
+      Blocking::StoreTileOpPattern, Blocking::UpdateTileOffsetOpPattern,
+      Blocking::TileMMAOpPattern, Blocking::TileReductionOpPattern,
+      Blocking::TileBroadcastOpPattern, Blocking::TileTransposeOpPattern,
+      Blocking::VectorizableOpPattern, Blocking::SCFForOpPattern,
+      Blocking::SCFYieldOpPattern, Blocking::VectorCreateMaskOpPattern>(
+      patterns.getContext(), analysis);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
 class NewXeTileBlockingPass
-    : public imex::impl::NewXeTileBlockingBase<imex::NewXeTileBlockingPass> {
+    : public impl::NewXeTileBlockingBase<NewXeTileBlockingPass> {
 
 public:
-  NewXeTileBlockingPass() = default;
+  NewXeTileBlockingPass() {
+    uArchInterface = std::make_shared<imex::XePVCuArch>();
+  }
 
   NewXeTileBlockingPass(const std::string &deviceName) {
-    if (this->device.getNumOccurrences() == 0) {
-      this->device = deviceName;
-
-      if (deviceName == "pvc") {
-        uArchInterface = std::make_shared<XePVCuArch>();
-      }
+    if (deviceName == "pvc") {
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
     }
+  }
+
+  mlir::LogicalResult
+  initializeOptions(mlir::StringRef options,
+                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                        errorHandler) override {
+    if (failed(Pass::initializeOptions(options, errorHandler)))
+      return mlir::failure();
+    if (device == "pvc")
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
+    else
+      return errorHandler(llvm::Twine("Invalid device: ") + device);
+    return mlir::success();
   }
 
   void runOnOperation() override {
@@ -849,10 +928,14 @@ public:
       for (auto ty : op->getOperandTypes()) {
         if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(ty))
           result &= (vecTy.getRank() != 2);
+        if (auto tileTy = mlir::dyn_cast<xetile::TileType>(ty))
+          result &= bool(tileTy.getInnerBlocks());
       }
       for (auto ty : op->getResultTypes()) {
         if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(ty))
           result &= (vecTy.getRank() != 2);
+        if (auto tileTy = mlir::dyn_cast<xetile::TileType>(ty))
+          result &= bool(tileTy.getInnerBlocks());
       }
       return result;
     });

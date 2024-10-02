@@ -162,6 +162,30 @@ mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
   return shuffleOps[0];
 }
 
+// Check that lowerUnpackOrPack will be able to evenly combine/split the input
+// grid into the output grid.
+static bool isUnpackPackCompatible(xetile::TileUnpackOp unpackOp,
+                                   xetile::TilePackOp packOp) {
+  auto inTy = unpackOp.getInVec().getType();
+  auto inGrids = inTy.getShape().take_front(2);
+  auto inBlkSizes = unpackOp.getInnerBlocksAttr();
+
+  auto outTy = packOp.getOutVec().getType();
+  llvm::ArrayRef<int64_t> outGrids = outTy.getShape().take_front(2);
+  mlir::DenseI64ArrayAttr outBlkSizes = packOp.getInnerBlocksAttr();
+
+  if (inBlkSizes[0] < outBlkSizes[0] && inGrids[0] % outGrids[0] != 0)
+    return false;
+  if (inBlkSizes[0] > outBlkSizes[0] && outGrids[0] % inGrids[0] != 0)
+    return false;
+  if (inBlkSizes[1] < outBlkSizes[1] && inGrids[1] % outGrids[1] != 0)
+    return false;
+  if (inBlkSizes[1] > outBlkSizes[1] && outGrids[1] % inGrids[1] != 0)
+    return false;
+
+  return true;
+}
+
 // a unified function lowering Unpack and Pack ops.
 static llvm::SmallVector<mlir::Value>
 lowerUnpackOrPack(XeOneToNPatternRewriter &rewriter, mlir::Operation *op,
@@ -278,7 +302,8 @@ class SgTileUnpackOpPattern : public XeOneToNConversion<xetile::TileUnpackOp> {
     llvm::ArrayRef<int64_t> outGrids;
     mlir::DenseI64ArrayAttr outBlkSizes;
     auto packOp = llvm::dyn_cast<xetile::TilePackOp>(*(op->user_begin()));
-    if (op->hasOneUse() && packOp) { // lower the Unpack and Pack pair
+    if (op->hasOneUse() && packOp && isUnpackPackCompatible(op, packOp)) {
+      // lower the Unpack and Pack pair
       auto outTy = packOp.getOutVec().getType();
       outGrids = outTy.getShape().take_front(2);
       outBlkSizes = packOp.getInnerBlocksAttr();
@@ -293,7 +318,8 @@ class SgTileUnpackOpPattern : public XeOneToNConversion<xetile::TileUnpackOp> {
     auto newOps = lowerUnpackOrPack(rewriter, op, inputs, inBlkSizes,
                                     outBlkSizes, inGrids, outGrids);
 
-    if (op->hasOneUse() && packOp) { // lowered Unpack and Pack as pair
+    if (op->hasOneUse() && packOp && isUnpackPackCompatible(op, packOp)) {
+      // lowered Unpack and Pack as pair
       rewriter.replaceOp(packOp, newOps);
       rewriter.eraseOp(op);
     } else { // lowering unpack only
@@ -313,7 +339,7 @@ class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
     auto defOp = input.getDefiningOp<xetile::TileUnpackOp>();
     // Unpack and Pack appeared as a pair, it should be handled
     // by UnpackOpPattern in this case.
-    if (defOp && defOp->hasOneUse())
+    if (defOp && defOp->hasOneUse() && isUnpackPackCompatible(defOp, op))
       return mlir::failure();
 
     auto inTy = op.getInVec().getType();
@@ -337,22 +363,30 @@ class SgTilePackOpPattern : public XeOneToNConversion<xetile::TilePackOp> {
 // A helper to compute the right array length given the inner block width,
 // and the tile width, as well as the element type. Both inner block width
 // and tile width are in number of elements. It is computed based on hardware
-// constraints (on PVC): array_lenght * inner_block_width * sizeof(elemTy) <=
+// constraints (on PVC): array_length * inner_block_width * sizeof(elemTy) <=
 // 256 bits. So, if tile width is larger than 256/sizeof(elemTy), the maximum
 // supported array_length will be used.
-int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy,
+// When array_length > 1 is specified, sub-GRF sized blocks are loaded into
+// separate GRFs. We do not handle that yet, and we may not really "want" to:
+//  We would waste GRFs. If multiple blocks (e.g., <1x16xf16, array_length=2>)
+//  fit into one GRF, let them.
+int getBlockArrayLength(mlir::Operation *op, mlir::Type elemTy, int innerHeight,
                         int inner_block_width, int tile_width) {
   auto uArch = std::make_shared<XePVCuArch>();
   auto elemBits = elemTy.getIntOrFloatBitWidth();
   auto params = uArch->get2DLoadConfig(op, elemBits, false, false);
   assert(mlir::succeeded(params) && "Invalid Config Params");
-
+  // Do not let an inner block get array_length'ed to blocks finer than one GRF.
+  if (innerHeight * inner_block_width * elemBits <=
+      uArch->getOneGRFSizeBits()) {
+    return 1;
+  }
   llvm::SmallVector<int> supportedArrLen = params->array_length;
-  int restriction = std::min(params->restriction, tile_width);
+  const int maxBlockWidth = std::min(params->restriction, tile_width);
 
   int result = 1;
   for (auto len : supportedArrLen) {
-    if (len * inner_block_width <= restriction)
+    if (len * inner_block_width <= maxBlockWidth)
       result = len;
   }
   return result;
@@ -389,10 +423,14 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     // using array_length for load if dim1 of innerBlocks is smaller than
     // dim1 of shape.
     auto elemTy = tileTy.getElementType();
-    auto array_length =
-        isForLoad(op) && shape[1] > innerBlk[1]
-            ? getBlockArrayLength(op, elemTy, innerBlk[1], shape[1])
-            : 1;
+    auto array_length = isForLoad(op) && shape[1] > innerBlk[1]
+                            ? getBlockArrayLength(op, elemTy, innerBlk[0],
+                                                  innerBlk[1], shape[1])
+                            : 1;
+    // If this tile is used in load -> transpose -> DPASB chain, optimize
+    // transpose optimization requires array_length to be 1.
+    if (isForLoadTransposeDPASB(op))
+      array_length = 1;
 
     auto width = array_length * innerBlk[1];
 
@@ -1052,33 +1090,54 @@ struct SgVectorCreateMaskOpPattern : public XeOneToNConversion<CreateMaskOp> {
       return mlir::failure();
     }
 
-    // See assumptions about the supported create_mask op in
-    // VectorCreateMaskOpPattern in Blocking.cpp. The second and forth operands
-    // are the same. This value is the mask of the inner dimension of the
-    // original shape. Different masks are created based on the new inner
-    // dimension size.
     mlir::Location loc = op->getLoc();
     auto shape = resType.getShape();
-    auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-    llvm::SmallVector<llvm::SmallVector<mlir::Value>> newOperands;
-    mlir::Value mask = adaptor.getOperands()[3][0];
-    auto innerDimSize =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, shape[3]);
-    for (int j = 0; j < shape[1]; ++j) {
-      newOperands.push_back({one, mask});
-      mask = rewriter.create<mlir::arith::SubIOp>(loc, mask, innerDimSize);
+    if (shape[2] != 1) {
+      op.emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
     }
-
-    llvm::SmallVector<mlir::Value> newOps;
     auto newTy =
         mlir::VectorType::get({shape[2], shape[3]}, resType.getElementType());
-    for (int i = 0; i < shape[0]; ++i) {
+    llvm::SmallVector<mlir::Value> newOps;
+    mlir::Value ub0 = adaptor.getOperands()[0][0];
+    auto constDef = ub0.getDefiningOp<mlir::arith::ConstantIndexOp>();
+    if (constDef && constDef.value() == shape[0]) {
+      // Case 1: all rows are enabled.
+      // See assumptions about the supported create_mask op in
+      // VectorCreateMaskOpPattern in xetile blocking pass. The second and forth
+      // operands are the same. This value is the mask of the inner dimension of
+      // the original shape. Different masks are created based on the new inner
+      // dimension size.
+      auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      llvm::SmallVector<llvm::SmallVector<mlir::Value>> newOperands;
+      mlir::Value mask = adaptor.getOperands()[3][0];
+      auto innerDimSize =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, shape[3]);
       for (int j = 0; j < shape[1]; ++j) {
-        auto newOp =
-            rewriter.create<CreateMaskOp>(op.getLoc(), newTy, newOperands[j]);
-        newOps.push_back(newOp);
+        newOperands.push_back({one, mask});
+        mask = rewriter.create<mlir::arith::SubIOp>(loc, mask, innerDimSize);
+      }
+
+      for (int i = 0; i < shape[0]; ++i) {
+        for (int j = 0; j < shape[1]; ++j) {
+          auto newOp =
+              rewriter.create<CreateMaskOp>(op.getLoc(), newTy, newOperands[j]);
+          newOps.push_back(newOp);
+        }
+      }
+
+    } else {
+      // Case 2: all columns are enabled.
+      for (int i = 0; i < shape[0]; ++i) {
+        auto elemIndex = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+        auto cmp = rewriter.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::slt, elemIndex, ub0);
+        auto bcast = rewriter.create<mlir::vector::SplatOp>(loc, newTy, cmp);
+        for (int j = 0; j < shape[1]; ++j)
+          newOps.push_back(bcast);
       }
     }
+
     rewriter.replaceOp(op, newOps);
     return mlir::success();
   }

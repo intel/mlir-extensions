@@ -46,7 +46,7 @@ cmake --build build --target install
 
 ### Example: Setting up requirements using Conda
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
+conda create -n imex-dev -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
 
 conda activate imex-dev
 ```
@@ -162,13 +162,11 @@ This will
   - `lib/Dialect/IR/<name>Ops.cpp`
   - `include/imex/Dialect/<name>/Transforms/Passes.h`
   - `include/imex/Dialect/<name>/Transforms/Passes.td`
-  - `lib/Dialect/Transforms/PassDetail.h`
 
 Now, it's your turn to
 * Add your dialect and its transforms/passes to appropriate places in
   - `include/imex/InitIMEXDialects.h`
   - `include/imex/InitIMEXPasses.h`
-  - `lib/Conversion/IMEXPassDetail.h`
 * Fill in what's marked with FIXME
 * The documentation of the dialect should go into the `description` fields in `<name>Ops.td`. At build time the description
 will be extracted and a file `doc/<name>.md` will be generated automatically. It will include descriptions of the dialect and operations in a standardized way.

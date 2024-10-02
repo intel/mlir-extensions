@@ -15,6 +15,7 @@
 #define IMEX_TRANSFORMS_PASSES_H_
 
 #include "mlir/Pass/Pass.h"
+#include <functional>
 #include <memory>
 
 namespace imex {
@@ -22,18 +23,23 @@ namespace imex {
 // Passes
 //===----------------------------------------------------------------------===//
 std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
-std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
+std::unique_ptr<mlir::Pass>
+createInsertGPUAllocsPass(const char *clientAPI = "vulkan");
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
-std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttributePass();
+std::unique_ptr<mlir::Pass>
+createSetSPIRVAbiAttributePass(const char *clientAPI = "vulkan");
 std::unique_ptr<mlir::Pass> createAddOuterParallelLoopPass();
 std::unique_ptr<mlir::Pass> createLowerMemRefCopyPass();
 std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
+std::unique_ptr<mlir::Pass> createCastIndexPass();
 std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 std::unique_ptr<mlir::Pass> createVectorLinearizePass();
 std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
 std::unique_ptr<mlir::Pass> createOptimizeTransposePass();
+std::unique_ptr<mlir::Pass> createHoistTransposePass();
 std::unique_ptr<mlir::Pass> createVnniTransformationPass();
+std::unique_ptr<mlir::Pass> createEmulateNonNativeBF16Pass();
 
 #define GEN_PASS_DECL
 #include "imex/Transforms/Passes.h.inc"

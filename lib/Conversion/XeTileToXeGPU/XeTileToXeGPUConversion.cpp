@@ -31,8 +31,6 @@
 
 #include <optional>
 
-#include "../PassDetail.h"
-
 namespace imex {
 
 static bool isIdentityConversion(mlir::Type originalType,

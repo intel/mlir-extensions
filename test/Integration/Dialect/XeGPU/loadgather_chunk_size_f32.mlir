@@ -32,10 +32,9 @@ module @gemm attributes {gpu.container_module} {
     gpu.func @test_scattered(%in: memref<?xf32>, %out: memref<?xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       // We have 16 work items, each accesses 2 elements: {chunk_size = 2}, hence 16x2 tensor.
       // Valid offsets (%offsets for which %mask is 1) should not exceed 16*2=32.
-      %offsets = arith.constant dense<[0,4,8,12,16,20,24,28,32,34,38,42,46,50,54,58]> : vector<16xindex>
       %mask = arith.constant dense<[1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0]> : vector<16xi1>
-      %tdesc_in = xegpu.create_tdesc %in, %offsets : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
-      %tdesc_out = xegpu.create_tdesc %out, %offsets : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
+      %tdesc_in = xegpu.create_tdesc %in[0,4,8,12,16,20,24,28,32,34,38,42,46,50,54,58] : memref<?xf32> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
+      %tdesc_out = xegpu.create_tdesc %out[0,4,8,12,16,20,24,28,32,34,38,42,46,50,54,58] : memref<?xf32> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
       %loaded = xegpu.load %tdesc_in, %mask {transpose} : !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1> -> vector<2x16xf32>
       xegpu.store %loaded, %tdesc_out, %mask {transpose} : vector<2x16xf32>, !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1>
       gpu.return

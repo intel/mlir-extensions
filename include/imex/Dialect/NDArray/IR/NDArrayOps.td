@@ -159,7 +159,8 @@ class NDArray_Op<string mnemonic, list<Trait> traits = []> :
     Op<NDArray_Dialect, mnemonic, traits>;
 
 
-def DeleteOp : NDArray_Op<"delete"> {
+def DeleteOp : NDArray_Op<"delete", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
   let summary = "Explicitly delete an NDArray, freeing its memory";
   let description = [{
       Allow explicitly deleting the memory of an NDArray. It is assumed

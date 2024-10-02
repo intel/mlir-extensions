@@ -88,7 +88,8 @@ private:
 } // namespace
 
 namespace imex {
-std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttributePass() {
-  return std::make_unique<SetSPIRVAbiAttributePass>();
+std::unique_ptr<mlir::Pass>
+createSetSPIRVAbiAttributePass(const char *clientAPI) {
+  return std::make_unique<SetSPIRVAbiAttributePass>(clientAPI);
 }
 } // namespace imex

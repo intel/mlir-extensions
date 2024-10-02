@@ -1,6 +1,8 @@
 add_mlir_library(IMEXTransforms
   AddOuterParallelLoop.cpp
   BF16ToGPU.cpp
+  CastIndex.cpp
+  EmulateNonNativeBF16.cpp
   InsertGPUAllocs.cpp
   LowerMemRefCopy.cpp
   PropagatePackedLayout.cpp
@@ -12,6 +14,7 @@ add_mlir_library(IMEXTransforms
   VectorLinearize.cpp
   VnniTransformation.cpp
   OptimizeTranspose.cpp
+  HoistTranspose.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms
