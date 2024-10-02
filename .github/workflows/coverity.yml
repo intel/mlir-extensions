@@ -127,7 +127,7 @@ jobs:
             -DLLVM_EXTERNAL_LIT=${external_lit} \
             -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
             -DLLVM_LIT_ARGS=-a
-          cov-build $HOME/cov-int cmake --build _build --target check-imex
+          cov-build --dir $HOME/cov-int cmake --build _build --target check-imex
 
       - name: Create coverity results tarball
         run: |
