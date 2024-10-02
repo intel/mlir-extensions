@@ -104,8 +104,8 @@ module @gemm attributes {gpu.container_module} {
           xetile.prefetch_tile %32 {l1_hint = #xetile.cache_hint<cached>, l2_hint = #xetile.cache_hint<cached>} : !xetile.tile<8x32xf16>
           %33 = xetile.update_tile_offset %32, [%c0,  %c32] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
           %34:8 = scf.for %arg5 = %c0 to %c96 step %c32 iter_args(%arg6 = %cst, %arg7 = %20, %arg8 = %21, %arg9 = %24, %arg10 = %27, %arg11 = %30, %arg12 = %33, %arg13 = %c0) -> (vector<32x32xf32>, !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, !xetile.tile<4x32xf16>, !xetile.tile<8x32xf16>, !xetile.tile<4x32xf16>, !xetile.tile<8x32xf16>, index) {
-            %36 = xetile.load_tile %arg7 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-            %37 = xetile.load_tile %arg8 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+            %36 = xetile.load_tile %arg7 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+            %37 = xetile.load_tile %arg8 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
             %38 = arith.cmpi eq, %arg13, %c10 : index
             %39 = arith.select %38, %c0, %arg13 : index
             scf.if %38 {

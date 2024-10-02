@@ -4,9 +4,9 @@ gpu.module @unpack_pack_non_compatible {
   gpu.func @unpack_pack_non_compatible(%arg0: memref<88x32xf16>, %arg1: memref<88x32xf16>) {
     %c0 = arith.constant 0 : index
     %0 = xetile.init_tile %arg0[%c0, %c0] : memref<88x32xf16> -> !xetile.tile<88x32xf16, #xetile.tile_attr<inner_blocks = [22, 16]>>
-    %1 = xetile.load_tile %0 { padding = 0.000000e+00 : f32 }  : !xetile.tile<88x32xf16, #xetile.tile_attr<inner_blocks = [22, 16]>> -> vector<4x2x22x16xf16>
-    %2 = xetile.tile_unpack %1 { inner_blocks = [22, 16] }  : vector<4x2x22x16xf16> -> vector<88x32xf16>
-    %3 = xetile.tile_pack %2 { inner_blocks = [8, 16] }  : vector<88x32xf16> -> vector<11x2x8x16xf16>
+    %1 = xetile.load_tile %0 {padding = 0.000000e+00 : f32}  : !xetile.tile<88x32xf16, #xetile.tile_attr<inner_blocks = [22, 16]>> -> vector<4x2x22x16xf16>
+    %2 = xetile.tile_unpack %1 {inner_blocks = array<i64: 22, 16>}  : vector<4x2x22x16xf16> -> vector<88x32xf16>
+    %3 = xetile.tile_pack %2 {inner_blocks = array<i64: 8, 16>}  : vector<88x32xf16> -> vector<11x2x8x16xf16>
     %4 = xetile.init_tile %arg1[%c0, %c0] : memref<88x32xf16> -> !xetile.tile<88x32xf16, #xetile.tile_attr<inner_blocks = [8, 16]>>
     xetile.store_tile %3,  %4 : vector<11x2x8x16xf16>, !xetile.tile<88x32xf16, #xetile.tile_attr<inner_blocks = [8, 16]>>
     gpu.return
@@ -28,9 +28,9 @@ gpu.module @unpack_pack_compatible {
   gpu.func @unpack_pack_compatible(%arg0: memref<64x32xf16>, %arg1: memref<64x32xf16>) {
     %c0 = arith.constant 0 : index
     %0 = xetile.init_tile %arg0[%c0, %c0] : memref<64x32xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
-    %1 = xetile.load_tile %0 { padding = 0.000000e+00 : f32 }  : !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<2x2x32x16xf16>
-    %2 = xetile.tile_unpack %1 { inner_blocks = [32, 16] }  : vector<2x2x32x16xf16> -> vector<64x32xf16>
-    %3 = xetile.tile_pack %2 { inner_blocks = [8, 16] }  : vector<64x32xf16> -> vector<8x2x8x16xf16>
+    %1 = xetile.load_tile %0 {padding = 0.000000e+00 : f32}  : !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>> -> vector<2x2x32x16xf16>
+    %2 = xetile.tile_unpack %1 {inner_blocks = array<i64: 32, 16>}  : vector<2x2x32x16xf16> -> vector<64x32xf16>
+    %3 = xetile.tile_pack %2 {inner_blocks = array<i64: 8, 16>}  : vector<64x32xf16> -> vector<8x2x8x16xf16>
     %4 = xetile.init_tile %arg1[%c0, %c0] : memref<64x32xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [8, 16]>>
     xetile.store_tile %3,  %4 : vector<8x2x8x16xf16>, !xetile.tile<64x32xf16, #xetile.tile_attr<inner_blocks = [8, 16]>>
     gpu.return

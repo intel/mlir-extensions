@@ -132,42 +132,42 @@ func.func @tile_mma_input_c_shape_mismatch(%a_vec : vector<8x16xf16>,
 func.func @tile_pack_invalid_element_types(%in : vector<32x64xf16>) {
     // input and output element types must match
     // expected-error@+1 {{input and output vector element type mismatch.}}
-    %out = xetile.tile_pack %in { inner_blocks = [8, 16] } : vector<32x64xf16> -> vector<4x4x8x16xf32>
+    %out = xetile.tile_pack %in {inner_blocks = array<i64: 8, 16>} : vector<32x64xf16> -> vector<4x4x8x16xf32>
 }
 
 // -----
 func.func @tile_pack_invalid_inner_blocks(%in : vector<32x64xf16>) {
     // innermost two dims of output must match inner_blocks shape
     // expected-error@+1 {{innermost 2 dimensions of output vector must satisfy : outVecShape[2] == innerBlocks[0] && outVecShape[3] == innerBlocks[1]}}
-    %out = xetile.tile_pack %in {inner_blocks = [16, 16]} : vector<32x64xf16> -> vector<4x4x8x16xf16>
+    %out = xetile.tile_pack %in {inner_blocks = array<i64: 16, 16>} : vector<32x64xf16> -> vector<4x4x8x16xf16>
 }
 
 // -----
 func.func @tile_pack_invalid_output_shape(%in : vector<32x64xf16>) {
     // outermost 2 dims of output must be consistent with input shape.
     // expected-error@+1 {{outermost 2 dimensions of the output vector must satisfy : outVecShape[0] == inVecShape[0]/innerBlocks[0] && outVecShape[1] == inVecShape[1]/innerBlocks[1]}}
-    %out = xetile.tile_pack %in {inner_blocks = [16, 16]} : vector<32x64xf16> -> vector<4x4x16x16xf16>
+    %out = xetile.tile_pack %in {inner_blocks = array<i64: 16, 16>} : vector<32x64xf16> -> vector<4x4x16x16xf16>
 }
 
 // -----
 func.func @tile_unpack_invalid_element_types(%in : vector<4x4x8x16xf16>) {
     // input and output element types must match
     // expected-error@+1 {{input and output vector element type mismatch.}}
-    %out = xetile.tile_unpack %in { inner_blocks = [8, 16] } : vector<4x4x8x16xf16> -> vector<32x64xf32>
+    %out = xetile.tile_unpack %in {inner_blocks = array<i64: 8, 16>} : vector<4x4x8x16xf16> -> vector<32x64xf32>
 }
 
 // -----
 func.func @tile_unpack_invalid_inner_blocks(%in : vector<4x4x8x16xf16>) {
     // innermost two dims of input must match inner_blocks shape
     // expected-error@+1 {{innermost 2 dimensions of the input vector must satisfy : inVecShape[2] == innerBlocks[0] && inVecShape[3] == innerBlocks[1]}}
-    %out = xetile.tile_unpack %in {inner_blocks = [16, 16]} : vector<4x4x8x16xf16> -> vector<32x64xf16>
+    %out = xetile.tile_unpack %in {inner_blocks = array<i64: 16, 16>} : vector<4x4x8x16xf16> -> vector<32x64xf16>
 }
 
 // -----
 func.func @tile_unpack_invalid_output_shape(%in : vector<4x4x16x16xf16>) {
     // output shape must be consistent with inputshape and inner_blocks
     // expected-error@+1 {{output vector must satisfy : outVecShape[0] == inVecShape[0] * innerBlocks[0] && outVecShape[1] == inVecShape[1] * innerBlocks[1]}}
-    %out = xetile.tile_unpack %in {inner_blocks = [16, 16]} :  vector<4x4x16x16xf16>  -> vector<32x64xf16>
+    %out = xetile.tile_unpack %in {inner_blocks = array<i64: 16, 16>} :  vector<4x4x16x16xf16>  -> vector<32x64xf16>
 }
 
 // -----
