@@ -35,7 +35,7 @@ mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
                                      mlir::Value operand) {
   auto idx = getOperandIndex(op, operand);
   auto numControls = op.getNumControlOperands();
-  assert(idx >= (int)numControls);
+  assert(idx >= static_cast<int>(numControls));
   return op.getRegionIterArg(idx - numControls);
 }
 

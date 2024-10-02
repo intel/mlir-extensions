@@ -206,7 +206,7 @@ lowerUnpackOrPack(XeOneToNPatternRewriter &rewriter, mlir::Operation *op,
       for (auto i = 0; i < inGrids[0]; i++) {
         auto idx = i * inGrids[1] + j;
         valSet.push_back(inputs[idx]);
-        if (valSet.size() == (size_t)nums) {
+        if (valSet.size() == static_cast<size_t>(nums)) {
           auto newOp =
               mergeVectorsWrapper(valSet, stack, op->getLoc(), rewriter);
           intermediates[i / nums * inGrids[1] + j] = newOp;
@@ -545,7 +545,7 @@ struct SgPrefetchTileOpPattern
     auto shape = tileTy.getShape();
     auto expectedNumTensorDescs =
         (shape[0] / innerBlocks[0]) * (shape[1] / innerBlocks[1]);
-    if (expectedNumTensorDescs != (int64_t)tiles.size()) {
+    if (expectedNumTensorDescs != static_cast<int64_t>(tiles.size())) {
       op.emitOpError("Failed to lower LoadTileOp because shape[0] * shape[1] "
                      "!= sources.size().");
       return mlir::failure();

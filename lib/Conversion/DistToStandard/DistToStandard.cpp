@@ -1244,7 +1244,7 @@ struct DefaultPartitionOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto gShape = adaptor.getGShape();
-    int64_t rank = (int64_t)gShape.size();
+    int64_t rank = static_cast<int64_t>(gShape.size());
 
     if (rank == 0) {
       rewriter.eraseOp(op);

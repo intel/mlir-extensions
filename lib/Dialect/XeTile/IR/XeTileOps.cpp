@@ -128,7 +128,8 @@ mlir::LogicalResult InitTileOp::verify() {
 
   auto tileTy = getType();
   // Check for memory space validity.
-  if (getSourceMemorySpaceAsInt() != (unsigned int)tileTy.getMemoryScopeAsInt())
+  if (getSourceMemorySpaceAsInt() !=
+      static_cast<unsigned int>(tileTy.getMemoryScopeAsInt()))
     return emitOpError(
         "memory space of the tile doesn't match with the source.");
 
@@ -489,7 +490,7 @@ mlir::LogicalResult TransposeOp::verify() {
 
   auto transposeShape = srcShape.vec();
   for (auto [i, j] : llvm::enumerate(permutation)) {
-    if (j >= (int64_t)srcShape.size())
+    if (j >= static_cast<int64_t>(srcShape.size()))
       return emitOpError("permutation index out of bounds");
     transposeShape[i] = srcShape[j];
   }

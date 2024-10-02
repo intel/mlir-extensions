@@ -31,7 +31,7 @@ namespace {
 bool isPermutation(const ::llvm::ArrayRef<int64_t> &axes) {
   auto sortedAxes = ::mlir::SmallVector<int64_t>(axes.begin(), axes.end());
   std::sort(sortedAxes.begin(), sortedAxes.end());
-  for (int64_t i = 0; (size_t)i < axes.size(); ++i) {
+  for (int64_t i = 0; static_cast<size_t>(i) < axes.size(); ++i) {
     if (sortedAxes[i] != i)
       return false;
   }
@@ -39,7 +39,7 @@ bool isPermutation(const ::llvm::ArrayRef<int64_t> &axes) {
 }
 
 bool isSorted(const ::llvm::ArrayRef<int64_t> &axes) {
-  for (int64_t i = 0; (size_t)i < axes.size(); ++i) {
+  for (int64_t i = 0; static_cast<size_t>(i) < axes.size(); ++i) {
     if (axes[i] != i)
       return false;
   }
@@ -58,7 +58,7 @@ public:
                   mlir::PatternRewriter &rewriter) const override {
     auto source = op.getSource();
     const auto axes = op.getAxes();
-    auto rank = (int64_t)axes.size();
+    auto rank = static_cast<int64_t>(axes.size());
 
     auto sourceType = source.getType();
     if (rank != sourceType.getRank())
