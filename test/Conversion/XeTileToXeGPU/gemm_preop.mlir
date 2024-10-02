@@ -59,8 +59,8 @@ module attributes {gpu.container_module} {
       %16 = xetile.init_tile %arg0[%11, %7] : memref<512x64xf16> -> !xetile.tile<32x32xf16>
       %17 = xetile.init_tile %arg1[%13, %15] : memref<256x64xf16> -> !xetile.tile<32x32xf16>
       %18:3 = scf.for %arg4 = %c0 to %c64 step %c32 iter_args(%arg5 = %16, %arg6 = %17, %arg7 = %cst) -> (!xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>) {
-        %27 = xetile.load_tile %arg5 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-        %28 = xetile.load_tile %arg6 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %27 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %28 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         xegpu.compile_hint
         //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
         //CHECK-COUNT-32: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
@@ -76,7 +76,7 @@ module attributes {gpu.container_module} {
         scf.yield %30, %31, %32 : !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>
       } {lowerBoundMap = #map, operandSegmentSizes = array<i32: 0, 0, 3>, step = 32 : index, upperBoundMap = #map1}
       %19 = xetile.init_tile %arg2[%11, %13] : memref<512x256xf32> -> !xetile.tile<32x32xf32>
-      %20 = xetile.load_tile %19 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+      %20 = xetile.load_tile %19 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
       %21 = arith.addf %18#2, %20 : vector<32x32xf32>
       %22 = arith.muli %block_id_x_3, %c256 : index
       %23 = arith.muli %block_id_y_4, %c128 : index

@@ -33,8 +33,8 @@
       // CHECK: %[[R9:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
       // CHECK: %[[R10:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
       // CHECK: %[[R11:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-      %1 = xetile.tile_unpack %cst { inner_blocks = [32, 16] }  : vector<1x2x32x16xf32> -> vector<32x32xf32>
-      %2 = xetile.tile_pack %1 { inner_blocks = [8, 16] }  : vector<32x32xf32> -> vector<4x2x8x16xf32>
+      %1 = xetile.tile_unpack %cst {inner_blocks = array<i64: 32, 16>}  : vector<1x2x32x16xf32> -> vector<32x32xf32>
+      %2 = xetile.tile_pack %1 {inner_blocks = array<i64: 8, 16>}  : vector<32x32xf32> -> vector<4x2x8x16xf32>
 
       // CHECK: xegpu.store_nd %[[R8]], %[[R0]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}>
       // CHECK-SAME: vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>

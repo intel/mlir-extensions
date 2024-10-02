@@ -45,7 +45,7 @@ gpu.module @test_wg_to_sg_4k {
         %n = arith.muli %block_id_y, %c256 : index
 
         //CHECK: %[[R15:.*]] = xetile.init_tile %[[arg2]][%[[R10]], %[[R14]]] : memref<4096x4096xf32> -> !xetile.tile<64x64xf32>
-        //CHECK: %[[R16:.*]] =  xetile.load_tile %[[R15]] { padding = 0.000000e+00 : f32 }
+        //CHECK: %[[R16:.*]] =  xetile.load_tile %[[R15]]
         // intialize C tile and load it
         %c_init_tile = xetile.init_tile %C[%m, %n] : memref<4096x4096xf32>
           -> !xetile.tile<256x256xf32, #tile_attr_c>
@@ -78,12 +78,12 @@ gpu.module @test_wg_to_sg_4k {
               !xetile.tile<256x256xf16, #tile_attr_b>,
               vector<256x256xf32>) {
 
-           //CHECK: %[[R26:.*]] =  xetile.load_tile %[[arg4]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<64x256xf16> -> vector<64x256xf16>
+           //CHECK: %[[R26:.*]] =  xetile.load_tile %[[arg4]] : !xetile.tile<64x256xf16> -> vector<64x256xf16>
           // load A and B tiles
           %a_value = xetile.load_tile %a_tile  : !xetile.tile<256x256xf16, #tile_attr_a>
             -> vector<256x256xf16>
 
-          //CHECK: %[[R27:.*]] =  xetile.load_tile %[[arg5]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<256x64xf16> -> vector<256x64xf16>
+          //CHECK: %[[R27:.*]] =  xetile.load_tile %[[arg5]] : !xetile.tile<256x64xf16> -> vector<256x64xf16>
           %b_value = xetile.load_tile %b_tile : !xetile.tile<256x256xf16, #tile_attr_b>
             -> vector<256x256xf16>
 
