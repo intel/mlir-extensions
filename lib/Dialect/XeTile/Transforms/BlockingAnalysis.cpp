@@ -698,8 +698,7 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
     mlir::FailureOr<LoadStore2DConfig> params;
     if (mlir::isa<xetile::StoreTileOp>(op))
       params = uArch->get2DStoreConfig(elemSize);
-    if (mlir::isa<xetile::PrefetchTileOp>(op) ||
-        mlir::isa<xetile::LoadTileOp>(op)) {
+    if (mlir::isa<xetile::LoadTileOp>(op)) {
       bool transpose = false;
       // if its user is a transpose op, and data element is 32-bit
       // or 64-bit, we will use the transpose supported size.
@@ -709,6 +708,9 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
                     mlir::isa<xetile::TransposeOp>(*(value.user_begin()));
       }
       params = uArch->get2DLoadConfig(op, elemSize, false, transpose);
+    }
+    if (mlir::isa<xetile::PrefetchTileOp>(op)) {
+      params = uArch->get2DPrefetchConfig(op, elemSize);
     }
     if (mlir::succeeded(params)) {
       maxHeight = params->blockHeight.max;
