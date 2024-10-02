@@ -266,6 +266,17 @@ public:
       return;
     }
 
+    // Checks if the memref type has the gpu address space. For this case we
+    // don't need to do anything since the memref is already in the device
+    // address space.
+    auto isGpuAddrSpace = [&](mlir::Value memref) {
+      if (auto type = mlir::dyn_cast<mlir::MemRefType>(memref.getType())) {
+        return mlir::isa_and_nonnull<mlir::gpu::AddressSpaceAttr>(
+            type.getMemorySpace());
+      }
+      return false;
+    };
+
     // walk over the users and find xegpu.load/store ops
     std::function<void(mlir::Operation *, bool, AccessType &)>
         findXeGPULoadStore;
@@ -517,6 +528,8 @@ public:
     // the device with gpu.alloc and insert a memref.copy from host to device.
     for (auto &it : gpuGetMemrefGlobalParams) {
       auto getGlobalOp = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
+      if (isGpuAddrSpace(getGlobalOp))
+        continue;
       auto access = getAccessType(getGlobalOp);
       access.hostRead = true;
       access.hostWrite = true;
@@ -529,6 +542,8 @@ public:
     // with gpu.alloc and insert a memref.copy from host to device
     for (const auto &it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
+      if (isGpuAddrSpace(param))
+        continue;
       auto access = getAccessType(param);
       access.hostRead = true;
       access.hostWrite = true;
@@ -543,6 +558,8 @@ public:
     for (auto &it : callOpReturnedBuffer) {
       auto op = mlir::cast<mlir::func::CallOp>(it.first);
       mlir::Value callOp = op.getResult(0);
+      if (isGpuAddrSpace(callOp))
+        continue;
       AccessType access;
       access.deviceRead = true;
       access.deviceWrite = false;
