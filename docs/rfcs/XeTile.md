@@ -234,7 +234,7 @@ For example, for the tile size [128, 128] and sg_data [32, 128], along the secon
 
 With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type.
 
-The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTile operations as illustrated below. The attribute applies only to the output value of each operation. The input values `xetile.wg_map` are determined by their respective defining operations. 
+The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTile operations as illustrated below. The attribute applies only to the output value of each operation. The input values `xetile.wg_map` are determined by their respective defining operations.
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
 |tile_mma	| operation ::=XeTile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c {#mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
@@ -268,7 +268,7 @@ The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_
    #wg_map_b = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>
 ```
 
-`tile_broadcast` with `wg_map` attribute broadcast at workgroup level. 
+`tile_broadcast` with `wg_map` attribute broadcast at workgroup level.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 256]>
    %vector_a = XeTile.tile_broadcast %vector_b [1] {#wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
@@ -288,24 +288,24 @@ The `wg_map` attribute of the input vector can be derived from the wg_map_a. The
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>
 ```
-The tile_transpose can be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming column_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  
+The tile_transpose can be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming column_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
 An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
 
 `tile_convert_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
 
-Example with the wg_map specified for both input and output operands. 
+Example with the wg_map specified for both input and output operands.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
    %vector_a = XeTile.tile_convert_layout <add> %vector_b [1] {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256float>
 ```
-Example without the wg_map specified for the input operand. 
+Example without the wg_map specified for the input operand.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
    %vector_a = XeTile.tile_convert_layout <add> %vector_b [1] {#wg_map_a}: vector<256x256xfloat> into vector<256x256float>
 ```
-The tile_convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.  
+The tile_convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
 
 ## Alternative design considerations
