@@ -28,9 +28,9 @@ module @gemm attributes {gpu.container_module} {
       //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
       //LSC: %[[r9:.*]] = vector.from_elements %c0_i8, %c0_i8 : vector<2xi8>
       //LSC: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //LSC: %[[c16_i8:.*]] = arith.constant 16 : i8
-      //LSC: %[[c8_i8:.*]] = arith.constant 8 : i8
-      //LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f16(%[[true]], %[[r9]], %[[c1_i8]], %[[c16_i8]], %[[c8_i8]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[data]]) : (i1, vector<2xi8>, i8, i8, i8, vector<16xi32>, i32, i32, vector<8x16xf16>) -> ()
+      //LSC: %[[c16_i16:.*]] = arith.constant 16 : i16
+      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
+      //LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f16(%[[true]], %[[r9]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[data]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<8x16xf16>) -> ()
       xegpu.store_nd %c, %0 : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       // CHECK: gpu.return
       gpu.return
@@ -87,9 +87,9 @@ module @gemm attributes {gpu.container_module} {
       //LSC: %c0_i8 = arith.constant 0 : i8
       //LSC: %9 = vector.from_elements %c0_i8, %c0_i8 : vector<2xi8>
       //LSC: %c1_i8 = arith.constant 1 : i8
-      //LSC: %c16_i8 = arith.constant 16 : i8
-      //LSC: %c8_i8 = arith.constant 8 : i8
-      //LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f16(%true, %9, %c1_i8, %c16_i8, %c8_i8, %8, %c0_i32, %c0_i32, %cst) : (i1, vector<2xi8>, i8, i8, i8, vector<16xi32>, i32, i32, vector<8x16xf16>) -> ()
+      //LSC: %c16_i16 = arith.constant 16 : i16
+      //LSC: %c8_i16 = arith.constant 8 : i16
+      //LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f16(%true, %9, %c1_i8, %c16_i16, %c8_i16, %8, %c0_i32, %c0_i32, %cst) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<8x16xf16>) -> ()
       xegpu.store_nd %c2, %tdesc_2d : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       gpu.return
     }
