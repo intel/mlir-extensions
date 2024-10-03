@@ -251,7 +251,7 @@ With the `wg_map` attribute attached for the output vector, `tile_mma` does a ma
      vector<256x256xfloat>, vector<256x32xbf16>, vector<32x256xbf16>
 	   into vector<256x256xfloat>
 ```
-The `wg_map` attribute of input vector operands can be derived from the wg_map_d. They must have the same sg_layout, and sg_data for m and n dimenion must be same as wg_map_d, and sg_data for k dimension must be same as operand A and B. These attributes may be retrieved from their producer ops, and the retrived attributes must be consistent with the derived ones. Below is the derived wg_map for the three vector operands in the example above.
+The `wg_map` attribute of input vector operands can be derived from the wg_map_d. They must have the same sg_layout, and sg_data for m and n dimenion must be same as wg_map_d, and sg_data for k dimension must be same as operand A and B. These attributes may be retrieved from their producer ops, and the retrieved attributes must be consistent with the derived ones. Below is the derived wg_map for the three vector operands in the example above.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
@@ -298,12 +298,12 @@ Example with the wg_map specified for both input and output operands.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = XeTile.tile_convert_layout <add> %vector_b [1] {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256float>
+   %vector_a = XeTile.tile_convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
 Example without the wg_map specified for the input operand.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = XeTile.tile_convert_layout <add> %vector_b [1] {#wg_map_a}: vector<256x256xfloat> into vector<256x256float>
+   %vector_a = XeTile.tile_convert_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
 The tile_convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
