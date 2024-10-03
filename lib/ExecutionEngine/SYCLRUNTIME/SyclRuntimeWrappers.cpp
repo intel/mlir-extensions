@@ -234,10 +234,9 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
   }
   // enable large register file if needed
   if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
-    build_flags +=
-        " -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
-        "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
-        "'-printregusage -enableBCR' ";
+    build_flags += "-doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
+                   "-DPASTokenReduction -Xfinalizer -SWSBDepReduction "
+                   "-Xfinalizer -printregusage -Xfinalizer -enableBCR";
   }
   desc.pBuildFlags = build_flags.c_str();
   auto zeDevice = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
