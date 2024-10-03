@@ -886,6 +886,8 @@ public:
     target.addLegalOp<xetile::TilePackOp>();
     target.addLegalOp<xetile::TileUnpackOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
+    target.addLegalOp<mlir::vector::StoreOp>();
+    target.addLegalOp<mlir::vector::LoadOp>();
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp>(
         [&](mlir::arith::ConstantOp op) -> bool {
