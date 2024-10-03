@@ -256,7 +256,7 @@ The `wg_map` attribute of input vector operands can be derived from the wg_map_d
    #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
    #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
-``` 
+```
 
 `tile_reduce` with `wg_map` does the reduction over a workgroup level vector.
 ```mlir
