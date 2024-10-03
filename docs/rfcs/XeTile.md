@@ -211,16 +211,16 @@ The tile_pack and tile_unpack operation is similar to pack and unpack operation 
 `load_gather` (aka. load) load data with each element's address being explictly specified. The tile is created with a base address and offset for each element to be load. The result tile has a `scatter` attribute to different it from the regular tile.
 ```mlir
   %tile0 = XeTile.init_tile %base_addr, %tile_offsets:
-     i64, vector<1x256xi32> into tile<1x256xbf16, #scatter>
+     i64, vector<1x256xi64> into tile<1x256xbf16, #scatter>
 ```
 `load_gather` (aka. load) load data with prepared tile and mask. Attribute `padding` specifies the padding value for the out-of-boundary access. The default value is zero.
 ```mlir
   %vector_a = XeTile.load_gather %tile_0, %mask, {padding = 1.0} :
      tile<1x256xbf16, #scatter> into vector<1x256xbf16>
 ```
-`store_gather` stores a 2d vector to a 2D tile with `scatter` attribute.
+`store_scatter` stores a 2d vector to a 2D tile with `scatter` attribute.
 ```mlir
-  XeTile.store_tile %vector_a, %mask, %tile_0 :
+  XeTile.store_scatter %vector_a, %mask, %tile_0 :
      vector<1x256xbf16> into tile<1x256xbf16, #scatter>
 ```
 
