@@ -634,11 +634,11 @@ static func::CallOp gen2DBlockIntrinsicCall(
   // arg2: i8, Number of blocks
   auto nBlks = i8_val(nblocks);
 
-  // arg3: i8, block width (in elements)
-  auto blkW = i8_val(blockShape[1]);
+  // arg3: i16, block width (in elements)
+  auto blkW = i16_val(blockShape[1]);
 
-  // arg4: i8, block height
-  auto blkH = i8_val(blockShape[0]);
+  // arg4: i16, block height
+  auto blkH = i16_val(blockShape[0]);
 
   // arg5: payload from parameter
 
