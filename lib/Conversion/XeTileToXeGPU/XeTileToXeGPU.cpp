@@ -92,6 +92,8 @@ public:
     // Arith ops
     addDynamicallyLegalOp<mlir::arith::AddFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::AndIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::DivFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::MulFOp>(
