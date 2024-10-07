@@ -56,15 +56,15 @@ func.func @test_load_nd_simd_bf16(%src: ui64, %w : index, %h : index, %x : index
 // CHECK-LABEL: func @test_load_nd_block_array_simd_f16({{.*}}) {
 func.func @test_load_nd_block_array_simd_f16(%src: memref<8x32xf16>) {
   // CHECK: xegpu.create_nd_tdesc %{{.*}}[0, 0]
-  // CHECK-SAME: memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2 : i64>>
+  // CHECK-SAME: memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
   %1 = xegpu.create_nd_tdesc %src[0, 0]
-      : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+      : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
   // CHECK: xegpu.load_nd
   // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> :
-  // CHECK-SAME: !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2 : i64>> -> vector<2x8x16xf16>
+  // CHECK-SAME: !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x8x16xf16>
   %2 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
-              : !xegpu.tensor_desc<8x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x8x16xf16>
+              : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x8x16xf16>
   return
 }
 

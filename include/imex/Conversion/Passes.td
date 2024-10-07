@@ -414,12 +414,6 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
     functions.
     }];
   let options = [
-    Option<"enableGenISAIntrinsic", "enable-genisa-intrinsic","bool", "false",
-           "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
-    Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "true",
-           "Enable XeGPU Ops lowered to intel vc Intrinsics">,
-    Option<"useRawSend", "useRawSend","bool", "true",
-           "Prefer Raw Send API for load/store">
   ];
 
   let dependentDialects = ["::mlir::xegpu::XeGPUDialect",

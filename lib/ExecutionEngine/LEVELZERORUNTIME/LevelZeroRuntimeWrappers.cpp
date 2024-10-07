@@ -373,7 +373,13 @@ static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
 static void deallocDeviceMemory(GPUL0QUEUE *queue, void *ptr) {
   CHECK_ZE_RESULT(zeMemFree(queue->zeContext_, ptr));
 }
-
+// @TODO: Add support for async copy
+// Currnetly, we only support synchrnous copy?
+static void memoryCopy(GPUL0QUEUE *queue, void *dstPtr, void *srcPtr,
+                       size_t size) {
+  CHECK_ZE_RESULT(zeCommandListAppendMemoryCopy(
+      queue->zeCommandList_, dstPtr, srcPtr, size, nullptr, 0, nullptr));
+}
 static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
                                      size_t dataSize) {
   assert(data);
@@ -387,19 +393,25 @@ static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
   }
   ze_module_desc_t desc = {};
 
-  const char *build_flags = nullptr;
+  std::string build_flags;
+  // IGC auto-detection of scalar/vector backend does not work for native BF16
+  // data type yet, hence we need to pass this flag explicitly for if native
+  // bf16 data type is used and we need to use vector compute.
+  if (getenv("IMEX_USE_IGC_VECTOR_BACK_END")) {
+    build_flags += " -vc-codegen ";
+  }
   // enable large register file if needed
   if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
-    build_flags =
-        "-vc-codegen -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
-        "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
-        "'-printregusage -enableBCR' ";
+    build_flags += "-doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
+                   "-DPASTokenReduction -Xfinalizer -SWSBDepReduction "
+                   "-Xfinalizer -printregusage -Xfinalizer -enableBCR";
+    ;
   }
 
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
   desc.pInputModule = static_cast<const uint8_t *>(data);
   desc.inputSize = dataSize;
-  desc.pBuildFlags = build_flags;
+  desc.pBuildFlags = build_flags.c_str();
   CHECK_ZE_RESULT(zeModuleCreate(gpuL0Queue->zeContext_, gpuL0Queue->zeDevice_,
                                  &desc, &zeModule, nullptr));
   std::lock_guard<std::mutex> entryLock(mutexLock);
@@ -592,6 +604,11 @@ gpuMemAlloc(GPUL0QUEUE *queue, size_t size, size_t alignment, bool isShared) {
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(GPUL0QUEUE *queue,
                                                      void *ptr) {
   catchAll([&]() { deallocDeviceMemory(queue, ptr); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
+gpuMemCopy(GPUL0QUEUE *queue, void *dstPtr, void *srcPtr, size_t size) {
+  return catchAll([&]() { memoryCopy(queue, dstPtr, srcPtr, size); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_module_handle_t

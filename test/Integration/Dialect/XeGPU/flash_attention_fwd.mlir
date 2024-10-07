@@ -169,29 +169,29 @@ module @flash_attention attributes {gpu.container_module} {
       %q_block_value_3_flat = vector.shape_cast %q_block_value_3 : vector<16x16xf16> to vector<256xf16>
 
       %q_block_value_0_0_t0 = vector.extract_strided_slice %q_block_value_0_flat { offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_0_0 = vector.shape_cast %q_block_value_0_0_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_0_0 = vector.shape_cast %q_block_value_0_0_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_1_0_t0 = vector.extract_strided_slice %q_block_value_0_flat { offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_1_0 = vector.shape_cast %q_block_value_1_0_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_1_0 = vector.shape_cast %q_block_value_1_0_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_0_1_t0 = vector.extract_strided_slice %q_block_value_1_flat { offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_0_1 = vector.shape_cast %q_block_value_0_1_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_0_1 = vector.shape_cast %q_block_value_0_1_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_1_1_t0 = vector.extract_strided_slice %q_block_value_1_flat { offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_1_1 = vector.shape_cast %q_block_value_1_1_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_1_1 = vector.shape_cast %q_block_value_1_1_t0 : vector<128xf16> to vector<8x16xf16>
 
       // ----
       %q_block_value_0_2_t0 = vector.extract_strided_slice %q_block_value_2_flat { offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_0_2 = vector.shape_cast %q_block_value_0_2_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_0_2 = vector.shape_cast %q_block_value_0_2_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_1_2_t0 = vector.extract_strided_slice %q_block_value_2_flat { offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_1_2 = vector.shape_cast %q_block_value_1_2_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_1_2 = vector.shape_cast %q_block_value_1_2_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_0_3_t0 = vector.extract_strided_slice %q_block_value_3_flat { offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_0_3 = vector.shape_cast %q_block_value_0_3_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_0_3 = vector.shape_cast %q_block_value_0_3_t0 : vector<128xf16> to vector<8x16xf16>
 
       %q_block_value_1_3_t0 = vector.extract_strided_slice %q_block_value_3_flat { offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
-      %q_block_value_1_3 = vector.shape_cast %q_block_value_1_3_t0 : vector<128xf16> to vector<8x8x2xf16>
+      %q_block_value_1_3 = vector.shape_cast %q_block_value_1_3_t0 : vector<128xf16> to vector<8x16xf16>
 
       xegpu.alloc_nbarrier 16
       %nbarrier_id = arith.constant 1 : i8
@@ -292,14 +292,14 @@ module @flash_attention attributes {gpu.container_module} {
 
 
           // compute first 16x16 of Q * K^T using DPAS
-          %qk_out_0_0_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_0_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_0_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_0_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_0_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_0_1, %qk_out_0_0_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_0_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_0_1, %qk_out_1_0_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_0_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_0_2, %qk_out_0_0_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_0_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_0_2, %qk_out_1_0_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_0 = xegpu.dpas %q_block_value_0_3, %k_value_slice_0_3, %qk_out_0_0_t2 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_0 = xegpu.dpas %q_block_value_1_3, %k_value_slice_0_3, %qk_out_1_0_t2 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_0_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_0_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_0_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_0_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_0_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_0_1, %qk_out_0_0_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_0_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_0_1, %qk_out_1_0_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_0_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_0_2, %qk_out_0_0_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_0_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_0_2, %qk_out_1_0_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_0 = xegpu.dpas %q_block_value_0_3, %k_value_slice_0_3, %qk_out_0_0_t2 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_0 = xegpu.dpas %q_block_value_1_3, %k_value_slice_0_3, %qk_out_1_0_t2 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
           xegpu.compile_hint
 
           // load second 16x64 K slice
@@ -316,15 +316,15 @@ module @flash_attention attributes {gpu.container_module} {
           xegpu.compile_hint
 
           // compute second 16x16 of Q * K^T using DPAS
-          %qk_out_0_1_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_1_0, %zero_dpas     : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_1_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_1_1, %qk_out_0_1_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_1_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_1_2, %qk_out_0_1_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_1 = xegpu.dpas %q_block_value_0_3, %k_value_slice_1_3, %qk_out_0_1_t2    : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_1_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_1_0, %zero_dpas     : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_1_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_1_1, %qk_out_0_1_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_1_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_1_2, %qk_out_0_1_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_1 = xegpu.dpas %q_block_value_0_3, %k_value_slice_1_3, %qk_out_0_1_t2    : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-          %qk_out_1_1_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_1_0, %zero_dpas      : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_1_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_1_1, %qk_out_1_1_t0  : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_1_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_1_2, %qk_out_1_1_t1  : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_1 = xegpu.dpas %q_block_value_1_3, %k_value_slice_1_3, %qk_out_1_1_t2     : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_1_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_1_0, %zero_dpas      : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_1_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_1_1, %qk_out_1_1_t0  : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_1_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_1_2, %qk_out_1_1_t1  : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_1 = xegpu.dpas %q_block_value_1_3, %k_value_slice_1_3, %qk_out_1_1_t2     : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
           xegpu.compile_hint
 
@@ -342,15 +342,15 @@ module @flash_attention attributes {gpu.container_module} {
           xegpu.compile_hint
 
           // compute third 16x16 of Q * K^T using DPAS
-          %qk_out_0_2_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_2_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_2_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_2_1, %qk_out_0_2_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_2_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_2_2, %qk_out_0_2_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_2 = xegpu.dpas %q_block_value_0_3, %k_value_slice_2_3, %qk_out_0_2_t2 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_2_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_2_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_2_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_2_1, %qk_out_0_2_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_2_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_2_2, %qk_out_0_2_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_2 = xegpu.dpas %q_block_value_0_3, %k_value_slice_2_3, %qk_out_0_2_t2 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-          %qk_out_1_2_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_2_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_2_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_2_1, %qk_out_1_2_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_2_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_2_2, %qk_out_1_2_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_2 = xegpu.dpas %q_block_value_1_3, %k_value_slice_2_3, %qk_out_1_2_t2 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_2_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_2_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_2_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_2_1, %qk_out_1_2_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_2_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_2_2, %qk_out_1_2_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_2 = xegpu.dpas %q_block_value_1_3, %k_value_slice_2_3, %qk_out_1_2_t2 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
           xegpu.compile_hint
 
@@ -368,15 +368,15 @@ module @flash_attention attributes {gpu.container_module} {
           xegpu.compile_hint
 
           // compute forth 16x16 of Q * K^T using DPAS
-          %qk_out_0_3_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_3_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_3_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_3_1, %qk_out_0_3_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_3_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_3_2, %qk_out_0_3_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_0_3 = xegpu.dpas %q_block_value_0_3, %k_value_slice_3_3, %qk_out_0_3_t2  : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_3_t0 = xegpu.dpas %q_block_value_0_0, %k_value_slice_3_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_3_t1 = xegpu.dpas %q_block_value_0_1, %k_value_slice_3_1, %qk_out_0_3_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_3_t2 = xegpu.dpas %q_block_value_0_2, %k_value_slice_3_2, %qk_out_0_3_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_0_3 = xegpu.dpas %q_block_value_0_3, %k_value_slice_3_3, %qk_out_0_3_t2  : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
-          %qk_out_1_3_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_3_0, %zero_dpas : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_3_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_3_1, %qk_out_1_3_t0 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_3_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_3_2, %qk_out_1_3_t1 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-          %qk_out_1_3 = xegpu.dpas %q_block_value_1_3, %k_value_slice_3_3, %qk_out_1_3_t2 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_3_t0 = xegpu.dpas %q_block_value_1_0, %k_value_slice_3_0, %zero_dpas : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_3_t1 = xegpu.dpas %q_block_value_1_1, %k_value_slice_3_1, %qk_out_1_3_t0 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_3_t2 = xegpu.dpas %q_block_value_1_2, %k_value_slice_3_2, %qk_out_1_3_t1 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+          %qk_out_1_3 = xegpu.dpas %q_block_value_1_3, %k_value_slice_3_3, %qk_out_1_3_t2 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
 
           xegpu.compile_hint
 

@@ -18,8 +18,12 @@
 #include <imex/Utils/PassWrapper.h>
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_DROPREGIONS
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 
@@ -46,7 +50,7 @@ struct RemoveRegion
 // *******************************
 
 // Full Pass
-struct DropRegionsPass : public ::imex::DropRegionsBase<DropRegionsPass> {
+struct DropRegionsPass : public ::imex::impl::DropRegionsBase<DropRegionsPass> {
   DropRegionsPass() = default;
 
   void runOnOperation() override {

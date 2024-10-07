@@ -468,3 +468,14 @@ func.func @test_from_memref(%arg0: memref<5xi32, strided<[?], offset: ?>>) -> !n
 // CHECK: [[V0:%.*]] = bufferization.to_tensor
 // CHECK: [[V1:%.*]] = bufferization.to_memref [[V0]]
 // CHECK-NEXT: return [[V1]] : memref<5xi32, strided<[?], offset: ?>>
+
+// -----
+func.func @test_permute_dims(%arg0: !ndarray.ndarray<5x3x2xi32>) -> !ndarray.ndarray<2x3x5xi32> {
+    %0 = ndarray.permute_dims %arg0 [2, 1, 0] : !ndarray.ndarray<5x3x2xi32> -> !ndarray.ndarray<2x3x5xi32>
+    return %0 : !ndarray.ndarray<2x3x5xi32>
+}
+// CHECK-LABEL: @test_permute_dims
+// CHECK: [[V0:%.*]] = bufferization.to_tensor
+// CHECK: [[V1:%.*]] = bufferization.to_memref [[V0]]
+// CHECK: [[V2:%.*]] = memref.transpose [[V1]] (d0, d1, d2) -> (d2, d1, d0)
+// CHECK-NEXT: return [[V2]] : memref<2x3x5xi32, strided<[?, ?, ?], offset: ?>>

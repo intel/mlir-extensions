@@ -28,6 +28,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -36,6 +37,7 @@
 #include <llvm/Support/Debug.h>
 
 #include <algorithm>
+#include <cassert>
 #include <optional>
 
 #include "imex/Dialect/XeTile/Transforms/Blocking.h"
@@ -45,7 +47,6 @@
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
 
-#include "PassDetail.h"
 #include <iostream>
 
 using namespace mlir;
@@ -55,6 +56,25 @@ namespace imex {
 #define GEN_PASS_DEF_XETILEWGTOSG
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
+
+namespace {
+// Create a Map to store SG layout_order if we have a load
+// which is transposed before being passed to MMA.
+// Sg layout_order [0, 1] means the subgroup ids are arranged
+// in column major. Default is row-major [1, 0].
+// For example:
+// If we have a sgLayout [4, 8] with layout_order [0, 1]
+// the sg id's will be arranged in the following manner
+// | 0  | 4 | 8  | 12 | 16 | 20 | 24 | 28 |
+// | 1  | 5 | 9  | 13 | 17 | 21 | 25 | 29 |
+// | 2  | 6 | 10 | 14 | 18 | 22 | 26 | 30 |
+// | 3  | 7 | 11 | 15 | 19 | 23 | 27 | 31 |
+
+// Internally we use this layout_order information to calculate the
+// offset for init and load tile
+
+llvm::DenseMap<mlir::Value, std::array<int, 2>> opSgLayoutMap;
+} // namespace
 
 namespace imex {
 
@@ -103,11 +123,11 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 
     rewriter.setInsertionPoint(op);
     // get the subgroup Id
-    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc);
+    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
     auto indexType = rewriter.getIndexType();
     auto sgLayoutDimYConst = createIndexConstant(indexType, sgLayout[1]);
-    auto sgDataDimXConst = createIndexConstant(indexType, sgTileShape[0]);
-    auto sgDataDimYConst = createIndexConstant(indexType, sgTileShape[1]);
+    auto sgDataDimYConst = createIndexConstant(indexType, sgTileShape[0]);
+    auto sgDataDimXConst = createIndexConstant(indexType, sgTileShape[1]);
 
     // The sgID is a linear (1D) id. Convert it to 2D to get the x and y
     // coordinates of sg
@@ -159,11 +179,22 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
           }
         };
 
+    // Look up the map if the init_tile has a layout_order [0, 1]
+    // If it does, tranpose the sg ids to get the correct tile.
+    auto it = opSgLayoutMap.find(op.getResult());
+    if (it != opSgLayoutMap.end()){
+     assert((opSgLayoutMap[op->getResult(0)] == std::array<int, 2>{0, 1}));
+     calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
+                           sgLayout[0], sgDataDimYConst, sgIdX, offsets[0]);
+     calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
+                           sgLayout[1], sgDataDimXConst, sgIdY, offsets[1]);
+    }
+    else {
     calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
-                           sgLayout[0], sgDataDimXConst, sgIdY, offsets[0]);
+                           sgLayout[0], sgDataDimYConst, sgIdY, offsets[0]);
     calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
-                           sgLayout[1], sgDataDimYConst, sgIdX, offsets[1]);
-
+                           sgLayout[1], sgDataDimXConst, sgIdX, offsets[1]);
+    }
     // TODO: check for how to broadcast
     for (auto y : globalOffsetsY) {
       for (auto x : globalOffsetsX) {
@@ -319,7 +350,7 @@ class WGToSGSCFForOpPattern : public XeOneToNConversion<mlir::scf::ForOp> {
                                        // adaptor.getInitArgs()
     }
 
-    rewriter.applySignatureConversion(&op.getRegion(), argumentMapping);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(), argumentMapping);
     newOp.getBody()->erase();
     rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
                                 newOp.getRegion().end());
@@ -517,13 +548,142 @@ class WGToSGArithConstantOpPattern
   }
 };
 
+class WGToSGVectorTranspose
+    :public XeOneToNConversion<mlir::vector::TransposeOp> {
+  using XeOneToNConversion<mlir::vector::TransposeOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::TransposeOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+    if (op.getVector().getType().getRank() != 2)
+      return mlir::failure();
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto it = opSgLayoutMap.find(op.getResult());
+    // Transpose within subgroup if the sg layout order is {0, 1}
+    if (it != opSgLayoutMap.end()){
+      assert((opSgLayoutMap[op->getResult(0)] == std::array<int, 2>{0, 1}));
+      auto sgData = mapAttr.getSgData();
+      auto newTy = mlir::VectorType::get({sgData[0], sgData[1]},
+                                                   resType.getElementType());
+      auto newOp = rewriter.create<mlir::vector::TransposeOp>(
+              op.getLoc(), newTy, adaptor.getVector()[0], op.getPermutation());
+      rewriter.replaceOp(op, newOp);
+      return mlir::success();
+    }
+    else
+    {
+      //TODO : Transpose using SLM
+      return mlir::failure();
+    }
+  }
+};
+
+
+// TODO: Add more pre-ops
+bool isElementWiseOp(mlir::Operation *op) {
+  return llvm::isa<mlir::arith::AddFOp>(op) ||
+         llvm::isa<mlir::arith::MulFOp>(op) ||
+         llvm::isa<mlir::math::ExpOp>(op);
+}
+
+// Helper function to analyze the def-use chain of initTileOps. Currently we
+// pattern match the following def-use chain as a candidate for
+// load + tranpose optimization.
+// init_tile -> scf.for -> load_tile -> vector.transpose -> (pre-op) -> tile_mma
+void analyzeInitTileOps(mlir::Operation *op) {
+
+  op->walk([&](imex::xetile::InitTileOp initOp) -> mlir::WalkResult {
+    llvm::SmallVector<mlir::Operation *> ops;
+    // TODO: Add support for initTileOps using sources other than static memrefs
+    if (!initOp.isSourceMemRef())
+      return mlir::WalkResult::skip();
+    if (!initOp.sourceMemRefHasStaticShape())
+      return mlir::WalkResult::skip();
+
+    // Ignore initTileOps with more than one use
+    if (!initOp->hasOneUse())
+      return mlir::WalkResult::skip();
+    ops.push_back(initOp);
+    auto user = *initOp->user_begin();
+    // InitTileOp must be consumed by a ForOp
+    mlir::Operation *loadUser = nullptr, *updateOffsetUser = nullptr;
+    if (auto scfFor = llvm::dyn_cast_if_present<mlir::scf::ForOp>(user)) {
+      auto argument = imex::getArgForOperand(scfFor, initOp.getResult());
+      int userCount = 0;
+      for (auto user : argument.getUsers()) {
+        userCount++;
+        if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
+          loadUser = user;
+          ops.push_back(scfFor);
+          ops.push_back(user);
+        } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
+          updateOffsetUser = user;
+          ops.push_back(scfFor);
+          ops.push_back(user);
+        }
+      }
+      // ForOp argument should have only two users, a load and an update offset
+      if (userCount != 2 || !(loadUser && updateOffsetUser))
+        return mlir::WalkResult::skip();
+    } else
+      return mlir::WalkResult::skip();
+
+    // LoadOp must be consumed by a transpose
+    if (!(loadUser->hasOneUse() &&
+          llvm::isa<mlir::vector::TransposeOp>(*loadUser->user_begin())))
+      return mlir::WalkResult::skip();
+    auto transposeOp =
+        llvm::cast<mlir::vector::TransposeOp>(*loadUser->user_begin());
+    ops.push_back(transposeOp);
+
+    // Check if the transpose has only one user and that user is a TileMMAOp
+    // or a pre-op followed by TileMMA
+    if (!transposeOp->hasOneUse())
+      return mlir::WalkResult::skip();
+
+    auto consumerOp = *transposeOp->user_begin();
+
+    // Check if vector.transpose is consumed by TileMMA directly or
+    // is consumed by some pre-op and then TileMMA.
+    if(!llvm::isa<imex::xetile::TileMMAOp>(consumerOp)){
+      if(!isElementWiseOp(consumerOp))
+        return mlir::WalkResult::skip();
+      else {
+        if (!(consumerOp->hasOneUse() &&
+              llvm::isa<imex::xetile::TileMMAOp>(*consumerOp->user_begin())))
+            return mlir::WalkResult::skip();
+          }
+    }
+
+    // At this point, we have a candidate def-use chain for optimization.
+    for (auto op : ops) {
+      if (op->getNumResults() > 0)
+        opSgLayoutMap[op->getResult(0)] = {0, 1};
+    }
+
+    return mlir::WalkResult::advance();
+  });
+}
+
+
+
 void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
                                   mlir::RewritePatternSet &patterns,
                                   TileUsageAnalysis &analysis) {
   patterns.insert<WGToSGInitTileOpPattern, WGToSGLoadTileOpPattern,
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
-                  WGToSGSCFYieldOpPattern>(patterns.getContext(), converter,
+                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose>(patterns.getContext(), converter,
                                            analysis);
   patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
@@ -533,7 +693,7 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
 
 // Transforms WG XeTile IR to SG XeTile
 class XeTileWgToSgPass
-    : public imex::impl::XeTileWgToSgBase<imex::XeTileWgToSgPass> {
+    : public impl::XeTileWgToSgBase<XeTileWgToSgPass> {
 
 public:
   XeTileWgToSgPass() = default;
@@ -550,6 +710,9 @@ public:
     }
 
     auto &analysis = getAnalysis<TileUsageAnalysis>();
+    mlir::Operation *op = getOperation();
+    // Run the analysis to find the candidates for the transformation
+    analyzeInitTileOps(op);
     XeOneToNTypeConverter typeConverter(context);
     mlir::ConversionTarget target(context);
     mlir::RewritePatternSet patterns(&context);
@@ -621,7 +784,7 @@ public:
         });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
-                                 mlir::math::ExpOp>(
+                                 mlir::math::ExpOp, mlir::vector::TransposeOp>(
         [&](mlir::Operation *op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
               op->getAttr("map"));

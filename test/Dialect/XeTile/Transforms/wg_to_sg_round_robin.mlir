@@ -61,10 +61,10 @@ gpu.module @test_wg_to_sg_rr  {
         %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32>
           -> !xetile.tile<128x128xf32, #tile_attr_c>
 
-        //CHECK: %[[R27:.*]] =  xetile.load_tile %[[R23]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
-        //CHECK: %[[R28:.*]] =  xetile.load_tile %[[R24]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
-        //CHECK: %[[R29:.*]] =  xetile.load_tile %[[R25]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
-        //CHECK: %[[R30:.*]] =  xetile.load_tile %[[R26]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+        //CHECK: %[[R27:.*]] =  xetile.load_tile %[[R23]] : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+        //CHECK: %[[R28:.*]] =  xetile.load_tile %[[R24]] : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+        //CHECK: %[[R29:.*]] =  xetile.load_tile %[[R25]] : !xetile.tile<32x32xf32> -> vector<32x32xf32>
+        //CHECK: %[[R30:.*]] =  xetile.load_tile %[[R26]] : !xetile.tile<32x32xf32> -> vector<32x32xf32>
         %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<128x128xf32, #tile_attr_c>
           -> vector<128x128xf32>
 
@@ -96,13 +96,13 @@ gpu.module @test_wg_to_sg_rr  {
               !xetile.tile<128x128xf16, #tile_attr_b>,
               vector<128x128xf32>) {
 
-          //CHECK: %[[R42:.*]] =  xetile.load_tile %[[arg4]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x128xf16> -> vector<32x128xf16>
-          //CHECK: %[[R43:.*]] =  xetile.load_tile %[[arg5]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x128xf16> -> vector<32x128xf16>
+          //CHECK: %[[R42:.*]] =  xetile.load_tile %[[arg4]] : !xetile.tile<32x128xf16> -> vector<32x128xf16>
+          //CHECK: %[[R43:.*]] =  xetile.load_tile %[[arg5]] : !xetile.tile<32x128xf16> -> vector<32x128xf16>
           %a_value = xetile.load_tile %a_tile  : !xetile.tile<128x128xf16, #tile_attr_a>
             -> vector<128x128xf16>
 
-          //CHECK: %[[R44:.*]] =  xetile.load_tile %[[arg6]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<128x32xf16> -> vector<128x32xf16>
-          //CHECK: %[[R45:.*]] =  xetile.load_tile %[[arg7]] { padding = 0.000000e+00 : f32 }  : !xetile.tile<128x32xf16> -> vector<128x32xf16>
+          //CHECK: %[[R44:.*]] =  xetile.load_tile %[[arg6]] : !xetile.tile<128x32xf16> -> vector<128x32xf16>
+          //CHECK: %[[R45:.*]] =  xetile.load_tile %[[arg7]] : !xetile.tile<128x32xf16> -> vector<128x32xf16>
           %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16, #tile_attr_b>
             -> vector<128x128xf16>
 

@@ -40,31 +40,54 @@ func.func @test_create_nd_tdesc_vc_5(%input: memref<24x32x64xf32>) {
   %c1 = arith.constant 2 : index
   %c8 = arith.constant 8 : index
 
-  // expected-error@+1 {{operand #0 must be 1D/2D memref}}
+  // expected-error@+1 {{Expecting the TensorDesc rank is up to 2 and not greater than the ranks of shape, strides, offsets or the memref source}}
   %1 = xegpu.create_nd_tdesc %input[%c1, %c1, %c8]
                               : memref<24x32x64xf32> -> !xegpu.tensor_desc<8x16x8xf32>
   return
 }
 
 // -----
-func.func @test_create_tdesc(%src: ui64, %offsets : vector<16x8xindex>) {
-  // expected-error@+1 {{operand #1 must be vector of index values of ranks 1}}
-  %1 = xegpu.create_tdesc %src, %offsets
-                              : ui64, vector<16x8xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>
+func.func @test_create_tdesc(%src: ui64) {
+  // expected-error@+1 {{Incorrect TensorDesc shape}}
+  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
+                              : ui64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<>>
   return
 }
 
 // -----
-func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
-  %0 = arith.constant dense<1>: vector<16x8xi1>
-  // CHECK: xegpu.create_tdesc
-  // CHECK-SAME: {chunk_size = 8}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.tdesc_attr<scattered = true>>
-  %1 = xegpu.create_tdesc %src, %offsets {chunk_size = 8}
-                              : ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf16, #xegpu.tdesc_attr<scattered = true>>
+func.func @test_load_gather(%src: ui64) {
+  %0 = arith.constant dense<1>: vector<16xi1>
+  // CHECK: xegpu.create_tdesc {{.*}} : ui64
+  // CHECK-SAME: !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<chunk_size = 8 : i64>>
+  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64
+        -> !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>
 
   // expected-error@+1 {{failed to verify that all of {value, TensorDesc} have same rank}}
   %2 = xegpu.load %1, %0 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
-                          : !xegpu.tensor_desc<16x8xf16, #xegpu.tdesc_attr<scattered = true>>, vector<16x8xi1> -> vector<8x8x4xf16>
+                          : !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x8x4xf16>
+  return
+}
+
+// -----
+func.func @test_create_tdesc_oversized(%src: ui64) {
+  // expected-error@+1 {{total access size (simd_lanes * chunk_size * sizeof(elemTy)) is upto 512 bytes}}
+  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64
+              -> !xegpu.tensor_desc<16x16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 16>>
+  return
+}
+
+// -----
+func.func @test_create_tdesc_invalid_chunk_size(%src: ui64) {
+  // expected-error@+1 {{Invalid chunk_size. Supported values are 1, 2, 3, 4, 8, 16, 32, 64, 128, or 256.}}
+  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64
+              -> !xegpu.tensor_desc<16x7xf32, #xegpu.scatter_tdesc_attr<chunk_size = 7>>
+  return
+}
+
+// -----
+func.func @test_create_tdesc_unaligned(%src: ui64) {
+  // expected-error@+1 {{access size (chunk_size * sizeof(elemTy)) should be 32-bit aligned}}
+  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64
+              -> !xegpu.tensor_desc<16x3xf16, #xegpu.scatter_tdesc_attr<chunk_size = 3>>
   return
 }

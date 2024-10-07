@@ -333,6 +333,9 @@ std::unique_ptr<::mlir::Pass> createFIXMEPass();
 void populateFIXMEPatterns(::mlir::LLVMTypeConverter &converter,
                            ::mlir::RewritePatternSet &patterns);
 
+#define GEN_PASS_DECL
+#include <imex/Dialect/{args.name}/Transforms/Passes.h.inc>
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//
@@ -344,53 +347,4 @@ void populateFIXMEPatterns(::mlir::LLVMTypeConverter &converter,
 }} // namespace imex
 
 #endif // _{args.name}_PASSES_H_INCLUDED_
-""")
-
-# add PassDetail.h
-fn = jp(libroot, args.name, "Transforms", "PassDetail.h")
-with open(fn, "w") as f:
-    f.write(f"""//===-- {os.path.basename(fn)} - {args.name} pass details --------*- tablegen -*-===//
-//
-// Copyright 2023 Intel Corporation
-// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-///
-/// \\file
-/// This header file defines prototypes for {args.name} dialect passes.
-///
-//===----------------------------------------------------------------------===//
-
-#ifndef _{args.name}_PASSDETAIL_H_INCLUDED_
-#define _{args.name}_PASSDETAIL_H_INCLUDED_
-
-
-#include <mlir/Pass/Pass.h>
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/Interfaces/FunctionInterfaces.h>
-
-namespace mlir {{
-
-namespace affine {{
-class AffineDialect;
-}} // namespace affine
-
-namespace arith {{
-class ArithDialect;
-}} // namespace arith
-
-// FIXME define other dependent MLIR dialects
-
-}} // namespace mlir
-
-namespace imex {{
-
-#define GEN_PASS_CLASSES
-#include <imex/Dialect/{args.name}/Transforms/Passes.h.inc>
-
-}} // namespace imex
-
-#endif // _{args.name}_PASSDETAIL_H_INCLUDED_
 """)

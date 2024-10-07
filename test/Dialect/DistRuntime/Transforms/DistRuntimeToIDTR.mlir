@@ -100,3 +100,21 @@ module {
 // CHECK: [[handle:%.*]] = call @_idtr_copy_reshape_i64
 // CHECK: call @_idtr_wait([[handle]]) : (i64) -> ()
 // CHECK: return [[V0]] : !ndarray.ndarray<3xi64>
+
+// -----
+module {
+  func.func @test_copy_permute(%arg0: !ndarray.ndarray<5x2xi64>) -> !ndarray.ndarray<2x5xi64> {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c5 = arith.constant 5 : index
+    %h, %a = distruntime.copy_permute %arg0 g_shape %c5, %c2 l_offs %c0, %c0 to n_offs %c0, %c0 n_shape %c2, %c5 axes [1, 0] {team=22 : i64} : (!ndarray.ndarray<5x2xi64>, index, index, index, index, index, index, index, index) -> (!distruntime.asynchandle, !ndarray.ndarray<2x5xi64>)
+    "distruntime.wait"(%h) : (!distruntime.asynchandle) -> ()
+    return %a : !ndarray.ndarray<2x5xi64>
+  }
+}
+// CHECK-LABEL: func.func @test_copy_permute
+// CHECK: [[V0:%.*]] = ndarray.create %c2, %c5 : (index, index) -> !ndarray.ndarray<2x5xi64>
+// CHECK: [[handle:%.*]] = call @_idtr_copy_permute_i64
+// CHECK: call @_idtr_wait([[handle]]) : (i64) -> ()
+// CHECK: return [[V0]] : !ndarray.ndarray<2x5xi64>

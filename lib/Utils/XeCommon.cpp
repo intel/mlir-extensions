@@ -20,6 +20,7 @@
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeCommon.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace imex {
 int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
@@ -34,7 +35,7 @@ mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
                                      mlir::Value operand) {
   auto idx = getOperandIndex(op, operand);
   auto numControls = op.getNumControlOperands();
-  assert(idx >= (int)numControls);
+  assert(idx >= static_cast<int>(numControls));
   return op.getRegionIterArg(idx - numControls);
 }
 
@@ -64,64 +65,42 @@ mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
   return castOp->getResults();
 }
 
+/// @brief
+/// We have to use flattened i32 for intrinsic calls like llvm_genx_raw_send2_*,
+/// hence we need to encode vectors with arbitrary datatypes as i32.
+/// keepF16 = true: when the vector element type is f16, it disables flattening
+/// it to i32.
 std::pair<std::string, mlir::VectorType>
 encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
-                 mlir::VectorType type, bool use64bitData,
-                 bool enforceInteger) {
-  auto elemType = type.getElementType();
-  auto bitWidth = elemType.getIntOrFloatBitWidth();
-  int size = type.getNumElements() * bitWidth / 32;
-  if (use64bitData) {
-    size /= 2;
+                 mlir::VectorType type, bool use64bitData, bool enforceInteger,
+                 bool keepF16) {
+  mlir::Type srcElemType = type.getElementType();
+  assert((srcElemType.isF16() || srcElemType.isBF16() || srcElemType.isF32() ||
+          srcElemType.isInteger(8) || srcElemType.isInteger(16) ||
+          srcElemType.isInteger(32) || srcElemType.isInteger(64)) &&
+         "Unsupported vector element type.");
+  const uint32_t srcBitWidth = srcElemType.getIntOrFloatBitWidth();
+  mlir::Type resElemType = rewriter.getI32Type();
+  if (!enforceInteger) {
+    if (srcElemType.isF32() || (keepF16 && srcElemType.isF16())) {
+      resElemType = srcElemType;
+    }
+    if (use64bitData) {
+      resElemType = rewriter.getI64Type();
+    }
   }
-  std::string str;
-  switch (size) {
-  case 4:
-    str += "v4";
-    break;
-  case 8:
-    str += "v8";
-    break;
-  case 16:
-    str += "v16";
-    break;
-  case 32:
-    str += "v32";
-    break;
-  case 64:
-    str += "v64";
-    break;
-  case 128:
-    str += "v128";
-    break;
-  case 256:
-    str += "v256";
-    break;
-  case 512:
-    str += "v512";
-    break;
-  default:
-    assert(0 && "add more support");
-    break;
-  }
-  if (use64bitData) {
-    str += "i64";
-    elemType = rewriter.getI64Type();
-  } else if (enforceInteger || elemType == rewriter.getI32Type()) {
-    str += "i32";
-    elemType = rewriter.getI32Type();
-  } else if (elemType == rewriter.getF32Type())
-    str += "f32";
-  else if (elemType == rewriter.getF16Type()) {
-    str += "i32";
-    elemType = rewriter.getI32Type();
-  } else if (elemType == rewriter.getBF16Type()) {
-    str += "i32";
-    elemType = rewriter.getI32Type();
-  } else
-    assert(0 && "add more support");
-  auto newType = mlir::VectorType::get(size, elemType);
-  return std::make_pair(str, newType);
+  const uint32_t resBitWidth = resElemType.getIntOrFloatBitWidth();
+  const uint32_t resVecSize =
+      (type.getNumElements() * srcBitWidth) / resBitWidth;
+  mlir::VectorType resVecType = mlir::VectorType::get(resVecSize, resElemType);
+  std::string resStr =
+      llvm::formatv("v{0}{1}{2}", resVecSize,
+                    ((resElemType.isF32() || (keepF16 && resElemType.isF16()))
+                         ? 'f'
+                         : 'i'),
+                    resBitWidth)
+          .str();
+  return {resStr, resVecType};
 }
 
 /// @brief
@@ -199,6 +178,20 @@ unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind) {
     break;
   }
   return encode;
+}
+
+/// Creates the default strides for the given `shape`. Example:
+///   input shape = 2x3x4x5
+///   output strides = 60x20x5x1
+llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape) {
+  int64_t stride = 1;
+  llvm::SmallVector<int64_t> strides;
+  for (int64_t size : llvm::reverse(shape)) {
+    strides.push_back(stride);
+    stride *= size;
+  }
+  std::reverse(strides.begin(), strides.end());
+  return strides;
 }
 
 } // namespace imex

@@ -19,6 +19,7 @@ include "imex/Dialect/XeTile/IR/XeTileTypes.td"
 include "imex/Dialect/XeTile/IR/XeTileAttrs.td"
 
 include "mlir/Dialect/Vector/IR/VectorAttributes.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 
 // Base class for dialect operations. This operation inherits from the base
 // `Op` class in OpBase.td, and provides:
@@ -28,11 +29,12 @@ include "mlir/Dialect/Vector/IR/VectorAttributes.td"
 class XeTile_Op<string mnemonic, list<Trait> traits = []> :
     Op<XeTile_Dialect, mnemonic, traits>;
 
-def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]> {
+def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
+                                    ViewLikeOpInterface, OffsetSizeAndStrideOpInterface]> {
     let summary = "Describes an XeTile with reference to a base memref";
     let description = [{
         The "init_tile" operation is used to describe a 2D region (i.e. tile) in gloabl memory.
-        This operation takes in a 2D memref or an address and return an xetile. If dynamic-shaped
+        This operation takes in a memref or an address and return an xetile. If dynamic-shaped
         memref or an address is used as the base, it is required to specify the shape and strides
         of the memory region described by the tile.
 
@@ -42,7 +44,7 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
 
         The operation takes in the following arguments:
         * source:  Source can be static/dynamic shaped memref or an address (i64)
-        * offsets: 2 offsets into the "source" memref or address at which to
+        * offsets: offsets into the "source" memref or address at which to
                create the tile. offsets can be operands (e.g., [%c0, %c]), attributes
                (e.g., [2, 4]), or mix of operand and attributes (e.g., [%c0, 4] and [2, %c0]).
         * dynamic_offsets : This is a subset of "offsets". offsets can contain both static and dynamic
@@ -103,14 +105,25 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
 
     }];
 
-    let arguments = (ins XeTile_BaseAddrType:$source,
-                       Variadic<Index>:$offsets,
-                       DenseI64ArrayAttr:$static_offsets,
-                       Variadic<Index>:$dynamic_shape,
-                       Variadic<Index>:$dynamic_strides
+    let arguments = (ins XeTile_BaseAddrType: $source,
+                       Variadic<Index>: $offsets,
+                       Variadic<Index>: $sizes,
+                       Variadic<Index>: $strides,
+                       DenseI64ArrayAttr: $const_offsets,
+                       OptionalAttr<DenseI64ArrayAttr>: $const_sizes,
+                       OptionalAttr<DenseI64ArrayAttr>: $const_strides
                        );
 
     let results = (outs XeTile: $tile);
+
+
+    let assemblyFormat = [{
+      $source ``
+      custom<DynamicIndexList>($offsets, $const_offsets)
+      (`,` custom<DynamicIndexList>($sizes, $const_sizes)^
+       `,` custom<DynamicIndexList>($strides, $const_strides))?
+      attr-dict `:` type($source) `->` qualified(type($tile))
+    }];
 
     let builders = [
         // creating init_tile op with static memref
@@ -121,11 +134,9 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         OpBuilder<(ins "xetile::TileType":$resultType,
             "mlir::Value":$source,
             "llvm::ArrayRef<mlir::OpFoldResult>":$offsets,
-            "llvm::ArrayRef<mlir::Value>":$dynamic_shape,
-            "llvm::ArrayRef<mlir::Value>":$dynamic_strides)>
+            "llvm::ArrayRef<mlir::OpFoldResult>":$sizes,
+            "llvm::ArrayRef<mlir::OpFoldResult>":$strides)>
     ];
-
-    let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
         /// get source type, could be a memref or an integer
@@ -163,16 +174,6 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             return getType().getShape();
         }
 
-        /// check if the offsets are static
-        bool hasStaticOffsets() {
-            return !mlir::ShapedType::isDynamicShape(getStaticOffsets());
-        }
-
-        /// check if a given dim in static offsets has a static value
-        bool hasStaticOffsetAtDim(int dim) {
-            return !mlir::ShapedType::isDynamic(getStaticOffsets()[dim]);
-        }
-
         /// check if the source memref has static shape info
         /// this method will fail if the source is not a memref
         bool sourceMemRefHasStaticShape() {
@@ -187,44 +188,82 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             return mlir::cast<mlir::MemRefType>(getSourceType()).getShape();
         }
 
-        /// check if dynamic shape arguments are present
-        bool hasDynamicShape() {
-            return getDynamicShape().size();
+        /// check if dynamic size arguments are present
+        bool hasSizeArgs() {
+            auto sizes = getConstSizes().value_or(llvm::ArrayRef<int64_t>({}));
+            return sizes.size();
         }
 
         /// check if dynamic stride arguments are present
-        bool hasDynamicStrides() {
-            return getDynamicStrides().size();
+        bool hasStrideArgs() {
+            auto strides = getConstStrides().value_or(llvm::ArrayRef<int64_t>({}));
+            return strides.size();
         }
 
-        /// Returns the offsets info to the source. It consolidates
-        /// information from both dynamic_offsets and static_offsets
-        /// parameters. static_offsets parameter always has the expected
-        /// ranks with some dim could have mlir::ShapeType::kDynamic value
-        /// indicating the corresponding value should be from dynamic_offsets.
-        // llvm::SmallVector<mlir::OpFoldResult> getOffsets() {
-        //   llvm::SmallVector<mlir::OpFoldResult> offsets;
-        //   auto dynamicOffsets = getOffsets(); // from offsets variable
-        //   auto staticOffsets = getStaticOffsets(); // from static_offsets attribute
+        /// Get static offsets.
+        llvm::ArrayRef<int64_t> getStaticOffsets() {
+            return getConstOffsets();
+        }
 
-        //   // in case static_offsets is missing
-        //   if (staticOffsets.size() == 0) {
-        //     offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
-        //     return offsets;
-        //   }
+        /// Get the static sizes.
+        llvm::ArrayRef<int64_t> getStaticSizes() {
+            if (getConstSizes().has_value())
+                return getConstSizes().value();
+            // At this point, the source must be a memref with static shape.
+            assert(sourceMemRefHasStaticShape() && "The source memref does not have static shape.");
+            return getSourceMemrefStaticShape();
+        }
 
-        //   for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
-        //     if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
-        //       assert(j < dynamicOffsets.size());
-        //       offsets.push_back(dynamicOffsets[j++]);
-        //     } else {
-        //       auto ty = mlir::IndexType::get(getContext());
-        //       auto attr = mlir::IntegerAttr::get(ty, staticOffsets[i]);
-        //       offsets.push_back(attr);
-        //     }
-        //   }
-        //   return offsets;
-        // }
+        /// Get the static strides.
+        llvm::ArrayRef<int64_t> getStaticStrides() {
+            if (getConstStrides().has_value())
+                return getConstStrides().value();
+            // At this point, the source must be a memref with static shape.
+            assert(sourceMemRefHasStaticShape() &&
+                   "The source memref does not have static shape.");
+            llvm::SmallVector<int64_t> strides;
+            int64_t offset;
+            auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
+            assert(mlir::succeeded(
+                       mlir::getStridesAndOffset(memrefType, strides, offset)) &&
+                   "Failed to get strides and offset. Invalid source memref.");
+            // Reuse the op storage.
+            setConstStrides(strides);
+            return getConstStrides().value();
+        }
+
+        mlir::Attribute getSourceMemorySpace() {
+          if (isSourceMemRef())
+            return mlir::cast<mlir::MemRefType>(getSourceType()).getMemorySpace();
+          return mlir::Attribute();
+        }
+
+        unsigned getSourceMemorySpaceAsInt() {
+          auto attr = getSourceMemorySpace();
+          if (attr) {
+            if (mlir::isa<mlir::IntegerAttr>(attr))
+              return static_cast<unsigned>(mlir::cast<mlir::IntegerAttr>(attr).getInt());
+          }
+          return 0;
+        }
+
+        /// Return the expected rank of each of the`static_offsets`,
+        /// `static_shape` and `static_strides` attributes.
+        std::array<unsigned, 3> getArrayAttrMaxRanks() {
+          unsigned rank;
+          if (auto ty = llvm::dyn_cast<mlir::MemRefType>(getSourceType())) {
+            rank = ty.getRank();
+          } else {
+            rank = (unsigned)getMixedOffsets().size();
+          }
+          return {rank, rank, rank};
+        }
+
+        /// Return the number of leading operands before the `offsets`,
+        /// `shape` and `strides` operands.
+        static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 1; }
+
+        mlir::Value getViewSource() { return getSource(); }
 
     }];
 
@@ -270,7 +309,7 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
     );
     let results = (outs XeTile_2DOr4DVector: $value);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `->` type($value)";
     let hasVerifier = true;
 
     let extraClassDeclaration = [{
@@ -396,7 +435,9 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     );
 
     let results = (outs XeTile_2DOr4DVector: $output);
-    let hasCustomAssemblyFormat = true;
+     let assemblyFormat = [{
+        $a `,` $b (`,` $c^)? attr-dict `:` type($a)`,` type($b) (`,` type($c)^)?  `->` type($output)
+     }];
 
     let extraClassDeclaration = [{
         mlir::VectorType getAType() {
@@ -407,6 +448,9 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
         }
         mlir::Type getElementType() {
             return getA().getType().getElementType();
+        }
+        mlir::VectorType getOutputType() {
+            return getOutput().getType();
         }
     }];
 
@@ -465,7 +509,7 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
 
         Example 1:
         ```mlir
-            %1 = xetile.tile_pack %0 {inner_blocks = [16, 16]}
+            %1 = xetile.tile_pack %0 {inner_blocks = array<i64: 16, 16>}
                 : vector<64x32xf32> -> vector<4x2x16x16xf32>
         ```
     }];
@@ -473,7 +517,7 @@ def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
     let arguments = (ins XeTile_2DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
     let results = (outs XeTile_4DVector: $out_vec);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
     let hasVerifier = true;
     let hasFolder = 1;
 }
@@ -491,7 +535,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
 
         Example 1:
         ```mlir
-            %1 = xetile.tile_unpack %0 {inner_blocks = [16, 16]}
+            %1 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}
                 : vector<4x2x16x16xf16> -> vector<64x32xf16>
         ```
     }];
@@ -499,7 +543,7 @@ def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
     let arguments = (ins XeTile_4DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
     let results = (outs XeTile_2DVector: $out_vec);
 
-    let hasCustomAssemblyFormat = true;
+    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
     let hasVerifier = true;
     let hasFolder = 1;
 }
@@ -542,7 +586,7 @@ def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
     let hasVerifier = 1;
 }
 
-def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
+def XeTile_ReductionOp: XeTile_Op<"reduction", []> {
     let summary = "performs a reduction operation over a 2D vector.";
     let description = [{
         It has the same semantics as the `vector.multi_reduction`,
@@ -552,10 +596,10 @@ def XeTile_ReduceOp: XeTile_Op<"reduce", []> {
 
     let arguments = (ins Vector_CombiningKindAttr: $kind,
                          XeTile_2DOr4DVector: $source,
-                         DenseI64ArrayAttr: $reduction_dim);
+                         DenseI64ArrayAttr: $reduction_dims);
     let results = (outs XeTile_2DOr4DVector: $result);
     let assemblyFormat = [{
-        $kind `,` $source $reduction_dim attr-dict `:` type($source) `->` type($result)
+        $kind `,` $source $reduction_dims attr-dict `:` type($source) `->` type($result)
     }];
 
     let hasVerifier = 1;

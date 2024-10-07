@@ -1,7 +1,12 @@
 // RUN: imex-opt --insert-gpu-allocs='client-api=opencl' %s | FileCheck %s --check-prefix=OPENCL
 // RUN: imex-opt --insert-gpu-allocs='client-api=vulkan' %s | FileCheck %s --check-prefix=VULKAN
 
-func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf32> {
+// OPENCL-NOT: gpu.alloc {{.*}}gpu.address_space
+// OPENCL-NOT: gpu.memcpy {{.*}}gpu.address_space
+// VULKAN-NOT: memref.alloc() {{.*}}gpu.address_space
+// VULKAN-NOT: memref.copy {{.*}}gpu.address_space
+
+func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %gpu_arg0: memref<2x5xf32, #gpu.address_space<global>>) -> memref<2x5xf32> {
   %c0 = arith.constant 0 : index
   %c2 = arith.constant 2 : index
   %c1 = arith.constant 1 : index
@@ -26,8 +31,10 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
     %4 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg3)[%c1, %c0]
     %5 = memref.load %arg0[%3, %4] : memref<2x5xf32>
     %6 = memref.load %arg1[%3, %4] : memref<2x5xf32>
+    %gpu_5 = memref.load %gpu_arg0[%3, %4] : memref<2x5xf32, #gpu.address_space<global>>
     %7 = arith.addf %5, %6 : f32
-    memref.store %7, %0[%3, %4] : memref<2x5xf32>
+    %gpu_7 = arith.addf %gpu_5, %6 : f32
+    memref.store %gpu_7, %0[%3, %4] : memref<2x5xf32>
     gpu.terminator
   } {SCFToGPU_visited}
   return %0 : memref<2x5xf32>

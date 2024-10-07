@@ -100,10 +100,40 @@ def BF16ToGPU : Pass<"bf16-to-gpu", "::mlir::ModuleOp"> {
     and f32 dtype that can be lowered to spirv dialect with Intel spirv extension ops.
     bf16 is bitcast to a bitwidth equal type i16 as bf16 is not a supported type
     in spirv.
-    Computation is replace by first extending bf16 to f32, do the compute in f32
+    Computation is replaced by first extending bf16 to f32, do the compute in f32
     and truncate result back to bf16.
   }];
   let constructor = "imex::createBF16ToGPUPass()";
+  let dependentDialects = [
+    "::mlir::gpu::GPUDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::arith::ArithDialect"
+    ];
+}
+
+def CastIndex : Pass<"cast-index", "::mlir::ModuleOp"> {
+  let summary = "Place cast to and from i32 for compute intense arith ops in gpu.func using index type and replace index type with i32 for such ops.";
+  let description = [{
+    This pass collects compute intense arith ops in gpu.func using index type and
+    replace with i32 type. Cast for index type to and from i32 is inserted before
+     and after.
+  }];
+  let constructor = "imex::createCastIndexPass()";
+  let dependentDialects = [
+    "::mlir::gpu::GPUDialect",
+    "::mlir::index::IndexDialect"
+    ];
+}
+
+def EmulateNonNativeBF16 : Pass<"imex-emulate-non-native-bf16", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "transform gpu.func with bf16 emulation (upconvert and downconvert) for ops that are not natively supported";
+  let description = [{
+    This pass transforms a set of operations inside gpu.func
+    whose respective lowered SPIR-V ops do not support bf16 data type natively.
+    For the unsupported ops, computation is replaced by first extending bf16 to f32,
+    do the compute in f32 and truncate result back to bf16 when appropiate.
+  }];
+  let constructor = "imex::createEmulateNonNativeBF16Pass()";
   let dependentDialects = [
     "::mlir::gpu::GPUDialect",
     "::mlir::memref::MemRefDialect",
@@ -146,5 +176,35 @@ def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
   ];
 }
 
+def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
+  let summary = "apply vnni transformation for to B operand of dpas instructions if necessary.";
+  let constructor = "imex::createVnniTransformationPass()";
+
+  let dependentDialects = [
+    "::mlir::vector::VectorDialect"
+  ];
+}
+
+def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
+  let summary = "Eliminate in-register vector transpose by fusing with load.";
+  let constructor = "imex::createOptimizeTransposePass()";
+  let dependentDialects = [
+    "::mlir::xegpu::XeGPUDialect"
+  ];
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
+}
+
+def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
+  let summary = "Move vector transpose ops closer to the load ops to enable load+tranpose fusion by OptimizeTranpose pass later in the pipeline.";
+  let constructor = "imex::createHoistTransposePass()";
+  let dependentDialects = [
+    "::mlir::xegpu::XeGPUDialect",
+    "::mlir::vector::VectorDialect"
+  ];
+}
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

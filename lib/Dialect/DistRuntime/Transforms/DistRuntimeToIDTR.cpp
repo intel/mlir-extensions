@@ -13,6 +13,7 @@
 
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
 #include <imex/Utils/PassUtils.h>
@@ -23,7 +24,10 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
-#include "PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_LOWERDISTRUNTIMETOIDTR
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h.inc>
+} // namespace imex
 
 namespace imex {
 namespace distruntime {
@@ -110,6 +114,11 @@ struct RuntimePrototypes {
     requireFunc(loc, builder, module, "_idtr_wait",
                 // handle
                 {i64Type}, {});
+    requireFunc(loc, builder, module, "_idtr_copy_permute",
+                // team, gshape, loffs, lPart, nloffs, nPart, axes
+                {i64Type, idxMRType, idxMRType, dataMRType, idxMRType,
+                 dataMRType, idxMRType},
+                {i64Type});
   }
 };
 
@@ -354,8 +363,68 @@ struct WaitOpPattern
   }
 };
 
+struct CopyPermuteOpPattern
+    : public ::mlir::OpRewritePattern<::imex::distruntime::CopyPermuteOp> {
+  using ::mlir::OpRewritePattern<
+      ::imex::distruntime::CopyPermuteOp>::OpRewritePattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::distruntime::CopyPermuteOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
+    auto lArray = op.getLArray();
+    auto arType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(lArray.getType());
+    auto resType =
+        mlir::dyn_cast<::imex::ndarray::NDArrayType>(op.getNlArray().getType());
+    if (!arType || !resType) {
+      return ::mlir::failure();
+    }
+
+    auto loc = op.getLoc();
+    auto elType = resType.getElementType();
+
+    auto team = op.getTeam();
+    auto gShape = op.getGShape();
+    auto lOffs = op.getLOffsets();
+    auto nlOffs = op.getNlOffsets();
+    auto nlShape = op.getNlShape();
+    auto axes = op.getAxes();
+
+    ::mlir::SmallVector<::mlir::Value> axesValues;
+    for (auto axis : axes) {
+      axesValues.emplace_back(
+          rewriter.create<::mlir::arith::ConstantIndexOp>(loc, axis));
+    }
+
+    // create output array with target size
+    auto nlArray = rewriter.create<::imex::ndarray::CreateOp>(
+        loc, nlShape, ::imex::ndarray::fromMLIR(elType), nullptr,
+        resType.getEnvironments());
+
+    auto idxType = rewriter.getIndexType();
+    auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
+        loc, mlir::cast<::mlir::IntegerAttr>(team));
+    auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
+    auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
+    auto lArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lArray);
+    auto nlOffsMR = createURMemRefFromElements(rewriter, loc, idxType, nlOffs);
+    auto nlArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, nlArray);
+    auto axesMR =
+        createURMemRefFromElements(rewriter, loc, idxType, axesValues);
+
+    auto fun =
+        rewriter.getStringAttr(mkTypedFunc("_idtr_copy_permute", elType));
+    auto handle = rewriter.create<::mlir::func::CallOp>(
+        loc, fun, rewriter.getI64Type(),
+        ::mlir::ValueRange{teamC, gShapeMR, lOffsMR, lArrayMR, nlOffsMR,
+                           nlArrayMR, axesMR});
+    rewriter.replaceOp(op, {handle.getResult(0), nlArray});
+    return ::mlir::success();
+  }
+};
+
 struct DistRuntimeToIDTRPass
-    : public ::imex::LowerDistRuntimeToIDTRBase<DistRuntimeToIDTRPass> {
+    : public impl::LowerDistRuntimeToIDTRBase<DistRuntimeToIDTRPass> {
 
   DistRuntimeToIDTRPass() = default;
 
@@ -366,8 +435,8 @@ struct DistRuntimeToIDTRPass
 
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<CopyReshapeOpPattern, TeamSizeOpPattern, TeamMemberOpPattern,
-                   GetHaloOpPattern, AllReduceOpPattern, WaitOpPattern>(
-        getContext(), patterns);
+                   GetHaloOpPattern, AllReduceOpPattern, WaitOpPattern,
+                   CopyPermuteOpPattern>(getContext(), patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }; // runOnOperation()
 

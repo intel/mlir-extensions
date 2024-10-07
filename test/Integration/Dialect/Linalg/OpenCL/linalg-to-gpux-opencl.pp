@@ -1,17 +1,9 @@
 // linalg dialect to gpu dialect lowering pipeline
 // Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 builtin.module(convert-tensor-to-linalg
-    arith-bufferize
-    func.func(empty-tensor-to-alloc-tensor
-          //eliminate-empty-tensors
-          scf-bufferize
-          shape-bufferize
-          linalg-bufferize
-          bufferization-bufferize
-          tensor-bufferize)
-    func-bufferize
-    func.func(finalizing-bufferize
-          convert-linalg-to-parallel-loops
+    func.func(empty-tensor-to-alloc-tensor)
+    one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
+    func.func(convert-linalg-to-parallel-loops
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
 // insert-gpu-allocs pass can have client-api = opencl or vulkan args
@@ -35,8 +27,8 @@ builtin.module(convert-tensor-to-linalg
     func.func(llvm-request-c-wrappers)
     serialize-spirv
     convert-gpu-to-gpux
+    finalize-memref-to-llvm
     convert-func-to-llvm
     convert-gpux-to-llvm
-    finalize-memref-to-llvm
     reconcile-unrealized-casts)
 // End

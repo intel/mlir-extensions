@@ -31,6 +31,8 @@ template <typename T> class OperationPass;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTGPUXTOSPIRV
+#include "imex/Conversion/Passes.h.inc"
 
 void populateGPUPrintfToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
                                       mlir::RewritePatternSet &patterns);

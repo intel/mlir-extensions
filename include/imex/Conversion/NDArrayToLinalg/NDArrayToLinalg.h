@@ -29,6 +29,9 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTNDARRAYTOLINALG
+#include "imex/Conversion/Passes.h.inc"
+
 /// Populate the given list with patterns which convert NDArray ops to Linalg
 /// and Dist
 void populateNDArrayToLinalgConversionPatterns(

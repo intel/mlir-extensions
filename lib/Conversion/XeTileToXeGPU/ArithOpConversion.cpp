@@ -169,7 +169,7 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
 
   // Stage 1: vector<ixjx1xnxf16> equals to a grid of ixj of vector<1xnxf16>
   // after lowering to xegpu. This stage performs j-1 reduction operations on
-  // j dim of the grid, the result is a vector of vector<mxnxf16> with size i.
+  // j dim of the grid, the result is a vector of vector<ixnxf16>.
   llvm::SmallVector<mlir::Value> intermediates(shape[0]);
   for (auto i = 0; i < shape[0]; i++) {
     auto combiningVal = sources[i * shape[1]];
@@ -191,14 +191,13 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
   // v2 = [b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ... b31]
   // ...
   // vn = [p0 p1 p2 p3 p4 p5 p6 p7 p8 p9 ... p31]
-  // it will repeately doing shuffle between two consecutive vectors
-  // v1 and v2, v3 and v4, ..., vn-1 and vn with a block size. Such
-  // that we can get two new vectors. The block size is typically
-  // starts with half of the vector size. For example, for v1 and v2,
-  // it is 16, and we can get:
+  // To reduce it, we repeatedly shuffle halves of two consecutive vectors.
+  // One can view it as: transpose halves of two partial aggregates, reduce
+  // vertically, get 1 vector with reduced halves of two vectors. For example,
+  // for v1 and v2, we get:
   //    nv1 = [a0, .., a15, b0, .., b15]
   //    nv2 = [a16, .., a31, b16, .., b31]
-  // and we then performs nv1 + nv2 (if reduction op is add)
+  //    nv_reduced = reductionOp(nv1,nv2)
   // such that the left half of the vector contains the partial reduction
   // of v1, and the right half contains the partial reduction of v2.
   // and the the number of vectors is reduced by half after one iteration.
@@ -207,12 +206,16 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
   // The intermediate result of this stage is an array of vectors with
   // type, e.g., vector<nxf16>, array size is `i/n`. And these vectors
   // will be merged into a single vector with type vector<ixf16>.
-  auto blkSize = shape[3] / 2;
-  while (blkSize) {
+
+  // each row should not have > 1 partial aggregate at the end
+  auto partialRowAggSize{shape[3]};
+  auto numVecsLeft{shape[0]};
+  while (partialRowAggSize != 1 && numVecsLeft != 1) {
+    partialRowAggSize /= 2;
     auto workList = intermediates;
     intermediates.clear();
     assert(workList.size() % 2 == 0 && "The size should be divisible by 2.");
-    auto masks = genShuffleMasks(blkSize, shape[3]);
+    auto masks = genShuffleMasks(partialRowAggSize, shape[3]);
     for (size_t i = 0; i < workList.size(); i += 2) {
       auto v1 = workList[i];
       auto v2 = workList[i + 1];
@@ -224,7 +227,28 @@ llvm::SmallVector<mlir::Value> lowerInnerReductionWithIntraVectorShuffles(
           createBinOp(kind, shuffleOp1, shuffleOp2, elemTy, loc, rewriter);
       intermediates.push_back(reductionVal);
     }
-    blkSize /= 2;
+    numVecsLeft /= 2;
+  }
+
+  if (partialRowAggSize > 1) {
+    assert(intermediates.size() == 1 &&
+           "We must have ONE row with non-finalized aggregates.");
+    auto toFinalize = intermediates.back();
+    intermediates.clear();
+    uint32_t currentAggVecSize = shape[3];
+    do {
+      currentAggVecSize /= 2;
+      partialRowAggSize /= 2;
+      auto [vecUpperMask, vecLowerMask] =
+          genShuffleMasks(partialRowAggSize, currentAggVecSize);
+      auto shuffleOp1 = rewriter.create<mlir::vector::ShuffleOp>(
+          loc, toFinalize, toFinalize, vecUpperMask);
+      auto shuffleOp2 = rewriter.create<mlir::vector::ShuffleOp>(
+          loc, toFinalize, toFinalize, vecLowerMask);
+      toFinalize =
+          createBinOp(kind, shuffleOp1, shuffleOp2, elemTy, loc, rewriter);
+    } while (partialRowAggSize != 1);
+    intermediates.push_back(toFinalize);
   }
   return intermediates;
 }

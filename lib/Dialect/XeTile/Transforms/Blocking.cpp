@@ -14,7 +14,6 @@
 /// such that each pieces can be handled by a hardware instruction.
 ///
 //===----------------------------------------------------------------------===//
-
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -27,6 +26,7 @@
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Support/LogicalResult.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -42,12 +42,9 @@
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeArch.h"
 
-#include "PassDetail.h"
-
 using namespace mlir;
 using namespace imex;
 namespace imex {
-#define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DEF_XETILEBLOCKING
 #include "imex/Dialect/XeTile/Transforms/Passes.h.inc"
 } // namespace imex
@@ -124,20 +121,35 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     return {};
   }
 
-  imex::LoadStore2DConfig configParams;
   int maxHeight, maxWidth, minHeight, minWidth;
 
-  // TODO : Separate it in future.
-  if (op == OpType::Load || op == OpType::Prefetch) {
+  if (op == OpType::Load) {
 
     mlir::FailureOr<LoadStore2DConfig> params = uArchInterface->get2DLoadConfig(
         operation, elementSize, vnni, transpose);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
+    } else {
+      llvm::dbgs() << "Invalid Config Params \n";
+      return {};
+    }
+
+    return imex::getInnerBlockHeightWidth(maxHeight, maxWidth, minHeight,
+                                          minWidth, height, width);
+  }
+
+  if (op == OpType::Prefetch) {
+
+    mlir::FailureOr<LoadStore2DConfig> params =
+        uArchInterface->get2DPrefetchConfig(operation, elementSize);
+    if (mlir::succeeded(params)) {
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
@@ -152,11 +164,10 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
     mlir::FailureOr<LoadStore2DConfig> params =
         uArchInterface->get2DStoreConfig(elementSize);
     if (mlir::succeeded(params)) {
-      configParams = *params;
-      maxHeight = configParams.blockHeight.max;
-      minHeight = configParams.blockHeight.min;
-      maxWidth = configParams.blockWidth.max;
-      minWidth = configParams.blockWidth.min;
+      maxHeight = params->blockHeight.max;
+      minHeight = params->blockHeight.min;
+      maxWidth = params->blockWidth.max;
+      minWidth = params->blockWidth.min;
     } else {
       llvm::dbgs() << "Invalid Config Params \n";
       return {};
@@ -167,8 +178,7 @@ getInnerBlockSizes(mlir::Operation *operation, mlir::Type elemTy, int height,
   }
 
   if (op == OpType::Elementwise) {
-    // TODO: get from uArch?
-    int64_t subgroupSize = 16;
+    int64_t subgroupSize = uArchInterface->getOneGRFSizeBits() / elementSize;
 
     maxHeight = 1;
     minHeight = 1;
@@ -274,6 +284,85 @@ struct ArithConstantOpPattern
     auto unpack = addUnpackOp(newOp, rewriter);
 
     rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
+// Blocks a vector.create_mask op such that, ideally, it matches its consuming
+// select op (which is an elementwise op). In this way, during the lowering to
+// XeGPU, there will be a one-to-one correspondence and an
+// unrealized_conversion_cast will not be needed.
+struct VectorCreateMaskOpPattern
+    : public XeTileConversion<mlir::vector::CreateMaskOp, TileUsageAnalysis> {
+
+  using XeTileConversion<mlir::vector::CreateMaskOp,
+                         TileUsageAnalysis>::XeTileConversion;
+
+  VectorCreateMaskOpPattern(mlir::MLIRContext *context,
+                            imex::XeTypeConverter &converter,
+                            TileUsageAnalysis &analysis,
+                            std::shared_ptr<XeuArchInterface> ptruArch)
+      : XeTileConversion(context, converter, analysis) {
+    this->uArchInterface = ptruArch;
+  }
+
+  std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = res.getType();
+    if (resType.getRank() != 2)
+      return rewriter.notifyMatchFailure(op, "type is not 2D vector");
+
+    // Only two cases are supported for now:
+    // 1.The first operand is a constant equal to the first dimension of the
+    // output shape (i.e., all rows are enabled). In other words, masking
+    // columns within a row is supported.
+    // 2.The second operand is a constant equal to the second dimension of the
+    // output shape (i.e., all columns are enabled).
+    auto shape = resType.getShape();
+    APInt cstOp0, cstOp1;
+    if (!(matchPattern(op->getOperand(0), m_ConstantInt(&cstOp0)) &&
+          cstOp0.getSExtValue() == shape[0]) &&
+        !(matchPattern(op->getOperand(1), m_ConstantInt(&cstOp1)) &&
+          cstOp1.getSExtValue() == shape[1])) {
+      op->emitOpError() << "Unsupported operands";
+      return mlir::failure();
+    }
+
+    auto blocks = getInnerBlockSizes<Elementwise>(
+        op, resType.getElementType(), shape[0], shape[1], this->uArchInterface);
+
+    if (blocks.empty()) {
+      op->emitOpError() << "Invalid inner block sizes";
+      return mlir::failure();
+    }
+
+    // TODO: support blocking the outer dimension.
+    if (blocks[0] != 1) {
+      op->emitOpError() << "Unsupported inner block sizes";
+      return mlir::failure();
+    }
+
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / blocks[0], shape[1] / blocks[1], blocks[0], blocks[1]},
+        resType.getElementType());
+    Location loc = op->getLoc();
+    rewriter.startOpModification(op);
+    // Due to the simplifications mentioned above, for now, the index operands
+    // are not adjusted. In fact, only the first index operand (masked rows) or
+    // the second index operand (masked columns) will be used during the
+    // lowering to XeGPU.
+    op->setOperands({op->getOperand(0), op->getOperand(1), op->getOperand(0),
+                     op->getOperand(1)});
+    res.setType(newTy);
+    rewriter.finalizeOpModification(op);
+    rewriter.setInsertionPointAfter(op);
+    auto unpack = rewriter.create<xetile::TileUnpackOp>(
+        loc, resType, res, mlir::DenseI64ArrayAttr::get(getContext(), blocks));
+    rewriter.replaceAllUsesExcept(res, unpack.getResult(), unpack);
     return mlir::success();
   }
 };
@@ -484,15 +573,16 @@ struct VectorMultiDimReductionOpPattern
   }
 };
 
-struct TileReduceOpPattern
-    : public XeTileConversion<xetile::ReduceOp, TileUsageAnalysis> {
+struct TileReductionOpPattern
+    : public XeTileConversion<xetile::ReductionOp, TileUsageAnalysis> {
 
-  using XeTileConversion<xetile::ReduceOp, TileUsageAnalysis>::XeTileConversion;
+  using XeTileConversion<xetile::ReductionOp,
+                         TileUsageAnalysis>::XeTileConversion;
 
-  TileReduceOpPattern(mlir::MLIRContext *context,
-                      imex::XeTypeConverter &converter,
-                      TileUsageAnalysis &analysis,
-                      std::shared_ptr<XeuArchInterface> ptruArch)
+  TileReductionOpPattern(mlir::MLIRContext *context,
+                         imex::XeTypeConverter &converter,
+                         TileUsageAnalysis &analysis,
+                         std::shared_ptr<XeuArchInterface> ptruArch)
       : XeTileConversion(context, converter, analysis) {
     this->uArchInterface = ptruArch;
   }
@@ -500,13 +590,13 @@ struct TileReduceOpPattern
   std::shared_ptr<XeuArchInterface> uArchInterface = nullptr;
 
   mlir::LogicalResult
-  matchAndRewrite(xetile::ReduceOp op, OpAdaptor adaptor,
+  matchAndRewrite(xetile::ReductionOp op, OpAdaptor adaptor,
                   OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto srcTy = op.getSource().getType();
     auto elemTy = srcTy.getElementType();
     auto shape = srcTy.getShape();
-    auto reductionDims = op.getReductionDim();
+    auto reductionDims = op.getReductionDims();
 
     if (srcTy.getRank() != 2 || reductionDims.size() != 1)
       return rewriter.notifyMatchFailure(
@@ -539,7 +629,7 @@ struct TileReduceOpPattern
 
     auto newSource =
         addPackOp(adaptor.getSource(), {blkSizes[0], blkSizes[1]}, rewriter);
-    auto newDest = rewriter.create<xetile::ReduceOp>(
+    auto newDest = rewriter.create<xetile::ReductionOp>(
         loc, newDestType, op.getKind(), newSource, newReductionDims);
     auto unpack = addUnpackOp(newDest.getResult(), rewriter);
     rewriter.replaceOp(op, unpack);
@@ -779,6 +869,7 @@ struct InitTileOpPattern
           op, "Skipped InitTileOp because the result tile is not rank 2.\n");
 
     auto innerBlocks = tileTy.getInnerBlocks();
+    auto memorySpace = op.getSourceMemorySpaceAsInt();
 
     // skip it if innerBlocks has been set by user or compiler.
     if (innerBlocks)
@@ -786,59 +877,75 @@ struct InitTileOpPattern
 
     auto elemTy = tileTy.getElementType();
     int elementSize = elemTy.getIntOrFloatBitWidth();
-    if (isForPrefetch(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(
-          getContext(), getInnerBlockSizes<Prefetch>(
-                            op.getOperation(), elemTy, tileTy.getShape()[0],
-                            tileTy.getShape()[1], this->uArchInterface));
-    } else if (isForLoad(op)) {
 
-      // Set transpose and vnni
-      bool vnni = false;
-      bool transpose = false;
+    if (memorySpace == 3) {                    // for shared memory
+      const unsigned int lscConstraints = 512; // 512 bytes constraint by lsc
+      const unsigned int subgroupSize = 16;
+      auto shape = tileTy.getShape();
+      int64_t innerBlockSizes[2];
+      // prefer to use gather loads with 16 simd lanes
+      innerBlockSizes[0] = shape[0] % subgroupSize == 0 ? 16 : 1;
+      innerBlockSizes[1] =
+          (lscConstraints * 8) / (elementSize * innerBlockSizes[0]);
+      innerBlockSizes[1] =
+          std::min<int64_t>(innerBlockSizes[1], tileTy.getShape()[1]);
+      innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlockSizes);
+    } else { // for global memory
+      if (isForPrefetch(op)) {
+        innerBlocks = mlir::DenseI64ArrayAttr::get(
+            getContext(), getInnerBlockSizes<Prefetch>(
+                              op.getOperation(), elemTy, tileTy.getShape()[0],
+                              tileTy.getShape()[1], this->uArchInterface));
+      } else if (isForLoad(op)) {
 
-      auto order = tileTy.getOrder();
-      if (order[0] == 0 && order[1] == 1)
-        transpose = true;
+        // Set transpose and vnni
+        bool vnni = false;
+        bool transpose = false;
 
-      for (auto user : getEffectiveUsers(op)) {
-        if (auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user)) {
-          if (isForDPASB(loadTileOp) && elementSize < 32) {
-            vnni = true;
-            break;
+        auto order = tileTy.getOrder();
+        if (order[0] == 0 && order[1] == 1)
+          transpose = true;
+
+        for (auto user : getEffectiveUsers(op)) {
+          if (auto loadTileOp = llvm::dyn_cast<xetile::LoadTileOp>(user)) {
+            if (isForDPASB(loadTileOp) && elementSize < 32) {
+              vnni = true;
+              break;
+            }
           }
         }
-      }
 
-      if (vnni && transpose && elementSize < 32) {
-        int factor = 32 / elementSize;
-        vnni = false;
-        llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(
-            op.getOperation(), mlir::FloatType::getF32(getContext()),
-            tileTy.getShape()[1], (tileTy.getShape()[0]) / factor,
-            this->uArchInterface, vnni, transpose);
-        std::swap(innerBlock[0], innerBlock[1]);
-        innerBlock[0] *= factor;
-        innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlock);
+        if (vnni && transpose && elementSize < 32) {
+          int factor = 32 / elementSize;
+          vnni = false;
+          llvm::SmallVector<int64_t, 2> innerBlock = getInnerBlockSizes<Load>(
+              op.getOperation(), mlir::FloatType::getF32(getContext()),
+              tileTy.getShape()[1], (tileTy.getShape()[0]) / factor,
+              this->uArchInterface, vnni, transpose);
+          std::swap(innerBlock[0], innerBlock[1]);
+          innerBlock[0] *= factor;
+          innerBlocks = mlir::DenseI64ArrayAttr::get(getContext(), innerBlock);
 
-      } else if (transpose && elementSize < 32) {
-        return rewriter.notifyMatchFailure(op, "Invalid transpose.");
-      } else {
+        } else if (transpose && elementSize < 32) {
+          return rewriter.notifyMatchFailure(op, "Invalid transpose.");
+        } else {
+          innerBlocks = mlir::DenseI64ArrayAttr::get(
+              getContext(),
+              getInnerBlockSizes<Load>(
+                  op.getOperation(), elemTy, tileTy.getShape()[0],
+                  tileTy.getShape()[1], this->uArchInterface, vnni, transpose));
+        }
+      } else if (isForStore(op)) {
         innerBlocks = mlir::DenseI64ArrayAttr::get(
-            getContext(),
-            getInnerBlockSizes<Load>(op.getOperation(), elemTy,
-                                     tileTy.getShape()[0], tileTy.getShape()[1],
-                                     this->uArchInterface, vnni, transpose));
+            getContext(), getInnerBlockSizes<Store>(
+                              op.getOperation(), elemTy, tileTy.getShape()[0],
+                              tileTy.getShape()[1], this->uArchInterface));
+      } else {
+        return rewriter.notifyMatchFailure(
+            op,
+            "The tile is used for multiple purpose. The init-duplicate pass "
+            "should be run first to resolve this issue.");
       }
-    } else if (isForStore(op)) {
-      innerBlocks = mlir::DenseI64ArrayAttr::get(
-          getContext(), getInnerBlockSizes<Store>(
-                            op.getOperation(), elemTy, tileTy.getShape()[0],
-                            tileTy.getShape()[1], this->uArchInterface));
-    } else {
-      return rewriter.notifyMatchFailure(
-          op, "The tile is used for multiple purpose. The init-duplicate pass "
-              "should be run first to resolve this issue.");
     }
 
     if (innerBlocks.empty()) {
@@ -848,7 +955,7 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), innerBlocks, tileTy.getWgData());
+        tileTy.getOrder(), innerBlocks, tileTy.getMemoryScope());
 
     auto newTileTy =
         imex::xetile::TileType::get(tileTy.getShape(), elemTy, attr);
@@ -1068,20 +1175,20 @@ struct UpdateTileOffsetOpPattern
 void populateXeTileBlockingPatterns(
     imex::XeTypeConverter &converter, mlir::RewritePatternSet &patterns,
     TileUsageAnalysis &analysis, std::shared_ptr<XeuArchInterface> ptruArch) {
-  patterns.insert<ArithConstantOpPattern, VectorizableOpPattern,
-                  SCFForOpPattern, SCFYieldOpPattern, InitTileOpPattern,
-                  LoadTileOpPattern, StoreTileOpPattern, TileMMAOpPattern,
-                  UpdateTileOffsetOpPattern, VectorMultiDimReductionOpPattern,
-                  TileReduceOpPattern, TileBroadcastOpPattern>(
-      patterns.getContext(), converter, analysis, ptruArch);
+  patterns.insert<ArithConstantOpPattern, VectorCreateMaskOpPattern,
+                  VectorizableOpPattern, SCFForOpPattern, SCFYieldOpPattern,
+                  InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
+                  TileMMAOpPattern, UpdateTileOffsetOpPattern,
+                  VectorMultiDimReductionOpPattern, TileReductionOpPattern,
+                  TileBroadcastOpPattern>(patterns.getContext(), converter,
+                                          analysis, ptruArch);
   patterns.insert<TransposeOpPattern<mlir::vector::TransposeOp>,
                   TransposeOpPattern<xetile::TransposeOp>>(
       patterns.getContext(), converter, analysis, ptruArch);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
-class XeTileBlockingPass
-    : public imex::impl::XeTileBlockingBase<imex::XeTileBlockingPass> {
+class XeTileBlockingPass : public impl::XeTileBlockingBase<XeTileBlockingPass> {
 
 public:
   XeTileBlockingPass() = default;
@@ -1118,7 +1225,7 @@ public:
     // Use TopDown traversal order, and only look at existing ops
     // to simpliy the code logic and speedup the pass
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     { // initialize the inner block size per op.

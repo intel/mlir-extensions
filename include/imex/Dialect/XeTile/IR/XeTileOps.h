@@ -14,7 +14,6 @@
 
 #ifndef _XETILE_OPS_H_INCLUDED_
 #define _XETILE_OPS_H_INCLUDED_
-
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinTypeInterfaces.h>
 #include <mlir/IR/BuiltinTypes.h>

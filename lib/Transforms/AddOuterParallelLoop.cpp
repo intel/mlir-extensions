@@ -13,19 +13,25 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "imex/Dialect/Region/IR/RegionOps.h"
+#include "imex/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "llvm/ADT/SetVector.h"
+
+namespace imex {
+#define GEN_PASS_DEF_ADDOUTERPARALLELLOOP
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
+
 using namespace mlir;
 using namespace imex;
 
 namespace {
 struct AddOuterParallelLoopPass
-    : public AddOuterParallelLoopBase<AddOuterParallelLoopPass> {
+    : public imex::impl::AddOuterParallelLoopBase<AddOuterParallelLoopPass> {
 private:
   void runOnBlock(::mlir::Block &block, ::mlir::Operation *parent,
                   mlir::OpBuilder &builder) {

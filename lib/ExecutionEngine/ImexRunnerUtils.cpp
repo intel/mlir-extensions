@@ -88,6 +88,14 @@ _mlir_ciface_fillResource1DRandomF16(UnrankedMemRefType<f16> *ptr,
   _mlir_ciface_fillResource1DRandom(ptr, lower, upper, genInt);
 }
 
+/// Fills 1D memref of f32 type with random values uniformly
+extern "C" void
+_mlir_ciface_fillResource1DRandomF32(UnrankedMemRefType<float> *ptr,
+                                     const float lower, const float upper,
+                                     const bool genInt) {
+  _mlir_ciface_fillResource1DRandom(ptr, lower, upper, genInt);
+}
+
 extern "C" void _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *M) {
   _mlir_ciface_printMemref(M);
 }

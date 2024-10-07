@@ -159,7 +159,8 @@ class NDArray_Op<string mnemonic, list<Trait> traits = []> :
     Op<NDArray_Dialect, mnemonic, traits>;
 
 
-def DeleteOp : NDArray_Op<"delete"> {
+def DeleteOp : NDArray_Op<"delete", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
   let summary = "Explicitly delete an NDArray, freeing its memory";
   let description = [{
       Allow explicitly deleting the memory of an NDArray. It is assumed
@@ -946,6 +947,27 @@ def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
     let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type($output))";
 
     let hasCanonicalizer = 1;
+}
+
+def PermuteDimsOp : NDArray_Op<"permute_dims", []> {
+  let summary = "Permutes the axes (dimensions) of an array to a new array.";
+  let description = [{
+      Permutes the axes (dimensions) of an array.
+      The output array is a new array.
+  }];
+
+  let arguments = (ins
+    NDArray_NDArray:$source,
+    DenseI64ArrayAttr:$axes
+  );
+  let results = (outs NDArray_NDArray);
+
+  let assemblyFormat = [{
+    $source $axes attr-dict `:` qualified(type($source)) `->` qualified(type(results))
+  }];
+
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 
 #endif // _NDARRAY_OPS_TD_INCLUDED_

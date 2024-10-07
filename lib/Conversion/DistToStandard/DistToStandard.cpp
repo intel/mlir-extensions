@@ -36,6 +36,7 @@
 #include <mlir/Dialect/SCF/Transforms/Patterns.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 
 #include <array>
 #include <cstdlib>
@@ -44,7 +45,10 @@
 #include <sstream>
 #include <string>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_CONVERTDISTTOSTANDARD
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 using ::imex::ndarray::createDType;
 using ::imex::ndarray::createShapeOf;
@@ -256,7 +260,8 @@ struct DeleteOpConverter
 
     // apply DeleteOp to all parts
     for (auto p : lParts) {
-      (void)rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      auto newOp = rewriter.create<::imex::ndarray::DeleteOp>(loc, p);
+      newOp->setAttrs(adaptor.getAttributes());
     }
 
     rewriter.eraseOp(op);
@@ -1239,7 +1244,7 @@ struct DefaultPartitionOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto gShape = adaptor.getGShape();
-    int64_t rank = (int64_t)gShape.size();
+    int64_t rank = static_cast<int64_t>(gShape.size());
 
     if (rank == 0) {
       rewriter.eraseOp(op);
@@ -1602,13 +1607,78 @@ struct RePartitionOpConverter
   }
 };
 
+/// Convert a global ndarray::PermuteDimsOp on a distributed array
+/// to ndarray::PermuteDimsOp on the local data.
+/// If needed, adds a repartition op.
+/// The local partition (e.g. a RankedTensor) is wrapped in a
+/// non-distributed NDArray and re-applied to PermuteDimsOp.
+/// op gets replaced with global distributed array
+struct PermuteDimsOpConverter
+    : public ::mlir::OpConversionPattern<::imex::ndarray::PermuteDimsOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::ndarray::PermuteDimsOp>::OpConversionPattern;
+
+  /// Initialize the pattern.
+  void initialize() {
+    /// Signal that this pattern safely handles recursive application.
+    setHasBoundedRewriteRecursion();
+  }
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::PermuteDimsOp op,
+                  ::imex::ndarray::PermuteDimsOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+
+    auto src = op.getSource();
+    auto dst = op.getResult();
+    auto srcType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(src.getType());
+    auto dstType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(dst.getType());
+    if (!(srcType && isDist(srcType) && dstType && isDist(dstType))) {
+      return ::mlir::failure();
+    }
+
+    auto loc = op.getLoc();
+    auto srcEnv = getDistEnv(srcType);
+    auto team = srcEnv.getTeam();
+    auto elementType = srcType.getElementType();
+
+    auto srcGShape = createGlobalShapeOf(loc, rewriter, src);
+    auto srcLParts = createPartsOf(loc, rewriter, src);
+    auto srcLArray = srcLParts.size() == 1 ? srcLParts[0] : srcLParts[1];
+    auto srcLOffsets = createLocalOffsetsOf(loc, rewriter, src);
+
+    auto dstGShape = createGlobalShapeOf(loc, rewriter, dst);
+    auto dstLPart = createDefaultPartition(loc, rewriter, team, dstGShape);
+    auto dstLOffsets = dstLPart.getLOffsets();
+    auto dstLShape = dstLPart.getLShape();
+    auto dstLShapeIndex = getShapeFromValues(dstLShape);
+    auto dstLType = ::imex::ndarray::NDArrayType::get(
+        dstLShapeIndex, elementType, getNonDistEnvs(dstType));
+
+    // call the dist runtime
+    auto handleType = ::imex::distruntime::AsyncHandleType::get(getContext());
+    auto distLArray = rewriter.create<::imex::distruntime::CopyPermuteOp>(
+        loc, ::mlir::TypeRange{handleType, dstLType}, team, srcLArray,
+        srcGShape, srcLOffsets, dstLOffsets, dstLShape, adaptor.getAxes());
+    (void)rewriter.create<::imex::distruntime::WaitOp>(loc,
+                                                       distLArray.getHandle());
+    // finally init dist array
+    rewriter.replaceOp(
+        op, createDistArray(loc, rewriter, team, dstGShape, dstLOffsets,
+                            ::mlir::ValueRange{distLArray.getNlArray()}));
+
+    return ::mlir::success();
+  }
+};
+
 // *******************************
 // ***** Pass infrastructure *****
 // *******************************
 
 // Full Pass
 struct ConvertDistToStandardPass
-    : public ::imex::ConvertDistToStandardBase<ConvertDistToStandardPass> {
+    : public ::imex::impl::ConvertDistToStandardBase<
+          ConvertDistToStandardPass> {
   ConvertDistToStandardPass() = default;
 
   void runOnOperation() override {
@@ -1696,23 +1766,23 @@ struct ConvertDistToStandardPass
         ::imex::ndarray::ReductionOp, ::imex::ndarray::ToTensorOp,
         ::imex::ndarray::DeleteOp, ::imex::ndarray::CastElemTypeOp,
         ::imex::region::EnvironmentRegionOp,
-        ::imex::region::EnvironmentRegionYieldOp>(
+        ::imex::region::EnvironmentRegionYieldOp,
+        ::imex::ndarray::PermuteDimsOp>(
         [&](::mlir::Operation *op) { return typeConverter.isLegal(op); });
     target.addLegalOp<::imex::dist::InitDistArrayOp>();
 
     // All the dist conversion patterns/rewriter
     ::mlir::RewritePatternSet patterns(&ctxt);
     // all these patterns are converted
-    patterns
-        .insert<LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
-                ReductionOpConverter, ToTensorOpConverter,
-                InsertSliceOpConverter, SubviewOpConverter, EWBinOpConverter,
-                EWUnyOpConverter, LocalBoundingBoxOpConverter,
-                LocalCoreOpConverter, RePartitionOpConverter,
-                ReshapeOpConverter, LocalTargetOfSliceOpConverter,
-                DefaultPartitionOpConverter, LocalOffsetsOfOpConverter,
-                PartsOfOpConverter, DeleteOpConverter, CastElemTypeOpConverter>(
-            typeConverter, &ctxt);
+    patterns.insert<
+        LinSpaceOpConverter, CreateOpConverter, CopyOpConverter,
+        ReductionOpConverter, ToTensorOpConverter, InsertSliceOpConverter,
+        SubviewOpConverter, EWBinOpConverter, EWUnyOpConverter,
+        LocalBoundingBoxOpConverter, LocalCoreOpConverter,
+        RePartitionOpConverter, ReshapeOpConverter,
+        LocalTargetOfSliceOpConverter, DefaultPartitionOpConverter,
+        LocalOffsetsOfOpConverter, PartsOfOpConverter, DeleteOpConverter,
+        CastElemTypeOpConverter, PermuteDimsOpConverter>(typeConverter, &ctxt);
     mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
         typeConverter, patterns, target);
     ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);

@@ -103,13 +103,6 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return xetile::WorkGroupMapAttr();
     }
 
-    mlir::DenseI32ArrayAttr getWgData() {
-      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
-      if (encoding)
-        return encoding.getWgData();
-      return mlir::DenseI32ArrayAttr();
-    }
-
     mlir::DenseI64ArrayAttr getInnerBlocks() {
       auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
       if (encoding)
@@ -122,6 +115,25 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       if (encoding)
         return encoding.getOrder();
       return mlir::DenseI32ArrayAttr::get(getContext(), {1, 0});
+    }
+
+    mlir::Attribute getMemoryScope() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getMemoryScope();
+      return mlir::Attribute();
+    }
+
+    int getMemoryScopeAsInt() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding && encoding.getMemoryScope()) {
+        auto memoryScope = encoding.getMemoryScope();
+        assert(mlir::isa<mlir::IntegerAttr>(memoryScope) &&
+              "Using `getMemorySpaceAsInt` with non-Integer attribute");
+        return mlir::cast<mlir::IntegerAttr>(memoryScope).getInt();
+      }
+      // return default value 0 indicating Global memory
+      return 0;
     }
 
   }];
@@ -140,7 +152,7 @@ def XeTile_FloatType : AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
 def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType]>;
 
 // define a 1D or 2D memref of XeTile scalar type
-def XeTile_DynamicMemref : MemRefRankOf<[XeTile_ScalarType], [1, 2]>;
+def XeTile_DynamicMemref : Non0RankedMemRefOf<[XeTile_ScalarType]>;
 
 // define the source type for XeTile init_tile
 def XeTile_BaseAddrType : AnyTypeOf<[XeTile_DynamicMemref, UI64, UI32, I64, I32]>;
@@ -154,7 +166,6 @@ def XeTile_2DOr4DVector: VectorOfRankAndType<[2, 4], [XeTile_ScalarType]>;
 
 // define the attribute type allowed for padding values for load op
 def XeTile_PaddingValueAttr : AnyAttrOf<[I32Attr, F32Attr]>;
-
 
 
 #endif // _XETILE_TYPES_TD_INCLUDED_

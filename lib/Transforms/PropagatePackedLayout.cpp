@@ -330,7 +330,8 @@ makeCast(mlir::OpBuilder &builder, mlir::Value src, mlir::Type srcType,
 
   tmp = builder.create<mlir::vector::ShuffleOp>(
       loc, tmp, tmp,
-      builder.getI64ArrayAttr(getVNNIShuffleIndices(srcVecType, dstVecType)));
+      builder.getDenseI64ArrayAttr(
+          getVNNIShuffleIndices(srcVecType, dstVecType)));
 
   return {builder.create<mlir::vector::ShapeCastOp>(loc, dstVecType, tmp),
           root};
