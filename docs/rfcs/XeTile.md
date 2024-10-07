@@ -46,6 +46,13 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
   %tile0 = xetile.init_tile %base_memref, [%tile_offset:2] :
      memref<128x128xbf16> into tile<8x16xbf16>
 ```
+
+`init_tile` can take high-dimension memref as input. The innermost two dimension of input memref are used to derive the tile's base_shape and base_strides.
+```mlir
+  %tile0 = xetile.init_tile %base_memref, [%tile_offset:4] :
+     memref<4x4x128x128xbf16> into tile<8x16xbf16>
+```
+
 `init_tile` with memref of dynamic shape. The memref has a dynamic shape, so that its shape and strides have to be passed as runtime parameters to init_tile.
 ```mlir
   %tile0 = xetile.init_tile %base_memref, [%tile_offset:2], [%base_shape:2], [%base_strides:2]:
@@ -65,6 +72,12 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      memref<128x128xbf16, affine_map=<(d0, d1)->(d1, d0)> into tile<64x32xbf16, #tile_attr>
 ```
 
+The tile with `order` attribute can be created from the high-dimension memref.
+```mlir
+  #tile_attr = #xetile.tile_attr<order = [0, 1]>
+  %tile0 = xetile.init_tile %base_memref, [%tile_offset:4]:
+     memref<4x4x128x128xbf16, affine_map=<(d3, d2, d0, d1)->(d3, d2, d1, d0)>> into tile<64x32xbf16, #tile_attr>
+```
 With the tile date type, XeTile supports load_tile, prefetch_tile, and store_tile.
 
 `load_tile` loads a tile to a 2D vector, which could be backed by a register region.
