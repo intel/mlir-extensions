@@ -232,7 +232,7 @@ The tile_pack and tile_unpack operation is similar to pack and unpack operation 
 Below is an example.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
-   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, order = [0, 1], inner_blocks= array<i64: 32,16]> 
+   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, order = [0, 1], inner_blocks= array<i64: 32,16> > 
 
    %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #tile_attr>
 ```
