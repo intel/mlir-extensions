@@ -434,7 +434,6 @@ findImmutableInsertSliceSource(::imex::ndarray::ImmutableInsertSliceOp iisOp,
     laterSizes.emplace_back(iisSizes);
   };
 
-  return {};
 }
 } // namespace
 
