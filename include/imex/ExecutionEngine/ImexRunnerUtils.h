@@ -73,6 +73,11 @@ _mlir_ciface_fillResource1DRandomF16(UnrankedMemRefType<f16> *ptr,
                                      const bool genInt);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_fillResource1DRandomF32(UnrankedMemRefType<float> *ptr,
+                                     const float lower, const float upper,
+                                     const bool genInt);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *m);
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMemrefF16(UnrankedMemRefType<f16> *m);

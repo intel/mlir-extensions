@@ -56,7 +56,7 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
       %26 = arith.muli %arg3, %c1024 : index
       %27 = arith.addi %26, %13 : index
       %28 = arith.addi %27, %16 : index
-      //CHECK: %{{.*}} = xegpu.create_nd_tdesc {{.*}} : memref<2048x12288xbf16> -> !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>>
+      //CHECK: %{{.*}} = xegpu.create_nd_tdesc {{.*}} : memref<2048x12288xbf16> -> !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
       %29 = xetile.init_tile %arg1[%28, %15] : memref<2048x12288xbf16> -> !xetile.tile<32x32xbf16>
 
       %30 = scf.for %arg4 = %c0 to %c2 step %c1 iter_args(%arg5 = %cst) -> (vector<1x4xf32>) {
@@ -65,27 +65,27 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
         %35 = arith.addi %34, %10 : index
         %36 = arith.addi %35, %11 : index
 
-        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<16384x12288xbf16> -> !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>>
+        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<16384x12288xbf16> -> !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
         %37 = xetile.init_tile %arg0[%36, %9] : memref<16384x12288xbf16> -> !xetile.tile<32x32xbf16>
         %38:3 = scf.for %arg6 = %c0 to %c12288 step %c32 iter_args(%arg7 = %37, %arg8 = %29, %arg9 = %cst_0) -> (!xetile.tile<32x32xbf16>, !xetile.tile<32x32xbf16>, vector<32x32xf32>) {
 
-          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x32x16xbf16>
+          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xbf16>
           //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<32x16xbf16> from vector<2x32x16xbf16>
           //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [8, 16], strides = [1, 1]} : vector<32x16xbf16> to vector<8x16xbf16>
-          %48 = xetile.load_tile %arg7 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
+          %48 = xetile.load_tile %arg7 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
 
 
-          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, packed}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>> -> vector<2x16x16x2xbf16>
-          //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<16x16x2xbf16> from vector<2x16x16x2xbf16>
-          //CHECK-COUNT-4: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [8, 16], strides = [1, 1]} : vector<16x16x2xbf16> to vector<8x16x2xbf16>
-          %49 = xetile.load_tile %arg8 { padding = 0.000000e+00 : f32 }  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
+          //CHECK: %{{.*}} = xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xbf16>
+          //CHECK-COUNT-2: %{{.*}} = vector.extract %{{.*}} : vector<32x16xbf16> from vector<2x32x16xbf16>
+          //CHECK-COUNT-4: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [16, 16], strides = [1, 1]} : vector<32x16xbf16> to vector<16x16xbf16>
+          %49 = xetile.load_tile %arg8 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xbf16> -> vector<32x32xbf16>
 
-          //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>>
-          //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true, scattered = false>>
+          //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
+          //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
           %50 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
           %51 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
 
-          //CHECK-COUNT-16: %{{.*}} = xegpu.dpas %{{.*}}, %{{.*}}, %{{.*}} : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>
+          //CHECK-COUNT-16: %{{.*}} = xegpu.dpas %{{.*}}, %{{.*}}, %{{.*}} : vector<8x16xbf16>, vector<16x16xbf16>, vector<8x16xf32> -> vector<8x16xf32>
           %52 = xetile.tile_mma %48, %49, %arg9 : vector<32x32xbf16>, vector<32x32xbf16>, vector<32x32xf32> -> vector<32x32xf32>
           scf.yield %50, %51, %52 : !xetile.tile<32x32xbf16>, !xetile.tile<32x32xbf16>, vector<32x32xf32>
         } {lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 3>, step = 32 : index, upperBoundMap = affine_map<() -> (12288)>}
@@ -99,23 +99,26 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
         //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16xf32>, vector<16xf32>
         %40 = vector.multi_reduction <add>, %39, %cst_1 [0] : vector<32x32xf32> to vector<32xf32>
         %41 = vector.shape_cast %40 : vector<32xf32> to vector<1x32xf32>
-        %alloc = memref.alloc() : memref<8x128xf32, #spirv.storage_class<Workgroup>>
+        %alloc = memref.alloc() : memref<8x128xf32, 3>
 
-        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        //CHECK: %{{.*}} = arith.addi %{{.*}}, %{{.*}} : index
-        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        %42 = xetile.init_tile %alloc[%17, %13] : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xetile.tile<1x32xf32>
+        //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x32xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        %42 = xetile.init_tile %alloc[%17, %13] : memref<8x128xf32, 3> -> !xetile.tile<1x32xf32, #xetile.tile_attr<memory_scope = 3>>
 
-        //CHECK-COUNT-2: vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [1, 16], strides = [1, 1]} : vector<1x32xf32> to vector<1x16xf32>
-        //CHECK-COUNT-2: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf32>, !xegpu.tensor_desc<1x16xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        xetile.store_tile %41,  %42 : vector<1x32xf32>, !xetile.tile<1x32xf32>
+        //CHECK: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x32xf32>, !xegpu.tensor_desc<1x32xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        xetile.store_tile %41,  %42 : vector<1x32xf32>, !xetile.tile<1x32xf32, #xetile.tile_attr<memory_scope = 3>>
 
-        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-        //CHECK: xegpu.load_nd {{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>> -> vector<8x4xf32>
-        //CHECK-COUNT-8: vector.extract_strided_slice %{{.*}} {offsets = {{.*}}, sizes = [1, 4], strides = [1, 1]} : vector<8x4xf32> to vector<1x4xf32>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK: xegpu.create_nd_tdesc %{{.*}} : memref<8x128xf32, 3> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>>
+        //CHECK-COUNT-8: xegpu.load_nd {{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 1 : i64, boundary_check = true>> -> vector<1x4xf32>
         //CHECK-COUNT-8: arith.addf %{{.*}}, %{{.*}} : vector<1x4xf32>
-        %43 = xetile.init_tile %alloc[%21, %23] : memref<8x128xf32, #spirv.storage_class<Workgroup>> -> !xetile.tile<8x4xf32>
-        %44 = xetile.load_tile %43 { padding = 0.000000e+00 : f32 }  : !xetile.tile<8x4xf32> -> vector<8x4xf32>
+        %43 = xetile.init_tile %alloc[%21, %23] : memref<8x128xf32, 3> -> !xetile.tile<8x4xf32, #xetile.tile_attr<memory_scope = 3>>
+        %44 = xetile.load_tile %43 {padding = 0.000000e+00 : f32}  : !xetile.tile<8x4xf32, #xetile.tile_attr<memory_scope = 3>> -> vector<8x4xf32>
         %45 = vector.multi_reduction <add>, %44, %cst_2 [0] : vector<8x4xf32> to vector<4xf32>
         %46 = vector.shape_cast %45 : vector<4xf32> to vector<1x4xf32>
         %47 = arith.addf %arg5, %46 : vector<1x4xf32>
@@ -123,8 +126,8 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
       } {lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 1>, step = 1 : index, syn.mm_dim = 0 : i64, syn.parall_level = 2 : i64, upperBoundMap = affine_map<() -> (2)>}
 
       //CHECK: %{{.*}} = arith.addi %{{.*}}, %{{.*}} : index
-      //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<32x2048xf32> -> !xegpu.tensor_desc<1x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
-      //CHECK: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x4xf32>, !xegpu.tensor_desc<1x4xf32, #xegpu.tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true, scattered = false>>
+      //CHECK: %{{.*}} = xegpu.create_nd_tdesc %{{.*}} : memref<32x2048xf32> -> !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x4xf32>, !xegpu.tensor_desc<1x4xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
       %31 = arith.addi %26, %16 : index
       %32 = xetile.init_tile %arg2[%25, %31] : memref<32x2048xf32> -> !xetile.tile<1x4xf32>
       xetile.store_tile %30,  %32 : vector<1x4xf32>, !xetile.tile<1x4xf32>

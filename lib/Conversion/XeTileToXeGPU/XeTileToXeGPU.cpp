@@ -20,14 +20,20 @@
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "../PassDetail.h"
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
+#include "imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h"
 #include "imex/Utils/XeArch.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTXETILETOXEGPU
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 #include <memory>
 namespace imex {
@@ -85,6 +91,8 @@ public:
 
     // Arith ops
     addDynamicallyLegalOp<mlir::arith::AddFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::AndIOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::DivFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
@@ -153,6 +161,9 @@ public:
     addDynamicallyLegalOp<mlir::math::TanhOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
 
+    addDynamicallyLegalOp<mlir::vector::CreateMaskOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+
     addDynamicallyLegalOp<mlir::vector::TransposeOp>(
         [](mlir::vector::TransposeOp op) {
           return op.getResult().getType().getRank() == 2;
@@ -165,7 +176,7 @@ private:
 
 // Full Pass
 struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
-    : public ::imex::ConvertXeTileToXeGPUBase<ConvertXeTileToXeGPUPass> {
+    : public imex::impl::ConvertXeTileToXeGPUBase<ConvertXeTileToXeGPUPass> {
   ConvertXeTileToXeGPUPass() = default;
 
   ConvertXeTileToXeGPUPass(const std::string &deviceName) {

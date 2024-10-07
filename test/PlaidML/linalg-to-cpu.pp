@@ -1,16 +1,9 @@
 // linalg dialect to gpu dialect lowering pipeline
 builtin.module(convert-tensor-to-linalg
-    arith-bufferize
-    func.func(empty-tensor-to-alloc-tensor
-          //eliminate-empty-tensors
-          scf-bufferize
-          shape-bufferize
-          linalg-bufferize
-          bufferization-bufferize
-          tensor-bufferize)
-    func-bufferize
-    func.func(finalizing-bufferize
-          convert-linalg-to-loops)
+    func.func(empty-tensor-to-alloc-tensor)
+    one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
+    buffer-deallocation-pipeline
+    func.func(convert-linalg-to-loops)
     convert-scf-to-cf
     convert-cf-to-llvm
     convert-arith-to-llvm

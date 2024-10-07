@@ -58,7 +58,8 @@ struct SgSCFForOpBlockPattern : public XeOneToNConversion<mlir::scf::ForOp> {
 
     // apply the signature convertion for SCFFor body arguments, an
     // UnrealizedConversionCastOp will be inserted by typeConverter
-    rewriter.applySignatureConversion(&op.getRegion(), argumentMapping);
+    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(),
+                                      argumentMapping);
 
     if (newOp.getBody())
       rewriter.eraseBlock(newOp.getBody());

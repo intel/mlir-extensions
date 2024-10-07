@@ -97,18 +97,49 @@ def XeTileWgToSg : Pass<"xetile-wg-to-sg", "::mlir::gpu::GPUModuleOp">{
                            "mlir::vector::VectorDialect"];
 }
 
-def XeTileOptimizeTranspose : Pass<"xetile-optimize-transpose"> {
-  let summary = "Fuse tile loads and transpose operations.";
+def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Collection of canonicalization patterns for XeTile dialect.";
 
   let description = [{
-    This pass fuses tile loads that are consumed by transpose operations into a single
-    load operation. Transformation uses the `order` attribute in the XeTile type to
-    perform the load and transpose together.
+    This pass performs a set of canonicalization steps on XeTile ops that are expected by the
+    downstream passes. First, this will convert certain vector ops (transpose, broadcast,
+     multi_reduction) to equivalent XeTile ops. Next, it will convert all XeTile ops
+     consuming or producing col-major tiles to one with row-major tiles. Finally, it will
+     perform cleanup to remove redundant ops that maybe produced by the previous steps.
   }];
-  let constructor = "imex::createXeTileOptimizeTransposePass()";
+  let constructor = "imex::createXeTileCanonicalizationPass()";
   let dependentDialects = [
-    "::imex::xetile::XeTileDialect"
+    "::imex::xetile::XeTileDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::vector::VectorDialect",
+    "::mlir::gpu::GPUDialect"
   ];
+}
+
+def NewXeTileBlocking : Pass<"new-xetile-blocking", "::mlir::gpu::GPUModuleOp">{
+  let summary = "transform XeTile large tiles(input) into arrays of smaller "
+                "blocks with appropriate size, such that the operator on each "
+                "of the blocks can be mapped into one hardware instruction.";
+
+  let description = [{
+    This transform pass preprocesses the xetile program by decomposing large XeTile tiles
+    into smaller ones that can be handled by a hardware instruction. It is going to replace
+    the xetile-blocking pass.
+  }];
+
+  let constructor = "imex::createNewXeTileBlockingPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::math::MathDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
 }
 
 

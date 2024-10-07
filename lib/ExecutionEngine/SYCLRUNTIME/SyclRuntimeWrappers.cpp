@@ -25,12 +25,12 @@
 #include <tuple>
 #include <vector>
 
-#include <CL/sycl.hpp>
 #include <level_zero/ze_api.h>
 #include <map>
 #include <mutex>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/queue.hpp> // for queue
+#include <sycl/sycl.hpp>
 
 #ifdef _WIN32
 #define SYCL_RUNTIME_EXPORT __declspec(dllexport)
@@ -194,6 +194,13 @@ static void deallocDeviceMemory(GPUSYCLQUEUE *queue, void *ptr) {
   sycl::free(ptr, queue->syclQueue_);
 }
 
+// @TODO: Add support for async copy
+// Currnetly, we only support synchrnous copy?
+static void memoryCopy(GPUSYCLQUEUE *queue, void *dstPtr, void *srcPtr,
+                       size_t size) {
+  queue->syclQueue_.memcpy(dstPtr, srcPtr, size).wait();
+}
+
 static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
                                      size_t dataSize) {
   assert(data);
@@ -218,14 +225,20 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
                            nullptr,
                            nullptr};
 
+  std::string build_flags;
+  // IGC auto-detection of scalar/vector backend does not work for native BF16
+  // data type yet, hence we need to pass this flag explicitly for if native
+  // bf16 data type is used and we need to use vector compute.
+  if (getenv("IMEX_USE_IGC_VECTOR_BACK_END")) {
+    build_flags += " -vc-codegen ";
+  }
   // enable large register file if needed
   if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
-    desc.pBuildFlags =
-        "-vc-codegen -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
-        "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
-        "'-printregusage -enableBCR' ";
+    build_flags += "-doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
+                   "-DPASTokenReduction -Xfinalizer -SWSBDepReduction "
+                   "-Xfinalizer -printregusage -Xfinalizer -enableBCR";
   }
-
+  desc.pBuildFlags = build_flags.c_str();
   auto zeDevice = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
       syclQueue.get_device());
   auto zeContext = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
@@ -354,10 +367,11 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
           enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
       event.wait();
 
-      auto startTime = event.get_profiling_info<
-          cl::sycl::info::event_profiling::command_start>();
-      auto endTime = event.get_profiling_info<
-          cl::sycl::info::event_profiling::command_end>();
+      auto startTime =
+          event
+              .get_profiling_info<sycl::info::event_profiling::command_start>();
+      auto endTime =
+          event.get_profiling_info<sycl::info::event_profiling::command_end>();
       auto gap = float(endTime - startTime) / 1000000.0f;
       executionTime += gap;
       if (gap > maxTime)
@@ -419,6 +433,11 @@ extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(GPUSYCLQUEUE *queue, void *ptr) {
       deallocDeviceMemory(queue, ptr);
     }
   });
+}
+
+extern "C" SYCL_RUNTIME_EXPORT void
+gpuMemCopy(GPUSYCLQUEUE *queue, void *dstPtr, void *srcPtr, size_t size) {
+  return catchAll([&]() { memoryCopy(queue, dstPtr, srcPtr, size); });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT ze_module_handle_t

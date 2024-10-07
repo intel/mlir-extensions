@@ -202,3 +202,12 @@ func.func @test_from_memref(%arg0: memref<?xi32, strided<[?], offset: ?>>) -> !n
 // CHECK-LABEL: func.func @test_from_memref
 // CHECK: [[V0:%.*]] = ndarray.from_memref
 // CHECK-NEXT: return [[V0]] : !ndarray.ndarray<?xi32>
+
+// -----
+func.func @test_permute_dims(%arg0: !ndarray.ndarray<?x?x?xi64>) -> !ndarray.ndarray<?x?x?xi64> {
+    %0 = ndarray.permute_dims %arg0 [0, 1, 2] : !ndarray.ndarray<?x?x?xi64> -> !ndarray.ndarray<?x?x?xi64>
+    return %0 : !ndarray.ndarray<?x?x?xi64>
+}
+// CHECK-LABEL: func.func @test_permute_dims
+// CHECK: [[V0:%.*]] = ndarray.permute_dims
+// CHECK-NEXT: return [[V0]] : !ndarray.ndarray<?x?x?xi64>

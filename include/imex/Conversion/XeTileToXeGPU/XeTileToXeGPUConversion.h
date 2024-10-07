@@ -67,7 +67,7 @@ public:
   }
 
   mlir::Block *
-  applySignatureConversion(mlir::Region *region,
+  applySignatureConversion(mlir::Block *block,
                            mlir::TypeConverter::SignatureConversion &conversion,
                            const mlir::TypeConverter *converter = nullptr);
 
@@ -159,12 +159,14 @@ public:
     // (convertedTypes.size() == 1) we will reuse the current value. Otherwise,
     // it has one-to-n mapping, and the new value should be an
     // UnrealizedConversionCastOp.
-    for (auto &value : remappedValues) {
+    for (size_t i = 0; i < remappedValues.size(); i++) {
+      auto value = remappedValues[i];
       auto castOp = value.getDefiningOp<mlir::UnrealizedConversionCastOp>();
-      if (castOp)
+      auto valueTy = value.getType();
+      if (castOp && valueTy == op->getOperand(i).getType())
         convertedValues.push_back(castOp.getInputs());
       else
-        convertedValues.push_back(value);
+        convertedValues.push_back(remappedValues[i]);
     }
 
     auto sourceOp = llvm::dyn_cast<SourceOp>(op);

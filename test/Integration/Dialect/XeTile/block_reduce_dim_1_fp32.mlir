@@ -39,7 +39,7 @@ module @softmax attributes {gpu.container_module} {
       %1 = xetile.init_tile %a[%m, %n] : memref<1024x32xf32> -> !xetile.tile<16x32xf32>
       %2 = xetile.load_tile %1: !xetile.tile<16x32xf32> -> vector<16x32xf32>
 
-      %4 = xetile.reduce <add>, %2 [1]: vector<16x32xf32> -> vector<16x1xf32>
+      %4 = xetile.reduction <add>, %2 [1]: vector<16x32xf32> -> vector<16x1xf32>
       %5 = xetile.init_tile %b[0, %m] : memref<1x1024xf32> -> !xetile.tile<1x16xf32>
       %cast = vector.shape_cast %4: vector<16x1xf32> to vector<1x16xf32>
       xetile.store_tile %cast, %5: vector<1x16xf32>, !xetile.tile<1x16xf32>

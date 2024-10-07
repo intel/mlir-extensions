@@ -50,7 +50,10 @@
 #include <iostream>
 #include <optional>
 
-#include "../PassDetail.h"
+namespace imex {
+#define GEN_PASS_DEF_CONVERTNDARRAYTOLINALG
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace imex {
 
@@ -566,7 +569,9 @@ struct DeleteLowering
     auto inp = adaptor.getInput();
     auto inpMR = createToMemRef(op.getLoc(), rewriter, inp,
                                 inpArType.getMemRefType(inp));
-    rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    auto newOp =
+        rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
+    newOp->setAttrs(op->getAttrs());
 
     return ::mlir::success();
   }
@@ -1217,6 +1222,39 @@ struct ReductionOpLowering
   }
 };
 
+/// Convert NDArray's permute_dims operations and their return type to
+/// Linalg/tensor.
+struct PermuteDimsOpLowering
+    : public ::mlir::OpConversionPattern<::imex::ndarray::PermuteDimsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::PermuteDimsOp op,
+                  ::imex::ndarray::PermuteDimsOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+
+    auto loc = op->getLoc();
+    auto srcTnsr = adaptor.getSource();
+
+    // convert src array to memref
+    auto srcArType = mlir::dyn_cast_or_null<::imex::ndarray::NDArrayType>(
+        op.getSource().getType());
+    if (!srcArType)
+      return mlir::failure();
+    auto srcMRType = srcArType.getMemRefType(srcTnsr);
+    auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType);
+
+    auto perm = ::mlir::AffineMapAttr::get(::mlir::AffineMap::getPermutationMap(
+        adaptor.getAxes(), rewriter.getContext()));
+    mlir::memref::TransposeOp transposeOp =
+        rewriter.create<mlir::memref::TransposeOp>(loc, srcMR, perm);
+
+    rewriter.replaceOp(op, transposeOp.getResult());
+
+    return ::mlir::success();
+  }
+};
+
 // *******************************
 // ***** Pass infrastructure *****
 // *******************************
@@ -1225,7 +1263,8 @@ struct ReductionOpLowering
 /// After success, no more NDArray should be left, replaced by Linalg & Affine
 /// & Arith. Use a type converter to get rid of NDArrayType.
 struct ConvertNDArrayToLinalgPass
-    : public ::imex::ConvertNDArrayToLinalgBase<ConvertNDArrayToLinalgPass> {
+    : public ::imex::impl::ConvertNDArrayToLinalgBase<
+          ConvertNDArrayToLinalgPass> {
 
   ConvertNDArrayToLinalgPass() = default;
 
@@ -1320,13 +1359,14 @@ struct ConvertNDArrayToLinalgPass
         [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-    patterns.insert<
-        ToTensorLowering, SubviewLowering, ExtractSliceLowering,
-        InsertSliceLowering, ImmutableInsertSliceLowering, LinSpaceLowering,
-        LoadOpLowering, CreateLowering, EWBinOpLowering, DimOpLowering,
-        EWUnyOpLowering, ReductionOpLowering, ReshapeLowering, CastLowering,
-        CopyLowering, DeleteLowering, CastElemTypeLowering, FromMemRefLowering>(
-        typeConverter, &ctxt);
+    patterns.insert<ToTensorLowering, SubviewLowering, ExtractSliceLowering,
+                    InsertSliceLowering, ImmutableInsertSliceLowering,
+                    LinSpaceLowering, LoadOpLowering, CreateLowering,
+                    EWBinOpLowering, DimOpLowering, EWUnyOpLowering,
+                    ReductionOpLowering, ReshapeLowering, CastLowering,
+                    CopyLowering, DeleteLowering, CastElemTypeLowering,
+                    FromMemRefLowering, PermuteDimsOpLowering>(typeConverter,
+                                                               &ctxt);
     ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 
     // populate function boundaries using our special type converter

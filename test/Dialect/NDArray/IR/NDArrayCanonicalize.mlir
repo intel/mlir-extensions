@@ -195,3 +195,27 @@ func.func @test_linspace() -> !ndarray.ndarray<?xi64> {
 // CHECK-SAME: !ndarray.ndarray<4xi64>
 // CHECK-NEXT: ndarray.cast
 // CHECK-SAME: !ndarray.ndarray<?xi64>
+
+func.func @test_permute_dims_cast(%arg0: !ndarray.ndarray<3x4x5xi64>) -> !ndarray.ndarray<?x?x?xi64> {
+    %0 = ndarray.permute_dims %arg0 [2, 1, 0] : !ndarray.ndarray<3x4x5xi64> -> !ndarray.ndarray<?x?x?xi64>
+    return %0 : !ndarray.ndarray<?x?x?xi64>
+}
+// CHECK-LABEL: func.func @test_permute_dims_cast
+// CHECK: ndarray.permute_dims
+// CHECK-SAME: !ndarray.ndarray<3x4x5xi64> -> !ndarray.ndarray<5x4x3xi64>
+// CHECK-NEXT: ndarray.cast
+
+func.func @test_permute_dims_identity1(%arg0: !ndarray.ndarray<3x4x5xi64>) -> !ndarray.ndarray<?x?x?xi64> {
+    %0 = ndarray.permute_dims %arg0 [0, 1, 2] : !ndarray.ndarray<3x4x5xi64> -> !ndarray.ndarray<?x?x?xi64>
+    return %0 : !ndarray.ndarray<?x?x?xi64>
+}
+// CHECK-LABEL: func.func @test_permute_dims_identity1
+// CHECK: ndarray.cast %arg0 : !ndarray.ndarray<3x4x5xi64> to !ndarray.ndarray<?x?x?xi64>
+// CHECK-NOT: ndarray.permute_dims
+
+func.func @test_permute_dims_identity2(%arg0: !ndarray.ndarray<3x4x5xi64>) -> !ndarray.ndarray<3x4x5xi64> {
+    %0 = ndarray.permute_dims %arg0 [0, 1, 2] : !ndarray.ndarray<3x4x5xi64> -> !ndarray.ndarray<3x4x5xi64>
+    return %0 : !ndarray.ndarray<3x4x5xi64>
+}
+// CHECK-LABEL: func.func @test_permute_dims_identity2
+// CHECK-NOT: ndarray.permute_dims

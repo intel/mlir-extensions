@@ -1,29 +1,10 @@
-From 1994f9d400c5d768636a89ecf0f78b83431ce609 Mon Sep 17 00:00:00 2001
-From: Md Abdullah Shahneous Bari <md.abdullah.shahneous.bari@intel.com>
-Date: Fri, 26 Apr 2024 20:33:41 +0000
-Subject: [PATCH 4/7] Add serialization and de-serialization support for
- several decorations.
-
-Added decorations:
-- Alignment
-- DescriptorSet
-- FuncParamIOKindINTEL
-- SingleElementVectorINTEL
-- VectorComputeCallableFunctionINTEL
-- VectorComputeFunctionINTEL
-- VectorComputeVariableINTEL
----
- mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 8 +++++++-
- mlir/lib/Target/SPIRV/Serialization/Serializer.cpp     | 6 ++++++
- 2 files changed, 13 insertions(+), 1 deletion(-)
-
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index cfe3121bbe95..bc0ca11f4e16 100644
+index 12980879b20a..b5fbe8c5ceb8 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -251,8 +251,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-         symbol, FPFastMathModeAttr::get(opBuilder.getContext(),
-                                         static_cast<FPFastMathMode>(words[2])));
+@@ -259,8 +259,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+         symbol, FPRoundingModeAttr::get(opBuilder.getContext(),
+                                         static_cast<FPRoundingMode>(words[2])));
      break;
 -  case spirv::Decoration::DescriptorSet:
 +  case spirv::Decoration::Alignment:
@@ -32,7 +13,7 @@ index cfe3121bbe95..bc0ca11f4e16 100644
      if (words.size() != 3) {
        return emitError(unknownLoc, "OpDecorate with ")
               << decorationName << " needs a single integer literal";
-@@ -312,6 +313,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -319,6 +320,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::Restrict:
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
@@ -43,7 +24,7 @@ index cfe3121bbe95..bc0ca11f4e16 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -322,6 +327,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -329,6 +334,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      // it is needed for many validation rules.
      decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
      break;
@@ -52,12 +33,12 @@ index cfe3121bbe95..bc0ca11f4e16 100644
    case spirv::Decoration::SpecId:
      if (words.size() != 3) {
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index a7d195d7fcb0..34427458d6c1 100644
+index 714a3edfb565..bb3c68530aa9 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -243,8 +243,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -252,8 +252,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
      }
-     return emitError(loc, "expected FPFastMathModeAttr attribute for ")
+     return emitError(loc, "expected FPRoundingModeAttr attribute for ")
             << stringifyDecoration(decoration);
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::Binding:
@@ -66,7 +47,7 @@ index a7d195d7fcb0..34427458d6c1 100644
    case spirv::Decoration::Location:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -278,6 +280,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -286,6 +288,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::Restrict:
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
@@ -77,5 +58,3 @@ index a7d195d7fcb0..34427458d6c1 100644
      // For unit attributes and decoration attributes, the args list
      // has no values so we do nothing.
      if (isa<UnitAttr, DecorationAttr>(attr))
---
-2.34.1

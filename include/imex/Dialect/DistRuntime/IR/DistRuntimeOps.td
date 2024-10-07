@@ -231,4 +231,39 @@ def WaitOp : DistRuntime_Op<"wait", []> {
   let arguments = (ins DistRuntime_AsyncHandle:$handle);
 }
 
+def CopyPermuteOp : DistRuntime_Op<"copy_permute",
+    [Pure, DeclareOpInterfaceMethods<AsyncOpInterface>, AttrSizedOperandSegments]> {
+  let summary = "Copy adequate data from input to a new permuted output";
+  let description = [{
+    Copy the necessary data from the distributed input array to the locally owned part of the new output array.
+    The shape of the output array is assumed to be a permuted version of the input's shape.
+
+    The local data is not modified.
+
+    Arguments:
+
+    - `team`: the distributed team owning the distributed array
+    - `gShape`: the global shape of the distributed array
+    - `lOffsets`: the offset of the local data within the global array
+    - `lArray`: the locally owned data
+    - `nlShape`: the local shape of the distributed output array
+    - `nlOffsets`: the offsets of the locally owned output array
+
+    `gShape`, `lOffsets` are variadic arguments with same size `ri` where `ri` is the rank of the global input array (e.g., one number for each dimension of the global input array).
+    `ngShape`, `nlOffsets` are variadic arguments with same size `ro` where `ro` is the rank of the global output array (e.g., one number for each dimension of the global output array).
+  }];
+  let arguments = (ins AnyAttr:$team,
+                       AnyType:$lArray,
+                       Variadic<Index>:$gShape,
+                       Variadic<Index>:$lOffsets,
+                       Variadic<Index>:$nlOffsets,
+                       Variadic<Index>:$nlShape,
+                       DenseI64ArrayAttr:$axes);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
+  let assemblyFormat = [{
+    $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_offs` $nlOffsets `n_shape` $nlShape `axes` $axes attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
+  }];
+  let hasCanonicalizer = 1;
+}
+
 #endif // _DistRuntime_OPS_TD_INCLUDED_

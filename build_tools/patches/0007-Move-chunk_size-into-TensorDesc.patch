@@ -1,0 +1,432 @@
+From c1a7d459790db5335907947cf44dcbd230cec783 Mon Sep 17 00:00:00 2001
+From: Chao Chen <chao.chen@intel.com>
+Date: Thu, 29 Aug 2024 17:58:34 +0000
+Subject: [PATCH] move chunk_size into TensorDesc
+
+---
+ .../mlir/Dialect/XeGPU/IR/XeGPUAttrs.td       | 46 +++++++++++---
+ .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td | 19 ++----
+ .../mlir/Dialect/XeGPU/IR/XeGPUTypes.td       | 63 ++++++++++++-------
+ mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp    | 40 ++++++++----
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp        | 31 ++++-----
+ 5 files changed, 122 insertions(+), 77 deletions(-)
+
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
+index f3ca09a6a68e..6ffb4eb3c60f 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
+@@ -19,9 +19,15 @@ class XeGPUAttr<string name, string attrMnemonic, list<Trait> traits = [],
+   let mnemonic = attrMnemonic;
+ }
+
+-def XeGPU_TensorDescAttr: XeGPUAttr<"TensorDesc", "tdesc_attr"> {
++class XeGPU_TensorDescAttr<string name, string attrMnemonic, list<Trait> traits = [],
++                         string baseCppClass = "::mlir::Attribute">
++    : XeGPUAttr<name, attrMnemonic, traits, baseCppClass> {
++  let assemblyFormat = "`<` struct(params) `>`";
++}
++
++def XeGPU_BlockTensorDescAttr: XeGPU_TensorDescAttr<"BlockTensorDesc", "block_tdesc_attr"> {
+   let summary = [{a composite attribute for `TensorDescType`}];
+-  let description = [{`TensorDescAttr` (or `tdesc_attr`) is a composite
++  let description = [{`BlockTensorDesc` (or `block_tdesc_attr`) is a composite
+     attribute defined for `TensorDescType` for describing following
+     properties of a `TensorDesc`.
+     1. `memory_scope`: It describes where the data block described by the
+@@ -33,29 +39,49 @@ def XeGPU_TensorDescAttr: XeGPUAttr<"TensorDesc", "tdesc_attr"> {
+         8x32. Its default value is 1.
+     3. `boundary_check`: It is used to indicates the hardware whether to do
+         out-of-boundary check. The default value is true.
+-    4. `scattered`: It is used to differenciate TensorDescs created from
+-       `create_nd_tdesc` vs from `create_tdesc`.
+   }];
+
+   let parameters = (ins
+     OptionalParameter<"MemoryScopeAttr">: $memory_scope,
+     OptionalParameter<"IntegerAttr", "1">: $array_length,
+-    OptionalParameter<"BoolAttr", "true">: $boundary_check,
+-    OptionalParameter<"BoolAttr", "false">: $scattered
++    OptionalParameter<"BoolAttr", "true">: $boundary_check
+   );
+
+   let builders = [
+     AttrBuilder<(ins
+       CArg<"xegpu::MemoryScope", "xegpu::MemoryScope::Global">:$memory_scope,
+       CArg<"int", "1">:$array_length,
+-      CArg<"bool", "true">: $boundary_check,
+-      CArg<"bool", "false">: $scattered
++      CArg<"bool", "true">: $boundary_check
+     )>
+   ];
+
+-  let assemblyFormat = "`<` struct(params) `>`";
+ }
+
++def XeGPU_ScatterTensorDescAttr: XeGPU_TensorDescAttr<"ScatterTensorDesc", "scatter_tdesc_attr"> {
++  let summary = [{a composite attribute for `TensorDescType`}];
++  let description = [{`ScatterTensorDesc` (or `scatter_tdesc_attr`) is a composite
++    attribute defined for `TensorDescType` for describing following
++    properties of a `TensorDesc`.
++    1. `memory_scope`: It describes where the data block described by the
++        TensorDesc is located, `Global` device memory or `Shared` local memory.
++        It is default to `Global`.
++    2.  `chunk_size`: indicates number of continious elements accessed for each
++        offset, default is 1. It is used with `scattered` attr only.
++  }];
++
++  let parameters = (ins
++    OptionalParameter<"MemoryScopeAttr">: $memory_scope,
++    OptionalParameter<"IntegerAttr", "1">: $chunk_size
++  );
++
++  let builders = [
++    AttrBuilder<(ins
++      CArg<"xegpu::MemoryScope", "xegpu::MemoryScope::Global">:$memory_scope,
++      CArg<"int", "1">: $chunk_size
++    )>
++  ];
++ }
++
+ //===----------------------------------------------------------------------===//
+ // XeGPU Memory Scope Enums.
+ //===----------------------------------------------------------------------===//
+@@ -116,4 +142,4 @@ def XeGPU_FenceScopeAttr:
+     let assemblyFormat = "$value";
+ }
+
+-#endif // MLIR_DIALECT_XEGPU_IR_XEGPUATTRS_TD
+\ No newline at end of file
++#endif // MLIR_DIALECT_XEGPU_IR_XEGPUATTRS_TD
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+index c32c7541c397..13a0bff5de1a 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+@@ -411,42 +411,33 @@ def XeGPU_CreateDescOp: XeGPU_Op<"create_tdesc", [Pure, ViewLikeOpInterface]> {
+       is fixed to the hardware supportted subgroup size, e.g., 16 on PVC,
+       implying each element in the array corresponds to a work-item (SIMT lane)
+       in the subgroup.
+-    * chunk_size: [optional attribute] indicates number of continious
+-      elements accessed for each offset, default is 1.
+
+     Example 1. It assumes subgroup size is 4, and accesses a[0], a[16], a[32], a[64]
+     ```mlir
+     %a = memref.alloc() : memref<1024xf32>
+-    %1 = xegpu.create_tdesc %a[0, 16, 32, 64]: memref<1024xf32> -> TensorDesc<4xf32>
++    %1 = xegpu.create_tdesc %a[0, 16, 32, 64]: memref<1024xf32> -> TensorDesc<4xf32, chunk_size_per_lane = 1>
+     ```
+
+     Example 2. It assumes subgroup size is 4, and each workitem access 8 elements.
+                It will access totally 32 data elements: a[0:7], a[16:23], a[32:39], a[64:71]
+     ```mlir
+     %0 = memref.alloc() : memref<1024xf32>
+-    %1 = xegpu.create_tdesc %0[0, 16, 32, 64] {chunk_size = 8}: memref<1024xf32> -> TensorDesc<4x8xf32>
++    %1 = xegpu.create_tdesc %0[0, 16, 32, 64] : memref<1024xf32> -> TensorDesc<4x8xf32, chunk_size_per_lane = 8>
+     ```
+
+     Example 3. It is similar to Example 2, but there is some overlaps among workitems.
+                It accesses: a[0:7], a[4:11], a[8:15], a[12:19]
+     ```mlir
+     %0 = memref.alloc() : memref<1024xf32>
+-    %1 = xegpu.create_tdesc %0[0, 4, 8, 12] {chunk_size = 8}: memref<1024xf32> -> TensorDesc<4x8xf32>
++    %1 = xegpu.create_tdesc %0[0, 4, 8, 12] : memref<1024xf32> -> TensorDesc<4x8xf32, chunk_size_per_lane = 8>>
+     ```
+   }];
+
+   let arguments = (ins XeGPU_BaseAddrType: $source,
+                        Variadic<Index>: $offsets,
+-                       DenseI64ArrayAttr: $const_offsets,
+-                       DefaultValuedAttr<I64Attr, "1">: $chunk_size);
++                       DenseI64ArrayAttr: $const_offsets);
+   let results = (outs XeGPU_TensorDesc:$TensorDesc);
+
+-  let builders = [
+-    OpBuilder<(ins "xegpu::TensorDescType": $TensorDesc, "Value": $source,
+-                   "llvm::ArrayRef<OpFoldResult>": $offsets,
+-                   CArg<"uint32_t", "1"> : $chunk_size)>,
+-  ];
+-
+   let assemblyFormat = [{
+     $source
+     custom<DynamicIndexList>($offsets, $const_offsets)
+@@ -723,7 +714,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas", [Pure, AllElementTypesMatch<["lhs", "rhs"]>]
+
+ def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", [Pure,
+       AllElementTypesMatch<["tensorDesc", "value", "result"]>,
+-      AllShapesMatch<["tensorDesc", "mask", "value", "result"]>]> {
++      AllShapesMatch<["tensorDesc", "value", "result"]>]> {
+   let summary = "Atomic ready-modify-write operation on the TensorDesc. ";
+
+   let description = [{
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
+index 9f101a71697b..8b22baf365af 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
+@@ -88,11 +88,14 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
+     TypeBuilderWithInferredContext<(ins
+       "llvm::ArrayRef<int64_t>": $shape,
+       "mlir::Type": $elementType,
+-      CArg<"bool", "false">: $scattered,
+       CArg<"int", "1">: $array_length,
+-      CArg<"xegpu::MemoryScope", "xegpu::MemoryScope::Global">:$memory_scope,
+-      CArg<"bool", "true">: $boundary_check
+-    )>
++      CArg<"bool", "true">: $boundary_check,
++      CArg<"xegpu::MemoryScope", "xegpu::MemoryScope::Global">:$memory_scope)>,
++    TypeBuilderWithInferredContext<(ins
++      "llvm::ArrayRef<int64_t>": $shape,
++      "mlir::Type": $elementType,
++      CArg<"int", "1">: $chunk_size,
++      CArg<"xegpu::MemoryScope", "xegpu::MemoryScope::Global">:$memory_scope)>
+   ];
+
+   let extraClassDeclaration = [{
+@@ -110,40 +113,58 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
+       return llvm::cast<TensorDescType>(cloneWith(getShape(), elementType));
+     }
+
+-    TensorDescAttr getEncodingAsTensorDescAttr() const {
+-      return llvm::dyn_cast_if_present<TensorDescAttr>(getEncoding());
++    BlockTensorDescAttr getEncodingAsBlockTensorDescAttr() const {
++      return llvm::dyn_cast_if_present<BlockTensorDescAttr>(getEncoding());
++    }
++
++    ScatterTensorDescAttr getEncodingAsScatterTensorDescAttr() const {
++      return llvm::dyn_cast_if_present<ScatterTensorDescAttr>(getEncoding());
+     }
+
+     xegpu::MemoryScope getMemoryScope() const {
+-      auto attr = getEncodingAsTensorDescAttr();
+-      if (attr && attr.getMemoryScope())
+-        return attr.getMemoryScope().getValue();
++      auto block_attr = getEncodingAsBlockTensorDescAttr();
++      if (block_attr && block_attr.getMemoryScope())
++        return block_attr.getMemoryScope().getValue();
++
++      auto scatter_attr = getEncodingAsScatterTensorDescAttr();
++      if (scatter_attr && scatter_attr.getMemoryScope())
++        return scatter_attr.getMemoryScope().getValue();
++
+       // return default value
+       return MemoryScope::Global;
+     }
+
+     int getArrayLength() {
+-      auto attr = getEncodingAsTensorDescAttr();
+-      if (attr && attr.getArrayLength())
+-        return attr.getArrayLength().getInt();
++      auto attr = getEncoding();
++      auto block_attr = mlir::dyn_cast_if_present<BlockTensorDescAttr>(attr);
++      assert((!attr || block_attr) && "invalid on non BlockTensorDescAttr.");
++      if (block_attr && block_attr.getArrayLength())
++        return block_attr.getArrayLength().getInt();
+       // return default value
+       return 1;
+     }
+
+     bool getBoundaryCheck() {
+-      auto attr = getEncodingAsTensorDescAttr();
+-      if (attr && attr.getBoundaryCheck())
+-        return attr.getBoundaryCheck().getValue();
++      auto attr = getEncoding();
++      auto block_attr = mlir::dyn_cast_if_present<BlockTensorDescAttr>(attr);
++      assert((!attr || block_attr) && "invalid on non BlockTensorDescAttr.");
++      if (block_attr && block_attr.getBoundaryCheck())
++        return block_attr.getBoundaryCheck().getValue();
+       // return default value
+       return true;
+     }
+
+-    bool getScattered() {
+-      auto attr = getEncodingAsTensorDescAttr();
+-      if (attr && attr.getScattered())
+-        return attr.getScattered().getValue();
+-      // return default value
+-      return false;
++    bool isScattered() {
++      return bool(getEncodingAsScatterTensorDescAttr());
++    }
++
++    int getChunkSize() {
++      auto attr = getEncoding();
++      auto scatter_attr = mlir::dyn_cast_if_present<ScatterTensorDescAttr>(attr);
++      assert((!attr || scatter_attr) && "invalid on non ScatterTensorDescAttr.");
++      if (scatter_attr && scatter_attr.getChunkSize())
++        return scatter_attr.getChunkSize().getInt();
++      return 1;
+     }
+   }];
+
+diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp
+index 24719fe748fe..0eab601bbaac 100644
+--- a/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp
++++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp
+@@ -30,18 +30,28 @@ void XeGPUDialect::initialize() {
+ }
+
+ //===----------------------------------------------------------------------===//
+-// XeGPU_TensorDescAttr
++// XeGPU_BlockTensorDescAttr
+ //===----------------------------------------------------------------------===//
+-TensorDescAttr TensorDescAttr::get(mlir::MLIRContext *context,
+-                                   xegpu::MemoryScope memory_scope,
+-                                   int array_length, bool boundary_check,
+-                                   bool scattered) {
++BlockTensorDescAttr BlockTensorDescAttr::get(mlir::MLIRContext *context,
++                                        xegpu::MemoryScope memory_scope,
++                                        int array_length, bool boundary_check) {
+   auto scopeAttr = MemoryScopeAttr::get(context, memory_scope);
+   auto lengthAttr =
+       IntegerAttr::get(IntegerType::get(context, 64), array_length);
+   auto boundaryAttr = BoolAttr::get(context, boundary_check);
+-  auto scatteredAttr = BoolAttr::get(context, scattered);
+-  return Base::get(context, scopeAttr, lengthAttr, boundaryAttr, scatteredAttr);
++  return Base::get(context, scopeAttr, lengthAttr, boundaryAttr);
++}
++
++//===----------------------------------------------------------------------===//
++// XeGPU_ScatterTensorDescAttr
++//===----------------------------------------------------------------------===//
++ScatterTensorDescAttr ScatterTensorDescAttr::get(mlir::MLIRContext *context,
++                                            xegpu::MemoryScope memory_scope,
++                                            int chunk_size) {
++  auto scopeAttr = MemoryScopeAttr::get(context, memory_scope);
++  auto chunkSizeAttr =
++      IntegerAttr::get(IntegerType::get(context, 64), chunk_size);
++  return Base::get(context, scopeAttr, chunkSizeAttr);
+ }
+
+ //===----------------------------------------------------------------------===//
+@@ -108,12 +118,18 @@ void TensorDescType::print(::mlir::AsmPrinter &printer) const {
+ }
+
+ TensorDescType TensorDescType::get(llvm::ArrayRef<int64_t> shape,
+-                                   mlir::Type elementType, bool scattered,
+-                                   int array_length, MemoryScope memory_scope,
+-                                   bool boundary_check) {
++                                   mlir::Type elementType, int array_length,
++                                   bool boundary_check, MemoryScope memory_scope) {
++  auto context = elementType.getContext();
++  auto attr = BlockTensorDescAttr::get(context, memory_scope, array_length, boundary_check);
++  return Base::get(context, shape, elementType, attr);
++}
++
++TensorDescType TensorDescType::get(llvm::ArrayRef<int64_t> shape,
++                                   mlir::Type elementType, int chunk_size,
++                                   MemoryScope memory_scope) {
+   auto context = elementType.getContext();
+-  auto attr = TensorDescAttr::get(context, memory_scope, array_length,
+-                                  boundary_check, scattered);
++  auto attr = ScatterTensorDescAttr::get(context, memory_scope, chunk_size);
+   return Base::get(context, shape, elementType, attr);
+ }
+
+diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
+index 8e185b8d2586..ee3834bd0d9c 100644
+--- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
++++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
+@@ -153,7 +153,7 @@ LogicalResult CreateNdDescOp::verify() {
+     return emitOpError("TensorDesc should have the same element "
+                        "type with the source if it is a memref.\n");
+
+-  if (getType().getScattered())
++  if (getType().isScattered())
+     return emitOpError("Expects a non-scattered TensorDesc.\n");
+
+   return success();
+@@ -164,7 +164,7 @@ LogicalResult CreateNdDescOp::verify() {
+ //===----------------------------------------------------------------------===//
+ LogicalResult PrefetchNdOp::verify() {
+   auto tdescTy = getTensorDescType();
+-  if (tdescTy.getScattered())
++  if (tdescTy.isScattered())
+     return emitOpError("Expects a non-scattered TensorDesc.\n");
+
+   if (!isReadHintOrNone(getL1HintAttr()))
+@@ -189,7 +189,7 @@ LogicalResult LoadNdOp::verify() {
+   if (tdescTy.getRank() > 2)
+     return emitOpError("Expecting a 1D/2D TensorDesc.\n");
+
+-  if (tdescTy.getScattered())
++  if (tdescTy.isScattered())
+     return emitOpError("Expects a non-scattered TensorDesc.\n");
+
+   if (!valueTy)
+@@ -257,7 +257,7 @@ LogicalResult StoreNdOp::verify() {
+   if (dstTy.getRank() > 2)
+     return emitOpError("Expecting a 1D/2D TensorDesc.\n");
+
+-  if (dstTy.getScattered())
++  if (dstTy.isScattered())
+     return emitOpError("Expects a non-scattered TensorDesc.\n");
+
+   if (!valTy)
+@@ -280,7 +280,7 @@ LogicalResult StoreNdOp::verify() {
+ //===----------------------------------------------------------------------===//
+ LogicalResult UpdateNdOffsetOp::verify() {
+   auto ty = getTensorDescType();
+-  if (ty.getScattered())
++  if (ty.isScattered())
+     return emitOpError("Expects a non-scattered TensorDesc.\n");
+
+   // number of offsets specified must match the rank of the tensor descriptor
+@@ -293,28 +293,19 @@ LogicalResult UpdateNdOffsetOp::verify() {
+ //===----------------------------------------------------------------------===//
+ // XeGPU_CreateDescOp
+ //===----------------------------------------------------------------------===//
+-void CreateDescOp::build(OpBuilder &builder, OperationState &state,
+-                         TensorDescType TensorDesc, Value source,
+-                         llvm::ArrayRef<OpFoldResult> offsets,
+-                         uint32_t chunk_size) {
+-  llvm::SmallVector<int64_t> staticOffsets;
+-  llvm::SmallVector<Value> dynamicOffsets;
+-  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
+-  build(builder, state, TensorDesc, source, dynamicOffsets, staticOffsets,
+-        chunk_size);
+-}
+
+ LogicalResult CreateDescOp::verify() {
+   auto tdescTy = getTensorDescType();
+-  auto chunkSize = getChunkSize();
+
+   if (getRankOf(getSource()) > 1)
+     return emitOpError(
+         "Expecting the source is a 1D memref or pointer (uint64_t).");
+
+-  if (!tdescTy.getScattered())
++  if (!tdescTy.isScattered())
+     return emitOpError("Expects a scattered TensorDesc.\n");
+
++  auto chunkSize = tdescTy.getChunkSize();
++
+   SmallVector<int64_t> shape({(int64_t)getNumOffsets()});
+   if (chunkSize != 1)
+     shape.push_back(chunkSize);
+@@ -332,7 +323,7 @@ LogicalResult CreateDescOp::verify() {
+ //===----------------------------------------------------------------------===//
+ LogicalResult PrefetchOp::verify() {
+   auto tdescTy = getTensorDescType();
+-  if (!tdescTy.getScattered())
++  if (!tdescTy.isScattered())
+     return emitOpError("Expects a scattered TensorDesc.\n");
+
+   if (!isReadHintOrNone(getL1HintAttr()))
+@@ -355,7 +346,7 @@ LogicalResult LoadGatherOp::verify() {
+   auto maskTy = getMaskType();
+   auto valueTy = getValueType();
+
+-  if (!tdescTy.getScattered())
++  if (!tdescTy.isScattered())
+     return emitOpError("Expects a scattered TensorDesc.\n");
+
+   if (!isReadHintOrNone(getL1HintAttr()))
+@@ -401,7 +392,7 @@ LogicalResult LoadGatherOp::verify() {
+ //===----------------------------------------------------------------------===//
+ LogicalResult StoreScatterOp::verify() {
+   auto tdescTy = getTensorDescType();
+-  if (!tdescTy.getScattered())
++  if (!tdescTy.isScattered())
+     return emitOpError("Expects a scattered TensorDesc.\n");
+
+   if (!isWriteHintOrNone(getL1HintAttr()))
+--
+2.34.1

@@ -235,3 +235,20 @@ func.func @test_cast_elemtype(%arg0: !ndarray.ndarray<?xi64>, %arg1: !ndarray.nd
 // CHECK-NEXT: [[V2:%.*]] = ndarray.cast_elemtype %arg1
 // CHECK-NEXT: [[V3:%.*]] = ndarray.cast_elemtype %arg2
 // CHECK: return [[V1]], [[V2]], [[V3]]
+
+// -----
+func.func @test_copy_permute() -> () {
+  %i1 = arith.constant 1 : i32
+  %c3 = arith.constant 3 : index
+  %c4 = arith.constant 4 : index
+  %src = ndarray.create %c3, %c4 value %i1 {dtype = 4 : i8} : (index, index, i32) -> !ndarray.ndarray<3x4xi32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>>
+  %dist = ndarray.permute_dims %src [1, 0]
+       : !ndarray.ndarray<3x4xi32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>>
+       -> !ndarray.ndarray<4x3xi32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>>
+  return
+}
+// CHECK-LABEL: @test_copy_permute
+// CHECK: "distruntime.team_size"() <{team = 22 : i64}> : () -> index
+// CHECK: "distruntime.team_member"() <{team = 22 : i64}> : () -> index
+// CHECK: [[handle:%.*]], [[nlArray:%.*]] = distruntime.copy_permute
+// CHECK: "distruntime.wait"([[handle]]) : (!distruntime.asynchandle) -> ()

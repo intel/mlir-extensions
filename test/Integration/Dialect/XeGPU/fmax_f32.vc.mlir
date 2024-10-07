@@ -50,6 +50,7 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
     %c16 = arith.constant 16 : index
+
     %A = memref.alloc() : memref<8x32xf16>
     %B = memref.alloc() : memref<16x32xf16>
     %Out_cpu = memref.alloc() : memref<8x16xf32>
@@ -72,9 +73,9 @@ module @gemm attributes {gpu.container_module} {
         %v0_init = arith.constant 0.0 : f32
         %v1_init = arith.constant 0.0 : f32
         %result:2 = scf.for %k = %c0 to %c16 step %c1 iter_args(%v0 = %v0_init, %v1 = %v1_init) -> (f32, f32){
-          %a0 = memref.load %A[%i, %k] : memref<8x32xf16>
           %1 = arith.addi %k, %c16 : index
           %2 = arith.addi %j, %c16 : index
+          %a0 = memref.load %A[%i, %k] : memref<8x32xf16>
           %a1 = memref.load %A[%i, %1] : memref<8x32xf16>
           %b0 = memref.load %B[%k, %j] : memref<16x32xf16>
           %b1 = memref.load %B[%k, %2] : memref<16x32xf16>
@@ -94,8 +95,8 @@ module @gemm attributes {gpu.container_module} {
     }
     %Out_cpu_cast = memref.cast %Out_cpu : memref<8x16xf32> to memref<*xf32>
     // print GPU and CPU outs
-    // call @printMemrefF32(%Out_cpu_cast) : (memref<*xf32>) -> ()
-    // call @printMemrefF32(%Out_gpu_cast) : (memref<*xf32>) -> ()
+     call @printMemrefF32(%Out_cpu_cast) : (memref<*xf32>) -> ()
+     call @printMemrefF32(%Out_gpu_cast) : (memref<*xf32>) -> ()
     // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF32(%Out_gpu_cast, %Out_cpu_cast) : (memref<*xf32>, memref<*xf32>) -> ()
     // dealloc

@@ -18,9 +18,9 @@ module @gemm attributes {gpu.container_module} {
   }
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
    gpu.func @test_kernel(%arg0: memref<32x32xf16>, %arg1: memref<32x32xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<32x32xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
-      %1 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>}
-                  : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<32x32xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+      %1 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}
+                  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
       %3 = arith.extf %1: vector<2x32x16xf16> to vector<2x32x16xf32>
       %4 = vector.extract %3[0]: vector<32x16xf32> from vector<2x32x16xf32>
       %5 = vector.extract %3[1]: vector<32x16xf32> from vector<2x32x16xf32>

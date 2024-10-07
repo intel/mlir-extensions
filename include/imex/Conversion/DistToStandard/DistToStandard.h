@@ -29,6 +29,9 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
+#define GEN_PASS_DECL_CONVERTDISTTOSTANDARD
+#include "imex/Conversion/Passes.h.inc"
+
 /// Populate the given list with patterns rewrite Dist Ops
 void populateDistToStandardConversionPatterns(
     ::mlir::LLVMTypeConverter &converter, ::mlir::RewritePatternSet &patterns);

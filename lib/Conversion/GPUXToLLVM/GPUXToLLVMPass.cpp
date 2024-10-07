@@ -18,9 +18,8 @@
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
 
 #include "imex/Utils/FuncUtils.hpp"
+#include "imex/Utils/GPUSerialize.h"
 #include "imex/Utils/TypeConversion.hpp"
-
-#include "../PassDetail.h"
 
 // TODO: remove
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -48,8 +47,16 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
+
+#include "mlir/Pass/Pass.h"
+
+namespace imex {
+#define GEN_PASS_DEF_CONVERTGPUXTOLLVM
+#include "imex/Conversion/Passes.h.inc"
+} // namespace imex
 
 namespace {
 
@@ -188,6 +195,71 @@ protected:
           llvmPointerType, /* void *stream */
           llvmPointerType  /* void *ptr */
       }};
+
+  FunctionCallBuilder memcpyCallBuilder = {
+      "gpuMemCopy",
+      llvmVoidType,
+      {
+          llvmPointerType, /* void *stream */
+          llvmPointerType, /* void *ptr dst */
+          llvmPointerType, /* void *ptr src */
+          llvmIndexType    /* intptr_t size */
+      }};
+};
+
+/// A rewrite pattern to convert gpux.memcpy operations into a GPU runtime
+/// call.
+class ConvertMemcpyOpToGpuRuntimeCallPattern
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::MemcpyOp> {
+public:
+  ConvertMemcpyOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::MemcpyOp>(typeConverter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(imex::gpux::MemcpyOp memcpyOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+
+    auto loc = memcpyOp.getLoc();
+    mlir::MemRefType srcMemRefType =
+        llvm::dyn_cast<mlir::MemRefType>(memcpyOp.getSrc().getType());
+    mlir::MemRefDescriptor srcDesc(adaptor.getSrc());
+
+    // Compute number of elements.
+    mlir::Value numElements = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, getIndexType(), rewriter.getIndexAttr(1));
+    for (int pos = 0; pos < srcMemRefType.getRank(); ++pos) {
+      auto size = srcDesc.size(rewriter, loc, pos);
+      numElements = rewriter.create<mlir::LLVM::MulOp>(loc, numElements, size);
+    }
+
+    // Get element size.
+    auto sizeInBytes =
+        getSizeInBytes(loc, srcMemRefType.getElementType(), rewriter);
+    // Compute total.
+    mlir::Value totalSize =
+        rewriter.create<mlir::LLVM::MulOp>(loc, numElements, sizeInBytes);
+
+    mlir::Type elementType =
+        typeConverter->convertType(srcMemRefType.getElementType());
+
+    mlir::Value srcBasePtr = srcDesc.alignedPtr(rewriter, loc);
+    mlir::Value srcOffset = srcDesc.offset(rewriter, loc);
+    mlir::Value srcPtr = rewriter.create<mlir::LLVM::GEPOp>(
+        loc, srcBasePtr.getType(), elementType, srcBasePtr, srcOffset);
+    mlir::MemRefDescriptor dstDesc(adaptor.getDst());
+    mlir::Value dstBasePtr = dstDesc.alignedPtr(rewriter, loc);
+    mlir::Value dstOffset = dstDesc.offset(rewriter, loc);
+    mlir::Value dstPtr = rewriter.create<mlir::LLVM::GEPOp>(
+        loc, dstBasePtr.getType(), elementType, dstBasePtr, dstOffset);
+
+    // Allocate the underlying buffer and store a pointer to it in the MemRef
+    // descriptor.
+    memcpyCallBuilder.create(
+        loc, rewriter, {adaptor.getGpuxStream(), dstPtr, srcPtr, totalSize});
+    rewriter.eraseOp(memcpyOp);
+    return mlir::success();
+  }
 };
 
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
@@ -517,6 +589,20 @@ private:
   }
 };
 
+class RemoveGPUModulePattern
+    : public mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUModuleOp> {
+public:
+  RemoveGPUModulePattern(mlir::LLVMTypeConverter &converter)
+      : mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUModuleOp>(converter) {}
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::GPUModuleOp op,
+                  mlir::gpu::GPUModuleOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 /// A rewrite pattern to convert gpux.create_stream operations into a GPU
 /// runtime call.
 class ConvertGpuStreamCreatePattern
@@ -571,7 +657,8 @@ private:
 };
 } // namespace
 
-class GPUXToLLVMPass : public ::imex::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
+class GPUXToLLVMPass
+    : public imex::impl::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
 public:
   explicit GPUXToLLVMPass() {}
   void runOnOperation() override;
@@ -583,19 +670,7 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
   mlir::LLVMConversionTarget target(context);
 
-  mlir::arith::populateArithToLLVMConversionPatterns(converter, patterns);
-  mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-  mlir::populateVectorToLLVMConversionPatterns(converter, patterns);
-  mlir::populateFinalizeMemRefToLLVMConversionPatterns(converter, patterns);
-  mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
-  mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
-                                                          target);
-
-  mlir::populateGpuToLLVMConversionPatterns(
-      converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
-                                                           target);
+  mlir::populateGpuToLLVMConversionPatterns(converter, patterns);
 
   imex::populateGpuxToLLVMPatternsAndLegality(converter, patterns, target);
 
@@ -631,12 +706,14 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
       ConvertGpuStreamCreatePattern,
       ConvertGpuStreamDestroyPattern,
       ConvertAllocOpToGpuRuntimeCallPattern,
-      ConvertDeallocOpToGpuRuntimeCallPattern
+      ConvertDeallocOpToGpuRuntimeCallPattern,
+      RemoveGPUModulePattern,
+      ConvertMemcpyOpToGpuRuntimeCallPattern
       // clang-format on
       >(converter);
 
   patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
-      converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
+      converter, imex::gpuBinaryAttrName);
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
   target.addIllegalDialect<imex::gpux::GPUXDialect>();
