@@ -88,7 +88,7 @@ create_nd_tdesc also accepts a memref as input instead of a memory address, shap
 		: memref<1024x1024xbf16>, index, index
      	into tensor_desc<8x16xbf16>
 
- %tdesc2 = XeGPU.create_nd_tdesc  %mref, %offsets:4 {mode =vc}
+ %tdesc2 = xegpu.create_nd_tdesc  %mref, %offsets:4 {mode =vc}
 		: memref<4x4x1024x1024xbf16>, index, index
      	into tensor_desc<8x16xbf16>
 ```
