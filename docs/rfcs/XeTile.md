@@ -292,20 +292,20 @@ The tile_transpose can be implemented by saving and restoring from the shared lo
 
 An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
 
-`tile_convert_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
+`tile_conv_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
 
 Example with the wg_map specified for both input and output operands.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = XeTile.tile_convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+   %vector_a = XeTile.tile_conv_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
 Example without the wg_map specified for the input operand.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = XeTile.tile_convert_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
+   %vector_a = XeTile.tile_conv_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
-The tile_convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
+The tile_conv_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
 
 ## Alternative design considerations
