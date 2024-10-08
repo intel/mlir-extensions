@@ -1,0 +1,164 @@
+name: Coverity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "5 2 * * 1"
+  push:
+    paths:
+      - .github/workflows/coverity.yml
+
+permissions: read-all
+
+jobs:
+  coverity:
+    name: Coverity
+    runs-on: ubuntu-latest
+    env:
+      COV_TOKEN: jQxsG_hSGU57M7A7lqyBvg
+      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
+
+    defaults:
+      run:
+        shell: bash -leo pipefail {0}
+
+    timeout-minutes: 450
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache coverity
+        id: cache-coverity
+        uses: actions/cache@v4
+        env:
+          COVERITY_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: |
+            /home/runner/coverity
+          key: ${{ runner.os }}-${{ env.COVERITY_CACHE_NUMBER }}
+
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+          activate-environment: imex-devel
+
+      - name: Conda info
+        run: conda info
+
+      - name: Install Build tools
+        run: |
+          conda install cmake ninja conda-forge::lit conda-forge::doxygen
+          conda list
+
+      - name: Download coverity
+        if: steps.cache-coverity.outputs.cache-hit != 'true'
+        run: |
+          cd
+          curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
+          tar zxf coverity.tgz
+          mv -T cov-analysis-linux64-* coverity
+
+      - name: Add coverity to PATH
+        run: |
+          echo "$HOME/coverity/bin" >> $GITHUB_PATH
+
+      - name: Show coverity version
+        run: |
+          coverity --version
+
+      - name: Add coverity inputs to env
+        run: |
+          version="$(git rev-parse --short HEAD)"
+          email="alexei.fedotov@intel.com"
+          project_id=30755
+
+          echo "project_id=$project_id" | tee -a $GITHUB_ENV
+          echo "email=$email" | tee -a $GITHUB_ENV
+          echo "version=$version" | tee -a $GITHUB_ENV
+
+      - name: Setup Cache Vars
+        run: |
+          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          cat $LLVM_SHA_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v4
+        env:
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: |
+            /home/runner/work/llvm-mlir/_mlir_install/**
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+
+      - name: Build LLVM-MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /home/runner/work/llvm-mlir
+          cd /home/runner/work/llvm-mlir
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=`nproc`
+          echo "INFO: nproc $np"
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch
+          cd llvm-project
+          git checkout ${LLVM_SHA}
+          git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch
+          cmake -G Ninja -B _build -S llvm                                  \
+            -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
+            -DLLVM_ENABLE_PROJECTS=mlir                                    \
+            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+            -DLLVM_USE_LINKER=gold                                         \
+            -DLLVM_INSTALL_UTILS=ON                                        \
+            -DLLVM_TARGETS_TO_BUILD=X86                                    \
+            -DLLVM_ENABLE_BINDINGS=OFF                                     \
+            -DLLVM_ENABLE_ZSTD=OFF                                         \
+            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
+          cmake --build _build --target install
+
+      - name: Create coverity build
+        run: |
+          external_lit=`which lit`
+          echo ${external_lit}
+          cd /home/runner/work/mlir-extensions/mlir-extensions
+          cmake -S . -B _build -GNinja  \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_EXTERNAL_LIT=${external_lit} \
+            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
+            -DLLVM_LIT_ARGS=-a
+          cov-build --dir $HOME/cov-int cmake --build _build --target check-imex
+
+      - name: Create coverity results tarball
+        run: |
+          cd $HOME
+          tar zcf cov-int.tgz cov-int
+
+      - name: Create coverity artifact
+        run: |
+          cd $HOME
+          curl -X POST \
+            -d version="$version" \
+            -d email="$email" \
+            -d token=$COV_TOKEN \
+            -d file_name="cov-int.tgz" \
+            https://scan.coverity.com/projects/$project_id/builds/init \
+            | tee response
+          upload_url="$(jq -r '.url' response)"
+          build_id="$(jq -r '.build_id' response)"
+          echo "upload_url=$upload_url" >> $GITHUB_ENV
+          echo "build_id=$build_id" | tee -a $GITHUB_ENV
+
+      - name: Upload coverity build
+        run: |
+          cd $HOME
+          curl -X PUT \
+            --header 'Content-Type: application/json' \
+            --upload-file cov-int.tgz \
+            $upload_url
+
+          curl -X PUT \
+            -d token=$COV_TOKEN \
+            https://scan.coverity.com/projects/$project_id/builds/$build_id/enqueue
