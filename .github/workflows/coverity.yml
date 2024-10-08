@@ -3,7 +3,7 @@ name: Coverity
 on:
   workflow_dispatch:
   schedule:
-    - cron: "5 2 * * *"
+    - cron: "5 2 * * 1"
   push:
     paths:
       - .github/workflows/coverity.yml

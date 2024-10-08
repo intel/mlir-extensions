@@ -2,9 +2,10 @@ name: Bandit Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '5 23 * * *'
-#FIXME
+    - cron: '5 23 * * 1'
   push:
+    paths:
+      - .github/workflows/bandit-check.yml
 
 permissions: read-all
 
@@ -23,3 +24,10 @@ jobs:
           pip install bandit
           bandit -c bandit.yml -r ./scripts ./test --exit-zero -f custom --msg-template \
             "{relpath}:{line:<4}  {test_id}[bandit]:{severity}: {msg}"
+          bandit -c bandit.yml -r ./scripts ./test --exit-zero -f html -o bandit_report.html
+
+      - name: Upload report to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bandit Report
+          path: bandit_report.html            
