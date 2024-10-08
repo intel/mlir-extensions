@@ -160,9 +160,9 @@ class LayoutAnalysisImpl
 public:
   using SparseBackwardDataFlowAnalysis::SparseBackwardDataFlowAnalysis;
 
-  mlir::LogicalResult visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<LayoutLattice *> operands,
-                      mlir::ArrayRef<const LayoutLattice *> results) override {
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op, mlir::ArrayRef<LayoutLattice *> operands,
+                 mlir::ArrayRef<const LayoutLattice *> results) override {
     if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
       Layout layout;
       for (auto &&[res, resLattice] :

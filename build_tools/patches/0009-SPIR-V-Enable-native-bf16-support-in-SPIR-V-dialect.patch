@@ -19,49 +19,49 @@ index 22d5afcd7738..de9e11493793 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td
 @@ -82,7 +82,7 @@ class SPIRV_ArithmeticExtendedBinaryOp<string mnemonic,
- 
+
  // -----
- 
+
 -def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_Float, [Commutative]> {
 +def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_AnyFloat, [Commutative]> {
    let summary = "Floating-point addition of Operand 1 and Operand 2.";
- 
+
    let description = [{
 @@ -104,7 +104,7 @@ def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_Float, [Commutative]>
- 
+
  // -----
- 
+
 -def SPIRV_FDivOp : SPIRV_ArithmeticBinaryOp<"FDiv", SPIRV_Float, []> {
 +def SPIRV_FDivOp : SPIRV_ArithmeticBinaryOp<"FDiv", SPIRV_AnyFloat, []> {
    let summary = "Floating-point division of Operand 1 divided by Operand 2.";
- 
+
    let description = [{
 @@ -154,7 +154,7 @@ def SPIRV_FModOp : SPIRV_ArithmeticBinaryOp<"FMod", SPIRV_Float, []> {
- 
+
  // -----
- 
+
 -def SPIRV_FMulOp : SPIRV_ArithmeticBinaryOp<"FMul", SPIRV_Float, [Commutative]> {
 +def SPIRV_FMulOp : SPIRV_ArithmeticBinaryOp<"FMul", SPIRV_AnyFloat, [Commutative]> {
    let summary = "Floating-point multiplication of Operand 1 and Operand 2.";
- 
+
    let description = [{
 @@ -229,7 +229,7 @@ def SPIRV_FRemOp : SPIRV_ArithmeticBinaryOp<"FRem", SPIRV_Float, []> {
- 
+
  // -----
- 
+
 -def SPIRV_FSubOp : SPIRV_ArithmeticBinaryOp<"FSub", SPIRV_Float, []> {
 +def SPIRV_FSubOp : SPIRV_ArithmeticBinaryOp<"FSub", SPIRV_AnyFloat, []> {
    let summary = "Floating-point subtraction of Operand 2 from Operand 1.";
- 
+
    let description = [{
 @@ -450,7 +450,7 @@ def SPIRV_DotOp : SPIRV_Op<"Dot",
    );
- 
+
    let results = (outs
 -    SPIRV_Float:$result
 +    SPIRV_AnyFloat:$result
    );
- 
+
    let assemblyFormat = "operands attr-dict `:` type($vector1) `->` type($result)";
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 index ddaeb13ef253..9b43dbfe2341 100644
@@ -72,7 +72,7 @@ index ddaeb13ef253..9b43dbfe2341 100644
  def SPV_KHR_terminate_invocation             : I32EnumAttrCase<"SPV_KHR_terminate_invocation", 30>;
  def SPV_KHR_cooperative_matrix               : I32EnumAttrCase<"SPV_KHR_cooperative_matrix", 31>;
 +def SPV_KHR_bfloat16                         : I32EnumAttrCase<"SPV_KHR_bfloat16", 32>;
- 
+
  def SPV_EXT_demote_to_helper_invocation  : I32EnumAttrCase<"SPV_EXT_demote_to_helper_invocation", 1000>;
  def SPV_EXT_descriptor_indexing          : I32EnumAttrCase<"SPV_EXT_descriptor_indexing", 1001>;
 @@ -434,7 +435,7 @@ def SPIRV_ExtensionAttr :
@@ -143,7 +143,7 @@ index ddaeb13ef253..9b43dbfe2341 100644
 @@ -4169,14 +4192,14 @@ def SPIRV_AnyStruct : DialectType<SPIRV_Dialect, SPIRV_IsStructType,
  def SPIRV_AnySampledImage : DialectType<SPIRV_Dialect, SPIRV_IsSampledImageType,
                                  "any SPIR-V sampled image type">;
- 
+
 -def SPIRV_Numerical : AnyTypeOf<[SPIRV_Integer, SPIRV_Float]>;
 +def SPIRV_Numerical : AnyTypeOf<[SPIRV_Integer, SPIRV_Float, SPIRV_BFloat16KHR]>;
  def SPIRV_Scalar : AnyTypeOf<[SPIRV_Numerical, SPIRV_Bool]>;
@@ -160,7 +160,7 @@ index ddaeb13ef253..9b43dbfe2341 100644
 @@ -4738,6 +4761,12 @@ def SPIRV_FPFMM_AllowReassocINTEL : I32BitEnumAttrCaseBit<"AllowReassocINTEL", 1
    ];
  }
- 
+
 +def SPIRV_FPE_BFloat16KHR     :  I32EnumAttrCase<"BFloat16KHR", 0>;
 +def SPIRV_FP_Encoding  :
 +     SPIRV_I32EnumAttr<"FPEncoding", "Valid floating-point encoding", "fpEncoding", [
@@ -175,67 +175,67 @@ index b5ca27d7d753..703920e42c60 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td
 @@ -386,7 +386,7 @@ def SPIRV_CLExpOp : SPIRV_CLUnaryArithmeticOp<"exp", 19, SPIRV_Float> {
- 
+
  // -----
- 
+
 -def SPIRV_CLFAbsOp : SPIRV_CLUnaryArithmeticOp<"fabs", 23, SPIRV_Float> {
 +def SPIRV_CLFAbsOp : SPIRV_CLUnaryArithmeticOp<"fabs", 23, SPIRV_AnyFloat> {
    let summary = "Absolute value of operand";
- 
+
    let description = [{
 @@ -409,7 +409,7 @@ def SPIRV_CLFAbsOp : SPIRV_CLUnaryArithmeticOp<"fabs", 23, SPIRV_Float> {
- 
+
  // -----
- 
+
 -def SPIRV_CLFMaxOp : SPIRV_CLBinaryArithmeticOp<"fmax", 27, SPIRV_Float> {
 +def SPIRV_CLFMaxOp : SPIRV_CLBinaryArithmeticOp<"fmax", 27, SPIRV_AnyFloat> {
    let summary = "Return maximum of two floating-point operands";
- 
+
    let description = [{
 @@ -433,7 +433,7 @@ def SPIRV_CLFMaxOp : SPIRV_CLBinaryArithmeticOp<"fmax", 27, SPIRV_Float> {
- 
+
  // -----
- 
+
 -def SPIRV_CLFMinOp : SPIRV_CLBinaryArithmeticOp<"fmin", 28, SPIRV_Float> {
 +def SPIRV_CLFMinOp : SPIRV_CLBinaryArithmeticOp<"fmin", 28, SPIRV_AnyFloat> {
    let summary = "Return minimum of two floating-point operands";
- 
+
    let description = [{
 @@ -479,7 +479,7 @@ def SPIRV_CLFloorOp : SPIRV_CLUnaryArithmeticOp<"floor", 25, SPIRV_Float> {
- 
+
  // -----
- 
+
 -def SPIRV_CLFmaOp : SPIRV_CLTernaryArithmeticOp<"fma", 26, SPIRV_Float> {
 +def SPIRV_CLFmaOp : SPIRV_CLTernaryArithmeticOp<"fma", 26, SPIRV_AnyFloat> {
    let summary = [{
      Compute the correctly rounded floating-point representation of the sum
      of c with the infinitely precise product of a and b. Rounding of
 @@ -789,7 +789,7 @@ def SPIRV_CLTanOp : SPIRV_CLUnaryArithmeticOp<"tan", 62, SPIRV_Float > {
- 
+
  // -----
- 
+
 -def SPIRV_CLTanhOp : SPIRV_CLUnaryArithmeticOp<"tanh", 63, SPIRV_Float> {
 +def SPIRV_CLTanhOp : SPIRV_CLUnaryArithmeticOp<"tanh", 63, SPIRV_AnyFloat> {
    let summary = "Compute hyperbolic tangent of x radians.";
- 
+
    let description = [{
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCastOps.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCastOps.td
 index b05ee0251df5..a5c8aa8fb450 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCastOps.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCastOps.td
 @@ -86,7 +86,7 @@ def SPIRV_BitcastOp : SPIRV_Op<"Bitcast", [Pure]> {
- 
+
  // -----
- 
+
 -def SPIRV_ConvertFToSOp : SPIRV_CastOp<"ConvertFToS", SPIRV_Integer, SPIRV_Float, []> {
 +def SPIRV_ConvertFToSOp : SPIRV_CastOp<"ConvertFToS", SPIRV_Integer, SPIRV_AnyFloat, []> {
    let summary = [{
      Convert value numerically from floating point to signed integer, with
      round toward 0.0.
 @@ -111,7 +111,7 @@ def SPIRV_ConvertFToSOp : SPIRV_CastOp<"ConvertFToS", SPIRV_Integer, SPIRV_Float
- 
+
  // -----
- 
+
 -def SPIRV_ConvertFToUOp : SPIRV_CastOp<"ConvertFToU", SPIRV_Integer, SPIRV_Float, []> {
 +def SPIRV_ConvertFToUOp : SPIRV_CastOp<"ConvertFToU", SPIRV_Integer, SPIRV_AnyFloat, []> {
    let summary = [{
@@ -243,7 +243,7 @@ index b05ee0251df5..a5c8aa8fb450 100644
      round toward 0.0.
 @@ -138,7 +138,7 @@ def SPIRV_ConvertFToUOp : SPIRV_CastOp<"ConvertFToU", SPIRV_Integer, SPIRV_Float
  // -----
- 
+
  def SPIRV_ConvertSToFOp : SPIRV_CastOp<"ConvertSToF",
 -                                   SPIRV_Float,
 +                                   SPIRV_AnyFloat,
@@ -252,7 +252,7 @@ index b05ee0251df5..a5c8aa8fb450 100644
    let summary = [{
 @@ -165,7 +165,7 @@ def SPIRV_ConvertSToFOp : SPIRV_CastOp<"ConvertSToF",
  // -----
- 
+
  def SPIRV_ConvertUToFOp : SPIRV_CastOp<"ConvertUToF",
 -                                   SPIRV_Float,
 +                                   SPIRV_AnyFloat,
@@ -261,7 +261,7 @@ index b05ee0251df5..a5c8aa8fb450 100644
    let summary = [{
 @@ -192,8 +192,8 @@ def SPIRV_ConvertUToFOp : SPIRV_CastOp<"ConvertUToF",
  // -----
- 
+
  def SPIRV_FConvertOp : SPIRV_CastOp<"FConvert",
 -                                SPIRV_Float,
 -                                SPIRV_Float,
@@ -275,7 +275,7 @@ index b4ad5923e975..d477c089732a 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 @@ -171,8 +171,10 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
- 
+
    // Check other allowed types
    if (auto t = llvm::dyn_cast<FloatType>(type)) {
 -    if (type.isBF16()) {
@@ -293,15 +293,15 @@ index 542c6beba2e4..27bfc1871528 100644
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -521,7 +521,7 @@ bool ScalarType::classof(Type type) {
  }
- 
+
  bool ScalarType::isValid(FloatType type) {
 -  return llvm::is_contained({16u, 32u, 64u}, type.getWidth()) && !type.isBF16();
 +  return llvm::is_contained({16u, 32u, 64u}, type.getWidth());
  }
- 
+
  bool ScalarType::isValid(IntegerType type) {
 @@ -530,6 +530,14 @@ bool ScalarType::isValid(IntegerType type) {
- 
+
  void ScalarType::getExtensions(SPIRVType::ExtensionArrayRefVector &extensions,
                                 std::optional<StorageClass> storage) {
 +
@@ -360,7 +360,7 @@ index cccf360b8e21..d38615eed7f1 100644
 +      return emitError(
 +          unknownLoc,
 +          "OpTypeFloat must have bitwidth parameter and optional FP Encoding");
- 
+
      Type floatTy;
      switch (operands[1]) {
 -    case 16:
@@ -383,7 +383,7 @@ index cccf360b8e21..d38615eed7f1 100644
 +      APInt data(16, operands[2]);
 +      value = APFloat(APFloat::BFloat(), data);
      }
- 
+
      auto attr = opBuilder.getFloatAttr(floatType, value);
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 index 10e5264bffac..26a8f7bb5fa9 100644
@@ -398,7 +398,7 @@ index 10e5264bffac..26a8f7bb5fa9 100644
 +      operands.push_back(static_cast<uint32_t>(spirv::FPEncoding::BFloat16KHR));
      return success();
    }
- 
+
 @@ -965,7 +968,8 @@ uint32_t Serializer::prepareConstantFp(Location loc, FloatAttr floatAttr,
      } words = llvm::bit_cast<DoubleWord>(value.convertToDouble());
      encodeInstructionInto(typesGlobalValues, opcode,
@@ -409,6 +409,5 @@ index 10e5264bffac..26a8f7bb5fa9 100644
      uint32_t word =
          static_cast<uint32_t>(value.bitcastToAPInt().getZExtValue());
      encodeInstructionInto(typesGlobalValues, opcode, {typeID, resultID, word});
--- 
+--
 2.34.1
-

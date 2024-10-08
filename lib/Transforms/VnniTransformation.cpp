@@ -127,9 +127,9 @@ class LayoutAnalysisImpl
 public:
   using SparseBackwardDataFlowAnalysis::SparseBackwardDataFlowAnalysis;
 
-  mlir::LogicalResult visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<LayoutLattice *> operands,
-                      mlir::ArrayRef<const LayoutLattice *> results) override {
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op, mlir::ArrayRef<LayoutLattice *> operands,
+                 mlir::ArrayRef<const LayoutLattice *> results) override {
     // the B operand of a dpas operation is always in vnni layout
     // and it is the start point of the layout propagation
     if (auto dpas = mlir::dyn_cast<mlir::xegpu::DpasOp>(op)) {
@@ -208,7 +208,7 @@ public:
     for (auto operand : operands)
       propagateIfChanged(operand, operand->join(Layout(false)));
 
-     return mlir::success();
+    return mlir::success();
   }
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
