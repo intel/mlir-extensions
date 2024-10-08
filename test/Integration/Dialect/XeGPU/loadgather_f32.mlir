@@ -24,11 +24,12 @@ module @gemm attributes {gpu.container_module} {
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
     gpu.func @test_scattered(%arg0: memref<1x16xf32>, %arg1: memref<1x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
+      %offsets = arith.constant dense<[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]> : vector<16xindex>
       %mask = arith.constant dense<[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]> : vector<16xi1>
       %1 = memref.reinterpret_cast %arg0 to offset: [0], sizes: [16], strides: [1] : memref<1x16xf32> to memref<16xf32>
       %2 = memref.reinterpret_cast %arg1 to offset: [0], sizes: [16], strides: [1] : memref<1x16xf32> to memref<16xf32>
-      %tdesc1 = xegpu.create_tdesc %1[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : memref<16xf32> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
-      %tdesc2 = xegpu.create_tdesc %2[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : memref<16xf32> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %tdesc1 = xegpu.create_tdesc %1, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+      %tdesc2 = xegpu.create_tdesc %2, %offsets : memref<16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
       %loaded = xegpu.load %tdesc1, %mask : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> -> vector<16xf32>
       xegpu.store %loaded, %tdesc2, %mask : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>
       gpu.return

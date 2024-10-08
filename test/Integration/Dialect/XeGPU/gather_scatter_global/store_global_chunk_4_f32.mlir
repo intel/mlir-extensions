@@ -5,7 +5,7 @@
 // RUN:                                        --runner imex-cpu-runner -e main --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-#scatter = #xegpu.scatter_tdesc_attr<memory_scope=global, chunk_size = 4>
+#scatter = #xegpu.scatter_tdesc_attr<memory_space=global, chunk_size = 4>
 
 module @gemm attributes {gpu.container_module} {
   func.func @test() -> memref<16x4xf32> attributes {llvm.emit_c_interface} {
@@ -23,8 +23,9 @@ module @gemm attributes {gpu.container_module} {
                                    [48., 49., 50., 51., 52., 53., 54., 55., 56., 57., 58., 59., 60., 61., 62., 63.]]> : vector<4x16xf32>
 
       %mask = arith.constant dense<1> : vector<16xi1>
+      %offsets = arith.constant dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xindex>
       %cast = memref.reinterpret_cast %mem to offset: [0], sizes: [64], strides: [1] : memref<16x4xf32> to memref<64xf32>
-      %5 = xegpu.create_tdesc %cast[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] : memref<64xf32> -> !xegpu.tensor_desc<16x4xf32, #scatter>
+      %5 = xegpu.create_tdesc %cast, %offsets : memref<64xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #scatter>
       xegpu.store %cst, %5, %mask {transpose} : vector<4x16xf32>, !xegpu.tensor_desc<16x4xf32, #scatter>, vector<16xi1>
       gpu.return
     }

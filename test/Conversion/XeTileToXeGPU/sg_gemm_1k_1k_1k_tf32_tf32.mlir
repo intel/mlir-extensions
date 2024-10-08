@@ -23,43 +23,43 @@ gpu.module @test_kernel {
 
     //CHECK: %[[r2:.*]] = arith.addi %[[r0]], %[[c0]] : index
     //CHECK: %[[r3:.*]] = arith.addi %[[r1]], %[[c0]] : index
-    //CHECK: %[[r4:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r4:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[c16:.*]] = arith.constant 16 : index
     //CHECK: %[[r5:.*]] = arith.addi %[[r1]], %[[c16]] : index
-    //CHECK: %[[r6:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r6:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[c8:.*]] = arith.constant 8 : index
     //CHECK: %[[r7:.*]] = arith.addi %[[r0]], %[[c8]] : index
-    //CHECK: %[[r8:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r7]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r9:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r7]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r8:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r7]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r9:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r7]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[r10:.*]] = arith.addi %[[r0]], %[[c16]] : index
-    //CHECK: %[[r11:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r10]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r12:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r10]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r11:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r10]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r12:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r10]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     //CHECK: %[[c24:.*]] = arith.constant 24 : index
     //CHECK: %[[r13:.*]] = arith.addi %[[r0]], %[[c24]] : index
-    //CHECK: %[[r14:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r13]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r15:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r13]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r16:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r17:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r14:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r13]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r15:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r13]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r16:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r3]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r17:.*]] = xegpu.create_nd_tdesc %[[arg2]][%[[r2]], %[[r5]]] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     %2 = xetile.init_tile %arg2[%0, %1] : memref<1024x1024xf32> -> !xetile.tile<32x32xf32>
 
-    //CHECK: %[[r18:.*]] = xegpu.load_nd %[[r16]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
-    //CHECK: %[[r19:.*]] = xegpu.load_nd %[[r17]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
+    //CHECK: %[[r18:.*]] = xegpu.load_nd %[[r16]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
+    //CHECK: %[[r19:.*]] = xegpu.load_nd %[[r17]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf32>
     %3 = xetile.load_tile %2 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf32> -> vector<32x32xf32>
 
-    //CHECK: %[[r20:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c0]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
-    //CHECK: %[[r21:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c16]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
+    //CHECK: %[[r20:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c0]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
+    //CHECK: %[[r21:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[r2]], %[[c16]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
     %4 = xetile.init_tile %arg0[%0, %c0] : memref<1024x1024xtf32> -> !xetile.tile<32x32xtf32>
 
-    //CHECK: %[[r22:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[r3]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: %[[r23:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[r5]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r22:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[r3]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: %[[r23:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[r5]]] : memref<1024x1024xtf32> -> !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     %5 = xetile.init_tile %arg1[%c0, %1] : memref<1024x1024xtf32> -> !xetile.tile<32x32xtf32>
 
     //CHECK: %[[r24:.*]]:6 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c1024]] step %[[c64]]
     //CHECK-SAME: iter_args(%[[arg4:.*]] = %[[r20]], %[[arg5:.*]] = %[[r21]], %[[arg6:.*]] = %[[r22]], %[[arg7:.*]] = %[[r23]], %[[arg8:.*]] = %[[r18]], %[[arg9:.*]] = %[[r19]])
-    //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>,
-    //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>,
-    //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>,
-    //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x16xf32>, vector<32x16xf32>
+    //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>,
+    //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>,
+    //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>,
+    //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x16xf32>, vector<32x16xf32>
     %6:3 = scf.for %arg3 = %c0 to %c1024 step %c64 iter_args(%arg4 = %4, %arg5 = %5, %arg6 = %3) -> (!xetile.tile<32x32xtf32>, !xetile.tile<32x32xtf32>, vector<32x32xf32>) {
       //CHECK: %[[r65:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
       //CHECK: %[[r66:.*]] = vector.extract_strided_slice %[[arg8]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
@@ -70,10 +70,10 @@ gpu.module @test_kernel {
       //CHECK: %[[r71:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
       //CHECK: %[[r72:.*]] = vector.extract_strided_slice %[[arg9]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
 
-      //CHECK: %[[r33:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x8xtf32>
+      //CHECK: %[[r33:.*]] = xegpu.load_nd %[[arg4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x8xtf32>
       //CHECK: %[[r34:.*]] = vector.extract %[[r33]][0] : vector<32x8xtf32> from vector<2x32x8xtf32>
       //CHECK: %[[r35:.*]] = vector.extract %[[r33]][1] : vector<32x8xtf32> from vector<2x32x8xtf32>
-      //CHECK: %[[r36:.*]] = xegpu.load_nd %[[arg5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x8xtf32>
+      //CHECK: %[[r36:.*]] = xegpu.load_nd %[[arg5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x8xtf32>
       //CHECK: %[[r37:.*]] = vector.extract %[[r36]][0] : vector<32x8xtf32> from vector<2x32x8xtf32>
       //CHECK: %[[r38:.*]] = vector.extract %[[r36]][1] : vector<32x8xtf32> from vector<2x32x8xtf32>
       //CHECK: %[[r39:.*]] = vector.extract_strided_slice %[[r34]] {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8xtf32> to vector<8x8xtf32>
@@ -94,8 +94,8 @@ gpu.module @test_kernel {
       //CHECK: %[[r54:.*]] = vector.extract_strided_slice %[[r38]] {offsets = [24, 0], sizes = [8, 8], strides = [1, 1]} : vector<32x8xtf32> to vector<8x8xtf32>
       %7 = xetile.load_tile %arg4 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xtf32> -> vector<32x32xtf32>
 
-      //CHECK: %[[r55:.*]] = xegpu.load_nd %[[arg6]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
-      //CHECK: %[[r56:.*]] = xegpu.load_nd %[[arg7]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
+      //CHECK: %[[r55:.*]] = xegpu.load_nd %[[arg6]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
+      //CHECK: %[[r56:.*]] = xegpu.load_nd %[[arg7]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xtf32>
       //CHECK: %[[r57:.*]] = vector.extract_strided_slice %[[r55]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
       //CHECK: %[[r58:.*]] = vector.extract_strided_slice %[[r55]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
       //CHECK: %[[r59:.*]] = vector.extract_strided_slice %[[r55]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xtf32> to vector<8x16xtf32>
@@ -149,19 +149,19 @@ gpu.module @test_kernel {
 
       %9 = xetile.tile_mma %7, %8, %arg6 : vector<32x32xtf32>, vector<32x32xtf32>, vector<32x32xf32> -> vector<32x32xf32>
 
-      //CHECK: %[[r111:.*]] = xegpu.update_nd_offset %[[arg4]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
-      //CHECK: %[[r112:.*]] = xegpu.update_nd_offset %[[arg5]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>
+      //CHECK: %[[r111:.*]] = xegpu.update_nd_offset %[[arg4]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
+      //CHECK: %[[r112:.*]] = xegpu.update_nd_offset %[[arg5]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
       %10 = xetile.update_tile_offset %arg4, [%c0,  %c64] : !xetile.tile<32x32xtf32>, index, index -> !xetile.tile<32x32xtf32>
 
-      //CHECK: %[[r113:.*]] = xegpu.update_nd_offset %[[arg6]], [%[[c64]], %[[c0]]] : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-      //CHECK: %[[r114:.*]] = xegpu.update_nd_offset %[[arg7]], [%[[c64]], %[[c0]]] : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: %[[r113:.*]] = xegpu.update_nd_offset %[[arg6]], [%[[c64]], %[[c0]]] : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: %[[r114:.*]] = xegpu.update_nd_offset %[[arg7]], [%[[c64]], %[[c0]]] : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       %11 = xetile.update_tile_offset %arg5, [%c64,  %c0] : !xetile.tile<32x32xtf32>, index, index -> !xetile.tile<32x32xtf32>
 
       //CHECK: scf.yield %[[r111]], %[[r112]], %[[r113]], %[[r114]], %[[r107]], %[[r110]]
-      //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>,
-      //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 2 : i64, boundary_check = true>>,
-      //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>,
-      //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x16xf32>, vector<32x16xf32>
+      //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>,
+      //CHECK-SAME: !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>,
+      //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>,
+      //CHECK-SAME: !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x16xf32>, vector<32x16xf32>
       scf.yield %10, %11, %9 : !xetile.tile<32x32xtf32>, !xetile.tile<32x32xtf32>, vector<32x32xf32>
     }
 
@@ -173,14 +173,14 @@ gpu.module @test_kernel {
     //CHECK: %[[r30:.*]] = vector.extract_strided_slice %[[r24]]#5 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
     //CHECK: %[[r31:.*]] = vector.extract_strided_slice %[[r24]]#5 {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
     //CHECK: %[[r32:.*]] = vector.extract_strided_slice %[[r24]]#5 {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
-    //CHECK: xegpu.store_nd %[[r25]], %[[r4]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r29]], %[[r6]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r26]], %[[r8]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r30]], %[[r9]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r27]], %[[r11]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r31]], %[[r12]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r28]], %[[r14]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
-    //CHECK: xegpu.store_nd %[[r32]], %[[r15]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r25]], %[[r4]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r29]], %[[r6]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r26]], %[[r8]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r30]], %[[r9]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r27]], %[[r11]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r31]], %[[r12]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r28]], %[[r14]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
+    //CHECK: xegpu.store_nd %[[r32]], %[[r15]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     xetile.store_tile %6#2,  %2 : vector<32x32xf32>, !xetile.tile<32x32xf32>
     //CHECK: gpu.return
     gpu.return

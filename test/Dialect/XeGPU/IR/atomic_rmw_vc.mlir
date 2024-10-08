@@ -5,8 +5,8 @@
 // RUN: imex-opt -mlir-print-op-generic %s | imex-opt | FileCheck %s
 
 // CHECK-LABEL: func @test_atomic_rmw({{.*}}) {
-func.func @test_atomic_rmw(%src: ui64, %value : vector<16xf32>, %mask : vector<16xi1>) {
-  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64 -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
+func.func @test_atomic_rmw(%src: ui64, %offsets : vector<16 x index>, %value : vector<16xf32>, %mask : vector<16xi1>) {
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>
 
   // CHECK: xegpu.atomic_rmw
   // CHECK-SAME: !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>, vector<16xf32>
@@ -16,8 +16,8 @@ func.func @test_atomic_rmw(%src: ui64, %value : vector<16xf32>, %mask : vector<1
 }
 
 // CHECK-LABEL: func @test_atomic_rmw_0({{.*}}) {
-func.func @test_atomic_rmw_0(%src: ui64, %value : vector<16x2xf32>, %mask : vector<16xi1>) {
-  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64 -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
+func.func @test_atomic_rmw_0(%src: ui64, %offsets : vector<16 x index>, %value : vector<16x2xf32>, %mask : vector<16xi1>) {
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
 
   // CHECK: xegpu.atomic_rmw
   // CHECK-SAME: !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2 : i64>>, vector<16xi1>, vector<16x2xf32>
@@ -27,8 +27,8 @@ func.func @test_atomic_rmw_0(%src: ui64, %value : vector<16x2xf32>, %mask : vect
 }
 
 // CHECK-LABEL: func @test_atomic_rmw_1({{.*}}) {
-func.func @test_atomic_rmw_1(%src: ui64, %value : vector<16x2xi32>, %mask : vector<16xi1>) {
-  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64 -> !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
+func.func @test_atomic_rmw_1(%src: ui64, %offsets : vector<16 x index>, %value : vector<16x2xi32>, %mask : vector<16xi1>) {
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
 
   // CHECK: xegpu.atomic_rmw
   // CHECK-SAME: !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2 : i64>>, vector<16xi1>, vector<16x2xi32>

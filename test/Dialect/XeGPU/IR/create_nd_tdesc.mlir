@@ -65,9 +65,9 @@ func.func @test_create_nd_tdesc_4(%src: memref<?x?xf16>, %w : index, %h : index,
 func.func @test_create_nd_tdesc_5(%src: memref<?x?xf16>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
+  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
   %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1]
-                                  : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = #sg_map_fp16>>
+                                  : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = #sg_map_fp16>>
   return
 }
 
@@ -75,9 +75,9 @@ func.func @test_create_nd_tdesc_5(%src: memref<?x?xf16>, %w : index, %h : index,
 func.func @test_create_nd_tdesc_6(%src: memref<?x?xf16>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
+  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
   %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1]
-                            : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = #sg_map_fp16>>
+                            : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = #sg_map_fp16>>
   return
 }
 
@@ -94,9 +94,9 @@ func.func @test_create_nd_tdesc_7(%src: memref<1024xf16>, %offset : index) {
 func.func @test_create_nd_tdesc_8(%src: memref<?x?xf16>, %w : index, %h : index, %x : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
+  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
   %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1]
-                                    : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = #sg_map_fp16>>
+                                    : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = #sg_map_fp16>>
   return
 }
 
@@ -104,8 +104,8 @@ func.func @test_create_nd_tdesc_8(%src: memref<?x?xf16>, %w : index, %h : index,
 func.func @test_create_nd_tdesc_9(%src: memref<?x?xf16>, %w : index, %h : index, %x : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<64x128xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
+  // CHECK-SAME: memref<?x?xf16> -> !xegpu.tensor_desc<64x128xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = <wi_layout = [2, 8], wi_data = [1, 2]>>>
   %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] : memref<?x?xf16>
-            -> !xegpu.tensor_desc<64x128xf16, #xegpu.block_tdesc_attr<memory_scope = slm, map = #sg_map_fp16>>
+            -> !xegpu.tensor_desc<64x128xf16, #xegpu.block_tdesc_attr<memory_space = slm, map = #sg_map_fp16>>
   return
 }

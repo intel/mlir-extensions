@@ -10,7 +10,7 @@ gpu.module @test_kernel {
     %3 = xetile.tile_unpack %2 {inner_blocks = array<i64: 1, 16>}: vector<32x4x1x16xf16> -> vector<32x64xf16>
     %4 = xetile.init_tile %arg0[0, 0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [1, 16]>>
     %5 = xetile.tile_pack %3 {inner_blocks = array<i64: 1, 16>}: vector<32x64xf16> -> vector<32x4x1x16xf16>
-    // CHECK-COUNT-128: xegpu.store_nd %[[cst]], %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf16>, !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    // CHECK-COUNT-128: xegpu.store_nd %[[cst]], %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf16>, !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     xetile.store_tile %5,  %4 : vector<32x4x1x16xf16>, !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [1, 16]>>
     gpu.return
   }
@@ -87,7 +87,7 @@ gpu.module @test_kernel {
     %2 = xetile.tile_unpack %1 {inner_blocks = array<i64: 1, 16>}: vector<32x4x1x16xf16> -> vector<32x64xf16>
     %3 = xetile.init_tile %arg0[0, 0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [1, 16]>>
     %4 = xetile.tile_pack %2 {inner_blocks = array<i64: 1, 16>}: vector<32x64xf16> -> vector<32x4x1x16xf16>
-    // CHECK-COUNT-128: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf16>, !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+    // CHECK-COUNT-128: xegpu.store_nd %{{.*}}, %{{.*}} <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<1x16xf16>, !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
     xetile.store_tile %4,  %3 : vector<32x4x1x16xf16>, !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [1, 16]>>
     gpu.return
   }

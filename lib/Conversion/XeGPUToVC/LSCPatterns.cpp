@@ -177,11 +177,11 @@ static LogicalResult isValidScatterSetup(Type elemTy, int simd_lanes,
 // or the data for store. It is not used for prefetch. prefetch on slm is not
 // available.
 static std::string getLSCIntrinsicStr(llvm::StringRef opName, int simd_lanes,
-                                      xegpu::MemoryScope memoryScope,
+                                      xegpu::MemorySpace MemorySpace,
                                       llvm::StringRef dataTyStr = "") {
-  auto kind = memoryScope == xegpu::MemoryScope::SLM ? "slm" : "stateless";
+  auto kind = MemorySpace == xegpu::MemorySpace::SLM ? "slm" : "stateless";
   // using 32bit for slm and 64bit for stateless
-  auto addrBits = memoryScope == xegpu::MemoryScope::SLM ? 32 : 64;
+  auto addrBits = MemorySpace == xegpu::MemorySpace::SLM ? 32 : 64;
   auto predTyStr = llvm::formatv("v{0}i1", simd_lanes).str();
   auto offsetTyStr = llvm::formatv("v{0}i{1}", simd_lanes, addrBits).str();
   if (opName == "load") {
@@ -443,7 +443,7 @@ static Value genLoadIntrinsicCallWithC32BConversion(
     ConversionPatternRewriter &rewriter, Location &loc, VectorType resultTy,
     int simd_lanes, Value pred, std::optional<xegpu::CachePolicy> l1,
     std::optional<xegpu::CachePolicy> l3, Type elemTy, int chunkSize,
-    xegpu::MemoryScope scope, Value addresses) {
+    xegpu::MemorySpace scope, Value addresses) {
 
   // truncate the value from i32Ty to elemTy.
   auto truncate = [&](Value value, Type elemTy,
@@ -486,7 +486,7 @@ static Value gen1DLoadInstrinsicCall(ConversionPatternRewriter &rewriter,
                                      std::optional<xegpu::CachePolicy> l1,
                                      std::optional<xegpu::CachePolicy> l3,
                                      Type elemTy, int elems,
-                                     xegpu::MemoryScope scope, Value payload) {
+                                     xegpu::MemorySpace scope, Value payload) {
   const int simd_lanes = 1;
   auto pred = dense_vector_int_val(1, i1Ty, simd_lanes);
   auto bitWidth = elemTy.getIntOrFloatBitWidth();
@@ -512,9 +512,9 @@ static func::CallOp
 genPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
                          int simd_lanes, std::optional<xegpu::CachePolicy> l1,
                          std::optional<xegpu::CachePolicy> l3, Type elemTy,
-                         int chunkSize, xegpu::MemoryScope memoryScope,
+                         int chunkSize, xegpu::MemorySpace MemorySpace,
                          Value addresses) {
-  auto intrinsicStr = getLSCIntrinsicStr("prefetch", simd_lanes, memoryScope);
+  auto intrinsicStr = getLSCIntrinsicStr("prefetch", simd_lanes, MemorySpace);
   auto pred = dense_vector_int_val(1, i1Ty, simd_lanes);
   return genLSCIntrinsicCallWithEncoding(
       rewriter, loc, intrinsicStr, {} /* null resultType */, pred, LSC_LOAD, l1,
@@ -526,12 +526,12 @@ genPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
 static func::CallOp gen1DPrefetchIntrinsicCall(
     ConversionPatternRewriter &rewriter, Location &loc,
     std::optional<xegpu::CachePolicy> l1, std::optional<xegpu::CachePolicy> l3,
-    Type elemTy, int elems, xegpu::MemoryScope memoryScope, Value payload) {
+    Type elemTy, int elems, xegpu::MemorySpace MemorySpace, Value payload) {
   const int simd_lanes = 1;
   auto bitWidth = elemTy.getIntOrFloatBitWidth();
   assert(bitWidth >= 32 && "1D block is only for 32/64-bit data.");
   return genPrefetchIntrinsicCall(rewriter, loc, simd_lanes, l1, l3, elemTy,
-                                  elems, memoryScope, payload);
+                                  elems, MemorySpace, payload);
 }
 
 // Generate a call to lsc.store intrinsic, using convert-to-32b conversion
@@ -545,7 +545,7 @@ static func::CallOp genStoreIntrinsicCallWithC32BConversion(
     ConversionPatternRewriter &rewriter, Location &loc, int simd_lanes,
     Value pred, std::optional<xegpu::CachePolicy> l1,
     std::optional<xegpu::CachePolicy> l3, Type elemTy, int chunkSize,
-    xegpu::MemoryScope scope, Value addresses, Value data) {
+    xegpu::MemorySpace scope, Value addresses, Value data) {
 
   // lsc store only takes 32-bit data as input and save the least 8-bit,
   // or 16-bit to the memory. So we need to extend the data to 32-bit if
@@ -597,7 +597,7 @@ static func::CallOp
 gen1DStoreInstrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
                          std::optional<xegpu::CachePolicy> l1,
                          std::optional<xegpu::CachePolicy> l3, Type elemTy,
-                         int elems, xegpu::MemoryScope scope, Value payload,
+                         int elems, xegpu::MemorySpace scope, Value payload,
                          Value data) {
   auto bitWidth = elemTy.getIntOrFloatBitWidth();
   assert(bitWidth >= 32 && "1D block is only for 32/64-bit data.");
@@ -729,7 +729,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
     auto rank = tdescTy.getRank();
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
 
     auto l1hint = op.getL1Hint();
     auto l3hint = op.getL3Hint();
@@ -763,11 +763,11 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
 
       auto newValue = gen1DLoadInstrinsicCall(
           rewriter, loc, op.getType(), l1hint, l3hint, elemTy, elems,
-          tdescTy.getMemoryScope(), adaptor.getTensorDesc());
+          tdescTy.getMemorySpace(), adaptor.getTensorDesc());
       rewriter.replaceOp(op, newValue);
       return success();
     } else if (rank == 2) { // 2d.ugm.desc
-      if (scope != xegpu::MemoryScope::Global)
+      if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block load.");
       auto payload = adaptor.getTensorDesc();
@@ -800,8 +800,9 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         // keep the clean interface. This part of the logic will be moved out.
         auto shape = tdescTy.getShape().vec();
         shape[1] = shape[1] / factor;
-        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
-                                      tdescTy.getEncoding());
+        tdescTy =
+            TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                tdescTy.getEncoding(), /*sg_map*/ nullptr);
 
         // update arg7 of the payload
         auto nblks = tdescTy.getArrayLength();
@@ -862,14 +863,14 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
     auto rank = tdescTy.getRank();
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
 
     auto l1hint = op.getL1Hint();
     auto l3hint = op.getL3Hint();
 
     if (rank == 1) { // for 1D tensor desc, use lsc.load
 
-      if (scope == xegpu::MemoryScope::SLM) {
+      if (scope == xegpu::MemorySpace::SLM) {
         // no prefetch for slm.
         rewriter.eraseOp(op);
         return success();
@@ -887,7 +888,7 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
       rewriter.replaceOp(op, callOp);
       return success();
     } else if (rank == 2) { // 2d.ugm.desc
-      if (scope != xegpu::MemoryScope::Global)
+      if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block prefetch.");
       auto callOp = gen2DPrefetchIntrinsicCall(
@@ -910,7 +911,7 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
     auto rank = tdescTy.getRank();
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
 
     auto l1hint = op.getL1Hint();
     auto l3hint = op.getL3Hint();
@@ -943,7 +944,7 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
       return success();
 
     } else if (rank == 2) { // store.2d.ugm.desc
-      if (scope != xegpu::MemoryScope::Global)
+      if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block store.");
 
@@ -996,7 +997,7 @@ public:
     auto resultTy = cast<VectorType>(op.getType());
     auto newValue = genLoadIntrinsicCallWithC32BConversion(
         rewriter, loc, resultTy, simd_lanes, op.getMask(), l1hint, l3hint,
-        elemTy, chunkSize, tdescTy.getMemoryScope(), adaptor.getTensorDesc());
+        elemTy, chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc());
     rewriter.replaceOp(op, newValue);
 
     return success();
@@ -1015,11 +1016,11 @@ public:
     auto elemTy = tdescTy.getElementType();
     auto chunkSize = tdescTy.getChunkSize();
     auto simd_lanes = tdescTy.getShape()[0];
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
 
     // For SLM, there is not prefetch available, we will simply
     // remove the prefetch op.
-    if (scope == xegpu::MemoryScope::SLM) {
+    if (scope == xegpu::MemorySpace::SLM) {
       rewriter.eraseOp(op);
       return success();
     }
@@ -1080,7 +1081,7 @@ public:
     auto l3hint = op.getL3Hint();
     auto callOp = genStoreIntrinsicCallWithC32BConversion(
         rewriter, loc, simd_lanes, op.getMask(), l1hint, l3hint, elemTy,
-        chunkSize, tdescTy.getMemoryScope(), adaptor.getTensorDesc(),
+        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(),
         adaptor.getValue());
 
     rewriter.replaceOp(op, callOp);
@@ -1204,10 +1205,10 @@ public:
     fence_scope = lscFenceScope::GROUP;
 
     switch (op.getMemoryKind()) {
-    case xegpu::MemoryScope::Global:
+    case xegpu::MemorySpace::Global:
       sfid = lscSFID::UGM;
       break;
-    case xegpu::MemoryScope::SLM:
+    case xegpu::MemorySpace::SLM:
       sfid = lscSFID::TGM;
       break;
     }

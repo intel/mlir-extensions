@@ -5,8 +5,8 @@
 // RUN:                                        --runner imex-cpu-runner -e main --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-#global = #xegpu.scatter_tdesc_attr<memory_scope=global>
-#slm = #xegpu.scatter_tdesc_attr<memory_scope=slm>
+#global = #xegpu.scatter_tdesc_attr<memory_space=global>
+#slm = #xegpu.scatter_tdesc_attr<memory_space=slm>
 
 module @gemm attributes {gpu.container_module} {
   func.func @test() -> memref<16xf16> attributes {llvm.emit_c_interface} {
@@ -20,15 +20,16 @@ module @gemm attributes {gpu.container_module} {
     gpu.func @test_store_scatter(%mem: memref<16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %cst = arith.constant dense<[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]> : vector<16xf16>
       %mask = arith.constant dense<1> : vector<16xi1>
+      %offsets = arith.constant dense<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]> : vector<16xindex>
 
       // store the cst into slm and load it back;
       %slm = memref.alloc() : memref<16xf16, 3>
-      %slm_tdesc = xegpu.create_tdesc %slm[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : memref<16xf16, 3> -> !xegpu.tensor_desc<16xf16, #slm>
+      %slm_tdesc = xegpu.create_tdesc %slm, %offsets : memref<16xf16, 3>, vector<16xindex> -> !xegpu.tensor_desc<16xf16, #slm>
       xegpu.store %cst, %slm_tdesc, %mask : vector<16xf16>, !xegpu.tensor_desc<16xf16, #slm>, vector<16xi1>
       %data = xegpu.load %slm_tdesc, %mask : !xegpu.tensor_desc<16xf16, #slm>, vector<16xi1> -> vector<16xf16>
 
       // store data to global memory
-      %tdesc = xegpu.create_tdesc %mem[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : memref<16xf16> -> !xegpu.tensor_desc<16xf16, #global>
+      %tdesc = xegpu.create_tdesc %mem, %offsets : memref<16xf16>, vector<16xindex> -> !xegpu.tensor_desc<16xf16, #global>
       xegpu.store %data, %tdesc, %mask : vector<16xf16>, !xegpu.tensor_desc<16xf16, #global>, vector<16xi1>
 
       gpu.return

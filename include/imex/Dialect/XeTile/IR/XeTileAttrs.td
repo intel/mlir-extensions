@@ -64,7 +64,7 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
     OptionalParameter<"xetile::WorkGroupMapAttr">:$wg_map,
     DefaultValuedParameter<"mlir::DenseI32ArrayAttr", "mlir::DenseI32ArrayAttr::get($_ctxt, {1, 0})">:$order,
     OptionalParameter<"mlir::DenseI64ArrayAttr">:$inner_blocks,
-    OptionalParameter<"mlir::Attribute">:$memory_scope
+    OptionalParameter<"mlir::Attribute">:$memory_space
   );
   let assemblyFormat = "`<` struct(params) `>`";
   let genVerifyDecl = true;
@@ -73,31 +73,31 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
                       CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
                       CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
                       CArg<"llvm::ArrayRef<int64_t>", "{}">:$inner_blocks,
-                      CArg<"int", "0">:$memory_scope),
+                      CArg<"int", "0">:$memory_space),
     [{
         mlir::Type intType = mlir::IntegerType::get($_ctxt, 32);
         return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
                       mlir::DenseI64ArrayAttr::get($_ctxt, inner_blocks),
-                      mlir::IntegerAttr::get(intType, memory_scope));
+                      mlir::IntegerAttr::get(intType, memory_space));
     }]>,
     AttrBuilder<(ins CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
-                     CArg<"int", "0">:$memory_scope),
+                     CArg<"int", "0">:$memory_space),
     [{
         mlir::Type intType = mlir::IntegerType::get($_ctxt, 32);
         return $_get($_ctxt, xetile::SubGroupMapAttr(), xetile::WorkGroupMapAttr(),
                       mlir::DenseI32ArrayAttr::get($_ctxt, order),
                       mlir::DenseI64ArrayAttr::get($_ctxt, {}),
-                      mlir::IntegerAttr::get(intType, memory_scope));
+                      mlir::IntegerAttr::get(intType, memory_space));
     }]>,
     AttrBuilder<(ins CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
                       CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
                       CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
-                      CArg<"int", "0">:$memory_scope),
+                      CArg<"int", "0">:$memory_space),
     [{
        mlir::Type intType = mlir::IntegerType::get($_ctxt, 32);
        return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
                       mlir::DenseI64ArrayAttr::get($_ctxt, {}),
-                      mlir::IntegerAttr::get(intType, memory_scope));
+                      mlir::IntegerAttr::get(intType, memory_space));
     }]>
   ];
 }

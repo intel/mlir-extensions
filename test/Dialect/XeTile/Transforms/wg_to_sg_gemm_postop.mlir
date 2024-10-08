@@ -1,11 +1,11 @@
 // RUN: imex-opt --split-input-file --xetile-wg-to-sg --cse %s -verify-diagnostics | FileCheck %s
 
 #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [40, 32]>
-#tile_attr_a = #xetile.tile_attr<wg_map = #wg_map_a, inner_blocks = [], memory_scope = 0>
+#tile_attr_a = #xetile.tile_attr<wg_map = #wg_map_a, inner_blocks = [], memory_space = 0>
 #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 96]>
-#tile_attr_b = #xetile.tile_attr<wg_map = #wg_map_b, inner_blocks = [], memory_scope = 0>
+#tile_attr_b = #xetile.tile_attr<wg_map = #wg_map_b, inner_blocks = [], memory_space = 0>
 #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [40, 96]>
-#tile_attr_c = #xetile.tile_attr<wg_map = #wg_map_c, inner_blocks = [], memory_scope = 0>
+#tile_attr_c = #xetile.tile_attr<wg_map = #wg_map_c, inner_blocks = [], memory_space = 0>
 
 #map = affine_map<() -> (0)>
 #map1 = affine_map<() -> (12288)>
