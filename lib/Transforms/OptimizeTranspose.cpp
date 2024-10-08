@@ -128,8 +128,8 @@ public:
           transposeAttr.asArrayRef() == llvm::ArrayRef<int64_t>{1, 0})
         return mlir::WalkResult::skip();
       // Memory space of the load op must be global.
-      if (loadOp.getTensorDesc().getType().getMemoryScope() !=
-          mlir::xegpu::MemoryScope::Global)
+      if (loadOp.getTensorDesc().getType().getMemorySpace() !=
+          mlir::xegpu::MemorySpace::Global)
         return mlir::WalkResult::skip();
       // Single user must be a transpose op.
       auto transposeOp = llvm::dyn_cast_if_present<mlir::vector::TransposeOp>(
