@@ -19,7 +19,6 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-
 |init_tile	| operation ::= xetile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index, attr-dict-> type($tile, attr-dict)	| %block = xetile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
 |load_tile	| operation ::=xetile.load_tile $tile attr-dict:type($tile) ->type($res)	 | %vector_a = xetile.load_tile %tile_a {padding=0} : tile<64x32xbf16> into vector<32x64xbf16>|
 |store_tile	| operation ::=xetile.store_tile $value, $tile attr-dict: type($value), type($tile) | xetile.store_tile %tile_a, %vector_a: vector<64x64xbf16> into tile<64x64xbf16> |
