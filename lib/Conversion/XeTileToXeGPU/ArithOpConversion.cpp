@@ -311,8 +311,8 @@ class SgVectorMultiDimReductionOpPattern
 
     rewriter.setInsertionPoint(op);
     // doing reduction on outer dimension
-    if (mlir::isConstantIntValue(dims[0], 0) &&
-        mlir::isConstantIntValue(dims[1], 2)) {
+    if (dims[0] == 0 &&
+        dims[1] == 2) {
       auto intermediates = lowerOuterReduction(sources, shape, op.getKind(),
                                                loc, elemTy, rewriter);
       {
@@ -330,8 +330,8 @@ class SgVectorMultiDimReductionOpPattern
     }
 
     // doing reduction on inner dimension
-    if (mlir::isConstantIntValue(dims[0], 1) &&
-        mlir::isConstantIntValue(dims[1], 3)) {
+    if (dims[0] == 1 &&
+        dims[1] == 3) {
       auto intermediates = lowerInnerReductionWithIntraVectorShuffles(
           sources, shape, op.getKind(), loc, elemTy, rewriter);
 

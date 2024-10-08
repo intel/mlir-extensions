@@ -1,22 +1,29 @@
+From 4cb4411e2451b1549bafd6a8a3723f78251ef6f3 Mon Sep 17 00:00:00 2001
+From: izamyati <igor.zamyatin@intel.com>
+Date: Tue, 1 Oct 2024 08:59:35 -0500
+Subject: [PATCH] Add serialization and deserialization support for s
+
+---
+ mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 6 ++++++
+ mlir/lib/Target/SPIRV/Serialization/Serializer.cpp     | 6 ++++++
+ 2 files changed, 12 insertions(+)
+
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 12980879b20a..b5fbe8c5ceb8 100644
+index 6c7fe4106982..b1be812e74eb 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -259,8 +259,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -259,6 +259,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
          symbol, FPRoundingModeAttr::get(opBuilder.getContext(),
                                          static_cast<FPRoundingMode>(words[2])));
      break;
--  case spirv::Decoration::DescriptorSet:
 +  case spirv::Decoration::Alignment:
+   case spirv::Decoration::DescriptorSet:
    case spirv::Decoration::Binding:
-+  case spirv::Decoration::DescriptorSet:
      if (words.size() != 3) {
-       return emitError(unknownLoc, "OpDecorate with ")
-              << decorationName << " needs a single integer literal";
-@@ -319,6 +320,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   case spirv::Decoration::Restrict:
+@@ -320,6 +321,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
+   case spirv::Decoration::Constant:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
@@ -24,7 +31,7 @@ index 12980879b20a..b5fbe8c5ceb8 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -329,6 +334,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -330,6 +335,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      // it is needed for many validation rules.
      decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
      break;
@@ -33,7 +40,7 @@ index 12980879b20a..b5fbe8c5ceb8 100644
    case spirv::Decoration::SpecId:
      if (words.size() != 3) {
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 714a3edfb565..bb3c68530aa9 100644
+index f355982e9ed8..d6080185eefe 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 @@ -252,8 +252,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
@@ -47,10 +54,10 @@ index 714a3edfb565..bb3c68530aa9 100644
    case spirv::Decoration::Location:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -286,6 +288,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
-   case spirv::Decoration::Restrict:
+@@ -287,6 +289,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
+   case spirv::Decoration::Constant:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
@@ -58,3 +65,6 @@ index 714a3edfb565..bb3c68530aa9 100644
      // For unit attributes and decoration attributes, the args list
      // has no values so we do nothing.
      if (isa<UnitAttr, DecorationAttr>(attr))
+-- 
+2.34.1
+

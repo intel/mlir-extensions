@@ -24,10 +24,10 @@ func.func @test_create_nd_tdesc_vc(%src: memref<24x32xf32>) {
 
 // CHECK-LABEL: func @test_create_tdesc_vc({{.*}}) {
 func.func @test_create_tdesc_vc(%src: ui64, %offsets : vector<16 x index>) {
-  // CHECK: xegpu.create_tdesc %{{.*}} : ui64
-  // CHECK-SAME: !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<memory_scope = slm, chunk_size = 2 : i64>>
-  %1 = xegpu.create_tdesc %src[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] : ui64
-          -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<memory_scope = slm, chunk_size = 2>>
+  // CHECK: xegpu.create_tdesc %{{.*}} : ui64, vector<16xindex>
+  // CHECK-SAME: !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2 : i64>>
+  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index>
+          -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
   return
 }
 

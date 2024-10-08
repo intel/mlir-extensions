@@ -127,7 +127,7 @@ class LayoutAnalysisImpl
 public:
   using SparseBackwardDataFlowAnalysis::SparseBackwardDataFlowAnalysis;
 
-  void visitOperation(mlir::Operation *op,
+  mlir::LogicalResult visitOperation(mlir::Operation *op,
                       mlir::ArrayRef<LayoutLattice *> operands,
                       mlir::ArrayRef<const LayoutLattice *> results) override {
     // the B operand of a dpas operation is always in vnni layout
@@ -144,7 +144,7 @@ public:
         // for C operand, it cannot be in vnni format
         propagateIfChanged(operands[2], operands[2]->meet(Layout(false)));
       }
-      return;
+      return mlir::success();
     }
 
     if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
@@ -175,7 +175,7 @@ public:
         for (auto &&lattice : operands)
           propagateIfChanged(lattice, lattice->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     if (auto extractStrideSliceOp =
@@ -186,7 +186,7 @@ public:
         layout = Layout::meet(layout, Layout(isVNNIApplicable(srcTy)));
         propagateIfChanged(operands[0], operands[0]->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     if (auto extractOp = mlir::dyn_cast<mlir::vector::ExtractOp>(op)) {
@@ -201,12 +201,14 @@ public:
         layout = Layout::meet(layout, Layout(isVNNIApplicable(vecTy)));
         propagateIfChanged(operands[0], operands[0]->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     // Unknown ops: mark all args as non-vnni layout (no layout change).
     for (auto operand : operands)
       propagateIfChanged(operand, operand->join(Layout(false)));
+
+     return mlir::success();
   }
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}

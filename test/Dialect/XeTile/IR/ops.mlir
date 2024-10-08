@@ -22,8 +22,8 @@
 #wg_map_b2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
 
 func.func @test_init_tile_for_slm(%a: memref<1024x1024xf16, 3>) {
-  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3 : i64>>
-  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_scope = 3>>
+  //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+  %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_space = 3>>
   return
 }
 

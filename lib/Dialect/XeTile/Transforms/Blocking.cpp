@@ -548,8 +548,8 @@ struct VectorMultiDimReductionOpPattern
     // will be transformed to
     // multi_reduction<add>, %e, %a[1, 3]: vector<16x2x1x16xf16> to
     // vector<16x1xf16>
-    auto dim = mlir::cast<mlir::IntegerAttr>(reductionDims[0]).getInt();
-    auto newReductionDims = rewriter.getI64ArrayAttr({dim, dim + 2});
+    auto dim = reductionDims[0];
+    auto newReductionDims = rewriter.getDenseI64ArrayAttr({dim, dim + 2});
 
     auto newDestShape =
         (dim == 0)
@@ -955,7 +955,7 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), innerBlocks, tileTy.getMemoryScope());
+        tileTy.getOrder(), innerBlocks, tileTy.getMemorySpace());
 
     auto newTileTy =
         imex::xetile::TileType::get(tileTy.getShape(), elemTy, attr);
