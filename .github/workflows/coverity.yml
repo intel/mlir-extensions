@@ -119,7 +119,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
           cmake --build _build --target install
 
-      - name: Build IMEX and run lit tests
+      - name: Create coverity build
         run: |
           external_lit=`which lit`
           echo ${external_lit}
@@ -136,7 +136,7 @@ jobs:
           cd $HOME
           tar zcf cov-int.tgz cov-int
 
-      - name: Create coverity build
+      - name: Create coverity artifact
         run: |
           cd $HOME
           curl -X POST \
