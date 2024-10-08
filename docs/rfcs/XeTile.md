@@ -265,7 +265,6 @@ With the `xetile.wg_map` attribute being included in the tile data type, the til
 The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTile operations as illustrated below. The attribute applies only to the output value of each operation. The input values `xetile.wg_map` are determined by their respective defining operations.
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-
 |tile_mma	| operation ::= xetile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = xetile.tile_mma %vector_a, %vector_b, %vector_c {#mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
 |tile_transpose	| operation ::= xetile.tile_transpose $permuation_dims attr_dict $vec : type($vec) -> type($res)	 | %vector_a = xetile.tile_transpose %vector_b {#mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
 |tile_reduce	| operation ::= xetile.tile_reduce $kind $src $reduction_dims attr_dict: type($value) -> type($res)	 | %vector_a = xetile.tile_reduce <add> %vector_b [1] {#mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
