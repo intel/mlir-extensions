@@ -147,7 +147,11 @@ public:
       return mlir::success();
     }
 
-    if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
+    // for non-cast elementwise ops only. Propagation is stopped
+    // when meet an cast op, e.g., truncf, in which source and result
+    // needs different vnni factors.
+    if (mlir::OpTrait::hasElementwiseMappableTraits(op) &&
+        !mlir::isa<mlir::CastOpInterface>(op)) {
       Layout layout;
 
       // if the op has results, initial the layout to be vnni
