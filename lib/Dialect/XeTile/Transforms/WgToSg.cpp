@@ -519,7 +519,7 @@ class WGToSGArithConstantOpPattern
         value.value_end<mlir::Attribute>());
 
     llvm::SmallVector<mlir::Attribute> newValues;
-    for (int64_t i = 0; i < sgData[0] * sgData[1]; i++) {
+    for (int64_t i = 0; i < static_cast<int64_t>(sgData[0]) * sgData[1]; i++) {
       newValues.push_back(elems[i]);
     }
 

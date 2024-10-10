@@ -49,6 +49,7 @@ class BlockingAnalysis {
 public:
   explicit BlockingAnalysis(std::shared_ptr<XeuArchInterface> uArch) {
     this->uArch = uArch;
+    this->target = nullptr;
   };
 
   mlir::LogicalResult run(mlir::Operation *op);
