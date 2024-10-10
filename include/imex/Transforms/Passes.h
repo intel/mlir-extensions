@@ -19,12 +19,15 @@
 #include <memory>
 
 namespace imex {
+struct InsertGPUAllocsOptions;
 //===----------------------------------------------------------------------===//
 // Passes
 //===----------------------------------------------------------------------===//
 std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass>
 createInsertGPUAllocsPass(const char *clientAPI = "vulkan");
+std::unique_ptr<mlir::Pass>
+createInsertGPUAllocsPass(const InsertGPUAllocsOptions &);
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass>
 createSetSPIRVAbiAttributePass(const char *clientAPI = "vulkan");
