@@ -386,7 +386,7 @@ static void updateDpasOp(mlir::OpBuilder &builder, mlir::xegpu::DpasOp &op,
   auto rhs = op.getRhs();
   // B operand of DPAS has multiple uses and
   // the rest uses don't use vnni.
-  if (!analysis.getLayout(rhs)) {
+  if (!analysis.getLayout(rhs) && isVNNIApplicable(rhs.getType())) {
     builder.setInsertionPoint(op);
     auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(rhs);
     auto &&[newRhs, root] = applyVnniTransform(builder, cast);

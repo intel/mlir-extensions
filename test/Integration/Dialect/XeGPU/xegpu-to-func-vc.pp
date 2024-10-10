@@ -3,6 +3,9 @@
 // spirv dialect (for device code) lowering pipeline.
 // Ready for imex runner starting from GPU dialect.
 builtin.module(
+    gpu.module(imex-xegpu-hoist-transpose,
+        imex-xegpu-apply-vnni-transformation,
+        imex-xegpu-optimize-transpose)
     imex-vector-linearize
     gpu.module(convert-xegpu-to-vc)
     cse
