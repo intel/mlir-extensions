@@ -149,9 +149,22 @@ public:
 
     // for non-cast elementwise ops only. Propagation is stopped
     // when meet an cast op, e.g., truncf, in which source and result
-    // needs different vnni factors.
-    if (mlir::OpTrait::hasElementwiseMappableTraits(op) &&
-        !mlir::isa<mlir::CastOpInterface>(op)) {
+    // needs different vnni factors. An exception is bitcast op, which
+    // source and results has the same bitwidth.
+    if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
+      // stop propagation for cast ops that are not guaranteed
+      // to have same bitwidth between source and result.
+      if (mlir::isa<mlir::CastOpInterface>(op)) {
+        auto srcTy = mlir::getElementTypeOrSelf(op->getOperand(0));
+        auto dstTy = mlir::getElementTypeOrSelf(op->getResult(0));
+        if (!srcTy.isIntOrFloat() || !dstTy.isIntOrFloat() ||
+            srcTy.getIntOrFloatBitWidth() != dstTy.getIntOrFloatBitWidth()) {
+          for (auto operand : operands)
+            propagateIfChanged(operand, operand->join(Layout(false)));
+          return mlir::success();
+        }
+      }
+
       Layout layout;
 
       // if the op has results, initial the layout to be vnni

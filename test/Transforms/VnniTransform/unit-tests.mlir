@@ -356,3 +356,22 @@ func.func @test(%arg1 : !xegpu.tensor_desc<8x16xf16>, %arg2 : !xegpu.tensor_desc
   %2 = xegpu.dpas %0, %1 : vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
   return %2 : vector<8x16xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @test
+//  CHECK-SAME: (%[[ARG1:.*]]: !xegpu.tensor_desc<8x16xi16>, %[[ARG2:.*]]: !xegpu.tensor_desc<16x16xi16>)
+// CHECK: %[[r0:.*]] = xegpu.load_nd %[[ARG1]]  : !xegpu.tensor_desc<8x16xi16> -> vector<8x16xi16>
+// CHECK: %[[r1:.*]] = xegpu.load_nd %[[ARG2]] <{packed}> : !xegpu.tensor_desc<16x16xi16> -> vector<8x16x2xi16>
+// CHECK: %[[r2:.*]] = arith.bitcast %[[r0]] : vector<8x16xi16> to vector<8x16xf16>
+// CHECK: %[[r3:.*]] = arith.bitcast %[[r1]] : vector<8x16x2xi16> to vector<8x16x2xf16>
+// CHECK: %[[r4:.*]] = xegpu.dpas %[[r2]], %[[r3]] : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+// CHECK: return %[[r4]] : vector<8x16xf32>
+func.func @test(%arg1 : !xegpu.tensor_desc<8x16xi16>, %arg2 : !xegpu.tensor_desc<16x16xi16>) -> vector<8x16xf32> {
+  %a = xegpu.load_nd %arg1 : !xegpu.tensor_desc<8x16xi16> -> vector<8x16xi16>
+  %b = xegpu.load_nd %arg2 : !xegpu.tensor_desc<16x16xi16> -> vector<16x16xi16>
+  %0 = arith.bitcast %a : vector<8x16xi16> to vector<8x16xf16>
+  %1 = arith.bitcast %b : vector<16x16xi16> to vector<16x16xf16>
+  %2 = xegpu.dpas %0, %1 : vector<8x16xf16>, vector<16x16xf16> -> vector<8x16xf32>
+  return %2 : vector<8x16xf32>
+}
