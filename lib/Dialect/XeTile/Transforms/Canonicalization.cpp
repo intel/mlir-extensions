@@ -301,16 +301,14 @@ struct VectorMultiReductionToXeTileReduce
       return mlir::failure();
     // If result is not 1D, we can not convert it to xetile.reduce. This
     // requires that the reduction dimensions has rank 1.
-    auto reductionDims = op.getReductionDims().getValue();
+    auto reductionDims = op.getReductionDims();
     if (reductionDims.size() != 1)
       return mlir::failure();
     // Retain discardable attributes if any.
     llvm::SmallVector<mlir::NamedAttribute> discardableAttrs(
         op->getDiscardableAttrs().begin(), op->getDiscardableAttrs().end());
     // Create an equivalent XeTileReduceOp
-    int64_t reduceDim = llvm::cast<mlir::IntegerAttr>(reductionDims[0])
-                            .getValue()
-                            .getSExtValue();
+    int64_t reduceDim = reductionDims[0];
     auto resultTy = llvm::cast<mlir::VectorType>(op.getType());
     auto xetileResultTy = mlir::VectorType::get(
         (reduceDim == 0 ? llvm::ArrayRef<int64_t>({1, resultTy.getDimSize(0)})
@@ -410,7 +408,7 @@ struct XeTileCanonicalizationPass final
           auto newAttr = imex::xetile::XeTileAttr::get(
               tileTy.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
               mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
-              tileTy.getInnerBlocks(), tileTy.getMemoryScope());
+              tileTy.getInnerBlocks(), tileTy.getMemorySpace());
 
           return imex::xetile::TileType::get(
               swapLastTwoElems(tileTy.getShape()), tileTy.getElementType(),

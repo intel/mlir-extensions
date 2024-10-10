@@ -5,8 +5,8 @@
 // RUN:                                        --runner imex-cpu-runner -e main --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-#global = #xegpu.scatter_tdesc_attr<memory_scope=global, chunk_size = 4>
-#slm = #xegpu.scatter_tdesc_attr<memory_scope=slm, chunk_size = 4>
+#global = #xegpu.scatter_tdesc_attr<memory_space=global, chunk_size = 4>
+#slm = #xegpu.scatter_tdesc_attr<memory_space=slm, chunk_size = 4>
 
 module @gemm attributes {gpu.container_module} {
   func.func @test() -> memref<16x4xf32> attributes {llvm.emit_c_interface} {
@@ -24,17 +24,18 @@ module @gemm attributes {gpu.container_module} {
                                    [48., 49., 50., 51., 52., 53., 54., 55., 56., 57., 58., 59., 60., 61., 62., 63.]]> : vector<4x16xf32>
 
       %mask = arith.constant dense<1> : vector<16xi1>
+      %offsets = arith.constant dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xindex>
 
       // store the cst into slm and load it back;
       %slm = memref.alloc() : memref<64xf32, 3>
-      %slm_tdesc = xegpu.create_tdesc %slm[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] : memref<64xf32, 3> -> !xegpu.tensor_desc<16x4xf32, #slm>
+      %slm_tdesc = xegpu.create_tdesc %slm, %offsets : memref<64xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #slm>
       xegpu.store %cst, %slm_tdesc, %mask {transpose} : vector<4x16xf32>, !xegpu.tensor_desc<16x4xf32, #slm>, vector<16xi1>
       // load from slm
       %data = xegpu.load %slm_tdesc, %mask {transpose} : !xegpu.tensor_desc<16x4xf32, #slm>, vector<16xi1> -> vector<4x16xf32>
 
       // store data to global memory
       %cast = memref.reinterpret_cast %mem to offset: [0], sizes: [64], strides: [1] : memref<16x4xf32> to memref<64xf32>
-      %5 = xegpu.create_tdesc %cast[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] : memref<64xf32> -> !xegpu.tensor_desc<16x4xf32, #global>
+      %5 = xegpu.create_tdesc %cast, %offsets : memref<64xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #global>
       xegpu.store %data, %5, %mask {transpose} : vector<4x16xf32>, !xegpu.tensor_desc<16x4xf32, #global>, vector<16xi1>
       gpu.return
     }

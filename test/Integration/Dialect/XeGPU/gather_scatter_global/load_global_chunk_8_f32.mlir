@@ -5,7 +5,7 @@
 // RUN:                                        --runner imex-cpu-runner -e main --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 
-#scatter = #xegpu.scatter_tdesc_attr<memory_scope=global, chunk_size = 8>
+#scatter = #xegpu.scatter_tdesc_attr<memory_space=global, chunk_size = 8>
 module @gemm attributes {gpu.container_module} {
   func.func @test(%arg0: memref<16x8xf32>) -> memref<16x8xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
@@ -23,11 +23,13 @@ module @gemm attributes {gpu.container_module} {
 
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
     gpu.func @test_copy(%a: memref<16x8xf32>, %b: memref<16x8xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+
       %mask = arith.constant dense<[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]> : vector<16xi1>
+      %offsets = arith.constant dense<[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120]> : vector<16xindex>
 
       // load from a using load_gather
       %a_cast = memref.reinterpret_cast %a to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
-      %a_tdesc = xegpu.create_tdesc %a_cast[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120] : memref<128xf32> -> !xegpu.tensor_desc<16x8xf32, #scatter>
+      %a_tdesc = xegpu.create_tdesc %a_cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #scatter>
       xegpu.prefetch %a_tdesc : !xegpu.tensor_desc<16x8xf32, #scatter>
       %data = xegpu.load %a_tdesc, %mask {transpose} : !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1> -> vector<8x16xf32>
 
@@ -38,7 +40,7 @@ module @gemm attributes {gpu.container_module} {
 
       // store to b using store_scatter
       %b_cast = memref.reinterpret_cast %b to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
-      %b_tdesc = xegpu.create_tdesc %b_cast[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120] : memref<128xf32> -> !xegpu.tensor_desc<16x8xf32, #scatter>
+      %b_tdesc = xegpu.create_tdesc %b_cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #scatter>
       xegpu.store %data, %b_tdesc, %mask {transpose} : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1>
       gpu.return
     }

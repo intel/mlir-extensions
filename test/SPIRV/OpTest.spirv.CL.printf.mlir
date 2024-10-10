@@ -45,7 +45,7 @@ module @print_simple attributes {gpu.container_module} {
 
       %printfMsg1_addr = spirv.mlir.addressof @printfMsg1 : !spirv.ptr<!spirv.array<14 x i8>, UniformConstant>
       %0 = spirv.Bitcast %printfMsg1_addr : !spirv.ptr<!spirv.array<14 x i8>, UniformConstant> to !spirv.ptr<i8, UniformConstant>
-      %1 = spirv.CL.printf %0 : !spirv.ptr<i8, UniformConstant> (%arg0, %arg1 : i32, f32) -> i32
+      %1 = spirv.CL.printf %0 %arg0, %arg1 : !spirv.ptr<i8, UniformConstant>, i32, f32 -> i32
 
      spirv.Return
     }

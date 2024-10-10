@@ -69,9 +69,8 @@ func.func @test_create_nd_tdesc_vc_5(%src: memref<?x?xf32>, %w : index, %h : ind
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1]
-                                  : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -80,9 +79,8 @@ func.func @test_create_nd_tdesc_vc_6(%src: memref<?x?xf32>, %w : index, %h : ind
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1]
-                            : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -100,16 +98,15 @@ func.func @test_create_nd_tdesc_vc_7(%src: memref<1024xf32>, %offset : index) {
 func.func @test_create_nd_tdesc_vc_8(%src: memref<?x?xf32>, %w : index, %h : index, %x : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
-  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1]
-                                    : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm>>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
 // CHECK-LABEL: func @test_create_nd_tdesc_vc_9({{.*}}) {
 func.func @test_create_nd_tdesc_vc_9(%src: memref<8x32xf32>) {
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  slm, array_length = 2 : i64>>
-  %1 = xegpu.create_nd_tdesc %src[0, 0] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope = slm, array_length = 2>>
+  // CHECK-SAME: memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
+  %1 = xegpu.create_nd_tdesc %src[0, 0] : memref<8x32xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<array_length = 2>>
   return
 }

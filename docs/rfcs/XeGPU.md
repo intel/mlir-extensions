@@ -16,13 +16,13 @@ Below is a summary.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|create_tdesc	| operation ::= xegpu.create_tdesc $base_addr, $offset attr-dict : type($base_addr), type($offset) -> type($tdesc)	| %scatter_tdesc = xegpu.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc<16 x bf16, #xegpu.scatter_tdesc_attr<memory_scope=slm>> |
+|create_tdesc	| operation ::= xegpu.create_tdesc $base_addr, $offset attr-dict : type($base_addr), type($offset) -> type($tdesc)	| %scatter_tdesc = xegpu.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc<16 x bf16, #xegpu.scatter_tdesc_attr<memory_space=slm>> |
 |load_gather	| operation ::= xegpu.load_gather $tdesc, $mask attr-dict : type($tdesc), type($mask) -> type($res)	| %result = xegpu.load_gather %scatter_tdesc, %mask {L1 = cached, L2 = uncached, transpose} : tensor_desc<16x8xbf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x16xbf16> |
 |store_scatter	| operation ::= xegpu.store_scatter $value, $tdesc, $mask attr-dict : type($value), type($tdesc), type($mask)	| xegpu.store_scatter %value, %scatter_tdesc, %mask {L1 = cached, L2 = uncached} : vector<16xbf16>, tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> |
 |update_offset	| operation ::= xegpu.update_offset $tdesc, $delta : type($tdesc), type($delta) -> type($tdesc)	| %tdesc_updated = xegpu.update_offset %tdesc, %offsets: tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xindex> -> tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>> |
 |Prefetch	| operation ::= xegpu.prefetch $tdesc attr-dict : type($tdesc) 	| xegpu.prefetch %scatter_tdesc1 {L1 = cached, L2 = uncached} : tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>> |
 |atomic_rmw	| operation ::= xegpu.atomic_rmw $kind, $value, $tdesc, $mask attr-dict : type($value), type($tdesc), type($mask) 	| %ret_value = xegpu.atomic_rmw “addf”, %value, %scatter_mem2, %mask : vector<16xbf16>, tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> |
-|create_nd_tdesc	| operation ::= xegpu.create_nd_tdesc $base_addr, $offset0, $offset1, $tdim0, $tdim1, $tstride0 attr-dict : type($base_addr), index, index, index, index, index, index -> type($tdesc)	| %tdesc = xegpu.create_nd_tdesc %mem_addr, %tile_offset:2, %base_shape:2,%base_strides:2: int64, index, index, index, index, index, index -> tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<memory_scope=global>> |
+|create_nd_tdesc	| operation ::= xegpu.create_nd_tdesc $base_addr, $offset0, $offset1, $tdim0, $tdim1, $tstride0 attr-dict : type($base_addr), index, index, index, index, index, index -> type($tdesc)	| %tdesc = xegpu.create_nd_tdesc %mem_addr, %tile_offset:2, %base_shape:2,%base_strides:2: int64, index, index, index, index, index, index -> tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<memory_space=global>> |
 |load_nd	| operation ::= xegpu.load_nd $tdesc attr-dict : type($tdesc) -> type($res)	| %result = xegpu.load_nd %tdesc {L1_hint = uncached, L3_hint = uncached} : tensor_desc<8x16xbf16> -> vector<8x16xbf16> |
 |dpas	| operation ::= xegpu.dpas $matC, $matA, $matB attr_dict : type($matC), type($matA), type($matB) -> type($res)	| %vector_c = xegpu.dpas %vector_c, %vector_a, %vector_b: vector<8x16xfloat>, vector<8x8x2xbf16>, vector<8x16x2xbf16> -> vector<8x16xfloat> |
 |store_nd	| operation ::= xegpu.store_nd $value, $tdesc attr-dict : type($value), type($tdesc) | xegpu.store_nd %value, %tdesc {L1_hint = uncached, L3_hint = uncached} : vector<8x16xbf16>, tensor_desc<8x16xbf16> |
@@ -66,7 +66,7 @@ data fragments and will be introduced in the next section in details. XeGPU oper
 
 `create_nd_tdesc` can also accept an optional `block_tdesc_attr` to extend its capablity. The `block_tdesc_attr` could encode the following
 optional attributes:
-- `memory_scope`. It describes where the data block being described is located. `global` means device memory, or `slm` means shared local memory.
+- `memory_space`. It describes where the data block being described is located. `global` means device memory, or `slm` means shared local memory.
   It is default to `global`. However, it has to match with the memory scope of the base addresses. If the base address is for shared local memory,
   than the memory scope of the tensor_desc has to be shared local memory too.
 - `array_length`. It is only used for load. It describes how many horizontally consecutive blocks will be loaded by a hardware load instruction.
@@ -82,26 +82,30 @@ is multiplied with the array_length along the innermost dimension. The subtensor
      	into tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>>
 ```
 
-create_nd_tdesc also accepts a memref as input instead of a memory address, shapes, and sizes.
+create_nd_tdesc also accepts a memref as input instead of a memory address, shapes, and sizes. The memref can be high-dimension, and the result tensor descriptor is created out of the innermost 2 dimension of input memref.
 ```mlir
  %tdesc2 = xegpu.create_nd_tdesc  %mref, %offsets:2
 		: memref<1024x1024xbf16>, index, index
+     	into tensor_desc<8x16xbf16>
+
+ %tdesc2 = xegpu.create_nd_tdesc  %mref, %offsets:4 {mode =vc}
+		: memref<4x4x1024x1024xbf16>, index, index
      	into tensor_desc<8x16xbf16>
 ```
 
 The example below accepts a memory address and an offset and creates a 1D tensor_desc. The tensor_desc describes a 1D vector that is loaded by all work items combined within the subgroup.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  #tdesc_attr1 = !xegpu.block_tdesc_attr<memory_scope=slm, boundary_check=false, sg= #sg_map_a>
+  #tdesc_attr1 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false, sg= #sg_map_a>
   %tdesc1 = xegpu.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
 
-  #tdesc_attr2 = !xegpu.block_tdesc_attr<memory_scope=slm, boundary_check=false>
+  #tdesc_attr2 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false>
   %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr2>
 ```
 
-Attribute `memory_scope` indicates whether the tensor is located in the global or shared local memory. The default value is global.
+Attribute `memory_space` indicates whether the tensor is located in the global or shared local memory. The default value is global.
 Attribute `boundary_check` indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true.
 For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior.
 
@@ -193,7 +197,7 @@ When this variant is used, the matrix B must be in VNNI layout, and the matrix A
 ```
 
 `prefetch_nd` prefetches the memory specified by tensor_desc to cache.
-Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to prefetch_nd.
+Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_space` can be applied to prefetch_nd.
 ```mlir
   xegpu.prefetch_nd %tdesc2: tensor_desc<8x16xbf16>
   xegpu.prefetch_nd %tdesc2: tensor_desc<16xbf16>
@@ -226,7 +230,7 @@ creates a tensor_desc, which describes the memory base address and offsets for 1
 
 `scatter_tdesc_attr` could also contain the following optional attributes to extend the capbility of the operator,
 as shown in the following example.
-- `memory_scope`. It has the same semantic to the one in `block_tdesc_attr`, describing where the data block being
+- `memory_space`. It has the same semantic to the one in `block_tdesc_attr`, describing where the data block being
   described is located: global means device memory, and slm means shared local memory. It has to match with the memory
   scope of the base addresses. It is default to global.
 - `chunk_size`. It specifies the size being loaded per each work item, when each work item may load a consecutive
@@ -237,7 +241,7 @@ as shown in the following example.
    a valid chunk size could be 2, 4, 8, 16, 32, 64, and for int8, a valid chunk size could be 4, 8, 16, 32, 64.
 
 ```mlir
-  #tdesc_attr = !xegpu.scatter_tdesc_attr< memory_scope=slm, chunk_size=8>
+  #tdesc_attr = !xegpu.scatter_tdesc_attr< memory_space=slm, chunk_size=8>
   %scatter_tdesc_chunk = xegpu.create_tdesc, %base_addr, %offsets :
 		uint64, vector<16xindex> into tensor_desc<16x8xuint16, #tdesc_attr>
 ```
@@ -254,7 +258,7 @@ When loading a tensor_desc with chunk_size attribute, the output vector must be 
 The transpose attribute must be present to explicitly describe the transpose effect.
 
 ```mlir
-  #tdesc_attr = #xegpu.scatter_tdesc_attr<memory_scope=slm, chunk_size=8>
+  #tdesc_attr = #xegpu.scatter_tdesc_attr<memory_space=slm, chunk_size=8>
   %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose} :
           tensor_desc<16x8xbf16, #tdesc_attr>, vector<16xi1> -> vector<8x16xbf16>
 ```
@@ -272,7 +276,7 @@ uint32, uint64.
 xegpu.store_scatter %value, %scatter_tdesc1, %mask :
      	 vector<16xuint16>, vector<16xi1>, tensor_desc<16xuint16, #xegpu.scatter_tdesc_attr<>>
 ```
-Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to `store_scatter`. Similar to `load_gather`,
+Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_space` can be applied to `store_scatter`. Similar to `load_gather`,
 when the `chunk_size` of `tensor_desc` is specified, the `value` is a 2D vector with the shape of [chunk_size, subgroup_size].
 
 `prefetch` prefetches data from the memory specified by tensor_desc.
@@ -388,7 +392,7 @@ For load_nd with `transpose` attribute, wi_layout is transposed to match with th
 `xegpu.sg_map` is also used to describe the WI data distribution for regular load. Below example shows that each WI loads one fp32 data element. The result vector <16xfp32> is loaded and distributed to each WI as <1xf32>.
 ```mlir
   #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  #scatter_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
+  #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
   %scatter_tdesc = xegpu.create_tdesc, %src_addr, %offsets:
 		uint64, vector<16xindex> into tensor_desc<16xfp32, #scatter_attr, #sg_map_t>
 
@@ -399,7 +403,7 @@ For load_nd with `transpose` attribute, wi_layout is transposed to match with th
 Below example shows that each WI loads 4 fp32 data element with the chunk_size_per_lane. This load with chunk_size_per_lane is effectively load 2D tensor and transpose. The data fragement <1x4xf32> is loaded and transposed as <4x1xf32>.
 ```mlir
   #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 4]>
-  #scatter_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
+  #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
   %scatter_tdesc_chunk = xegpu.create_tdesc, %src_addr, %offsets
 		{chunk_size_per_lane=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
@@ -550,7 +554,7 @@ An example on how to perform transpose using load_gather with chunk_size_per_lan
 ```mlir
 
   #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
-  #scatter_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
+  #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
   %scatter_tdesc_chunk = xegpu.create_tdesc, %src_addr, %offsets
 		{chunk_size_per_lane=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
@@ -559,7 +563,7 @@ An example on how to perform transpose using load_gather with chunk_size_per_lan
           tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<16xi1> -> vector<4x1xfp32>
 
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
+  #tdesc_attr = !xegpu.tdesc_attr< memory_space=slm, boundary_check=false>
   %tdesc2 = xegpu.create_nd_tdesc %dest_addr, %offset:
 		uint64, index into tensor_desc<64xfp32, #tdesc_attr>
   xegpu.store_nd %value, %tdesc2:

@@ -10,10 +10,10 @@ module {
       %c0 = arith.constant 0 : index
       %acc = arith.constant dense<0.0> : vector<16xf16>
       //CHECK: %[[R0:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[c0]], %[[c0]]] : memref<128x256xf16>
-      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       %t = xetile.init_tile %a[%c0, %c0] : memref<128x256xf16> -> !xetile.tile<16x32xf16>
       //CHECK: %[[R1:.*]] = xegpu.load_nd %[[R0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}>
-      //CHECK-SAME : !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<16x32xf16>
+      //CHECK-SAME : !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<16x32xf16>
       %v = xetile.load_tile %t : !xetile.tile<16x32xf16> -> vector<16x32xf16>
 
       //CHECK: %[[R2:.*]] = vector.extract_strided_slice %[[R1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<16x32xf16> to vector<1x32xf16>
@@ -118,9 +118,9 @@ module {
       %r = vector.multi_reduction <add>, %e, %acc [1] : vector<16x32xf16> to vector<16xf16>
       //CHECK: %[[R161:.*]] = vector.shape_cast %[[R160]] : vector<16xf16> to vector<2x8xf16>
       %c = vector.shape_cast %r: vector<16xf16> to vector<2x8xf16>
-      //CHECK: %[[R162:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xegpu.tensor_desc<2x8xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: %[[R162:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xegpu.tensor_desc<2x8xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       %s = xetile.init_tile %b[%c0, %c0] : memref<128x256xf16> -> !xetile.tile<2x8xf16>
-      //CHECK: xegpu.store_nd %[[R161]], %[[R162]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<2x8xf16>, !xegpu.tensor_desc<2x8xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: xegpu.store_nd %[[R161]], %[[R162]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<2x8xf16>, !xegpu.tensor_desc<2x8xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       xetile.store_tile %c, %s : vector<2x8xf16>, !xetile.tile<2x8xf16>
       gpu.return
     }
@@ -132,8 +132,8 @@ module {
       %a_tile = xetile.init_tile %a[%c0, %c0] : memref<8x32xf32> -> !xetile.tile<8x32xf32>
       %b_tile = xetile.init_tile %b[%c0, %c0] : memref<8x1xf32> -> !xetile.tile<8x1xf32>
 
-      //CHECK: xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<8x16xf32>
-      //CHECK: xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<8x16xf32>
+      //CHECK: xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<8x16xf32>
+      //CHECK: xegpu.load_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<8x16xf32>
       %a_loaded = xetile.load_tile %a_tile: !xetile.tile<8x32xf32> -> vector<8x32xf32>
 
       //CHECK: %[[R1:.*]] = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23] : vector<16xf32>, vector<16xf32>
@@ -173,10 +173,10 @@ module {
       %c0 = arith.constant 0 : index
       %acc = arith.constant dense<0.0> : vector<32xf16>
       //CHECK: %[[R0:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[c0]], %[[c0]]] : memref<128x256xf16>
-      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       %t = xetile.init_tile %a[%c0, %c0] : memref<128x256xf16> -> !xetile.tile<16x32xf16>
       //CHECK: %[[R1:.*]] = xegpu.load_nd %[[R0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}>
-      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>> -> vector<16x32xf16>
+      //CHECK-SAME: !xegpu.tensor_desc<16x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<16x32xf16>
       %v = xetile.load_tile %t : !xetile.tile<16x32xf16> -> vector<16x32xf16>
       //CHECK: %[[R2:.*]] = vector.extract_strided_slice %[[R1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<16x32xf16> to vector<1x32xf16>
       //CHECK: %[[R3:.*]] = vector.extract_strided_slice %[[R1]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<16x32xf16> to vector<1x32xf16>
@@ -231,9 +231,9 @@ module {
       %r = vector.multi_reduction <add>, %e, %acc [0] : vector<16x32xf16> to vector<32xf16>
       //CHECK: %[[R118:.*]] = vector.shape_cast %[[R117]] : vector<32xf16> to vector<4x8xf16>
       %c = vector.shape_cast %r: vector<32xf16> to vector<4x8xf16>
-      //CHECK: %[[R119:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xegpu.tensor_desc<4x8xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: %[[R119:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xegpu.tensor_desc<4x8xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       %s = xetile.init_tile %b[%c0, %c0] : memref<128x256xf16> -> !xetile.tile<4x8xf16>
-      //CHECK: xegpu.store_nd %[[R118]], %[[R119]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<4x8xf16>, !xegpu.tensor_desc<4x8xf16, #xegpu.block_tdesc_attr<memory_scope =  global, array_length = 1 : i64, boundary_check = true>>
+      //CHECK: xegpu.store_nd %[[R118]], %[[R119]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<4x8xf16>, !xegpu.tensor_desc<4x8xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       xetile.store_tile %c, %s : vector<4x8xf16>, !xetile.tile<4x8xf16>
       gpu.return
     }

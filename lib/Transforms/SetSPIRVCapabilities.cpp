@@ -70,6 +70,7 @@ public:
         spirv::Capability::AtomicFloat32AddEXT,
         spirv::Capability::ExpectAssumeKHR,
         spirv::Capability::VectorAnyINTEL,
+        spirv::Capability::VectorComputeINTEL,
         // clang-format on
     };
     spirv::Capability caps_vulkan[] = {

@@ -127,9 +127,9 @@ class LayoutAnalysisImpl
 public:
   using SparseBackwardDataFlowAnalysis::SparseBackwardDataFlowAnalysis;
 
-  void visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<LayoutLattice *> operands,
-                      mlir::ArrayRef<const LayoutLattice *> results) override {
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op, mlir::ArrayRef<LayoutLattice *> operands,
+                 mlir::ArrayRef<const LayoutLattice *> results) override {
     // the B operand of a dpas operation is always in vnni layout
     // and it is the start point of the layout propagation
     if (auto dpas = mlir::dyn_cast<mlir::xegpu::DpasOp>(op)) {
@@ -144,10 +144,27 @@ public:
         // for C operand, it cannot be in vnni format
         propagateIfChanged(operands[2], operands[2]->meet(Layout(false)));
       }
-      return;
+      return mlir::success();
     }
 
+    // for non-cast elementwise ops only. Propagation is stopped
+    // when meet an cast op, e.g., truncf, in which source and result
+    // needs different vnni factors. An exception is bitcast op, which
+    // source and results has the same bitwidth.
     if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
+      // stop propagation for cast ops that are not guaranteed
+      // to have same bitwidth between source and result.
+      if (mlir::isa<mlir::CastOpInterface>(op)) {
+        auto srcTy = mlir::getElementTypeOrSelf(op->getOperand(0));
+        auto dstTy = mlir::getElementTypeOrSelf(op->getResult(0));
+        if (!srcTy.isIntOrFloat() || !dstTy.isIntOrFloat() ||
+            srcTy.getIntOrFloatBitWidth() != dstTy.getIntOrFloatBitWidth()) {
+          for (auto operand : operands)
+            propagateIfChanged(operand, operand->join(Layout(false)));
+          return mlir::success();
+        }
+      }
+
       Layout layout;
 
       // if the op has results, initial the layout to be vnni
@@ -175,7 +192,7 @@ public:
         for (auto &&lattice : operands)
           propagateIfChanged(lattice, lattice->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     if (auto extractStrideSliceOp =
@@ -186,7 +203,7 @@ public:
         layout = Layout::meet(layout, Layout(isVNNIApplicable(srcTy)));
         propagateIfChanged(operands[0], operands[0]->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     if (auto extractOp = mlir::dyn_cast<mlir::vector::ExtractOp>(op)) {
@@ -201,12 +218,14 @@ public:
         layout = Layout::meet(layout, Layout(isVNNIApplicable(vecTy)));
         propagateIfChanged(operands[0], operands[0]->meet(layout));
       }
-      return;
+      return mlir::success();
     }
 
     // Unknown ops: mark all args as non-vnni layout (no layout change).
     for (auto operand : operands)
       propagateIfChanged(operand, operand->join(Layout(false)));
+
+    return mlir::success();
   }
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
@@ -367,7 +386,7 @@ static void updateDpasOp(mlir::OpBuilder &builder, mlir::xegpu::DpasOp &op,
   auto rhs = op.getRhs();
   // B operand of DPAS has multiple uses and
   // the rest uses don't use vnni.
-  if (!analysis.getLayout(rhs)) {
+  if (!analysis.getLayout(rhs) && isVNNIApplicable(rhs.getType())) {
     builder.setInsertionPoint(op);
     auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(rhs);
     auto &&[newRhs, root] = applyVnniTransform(builder, cast);

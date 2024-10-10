@@ -213,7 +213,7 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), innerBlockAttr, tileTy.getMemoryScope());
+        tileTy.getOrder(), innerBlockAttr, tileTy.getMemorySpace());
 
     auto elemTy = tileTy.getElementType();
     auto newTileTy = imex::xetile::TileType::get(shape, elemTy, attr);
@@ -886,6 +886,8 @@ public:
     target.addLegalOp<xetile::TilePackOp>();
     target.addLegalOp<xetile::TileUnpackOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
+    target.addLegalOp<mlir::vector::StoreOp>();
+    target.addLegalOp<mlir::vector::LoadOp>();
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp>(
         [&](mlir::arith::ConstantOp op) -> bool {

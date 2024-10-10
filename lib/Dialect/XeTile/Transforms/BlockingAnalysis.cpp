@@ -213,9 +213,10 @@ public:
                        std::shared_ptr<XeuArchInterface> uArch)
       : SparseBackwardDataFlowAnalysis(solver, symbolTable), uArch(uArch) {}
 
-  void visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<BlockingLattice *> operands,
-                      mlir::ArrayRef<const BlockingLattice *> results) override;
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op,
+                 mlir::ArrayRef<BlockingLattice *> operands,
+                 mlir::ArrayRef<const BlockingLattice *> results) override;
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
 
@@ -283,7 +284,7 @@ private:
   std::shared_ptr<XeuArchInterface> uArch = nullptr;
 };
 
-void BlockingAnalysisImpl::visitOperation(
+mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
     mlir::Operation *op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
 
@@ -319,6 +320,8 @@ void BlockingAnalysisImpl::visitOperation(
 
   if (auto createMaskOp = mlir::dyn_cast<mlir::vector::CreateMaskOp>(op))
     visitCreateMaskOp(createMaskOp, operands, results);
+
+  return mlir::success();
 }
 
 void BlockingAnalysisImpl::visitPrefetchTileOp(
@@ -327,7 +330,7 @@ void BlockingAnalysisImpl::visitPrefetchTileOp(
   auto tileTy = op.getTile().getType();
   auto elemTy = tileTy.getElementType();
   auto shape = tileTy.getShape();
-  auto memSpace = tileTy.getMemoryScopeAsInt();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
   // initialized with a default size queried from the architecture
   auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
   if (!size)
@@ -348,7 +351,7 @@ void BlockingAnalysisImpl::visitLoadTileOp(
   auto elemTy = tileTy.getElementType();
   auto bitWidth = elemTy.getIntOrFloatBitWidth();
   auto shape = tileTy.getShape();
-  auto memSpace = tileTy.getMemoryScopeAsInt();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
   // initialized with a default size queried from the architecture
   Block block = getInnerBlockSize(op, elemTy, shape, memSpace);
 
@@ -387,7 +390,7 @@ void BlockingAnalysisImpl::visitStoreTileOp(
   auto tileTy = op.getTile().getType();
   auto elemTy = tileTy.getElementType();
   auto shape = tileTy.getShape();
-  auto memSpace = tileTy.getMemoryScopeAsInt();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
   auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
 
   if (!size)
@@ -698,8 +701,7 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
     mlir::FailureOr<LoadStore2DConfig> params;
     if (mlir::isa<xetile::StoreTileOp>(op))
       params = uArch->get2DStoreConfig(elemSize);
-    if (mlir::isa<xetile::PrefetchTileOp>(op) ||
-        mlir::isa<xetile::LoadTileOp>(op)) {
+    if (mlir::isa<xetile::LoadTileOp>(op)) {
       bool transpose = false;
       // if its user is a transpose op, and data element is 32-bit
       // or 64-bit, we will use the transpose supported size.
@@ -709,6 +711,9 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
                     mlir::isa<xetile::TransposeOp>(*(value.user_begin()));
       }
       params = uArch->get2DLoadConfig(op, elemSize, false, transpose);
+    }
+    if (mlir::isa<xetile::PrefetchTileOp>(op)) {
+      params = uArch->get2DPrefetchConfig(op, elemSize);
     }
     if (mlir::succeeded(params)) {
       maxHeight = params->blockHeight.max;

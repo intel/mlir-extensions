@@ -61,10 +61,6 @@ using mlir::xegpu::UpdateOffsetOp;
 
 namespace imex {
 
-extern void populateNbarrierArriveRawSendPatterns(TypeConverter &converter,
-                                                  RewritePatternSet &patterns);
-extern void populateLoadStoreRawSendPatterns(TypeConverter &converter,
-                                             RewritePatternSet &patterns);
 extern void populateAtomicAndFenceLSCPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns);
 extern void populateLoadStoreLSCPatterns(TypeConverter &converter,
@@ -227,13 +223,13 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto tdescTy = op.getType();
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
     auto rank = tdescTy.getRank();
     auto elemBytes = tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
 
     // SLM has to use 32-bit address, while ugm needs to use 64-bit address.
     auto addrTy =
-        (scope == xegpu::MemoryScope::SLM) ? (Type)i32Ty : (Type)i64Ty;
+        (scope == xegpu::MemorySpace::SLM) ? (Type)i32Ty : (Type)i64Ty;
 
     // Handle different source types: memref and i64/i32/ui64/ui32
     auto memRefType = dyn_cast<MemRefType>(op.getSource().getType());
@@ -249,7 +245,7 @@ public:
     base = adjustBasePointer(rewriter, op, base);
     base = rewriter.create<arith::IndexCastUIOp>(loc, addrTy, base);
 
-    if (scope == xegpu::MemoryScope::SLM || rank == 1) {
+    if (scope == xegpu::MemorySpace::SLM || rank == 1) {
       // for SLM and 1D, we need to create message for use regular load/store
       // instead of matrix descriptor, the shape of accepted TensorDescs are
       // limited to 1xN (rank = 2 with leading dimension to be 1) or N (rank =
@@ -369,14 +365,14 @@ public:
 
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
-    auto scope = tdescTy.getMemoryScope();
+    auto scope = tdescTy.getMemorySpace();
     auto rank = tdescTy.getRank();
 
     auto addrTy =
-        (scope == xegpu::MemoryScope::SLM) ? (Type)i32Ty : (Type)i64Ty;
+        (scope == xegpu::MemorySpace::SLM) ? (Type)i32Ty : (Type)i64Ty;
 
     auto desc = adaptor.getTensorDesc();
-    if (scope == xegpu::MemoryScope::SLM || rank == 1) {
+    if (scope == xegpu::MemorySpace::SLM || rank == 1) {
       // for SLM and 1D, we need to create message for use regular load/store
       // instead of matrix descriptor
 
@@ -435,20 +431,6 @@ public:
   }
 };
 
-// converts an array of OpFoldResult into a vector of index.
-static Value convertToIndexVector(llvm::ArrayRef<OpFoldResult> ofrs,
-                                  Location loc,
-                                  ConversionPatternRewriter &rewriter) {
-  SmallVector<Value> array;
-  for (auto ofr : ofrs) {
-    auto value = getValueOrConstantOp(ofr, loc, rewriter, indexTy);
-    assert(value.getType().isIndex() && "expecting an index type value.");
-    array.push_back(value);
-  }
-  return rewriter.create<vector::FromElementsOp>(
-      loc, vecTy(ofrs.size(), indexTy), ValueRange(array));
-}
-
 class CreateDescPattern : public OpConversionPattern<CreateDescOp> {
 public:
   using OpConversionPattern<CreateDescOp>::OpConversionPattern;
@@ -462,8 +444,8 @@ public:
     assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
     // use 32-bit address for SLM and 64-bit address for UGM
-    auto scope = tdescTy.getMemoryScope();
-    auto addrTy = scope == xegpu::MemoryScope::SLM ? (Type)i32Ty : (Type)i64Ty;
+    auto scope = tdescTy.getMemorySpace();
+    auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
 
     Value base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
         loc, adaptor.getSource());
@@ -478,8 +460,7 @@ public:
     // offset is represented in number of elements, need to scale it to bytes
     auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
     auto factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
-    Value offsets = convertToIndexVector(op.getMixedOffsets(), loc, rewriter);
-    offsets = castValueTo(offsets, payloadTy, loc, rewriter);
+    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
     offsets = muli(factor, offsets);
 
     // create a payload with the base address broadcasted to all simd lanes
@@ -506,16 +487,15 @@ public:
     assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
     // use 32-bit address for SLM and 64-bit address for UGM
-    auto scope = tdescTy.getMemoryScope();
-    auto addrTy = scope == xegpu::MemoryScope::SLM ? (Type)i32Ty : (Type)i64Ty;
+    auto scope = tdescTy.getMemorySpace();
+    auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
 
     auto simd_lanes = tdescTy.getShape()[0];
     auto payloadTy = VectorType::get(simd_lanes, addrTy);
 
     auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
     Value factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
-    Value offsets = convertToIndexVector(op.getMixedOffsets(), loc, rewriter);
-    offsets = castValueTo(offsets, payloadTy, loc, rewriter);
+    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
     offsets = muli(factor, offsets);
 
     auto payload = addi(adaptor.getTensorDesc(), offsets);
@@ -645,26 +625,16 @@ public:
     auto nbarrier_id = op.getNbarrierId();
 
     // a participant is both a producer or a consumer (0)
-    auto nbarrier_role = i32_val(0);
-    auto num_participants = zext(i32Ty, op.getParticipantThreadNum());
+    auto nbarrier_role = i8_val(0);
+    auto num_participants = op.getParticipantThreadNum();
+    Value num_producers = num_participants;
+    Value num_consumers = num_participants;
 
-    Value nbarrierMsg = dense_vector_int_val(0, i32Ty, 8);
-    Value payload = zext(i32Ty, nbarrier_id);
-
-    Value payload_nbarrier_role = logic_shl(i32Ty, nbarrier_role, i32_val(14));
-    payload = bitwise_or(i32Ty, payload, payload_nbarrier_role);
-
-    Value payload_num_producers =
-        logic_shl(i32Ty, num_participants, i32_val(16));
-    payload = bitwise_or(i32Ty, payload, payload_num_producers);
-
-    Value payload_num_consumers =
-        logic_shl(i32Ty, num_participants, i32_val(24));
-    payload = bitwise_or(i32Ty, payload, payload_num_consumers);
-
-    nbarrierMsg =
-        rewriter.create<vector::InsertOp>(loc, payload, nbarrierMsg, 2);
-    rewriter.replaceOp(op, nbarrierMsg);
+    auto nbarrier = rewriter.create<::mlir::UnrealizedConversionCastOp>(
+        loc, ::mlir::TypeRange{op.getType()},
+        ::mlir::ValueRange{nbarrier_id, nbarrier_role, num_producers,
+                           num_consumers});
+    rewriter.replaceOp(op, nbarrier);
 
     return success();
   }
@@ -743,6 +713,28 @@ public:
   }
 };
 
+class NbarrierArrivePattern : public OpConversionPattern<NbarrierArriveOp> {
+public:
+  using OpConversionPattern<NbarrierArriveOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NbarrierArriveOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto payload = adaptor.getNbarrier();
+    auto dop = payload.getDefiningOp();
+
+    std::string funcName = "llvm.genx.nbarrier.arrive";
+
+    SmallVector<Value> args{dop->getOperand(0), dop->getOperand(1),
+                            dop->getOperand(2), dop->getOperand(3)};
+
+    createFuncCall(rewriter, loc, funcName, TypeRange{}, args, false);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class NbarrierWaitPattern : public OpConversionPattern<NbarrierWaitOp> {
 public:
   using OpConversionPattern<NbarrierWaitOp>::OpConversionPattern;
@@ -751,12 +743,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto payload = adaptor.getNbarrier();
-
-    auto i8Type = rewriter.getIntegerType(8);
-    auto i32Type = rewriter.getIntegerType(32);
-    auto nbarrier_src = rewriter.create<vector::ExtractOp>(loc, payload, 2);
-    auto nbarrier_id = rewriter.create<arith::TruncIOp>(
-        loc, i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
+    auto nbarrier_id = payload.getDefiningOp()->getOperand(0);
 
     Value signal_flag = i8_val(0); // 0b0: wait 0b1: signal
     Value num_threads = i8_val(0); // This field is ignored for nbarrier.wait
@@ -913,18 +900,21 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     target.addIllegalOp<ShapeCastOp>();
 
+    // TODO: can we change it to addDynamicLegalOp?
+    target.addLegalOp<mlir::UnrealizedConversionCastOp>();
+
     // Don't convert "index" to "i64"
     typeConverter.addConversion([&](IndexType type) { return type; });
 
     typeConverter.addConversion([&](xegpu::TensorDescType type) -> Type {
-      auto scope = type.getMemoryScope();
+      auto scope = type.getMemorySpace();
       auto rank = type.getRank();
       auto i32Type = IntegerType::get(&getContext(), 32);
       auto i64Type = IntegerType::get(&getContext(), 64);
 
-      if (type.isScattered() || rank == 1 || scope == xegpu::MemoryScope::SLM) {
+      if (type.isScattered() || rank == 1 || scope == xegpu::MemorySpace::SLM) {
         auto addrTy =
-            scope == xegpu::MemoryScope::SLM ? (Type)i32Type : (Type)i64Type;
+            scope == xegpu::MemorySpace::SLM ? (Type)i32Type : (Type)i64Type;
         auto simd_lanes = type.isScattered() ? type.getShape()[0] : 1;
         return VectorType::get(simd_lanes, addrTy);
       } else if (rank == 2) {
@@ -973,11 +963,8 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     // Ops to llvm.genx only Patterns
     patterns.add<NbarrierWaitPattern, CompilerHintPattern,
                  ElementwiseToVCPattern<arith::MaximumFOp>,
-                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern>(
-        patterns.getContext());
-
-    // Ops to RawSend only patterns
-    populateNbarrierArriveRawSendPatterns(typeConverter, patterns);
+                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern,
+                 NbarrierArrivePattern>(patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);

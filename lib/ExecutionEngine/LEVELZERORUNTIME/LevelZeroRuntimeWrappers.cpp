@@ -402,10 +402,10 @@ static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
   }
   // enable large register file if needed
   if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
-    build_flags +=
-        " -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
-        "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
-        "'-printregusage -enableBCR' ";
+    build_flags += "-doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
+                   "-DPASTokenReduction -Xfinalizer -SWSBDepReduction "
+                   "-Xfinalizer -printregusage -Xfinalizer -enableBCR";
+    ;
   }
 
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;

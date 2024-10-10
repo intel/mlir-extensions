@@ -160,9 +160,9 @@ class LayoutAnalysisImpl
 public:
   using SparseBackwardDataFlowAnalysis::SparseBackwardDataFlowAnalysis;
 
-  void visitOperation(mlir::Operation *op,
-                      mlir::ArrayRef<LayoutLattice *> operands,
-                      mlir::ArrayRef<const LayoutLattice *> results) override {
+  mlir::LogicalResult
+  visitOperation(mlir::Operation *op, mlir::ArrayRef<LayoutLattice *> operands,
+                 mlir::ArrayRef<const LayoutLattice *> results) override {
     if (mlir::OpTrait::hasElementwiseMappableTraits(op)) {
       Layout layout;
       for (auto &&[res, resLattice] :
@@ -182,7 +182,7 @@ public:
         propagateIfChanged(argLattice, argLattice->meet(tmpLayout));
       }
 
-      return;
+      return mlir::success();
     }
 
     if (auto dpas = mlir::dyn_cast<mlir::xegpu::DpasOp>(op)) {
@@ -193,12 +193,14 @@ public:
           propagateIfChanged(operand, operand->meet(std::nullopt));
         }
       }
-      return;
+      return mlir::success();
     }
 
     // Unknown ops: mark all args as invalid layout (no layout change).
     for (auto operand : operands)
       propagateIfChanged(operand, operand->meet(std::nullopt));
+
+    return mlir::success();
   }
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
