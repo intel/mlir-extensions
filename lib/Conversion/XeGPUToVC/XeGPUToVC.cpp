@@ -61,10 +61,6 @@ using mlir::xegpu::UpdateOffsetOp;
 
 namespace imex {
 
-extern void populateNbarrierArriveRawSendPatterns(TypeConverter &converter,
-                                                  RewritePatternSet &patterns);
-extern void populateLoadStoreRawSendPatterns(TypeConverter &converter,
-                                             RewritePatternSet &patterns);
 extern void populateAtomicAndFenceLSCPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns);
 extern void populateLoadStoreLSCPatterns(TypeConverter &converter,
@@ -629,26 +625,16 @@ public:
     auto nbarrier_id = op.getNbarrierId();
 
     // a participant is both a producer or a consumer (0)
-    auto nbarrier_role = i32_val(0);
-    auto num_participants = zext(i32Ty, op.getParticipantThreadNum());
+    auto nbarrier_role = i8_val(0);
+    auto num_participants = op.getParticipantThreadNum();
+    Value num_producers = num_participants;
+    Value num_consumers = num_participants;
 
-    Value nbarrierMsg = dense_vector_int_val(0, i32Ty, 8);
-    Value payload = zext(i32Ty, nbarrier_id);
-
-    Value payload_nbarrier_role = logic_shl(i32Ty, nbarrier_role, i32_val(14));
-    payload = bitwise_or(i32Ty, payload, payload_nbarrier_role);
-
-    Value payload_num_producers =
-        logic_shl(i32Ty, num_participants, i32_val(16));
-    payload = bitwise_or(i32Ty, payload, payload_num_producers);
-
-    Value payload_num_consumers =
-        logic_shl(i32Ty, num_participants, i32_val(24));
-    payload = bitwise_or(i32Ty, payload, payload_num_consumers);
-
-    nbarrierMsg =
-        rewriter.create<vector::InsertOp>(loc, payload, nbarrierMsg, 2);
-    rewriter.replaceOp(op, nbarrierMsg);
+    auto nbarrier = rewriter.create<::mlir::UnrealizedConversionCastOp>(
+        loc, ::mlir::TypeRange{op.getType()},
+        ::mlir::ValueRange{nbarrier_id, nbarrier_role, num_producers,
+                           num_consumers});
+    rewriter.replaceOp(op, nbarrier);
 
     return success();
   }
@@ -727,6 +713,28 @@ public:
   }
 };
 
+class NbarrierArrivePattern : public OpConversionPattern<NbarrierArriveOp> {
+public:
+  using OpConversionPattern<NbarrierArriveOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NbarrierArriveOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto payload = adaptor.getNbarrier();
+    auto dop = payload.getDefiningOp();
+
+    std::string funcName = "llvm.genx.nbarrier.arrive";
+
+    SmallVector<Value> args{dop->getOperand(0), dop->getOperand(1),
+                            dop->getOperand(2), dop->getOperand(3)};
+
+    createFuncCall(rewriter, loc, funcName, TypeRange{}, args, false);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class NbarrierWaitPattern : public OpConversionPattern<NbarrierWaitOp> {
 public:
   using OpConversionPattern<NbarrierWaitOp>::OpConversionPattern;
@@ -735,12 +743,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto payload = adaptor.getNbarrier();
-
-    auto i8Type = rewriter.getIntegerType(8);
-    auto i32Type = rewriter.getIntegerType(32);
-    auto nbarrier_src = rewriter.create<vector::ExtractOp>(loc, payload, 2);
-    auto nbarrier_id = rewriter.create<arith::TruncIOp>(
-        loc, i8Type, bitwise_and(i32Type, nbarrier_src, i32_val(0xFF)));
+    auto nbarrier_id = payload.getDefiningOp()->getOperand(0);
 
     Value signal_flag = i8_val(0); // 0b0: wait 0b1: signal
     Value num_threads = i8_val(0); // This field is ignored for nbarrier.wait
@@ -897,6 +900,9 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     target.addIllegalOp<ShapeCastOp>();
 
+    // TODO: can we change it to addDynamicLegalOp?
+    target.addLegalOp<mlir::UnrealizedConversionCastOp>();
+
     // Don't convert "index" to "i64"
     typeConverter.addConversion([&](IndexType type) { return type; });
 
@@ -957,11 +963,8 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     // Ops to llvm.genx only Patterns
     patterns.add<NbarrierWaitPattern, CompilerHintPattern,
                  ElementwiseToVCPattern<arith::MaximumFOp>,
-                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern>(
-        patterns.getContext());
-
-    // Ops to RawSend only patterns
-    populateNbarrierArriveRawSendPatterns(typeConverter, patterns);
+                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern,
+                 NbarrierArrivePattern>(patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);

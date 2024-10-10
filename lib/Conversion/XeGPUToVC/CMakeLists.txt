@@ -1,6 +1,5 @@
 add_imex_conversion_library(IMEXXeGPUToVC
   LSCPatterns.cpp
-  RawSendPatterns.cpp
   XeGPUToVC.cpp
   Utils.cpp
 
