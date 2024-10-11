@@ -564,7 +564,6 @@ struct DistCoalescePass
                                 loc, nProcs, pRank, _sizes);
                         tOffs = defPart.getLOffsets();
                         tSizes = defPart.getLShape();
-                        bbIPnt = defPart;
                         auto nop = updateTargetPart(builder, e, tOffs, tSizes);
                         assert(!nop);
                       }
