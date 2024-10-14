@@ -473,13 +473,17 @@ void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
 // First creates a toMemrefOp with the same shape as tensor.
 // If this memref has a different shape than mrTyp, also creates a memref.cast
 ::mlir::Value createToMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
-                             ::mlir::Value input, ::mlir::Type toTyp) {
+                             ::mlir::Value input, ::mlir::Type toTyp,
+                             bool clone) {
   auto iTyp = mlir::cast<::mlir::RankedTensorType>(input.getType());
   auto mrTyp = mlir::cast<::mlir::MemRefType>(toTyp);
   auto shapedMrTyp =
       mlir::cast<::mlir::ShapedType>(mrTyp).clone(iTyp.getShape());
-  auto shapedMr = builder.create<::mlir::bufferization::ToMemrefOp>(
+  ::mlir::Value shapedMr = builder.create<::mlir::bufferization::ToMemrefOp>(
       loc, shapedMrTyp, input);
+  if (clone) {
+    shapedMr = builder.create<::mlir::bufferization::CloneOp>(loc, shapedMr);
+  }
   return shapedMrTyp == toTyp
              ? shapedMr
              : builder.create<::mlir::memref::CastOp>(loc, toTyp, shapedMr)

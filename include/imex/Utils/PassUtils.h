@@ -280,7 +280,8 @@ extern void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
 // If this memref has a different shape than mrTyp, also creates a memref.cast
 extern ::mlir::Value createToMemRef(::mlir::Location loc,
                                     ::mlir::OpBuilder &builder,
-                                    ::mlir::Value input, ::mlir::Type toTyp);
+                                    ::mlir::Value input, ::mlir::Type toTyp,
+                                    bool clone = false);
 
 // broadcast 2 shapes into one according to the array-API
 template <typename V1, typename V2>
