@@ -36,6 +36,36 @@ namespace imex {
 
 namespace {
 
+struct VectorExtractElementOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::ExtractElementOp> {
+  using mlir::OpConversionPattern<
+      mlir::vector::ExtractElementOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::ExtractElementOp extractOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto vector = extractOp.getVector();
+    auto vecTy = vector.getType();
+    auto constOp = vector.getDefiningOp<mlir::arith::ConstantOp>();
+
+    if (vecTy.getRank() == 1 && vecTy.getNumElements() == 1 && constOp) {
+      auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(constOp.getValue());
+      if (!value)
+        return mlir::failure();
+
+      auto attr = value.getValues<mlir::TypedAttr>()[0];
+      auto elemTy = vecTy.getElementType();
+
+      auto newVal = rewriter.create<mlir::arith::ConstantOp>(extractOp.getLoc(),
+                                                             elemTy, attr);
+
+      rewriter.replaceOp(extractOp, newVal);
+      return mlir::success();
+    }
+    return mlir::failure();
+  }
+};
+
 struct VectorExtractStridedSliceConversion final
     : public mlir::OpConversionPattern<mlir::vector::ExtractStridedSliceOp> {
   using mlir::OpConversionPattern<
@@ -204,8 +234,13 @@ struct RemoveSingleElemVectorPass final
 
     mlir::ConversionTarget target(*context);
     target.addLegalOp<mlir::arith::ConstantOp>();
-    target.addLegalOp<mlir::vector::ExtractElementOp>();
     target.addLegalOp<mlir::vector::InsertElementOp>();
+    target.addDynamicallyLegalOp<mlir::vector::ExtractElementOp>(
+        [&](mlir::vector::ExtractElementOp op) {
+          auto vecTy = op.getVector().getType();
+          return vecTy.getNumElements() != 1;
+        });
+
     target.markUnknownOpDynamicallyLegal(
         [=](mlir::Operation *op) -> std::optional<bool> {
           if (op->hasTrait<mlir::OpTrait::Vectorizable>()) {
@@ -225,7 +260,8 @@ struct RemoveSingleElemVectorPass final
     mlir::RewritePatternSet patterns(context);
     patterns.add<VectorExtractStridedSliceConversion, VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
-                 VectorSplatOpConversion>(typeConverter, context);
+                 VectorSplatOpConversion, VectorExtractElementOpConversion>(
+        typeConverter, context);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       return signalPassFailure();

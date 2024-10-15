@@ -34,7 +34,6 @@ std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
 std::unique_ptr<mlir::Pass> createCastIndexPass();
 std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 std::unique_ptr<mlir::Pass> createVectorLinearizePass();
-std::unique_ptr<mlir::Pass> createPropagatePackedLayoutPass();
 std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
 std::unique_ptr<mlir::Pass>
 createOptimizeTransposePass(const std::string &device = "pvc");

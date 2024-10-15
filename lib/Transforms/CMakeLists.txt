@@ -5,7 +5,6 @@ add_mlir_library(IMEXTransforms
   EmulateNonNativeBF16.cpp
   InsertGPUAllocs.cpp
   LowerMemRefCopy.cpp
-  PropagatePackedLayout.cpp
   RemoveSingleElemVector.cpp
   RemoveTemporaries.cpp
   SerializeSPIRV.cpp

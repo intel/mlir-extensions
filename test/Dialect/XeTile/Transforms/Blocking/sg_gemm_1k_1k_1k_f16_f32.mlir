@@ -1,4 +1,4 @@
-// RUN: imex-opt --xetile-init-duplicate --new-xetile-blocking --canonicalize --cse %s | FileCheck %s
+// RUN: imex-opt --xetile-init-duplicate --xetile-blocking --canonicalize --cse %s | FileCheck %s
 
 // CHECK-LABEL: gpu.module @test_kernel {
 gpu.module @test_kernel {

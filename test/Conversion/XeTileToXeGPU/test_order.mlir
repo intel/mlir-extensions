@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-canonicalization --xetile-blocking --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
+// RUN: imex-opt --split-input-file --xetile-canonicalization --xetile-blocking --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 
 // CHECK-LABEL: @test_func
 // CHECK-SAME: (%[[ARG0:.*]]: memref<128x64xf16>, %[[ARG1:.*]]: memref<64x128xf16, strided<[1, 64]>>) {
