@@ -3,7 +3,9 @@ builtin.module(
     gpu.module(xetile-init-duplicate
         xetile-canonicalization
         xetile-blocking
+	cse
         convert-xetile-to-xegpu
+	cse
         imex-xegpu-apply-vnni-transformation)
     cse
     imex-vector-linearize

@@ -37,7 +37,6 @@
 
 #include <optional>
 
-#include "imex/Dialect/XeTile/Transforms/Blocking.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "imex/Utils/DebugUtils.h"
 

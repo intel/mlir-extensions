@@ -4,10 +4,11 @@ builtin.module(
         cse
         xetile-init-duplicate
         xetile-canonicalization
-        new-xetile-blocking
+        xetile-blocking
         canonicalize
         convert-xetile-to-xegpu
-        imex-propagate-packed-layout)
+        cse
+        imex-xegpu-apply-vnni-transformation)
     cse
     imex-vector-linearize
     gpu.module(convert-xegpu-to-vc)

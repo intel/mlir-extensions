@@ -2,7 +2,7 @@ builtin.module(
     cse
     gpu.module(xetile-init-duplicate
         xetile-canonicalization
-        new-xetile-blocking
+        xetile-blocking
         convert-xetile-to-xegpu
         cse
         imex-xegpu-hoist-transpose

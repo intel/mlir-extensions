@@ -34,53 +34,6 @@ def XeTileInitDuplicate : Pass<"xetile-init-duplicate", "::mlir::gpu::GPUModuleO
   let dependentDialects = ["imex::xetile::XeTileDialect"];
 }
 
-def XeTileBlocking : Pass<"xetile-blocking", "::mlir::gpu::GPUModuleOp">{
-  let summary = "transform XeTile large tiles(input) into arrays of smaller "
-                "blocks with appropriate size, such that the operator on each "
-                "of the blocks can be mapped into one hardware instruction.";
-
-  let description = [{
-    This transform pass preprocesses the xetile program by decomposing large XeTile tiles
-    into smaller ones that can be handled by a hardware instruction. This blocked layout
-    is represented by high dimension vectors, inner dimension matches to DPAS size config.
-    This lowers 2D vector to 4D vector.
-  }];
-
-  let constructor = "imex::createXeTileBlockingPass()";
-  let dependentDialects = ["imex::xetile::XeTileDialect",
-                           "mlir::arith::ArithDialect",
-                           "mlir::gpu::GPUDialect",
-                           "mlir::memref::MemRefDialect",
-                           "mlir::vector::VectorDialect"];
-
-  let options = [
-     Option<"device", "device", "std::string",
-            /*default=*/"\"pvc\"",
-            "gpu platform architecture where these ops are running">
- ];
-}
-
-
-// TODO: [block-aligning] remove the following code when upstreaming the pass.
-// The pass is not supposed to be exposed to users. Temporary keep in case we
-// need debug it for down stream development.
-def XeTileBlockAligning: Pass <"xetile-block-aligning", "::mlir::gpu::GPUModuleOp"> {
-  let summary = "optimize the performance for mma.";
-
-  let description = [{
-    This transform is to optimize performance by aligning the block size among operators
-    to reduce in-register data movements. Currently, it mainly focues on the alignment
-    between load and MMA operators.
-  }];
-
-  let constructor = "imex::createXeTileBlockAligningPass()";
-  let dependentDialects = ["imex::xetile::XeTileDialect",
-                           "mlir::arith::ArithDialect",
-                           "mlir::gpu::GPUDialect",
-                           "mlir::memref::MemRefDialect",
-                           "mlir::vector::VectorDialect"];
-}
-
 def XeTileWgToSg : Pass<"xetile-wg-to-sg", "::mlir::gpu::GPUModuleOp">{
   let summary = "Transform WG level XeTile code to SG XeTile";
 
@@ -116,7 +69,7 @@ def XeTileCanonicalization : Pass<"xetile-canonicalization", "::mlir::gpu::GPUMo
   ];
 }
 
-def NewXeTileBlocking : Pass<"new-xetile-blocking", "::mlir::gpu::GPUModuleOp">{
+def XeTileBlocking : Pass<"xetile-blocking", "::mlir::gpu::GPUModuleOp">{
   let summary = "transform XeTile large tiles(input) into arrays of smaller "
                 "blocks with appropriate size, such that the operator on each "
                 "of the blocks can be mapped into one hardware instruction.";
@@ -127,7 +80,7 @@ def NewXeTileBlocking : Pass<"new-xetile-blocking", "::mlir::gpu::GPUModuleOp">{
     the xetile-blocking pass.
   }];
 
-  let constructor = "imex::createNewXeTileBlockingPass()";
+  let constructor = "imex::createXeTileBlockingPass()";
   let dependentDialects = ["imex::xetile::XeTileDialect",
                            "mlir::arith::ArithDialect",
                            "mlir::math::MathDialect",

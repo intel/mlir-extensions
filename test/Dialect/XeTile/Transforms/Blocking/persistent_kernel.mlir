@@ -1,4 +1,4 @@
-// RUN:  imex-opt --split-input-file --xetile-init-duplicate --new-xetile-blocking --canonicalize %s -verify-diagnostics -o -| FileCheck %s
+// RUN:  imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking --canonicalize %s -verify-diagnostics -o -| FileCheck %s
 module @gemm attributes {gpu.container_module} {
   gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
 

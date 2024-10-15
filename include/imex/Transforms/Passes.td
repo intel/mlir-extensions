@@ -159,15 +159,6 @@ def VectorLinearize : Pass<"imex-vector-linearize"> {
   ];
 }
 
-def PropagatePackedLayout : Pass<"imex-propagate-packed-layout"> {
-  let summary = "Propagate packed layout (i.e. VNNI) through ops";
-  let constructor = "imex::createPropagatePackedLayoutPass()";
-
-  let dependentDialects = [
-    "::mlir::vector::VectorDialect"
-  ];
-}
-
 def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
   let summary = "Remove <1xT> vectors, and replace them with scalars.";
   let constructor = "imex::createRemoveSingleElemVectorPass()";
