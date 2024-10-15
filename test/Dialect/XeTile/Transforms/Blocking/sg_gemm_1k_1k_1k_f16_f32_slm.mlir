@@ -1,4 +1,4 @@
-// RUN: imex-opt --xetile-init-duplicate --new-xetile-blocking --canonicalize --cse %s | FileCheck %s
+// RUN: imex-opt --xetile-init-duplicate --xetile-blocking --canonicalize --cse %s | FileCheck %s
 
 #slm = #xetile.tile_attr<memory_space = 3>
 

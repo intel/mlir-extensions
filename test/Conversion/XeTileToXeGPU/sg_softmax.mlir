@@ -13,14 +13,14 @@ gpu.module @test_kernel {
       //CHECK: %[[r3:.*]] = xegpu.load_nd %[[r1]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       %2 = xetile.load_tile %1: !xetile.tile<32x64xf16> -> vector<32x64xf16>
 
-      //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-      //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-      //CHECK-COUNT-64: {{.*}} = math.exp %{{.*}} : vector<1x32xf16>
+      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-8: {{.*}} = math.exp %{{.*}} : vector<8x32xf16>
       %3 = math.exp %2: vector<32x64xf16>
       //CHECK-COUNT-62: arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
       %4 = xetile.reduction <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
       %5 = xetile.broadcast %4 [0]: vector<1x64xf16> -> vector<32x64xf16>
-      //CHECK-COUNT-64: arith.divf {{.*}}, {{.*}} : vector<1x32xf16>
+      //CHECK-COUNT-8: arith.divf {{.*}}, {{.*}} : vector<8x32xf16>
       %6 = arith.divf %3, %5: vector<32x64xf16>
       %7 = xetile.init_tile %a[0, 0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
       xetile.store_tile %6, %7: vector<32x64xf16>, !xetile.tile<32x64xf16>
@@ -37,9 +37,9 @@ gpu.module @test_kernel {
       //CHECK: %[[r2:.*]] = xegpu.load_nd %[[r0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       //CHECK: %[[r3:.*]] = xegpu.load_nd %[[r1]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       %2 = xetile.load_tile %1: !xetile.tile<32x64xf16> -> vector<32x64xf16>
-      //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-      //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-      //CHECK-COUNT-64: {{.*}} = math.exp %{{.*}} : vector<1x32xf16>
+      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-8: {{.*}} = math.exp %{{.*}} : vector<8x32xf16>
       %3 = math.exp %2: vector<32x64xf16>
       //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
       //CHECK: {{.*}} = vector.shape_cast {{.*}} : vector<1x32xf16> to vector<32xf16>
@@ -329,7 +329,7 @@ gpu.module @test_kernel {
       //CHECK: {{.*}} = vector.extract {{.*}}[0, 0] : f16 from vector<1x1xf16>
       //CHECK: {{.*}} = vector.splat {{.*}} : vector<1x32xf16>
       %5 = xetile.broadcast %4 [1]: vector<32x1xf16> -> vector<32x64xf16>
-      // CHECK-COUNT-64: {{.*}} = arith.divf {{.*}}, {{.*}} : vector<1x32xf16>
+      // CHECK-COUNT-8: {{.*}} = arith.divf {{.*}}, {{.*}} : vector<8x32xf16>
       %6 = arith.divf %3, %5: vector<32x64xf16>
       %7 = xetile.init_tile %a[0, 0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
       xetile.store_tile %6, %7: vector<32x64xf16>, !xetile.tile<32x64xf16>

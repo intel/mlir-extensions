@@ -2,7 +2,7 @@
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/Debug.h>
 
-#include "BlockingAnalysis.h"
+#include "imex/Dialect/XeTile/Transforms/BlockingAnalysis.h"
 
 namespace llvm {
 using imex::Block;
@@ -121,8 +121,9 @@ BlockingRequests::BlockingRequests(Block block, UsePoint point) {
 Block BlockingRequests::getDefBlock() const {
   if (def)
     return def;
-  if (requests.size())
-    return (requests.begin()->second);
+  for (auto [p, req] : requests)
+    if (req)
+      return req;
   return Block();
 }
 
@@ -514,18 +515,19 @@ void BlockingAnalysisImpl::visitTransposeOp(
 
   auto lattice = results[0]->getValue();
 
-  // Wait for requests from users.
-  if (!op->use_empty() && !lattice.isInitialized())
-    return;
+  // Wait for requests from users, unless all users are terminators
+  if (!op->use_empty() && !lattice.isInitialized()) {
+    for (auto user : op->getUsers()) {
+      if (!user->hasTrait<mlir::OpTrait::ReturnLike>())
+        return;
+    }
+  }
 
-  Block block;
   auto srcTy = op.getVector().getType();
   auto shape = srcTy.getShape();
 
-  // use the default size if no users
-  if (op->use_empty()) {
-    block = getInnerBlockSize(op, srcTy.getElementType(), shape);
-  }
+  // init with the default size
+  Block block = getInnerBlockSize(op, srcTy.getElementType(), shape);
 
   // TransposeOp determines its blocking size based on requests from
   // its users, by swapping the blocking size of its users.
@@ -566,17 +568,30 @@ void BlockingAnalysisImpl::visitVectorizableOp(
 
   auto lattice = results[0]->getValue();
 
-  // Wait for requests from users.
-  if (!op->use_empty() && !lattice.isInitialized())
-    return;
-
   auto elemTy = type.getElementType();
   auto shape = type.getShape();
   Block block = getInnerBlockSize(op, elemTy, shape);
 
+  // Wait for requests from users, unless all of its users are terminators.
+  if (!op->use_empty() && !lattice.isInitialized()) {
+    for (auto user : op->getUsers()) {
+      if (!user->hasTrait<mlir::OpTrait::ReturnLike>())
+        return;
+    }
+  }
+
+  // TODO: special hack is needed for select op, becasue mismatch with
+  // creat_mask will generate vector shuffles on i1 type, which is not
+  // well supported by IGC yet. Using default size (same as CreateMask)
+  // could help to avoid this. Remove it when lowering of create_mask
+  // and IGC get matured.
+  if (mlir::isa<mlir::arith::SelectOp>(op)) {
+    block = Block(1, block[1]);
+  }
+
   // elementwise operations are not sensitive to the block size.
-  // It will use the block size requested by its users.
-  if (lattice.isInitialized()) {
+  // It will use the block size requested by its users, except SelectOp
+  if (lattice.isInitialized() && !mlir::isa<mlir::arith::SelectOp>(op)) {
     block[0] = 0;
     for (auto &req : lattice.getRequests()) {
       block[0] = std::max(block[0], req[0]);

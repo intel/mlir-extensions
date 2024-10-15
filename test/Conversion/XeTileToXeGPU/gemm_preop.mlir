@@ -62,8 +62,8 @@ module attributes {gpu.container_module} {
         %27 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %28 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         xegpu.compile_hint
-        //CHECK-COUNT-32: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-        //CHECK-COUNT-32: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
+        //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+        //CHECK-COUNT-8: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<8x16xf16>
         %29 = arith.addf %27, %27 : vector<32x32xf16>
         xegpu.compile_hint
         %30 = xetile.update_tile_offset %arg5, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>

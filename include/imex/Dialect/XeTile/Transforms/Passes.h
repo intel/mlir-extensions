@@ -40,9 +40,6 @@ std::unique_ptr<mlir::Pass> createXeTileInitDuplicatePass();
 
 std::unique_ptr<mlir::Pass>
 createXeTileBlockingPass(const std::string &device = "pvc");
-std::unique_ptr<mlir::Pass>
-createNewXeTileBlockingPass(const std::string &device = "pvc");
-std::unique_ptr<mlir::Pass> createXeTileBlockAligningPass();
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
 std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
 
@@ -50,13 +47,6 @@ std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
 void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
                                          mlir::RewritePatternSet &patterns);
 
-///
-void populateXeTileBlockingPatterns(imex::XeTypeConverter &converter,
-                                    mlir::RewritePatternSet &patterns,
-                                    std::shared_ptr<XeuArchInterface> ptruArch);
-
-#define GEN_PASS_DECL_NEWXETILEBLOCKING
-#define GEN_PASS_DECL_XETILEBLOCKALIGNING
 #define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DECL_XETILECANONICALIZATION
 #define GEN_PASS_DECL_XETILEINITDUPLICATE
