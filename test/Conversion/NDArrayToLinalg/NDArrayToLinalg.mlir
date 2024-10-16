@@ -477,5 +477,6 @@ func.func @test_permute_dims(%arg0: !ndarray.ndarray<5x3x2xi32>) -> !ndarray.nda
 // CHECK-LABEL: @test_permute_dims
 // CHECK: [[V0:%.*]] = bufferization.to_tensor
 // CHECK: [[V1:%.*]] = bufferization.to_memref [[V0]]
-// CHECK: [[V2:%.*]] = memref.transpose [[V1]] (d0, d1, d2) -> (d2, d1, d0)
-// CHECK-NEXT: return [[V2]] : memref<2x3x5xi32, strided<[?, ?, ?], offset: ?>>
+// CHECK: [[V2:%.*]] = bufferization.clone [[V1]]
+// CHECK: [[V3:%.*]] = memref.transpose [[V2]] (d0, d1, d2) -> (d2, d1, d0)
+// CHECK-NEXT: return [[V3]] : memref<2x3x5xi32, strided<[?, ?, ?], offset: ?>>

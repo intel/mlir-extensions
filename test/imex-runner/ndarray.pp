@@ -11,6 +11,7 @@ builtin.module(
     func.func(empty-tensor-to-alloc-tensor)
     one-shot-bufferize{bufferize-function-boundaries}
     imex-remove-temporaries
+    convert-bufferization-to-memref
     func.func(convert-linalg-to-parallel-loops)
     func.func(scf-parallel-loop-fusion)
     drop-regions
