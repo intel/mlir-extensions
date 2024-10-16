@@ -1242,7 +1242,7 @@ struct PermuteDimsOpLowering
     if (!srcArType)
       return mlir::failure();
     auto srcMRType = srcArType.getMemRefType(srcTnsr);
-    auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType);
+    auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType, true);
 
     auto perm = ::mlir::AffineMapAttr::get(::mlir::AffineMap::getPermutationMap(
         adaptor.getAxes(), rewriter.getContext()));
