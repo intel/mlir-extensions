@@ -49,8 +49,8 @@ module @gemm attributes {gpu.container_module} {
       %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value
           : vector<32x32xf16>, vector<32x64xf16>, vector<32x64xf32> -> vector<32x64xf32>
       // k iter 1 : update offsets and do a partial C tile 32x32x64
-      %a_tile_1 = xetile.update_tile_offset %a_tile, [%c0, %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-      %b_tile_1 = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x64xf16, #xetile.tile_attr<order=[0, 1]>>, index, index -> !xetile.tile<32x64xf16, #xetile.tile_attr<order=[0, 1]>>
+      %a_tile_1 = xetile.update_tile_offset %a_tile, [%c0, %c32] :  !xetile.tile<32x32xf16>
+      %b_tile_1 = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x64xf16, #xetile.tile_attr<order=[0, 1]>>
       %a_value_1 = xetile.load_tile %a_tile_1  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
       %b_value_1 = xetile.load_tile %b_tile_1  : !xetile.tile<32x64xf16, #xetile.tile_attr<order=[0, 1]>> -> vector<32x64xf16>
       %c_new_value_1 = xetile.tile_mma %a_value_1, %b_value_1, %c_new_value

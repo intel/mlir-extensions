@@ -59,8 +59,8 @@ module @gemm_output_f16 attributes {gpu.container_module} {
       %8 = xetile.init_tile %arg0[%5, %c0] : memref<128x96xf16> -> !xetile.tile<32x32xf16>
       %9 = xetile.init_tile %arg1[%7, %c0] : memref<256x96xf16> -> !xetile.tile<32x32xf16>
       %10:3 = scf.for %arg4 = %c0 to %c96 step %c32 iter_args(%arg5 = %cst, %arg6 = %8, %arg7 = %9) -> (vector<32x32xf16>, !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>) {
-        %15 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-        %16 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+        %15 = xetile.update_tile_offset %arg7, [%c0,  %c32] :  !xetile.tile<32x32xf16>
+        %16 = xetile.update_tile_offset %arg6, [%c0,  %c32] :  !xetile.tile<32x32xf16>
         %17 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %18 = xetile.load_tile %arg7 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %19 = vector.transpose %18, [1, 0] : vector<32x32xf16> to vector<32x32xf16>

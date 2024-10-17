@@ -35,8 +35,8 @@ gpu.module @test_kernel {
       %7 = xetile.load_tile %arg4 {padding = 0.000000e+00 : f32}  : !xetile.tile<8x16xf16, #slm> -> vector<8x16xf16>
       %8 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<16x16xf16, #slm> -> vector<16x16xf16>
       %9 = xetile.tile_mma %7, %8, %arg6 : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      %10 = xetile.update_tile_offset %arg4, [%c0,  %c16] : !xetile.tile<8x16xf16, #slm>, index, index -> !xetile.tile<8x16xf16, #slm>
-      %11 = xetile.update_tile_offset %arg5, [%c16,  %c0] : !xetile.tile<16x16xf16, #slm>, index, index -> !xetile.tile<16x16xf16, #slm>
+      %10 = xetile.update_tile_offset %arg4, [%c0,  %c16] : !xetile.tile<8x16xf16, #slm>
+      %11 = xetile.update_tile_offset %arg5, [%c16,  %c0] : !xetile.tile<16x16xf16, #slm>
       scf.yield %10, %11, %9 : !xetile.tile<8x16xf16, #slm>, !xetile.tile<16x16xf16, #slm>, vector<8x16xf32>
     }
     xetile.store_tile %6#2,  %2 : vector<8x16xf32>, !xetile.tile<8x16xf32>

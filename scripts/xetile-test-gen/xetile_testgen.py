@@ -177,11 +177,11 @@ class GPUCode:
 
             %A_sg_prefetch_tile_iter0 = xetile.init_tile %A[%A_prefetch_tile_x_start_global, %A_slice_prefetch_tile_y_start] : memref<{self.params.A.memref()}> -> !xetile.tile<{self.A_prefetch_tile.memref()}>
             xetile.prefetch_tile %A_sg_prefetch_tile_iter0 : !xetile.tile<{self.A_prefetch_tile.memref()}>
-            %A_sg_prefetch_tile_iter1 = xetile.update_tile_offset %A_sg_prefetch_tile_iter0, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.A_prefetch_tile.memref()}>
+            %A_sg_prefetch_tile_iter1 = xetile.update_tile_offset %A_sg_prefetch_tile_iter0, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>
             xetile.prefetch_tile %A_sg_prefetch_tile_iter1 : !xetile.tile<{self.A_prefetch_tile.memref()}>
-            %A_sg_prefetch_tile_iter2 = xetile.update_tile_offset %A_sg_prefetch_tile_iter1, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.A_prefetch_tile.memref()}>
+            %A_sg_prefetch_tile_iter2 = xetile.update_tile_offset %A_sg_prefetch_tile_iter1, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>
             xetile.prefetch_tile %A_sg_prefetch_tile_iter2 : !xetile.tile<{self.A_prefetch_tile.memref()}>
-            %A_sg_prefetch_tile_iter3 = xetile.update_tile_offset %A_sg_prefetch_tile_iter2, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.A_prefetch_tile.memref()}>
+            %A_sg_prefetch_tile_iter3 = xetile.update_tile_offset %A_sg_prefetch_tile_iter2, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>
 
 
             // (k-step x N) slice of A matrix moves along x (↓), so all rows of a column of SG layout have to collaborate on prefetch
@@ -206,11 +206,11 @@ class GPUCode:
 
             %B_sg_prefetch_tile_iter0 = xetile.init_tile %B[%B_slice_prefetch_tile_x_start_global, %B_prefetch_tile_y_start] : memref<{self.params.B.memref()}> -> !xetile.tile<{self.B_prefetch_tile.memref()}>
             xetile.prefetch_tile %B_sg_prefetch_tile_iter0 : !xetile.tile<{self.B_prefetch_tile.memref()}>
-            %B_sg_prefetch_tile_iter1 = xetile.update_tile_offset %B_sg_prefetch_tile_iter0, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.B_prefetch_tile.memref()}>
+            %B_sg_prefetch_tile_iter1 = xetile.update_tile_offset %B_sg_prefetch_tile_iter0, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>
             xetile.prefetch_tile %B_sg_prefetch_tile_iter1 : !xetile.tile<{self.B_prefetch_tile.memref()}>
-            %B_sg_prefetch_tile_iter2 = xetile.update_tile_offset %B_sg_prefetch_tile_iter1, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.B_prefetch_tile.memref()}>
+            %B_sg_prefetch_tile_iter2 = xetile.update_tile_offset %B_sg_prefetch_tile_iter1, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>
             xetile.prefetch_tile %B_sg_prefetch_tile_iter2 : !xetile.tile<{self.B_prefetch_tile.memref()}>
-            %B_sg_prefetch_tile_iter3 = xetile.update_tile_offset %B_sg_prefetch_tile_iter2, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.B_prefetch_tile.memref()}>
+            %B_sg_prefetch_tile_iter3 = xetile.update_tile_offset %B_sg_prefetch_tile_iter2, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>
         """
         return template
 
@@ -303,13 +303,13 @@ class GPUCode:
             xetile.prefetch_tile %B_prefetch_tile : !xetile.tile<{self.B_prefetch_tile.memref()}>
             xegpu.compile_hint
 
-            %next_A_prefetch_tile = xetile.update_tile_offset %A_prefetch_tile, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.A_prefetch_tile.memref()}>
-            %next_B_prefetch_tile = xetile.update_tile_offset %B_prefetch_tile, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>, index, index -> !xetile.tile<{self.B_prefetch_tile.memref()}>
+            %next_A_prefetch_tile = xetile.update_tile_offset %A_prefetch_tile, [%c0, %c{self.params.k_loop_step}] : !xetile.tile<{self.A_prefetch_tile.memref()}>
+            %next_B_prefetch_tile = xetile.update_tile_offset %B_prefetch_tile, [%c{self.params.k_loop_step}, %c0] : !xetile.tile<{self.B_prefetch_tile.memref()}>
         """
 
         template += f"""
-            %next_A_tile = xetile.update_tile_offset %A_tile, [%c0, %c{self.params.k_loop_step}]  : !xetile.tile<{self.params.SG.A_tile.memref()}>, index, index -> !xetile.tile<{self.params.SG.A_tile.memref()}>
-            %next_B_tile = xetile.update_tile_offset %B_tile, [%c{self.params.k_loop_step}, %c0]  : !xetile.tile<{self.params.SG.B_tile.memref()}>, index, index -> !xetile.tile<{self.params.SG.B_tile.memref()}>
+            %next_A_tile = xetile.update_tile_offset %A_tile, [%c0, %c{self.params.k_loop_step}]  : !xetile.tile<{self.params.SG.A_tile.memref()}>
+            %next_B_tile = xetile.update_tile_offset %B_tile, [%c{self.params.k_loop_step}, %c0]  : !xetile.tile<{self.params.SG.B_tile.memref()}>
 
             xegpu.compile_hint
             %new_c_val = xetile.tile_mma %a_val, %b_val, %c_val : vector<{self.params.SG.A_tile.memref()}>, vector<{self.params.SG.B_tile.memref()}>, vector<{self.params.SG.C_tile.memref()}> -> vector<{self.params.SG.C_tile.memref()}>

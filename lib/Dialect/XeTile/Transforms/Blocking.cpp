@@ -212,7 +212,8 @@ struct InitTileOpPattern
 
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
-        tileTy.getOrder(), innerBlockAttr, tileTy.getMemorySpace());
+        tileTy.getOrder(), innerBlockAttr, tileTy.getMemorySpace(),
+        tileTy.getScatterAttr());
 
     auto elemTy = tileTy.getElementType();
     auto newTileTy = imex::xetile::TileType::get(shape, elemTy, attr);
@@ -339,7 +340,8 @@ struct UpdateTileOffsetOpPattern
       return failure();
 
     rewriter.replaceOpWithNewOp<xetile::UpdateTileOffsetOp>(
-        op, tileTy, tile, adaptor.getOffsetX(), adaptor.getOffsetY());
+        op, tileTy, tile, adaptor.getOffsetX(), adaptor.getOffsetY(),
+        adaptor.getIndices());
     return mlir::success();
   }
 };

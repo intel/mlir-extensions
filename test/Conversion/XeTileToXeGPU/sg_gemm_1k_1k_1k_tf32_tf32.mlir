@@ -50,10 +50,10 @@ gpu.module @test_kernel {
       %9 = xetile.tile_mma %7, %8, %arg6 : vector<32x32xtf32>, vector<32x32xtf32>, vector<32x32xf32> -> vector<32x32xf32>
 
       //CHECK-COUNT-2: {{.*}} = xegpu.update_nd_offset %{{.*}}, [{{.*}}] : !xegpu.tensor_desc<32x8xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
-      %10 = xetile.update_tile_offset %arg4, [%c0,  %c64] : !xetile.tile<32x32xtf32>, index, index -> !xetile.tile<32x32xtf32>
+      %10 = xetile.update_tile_offset %arg4, [%c0,  %c64] : !xetile.tile<32x32xtf32>
 
       //CHECK-COUNT-2: {{.*}} = xegpu.update_nd_offset %{{.*}}, [{{.*}}] : !xegpu.tensor_desc<32x16xtf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
-      %11 = xetile.update_tile_offset %arg5, [%c64,  %c0] : !xetile.tile<32x32xtf32>, index, index -> !xetile.tile<32x32xtf32>
+      %11 = xetile.update_tile_offset %arg5, [%c64,  %c0] : !xetile.tile<32x32xtf32>
 
       scf.yield %10, %11, %9 : !xetile.tile<32x32xtf32>, !xetile.tile<32x32xtf32>, vector<32x32xf32>
     }

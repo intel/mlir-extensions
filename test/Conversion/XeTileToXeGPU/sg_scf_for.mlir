@@ -24,7 +24,7 @@ gpu.module @test_kernel {
       %3 = xetile.load_tile %subA : !xetile.tile<32x32xf16> -> vector<32x32xf16>
 
       //CHECK: %[[r13:.*]] = xegpu.update_nd_offset %[[arg3]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
-      %5 = xetile.update_tile_offset %subA, [%c0, %c64]: !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+      %5 = xetile.update_tile_offset %subA, [%c0, %c64]: !xetile.tile<32x32xf16>
 
       //CHECK: scf.yield %[[r13]], %[[r12]] : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x32xf16>
       scf.yield %5, %3: !xetile.tile<32x32xf16>, vector<32x32xf16>
