@@ -69,18 +69,20 @@ if config.imex_enable_igpu:
         config.igpu_fp64 = "--no-igpu-fp64"
 if config.imex_enable_fs_simulator:
     config.environment.update({
-        "ForceBCSForInternalCopyEngine": "1",
-        "ForceBcsEngineIndex": "1",
+        "TbxPort": "1234",
         "ForceDeviceId": "0B73",
         "HardwareInfoOverride": "1x4x8",
-        "IGC_Disable512GRFISA": "0",
         "NEOReadDebugKeys": "1",
-        "OverrideSlmSize": "320",
         "PrintDebugSettings": "1",
         "ProductFamilyOverride": "fcs",
         "RebuildPrecompiledKernels": "1",
         "SetCommandStreamReceiver": "2",
-        "TbxPort": "1234",
+        "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
+        "GLIBC_TUNABLES": "glibc.cpu.hwcaps=-AVX2",
+        "BlitterEnableMaskOverride": "6",
+        "EnableDirectSubmission": "0",
+        "IMEX_ENABLE_LARGE_REG_FILE": "1",
+        "Enable64BitAddressing": "1",
     })
 
 config.imex_runner_utils = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "imex_runner_utils" + config.llvm_shlib_ext))
