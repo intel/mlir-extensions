@@ -47,6 +47,12 @@ public:
   explicit InsertGPUAllocsPass() : m_clientAPI("vulkan") {}
   explicit InsertGPUAllocsPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
+  explicit InsertGPUAllocsPass(const imex::InsertGPUAllocsOptions &options)
+      : InsertGPUAllocsBase<InsertGPUAllocsPass>(options) {
+    if (clientAPI == "opencl") {
+      m_clientAPI = "opencl";
+    }
+  }
 
   mlir::LogicalResult
   initializeOptions(mlir::StringRef options,
@@ -540,15 +546,17 @@ public:
     // This is the case where the inputs are passed as arguments to the
     // function. This code will add the IR for memory allocation on the device
     // with gpu.alloc and insert a memref.copy from host to device
-    for (const auto &it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      if (isGpuAddrSpace(param))
-        continue;
-      auto access = getAccessType(param);
-      access.hostRead = true;
-      access.hostWrite = true;
-      builder.setInsertionPointToStart(&block);
-      add_gpu_alloc(builder, param, access, term);
+    if (!isUsmArgs.getValue()) {
+      for (const auto &it : gpuBufferParams) {
+        auto param = block.getArgument(it.first);
+        if (isGpuAddrSpace(param))
+          continue;
+        auto access = getAccessType(param);
+        access.hostRead = true;
+        access.hostWrite = true;
+        builder.setInsertionPointToStart(&block);
+        add_gpu_alloc(builder, param, access, term);
+      }
     }
 
     // CallOp Case: This is the case where the memref producer is coming
@@ -579,5 +587,9 @@ private:
 namespace imex {
 std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass(const char *clientAPI) {
   return std::make_unique<InsertGPUAllocsPass>(clientAPI);
+}
+std::unique_ptr<mlir::Pass>
+createInsertGPUAllocsPass(const InsertGPUAllocsOptions &option) {
+  return std::make_unique<InsertGPUAllocsPass>(option);
 }
 } // namespace imex
