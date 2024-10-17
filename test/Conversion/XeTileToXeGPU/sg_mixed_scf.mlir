@@ -82,8 +82,8 @@ gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#sp
 
           //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
           //CHECK: %{{.*}} = xegpu.update_nd_offset %{{.*}} : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
-          %50 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
-          %51 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<32x32xbf16>, index, index -> !xetile.tile<32x32xbf16>
+          %50 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<32x32xbf16>
+          %51 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<32x32xbf16>
 
           //CHECK-COUNT-16: %{{.*}} = xegpu.dpas %{{.*}}, %{{.*}}, %{{.*}} : vector<8x16xbf16>, vector<16x16xbf16>, vector<8x16xf32> -> vector<8x16xf32>
           %52 = xetile.tile_mma %48, %49, %arg9 : vector<32x32xbf16>, vector<32x32xbf16>, vector<32x32xf32> -> vector<32x32xf32>

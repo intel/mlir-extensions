@@ -22,7 +22,7 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |init_tile	| operation ::= xetile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index, attr-dict-> type($tile, attr-dict)	| %block = xetile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
 |load_tile	| operation ::=xetile.load_tile $tile attr-dict:type($tile) ->type($res)	 | %vector_a = xetile.load_tile %tile_a {padding=0} : tile<64x32xbf16> into vector<32x64xbf16>|
 |store_tile	| operation ::=xetile.store_tile $value, $tile attr-dict: type($value), type($tile) | xetile.store_tile %tile_a, %vector_a: vector<64x64xbf16> into tile<64x64xbf16> |
-|update_tile_offset	| operation ::=xetile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = xetile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
+|update_tile_offset	| operation ::=xetile.update_tile_offset $tile, $delta0, $delta1: type($tile)	| %tdesc_updated = xetile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=xetile.prefetch_tile $tile, attr-dict: type($tile)	  | xetile.prefetch_tile %coop_tile: tile<16x32xbf16> |
 |tile_mma	| operation ::=xetile.tile_mma $matA, $matB, $matC attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = xetile.tile_mma %vector_a, %vector_b, %vector_c : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
 |atomic_rmw_tile| operation ::=xetile.atomic_rmw_tile \<$kind\>, $vec, $tile: type($vec), type($tile) -> type($res)	 | %vector_a = xetile.atomic_rmw_tile \<add\> %value, %tile: vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>  |
@@ -129,8 +129,7 @@ A `tile_mma` variant without vector_c initialization.
 ```
 `update_tile_offset` updates tile with offset_x and offset_y, to move the current tile to a new position. These offsets are relative offset to the current position and counted in the number of elements.  Usually only one value is needed to update since the tile is only moving along the K dimension. Users should avoid initializing new tiles repeatedly. For best performance, the user should only initialize one tile as a base tile and update the tile offset to move to a new tile.
 ```mlir
-  %tile_updated = xetile.update_tile_offset %tile, %offset_x, offset_y :
-		tile<64x64xbf16>, index, index into tile <64x64xbf16>
+  %tile_updated = xetile.update_tile_offset %tile, %offset_x, offset_y : tile<64x64xbf16>
 ```
 
 
@@ -476,10 +475,10 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<32x256xf16, #mp_a_pfh>                                    // sg_layout=[4,8]
            %6 = tile_mma %4, %5 {#mp_a #mp_b #mp_c} %4, %10 : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
-           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
-           %2 = update_tile_offset   %2, %c32, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
-           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
+           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a>
+           %2 = update_tile_offset   %2, %c32, %c0 :  tile<32x256xf16, #mp_b>
+           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft>
+           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<32x256xf16, #mp_b_pft>
          } 
          store_tile %3, %6: (tile<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 4]
     } 
@@ -530,10 +529,10 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
            prefetch_tile %1 : tile<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
            prefetch_tile %2  : tile<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
            %6 = tile_mma %4, %5 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
-           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
-           %2 = update_tile_offset   %2, %c0, %c32 :  tile<256x32xf16, #mp_bt> -> tile<256x32xf16, #mp_bt>
-           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<256x32xf16, #mp_bt_pft> -> tile<256x32xf16, #mp_bt_pft>
+           %1 = update_tile_offset   %1, %c0, %c32 :  tile<256x32xf16, #mp_a>
+           %2 = update_tile_offset   %2, %c0, %c32 :  tile<256x32xf16, #mp_bt>
+           %1p = update_tile_offset   %1p, %c0, %c32 :  tile<256x32xf16, #mp_a_pft>
+           %2p = update_tile_offset   %2p, %c32, %c0 :  tile<256x32xf16, #mp_bt_pft>
          } 
 
          %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
@@ -631,12 +630,12 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
            %slm_offset = add %slm_offset,  %c32
            %slm_offset = mod %slm_offset,  %c128
 
-           %a1_load = update_tile_offset  %a1_load, %c0, %slm_offset :  tile<256x32xf16, #mp_a> -> tile<256x32xf16, #mp_a>
-           %b1_load = update_tile_offset  %b1_load, %slm_offset, %c0 :  tile<32x256xf16, #mp_b> -> tile<256x32xf16, #mp_b>
-           %a4_glb = update_tile_offset   %a4_glb, %c0, %c32 : tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %b4_glb = update_tile_offset   %b4_glb, %c32, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16, #mp_b_pft>
-           %a4_slm’ = update_tile_offset  %a4_slm, %c0, %slm_offset: tile<256x32xf16, #mp_a_pft> -> tile<256x32xf16, #mp_a_pft>
-           %b4_slm’ = update_tile_offset  %b4_slm, %slm_offset, %c0 : tile<32x256xf16, #mp_b_pft> -> tile<32x256xf16,#mp_b_pft>
+           %a1_load = update_tile_offset  %a1_load, %c0, %slm_offset :  tile<256x32xf16, #mp_a>
+           %b1_load = update_tile_offset  %b1_load, %slm_offset, %c0 :  tile<32x256xf16, #mp_b>
+           %a4_glb = update_tile_offset   %a4_glb, %c0, %c32 : tile<256x32xf16, #mp_a_pft>
+           %b4_glb = update_tile_offset   %b4_glb, %c32, %c0 : tile<32x256xf16, #mp_b_pft>
+           %a4_slm’ = update_tile_offset  %a4_slm, %c0, %slm_offset: tile<256x32xf16, #mp_a_pft>
+           %b4_slm’ = update_tile_offset  %b4_slm, %slm_offset, %c0 : tile<32x256xf16, #mp_b_pft>
 
            %c_r = tile_mma %a1_rr, %b1_rr #mp_a #mp_b #mp_c:
                    (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> // sg_layout=[8,8], sg_data=[32,32]

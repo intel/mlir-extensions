@@ -9,7 +9,7 @@ gpu.module @test_module {
     // Update offsets
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
-    %2 = xetile.update_tile_offset %1, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
+    %2 = xetile.update_tile_offset %1, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     %4 = xetile.load_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
     xetile.prefetch_tile %1 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     gpu.return
@@ -28,7 +28,7 @@ gpu.module @test_module {
 // CHECK: xetile.prefetch_tile %[[T0]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[RCAST0:.*]] = memref.reinterpret_cast %[[ARG0]] to offset: [0], sizes: [128, 512], strides: [512, 1] : memref<512x128xf16, strided<[1, 512]>> to memref<128x512xf16, strided<[512, 1]>>
 // CHECK: %[[T3:.*]] = xetile.init_tile %[[RCAST0]][%[[ARG1]], 12] : memref<128x512xf16, strided<[512, 1]>> -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
-// CHECK: %[[T4:.*]] = xetile.update_tile_offset %[[T3]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
+// CHECK: %[[T4:.*]] = xetile.update_tile_offset %[[T3]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T5:.*]] = xetile.load_tile %[[T4]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T6:.*]] = xetile.transpose %[[T5]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
 // CHECK: xetile.prefetch_tile %[[T3]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
@@ -41,7 +41,7 @@ gpu.module @test_module {
     // Update offsets
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
-    %2 = xetile.update_tile_offset %0, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
+    %2 = xetile.update_tile_offset %0, [%c32, %c16] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     %3 = xetile.load_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
     xetile.prefetch_tile %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     gpu.return
@@ -61,7 +61,7 @@ gpu.module @test_module {
 // CHECK: %[[T0:.*]] = xetile.init_tile %[[ARG0]][%[[ARG2]], %[[ARG1]]], [%[[ARG4]], %[[ARG3]]], [%[[ARG6]], %[[ARG5]]] : memref<?x?xf16> -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T1:.*]] = xetile.load_tile %[[T0]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T2:.*]] = xetile.transpose %[[T1]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
-// CHECK: %[[T3:.*]] = xetile.update_tile_offset %[[T0]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
+// CHECK: %[[T3:.*]] = xetile.update_tile_offset %[[T0]], [%[[C16]],  %[[C32]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: %[[T4:.*]] = xetile.load_tile %[[T3]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T5:.*]] = xetile.transpose %[[T4]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
 // CHECK: xetile.prefetch_tile %[[T3]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
@@ -78,7 +78,7 @@ gpu.module @test_module {
     %0 = xetile.init_tile %arg0 [%c0, %c0] : memref<512x128xf16, strided<[1, 512], offset:0>> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     scf.for %arg1 = %c0 to %c128 step %c32 iter_args(%arg2 = %0) -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> {
       %1 = xetile.load_tile %arg2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>> -> vector<16x32xf16>
-      %2 = xetile.update_tile_offset %arg2, [%c0, %c32] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
+      %2 = xetile.update_tile_offset %arg2, [%c0, %c32] : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
       scf.yield %2 : !xetile.tile<16x32xf16, #xetile.tile_attr<order=[0,1]>>
     }
     gpu.return
@@ -95,7 +95,7 @@ gpu.module @test_module {
 // CHECK: scf.for %[[ARG1:[a-zA-Z0-9]+]] = %[[C0]] to %[[C128]] step %[[C32]] iter_args(%[[ARG3:[a-zA-Z0-9]+]] = %[[T0]]) -> (!xetile.tile<32x16xf16, #xetile.tile_attr<>>) {
 // CHECK: %[[T2:.*]] = xetile.load_tile %[[ARG2]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T3:.*]] = xetile.transpose %[[T2]], [1, 0] : vector<32x16xf16> -> vector<16x32xf16>
-// CHECK: %[[T4:.*]] = xetile.update_tile_offset %[[ARG2]], [%[[C32]],  %[[C0]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<>>
+// CHECK: %[[T4:.*]] = xetile.update_tile_offset %[[ARG2]], [%[[C32]],  %[[C0]]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 // CHECK: scf.yield %[[T4]] : !xetile.tile<32x16xf16, #xetile.tile_attr<>>
 
 // -----
@@ -144,10 +144,8 @@ gpu.module @test_module {
       %b_trans = vector.transpose %b_value, [1, 0] : vector<32x16xf16> to vector<16x32xf16>
       %c_new_value = xetile.tile_mma %a_value, %b_trans, %c_value
         : vector<32x16xf16>, vector<16x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
-      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c16]
-        : !xetile.tile<32x16xf16>, index, index -> !xetile.tile<32x16xf16>
-      %b_next_tile = xetile.update_tile_offset %b_tile, [%c0, %c16]
-        : !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
+      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c16] : !xetile.tile<32x16xf16>
+      %b_next_tile = xetile.update_tile_offset %b_tile, [%c0, %c16] : !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value
         : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>, vector<32x32xf32>
     }
@@ -177,8 +175,8 @@ gpu.module @test_module {
 // CHECK: %[[T7:.*]] = xetile.load_tile %[[ARG4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
 // CHECK: %[[T8:.*]] = xetile.load_tile %[[ARG5]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>> -> vector<16x32xf16>
 // CHECK: %[[T9:.*]] = xetile.tile_mma %[[T7]], %[[T8]], %[[ARG6]] : vector<32x16xf16>, vector<16x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
-// CHECK: %[[T10:.*]] = xetile.update_tile_offset %[[ARG4]], [%[[C0]],  %[[C16]]] : !xetile.tile<32x16xf16>, index, index -> !xetile.tile<32x16xf16>
-// CHECK: %[[T11:.*]] = xetile.update_tile_offset %[[ARG5]], [%[[C16]],  %[[C0]]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<>>
+// CHECK: %[[T10:.*]] = xetile.update_tile_offset %[[ARG4]], [%[[C0]],  %[[C16]]] : !xetile.tile<32x16xf16>
+// CHECK: %[[T11:.*]] = xetile.update_tile_offset %[[ARG5]], [%[[C16]],  %[[C0]]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>>
 // CHECK: scf.yield %[[T10]], %[[T11]], %[[T9]] : !xetile.tile<32x16xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<>>, vector<32x32xf32>
 
 // -----
@@ -208,9 +206,9 @@ gpu.module @test_module {
       %c_new_value = xetile.tile_mma %a_value, %b_trans, %c_value
         : vector<32x16xf16>, vector<16x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
       %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c16]
-        : !xetile.tile<32x16xf16>, index, index -> !xetile.tile<32x16xf16>
+        : !xetile.tile<32x16xf16>
       %b_next_tile = xetile.update_tile_offset %b_tile, [%c0, %c16]
-        : !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>, index, index -> !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
+        : !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value
         : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16, #xetile.tile_attr<order=[0, 1]>>, vector<32x32xf32>
     }
@@ -240,8 +238,8 @@ gpu.module @test_module {
 // CHECK: %[[T7:.*]] = xetile.load_tile %[[ARG4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
 // CHECK :%[[T8:.*]] = xetile.load_tile %[[ARG5]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>> -> vector<16x32xf16>
 // CHECK: %[[T9:.*]] = xetile.tile_mma %[[T7]], %[[T8]], %[[ARG6]] : vector<32x16xf16>, vector<16x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
-// CHECK: %[[T10:.*]] = xetile.update_tile_offset %[[ARG4]], [%[[C0]],  %[[C16]]] : !xetile.tile<32x16xf16>, index, index -> !xetile.tile<32x16xf16>
-// CHECK: %[[T11:.*]] = xetile.update_tile_offset %[[ARG5]], [%[[C16]],  %[[C0]]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<>>
+// CHECK: %[[T10:.*]] = xetile.update_tile_offset %[[ARG4]], [%[[C0]],  %[[C16]]] : !xetile.tile<32x16xf16>
+// CHECK: %[[T11:.*]] = xetile.update_tile_offset %[[ARG5]], [%[[C16]],  %[[C0]]] : !xetile.tile<16x32xf16, #xetile.tile_attr<>>
 // CHECK :scf.yield %[[T10]], %[[T11]], %[[T9]] : !xetile.tile<32x16xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<>>, vector<32x32xf32>
 
 // -----

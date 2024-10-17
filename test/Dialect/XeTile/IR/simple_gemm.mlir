@@ -67,18 +67,12 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
     // update the offsets for A and B tiles
     // CHECK:  xetile.update_tile_offset
     // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [2, 8], wi_data = [1, 2]>,
-    // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>>, index, index
-    // CHECK-SAME: -> !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [2, 8], wi_data = [1, 2]>,
     // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>>
-    %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128]
-      : !xetile.tile<128x128xf16, #tile_attr_a>, index, index -> !xetile.tile<128x128xf16,  #tile_attr_a>
+    %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128] : !xetile.tile<128x128xf16,  #tile_attr_a>
     // CHECK: xetile.update_tile_offset
     // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [1, 16], wi_data = [1, 1]>,
-    // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [128, 32]>>>, index, index
-    // CHECK-SAME: -> !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [1, 16], wi_data = [1, 1]>,
     // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [128, 32]>>>
-    %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
-      : !xetile.tile<128x128xf16, #tile_attr_b>, index, index -> !xetile.tile<128x128xf16, #tile_attr_b>
+    %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0] : !xetile.tile<128x128xf16, #tile_attr_b>
     // partial C tile result
     scf.yield %a_next_tile, %b_next_tile, %c_new_value
       : !xetile.tile<128x128xf16, #tile_attr_a>, !xetile.tile<128x128xf16,  #tile_attr_b>, vector<128x128xf32>

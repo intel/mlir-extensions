@@ -11,7 +11,6 @@
 /// This file implements the XeTile dialect and its basic operations.
 ///
 //===----------------------------------------------------------------------===//
-
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -20,6 +19,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -36,29 +36,6 @@
 
 namespace imex {
 namespace xetile {
-
-template <typename AttrType>
-static mlir::ParseResult parseAttributeHelper(mlir::OpAsmParser &parser,
-                                              mlir::OperationState &result,
-                                              llvm::StringRef attrKeyword) {
-  AttrType attr;
-  mlir::Type ty;
-
-  if (std::is_same<AttrType, mlir::Attribute>::value) {
-    ty = mlir::Type{};
-  } else if (std::is_same<AttrType, mlir::DenseI64ArrayAttr>::value) {
-    ty = mlir::Type{};
-  } else {
-    assert(0 && "Unreachable.\n");
-  }
-
-  if (parser.parseCustomAttributeWithFallback(attr, ty))
-    return mlir::failure();
-
-  if (attr)
-    result.addAttribute(attrKeyword, attr);
-  return mlir::success();
-}
 
 static bool isColumnMajor(mlir::AffineMap layoutMap) {
   if (layoutMap.getNumDims() != 2 || layoutMap.getNumResults() != 2) {
@@ -84,18 +61,32 @@ static bool isConstantIndex(mlir::OpFoldResult value) {
          nullptr;
 }
 
-// Helper to get the constant value from a OpFoldResult.
-static int64_t getConstantValue(mlir::OpFoldResult value) {
-  assert(isConstantIndex(value) && "value is not a constant");
-  if (value.is<mlir::Attribute>())
-    return llvm::cast<mlir::IntegerAttr>(value.get<mlir::Attribute>()).getInt();
-  // If not, it must be a constant op.
-  auto constOp =
-      value.get<mlir::Value>().getDefiningOp<mlir::arith::ConstantOp>();
-  return mlir::cast<mlir::IntegerAttr>(constOp.getValue()).getInt();
-}
-
 mlir::LogicalResult InitTileOp::verify() {
+  auto tileTy = getType();
+
+  // Check for memory space validity.
+  if (getSourceMemorySpaceAsInt() !=
+      static_cast<unsigned int>(tileTy.getMemorySpaceAsInt()))
+    return emitOpError(
+        "memory space of the tile doesn't match with the source.");
+
+  // for scattered TileType
+  if (auto indices = getIndices()) {
+    auto srcTy = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
+    if (!srcTy || srcTy.getRank() > 1)
+      return emitOpError("Expecting a 0-D or 1-D memref as source.");
+
+    if (!tileTy.getScatterAttr())
+      return emitOpError("Expecting a scattered TileType.");
+
+    if (tileTy.getShape() != indices.getType().getShape())
+      return emitOpError("Shape mismatch between indices and result tile.");
+
+    return mlir::success();
+  }
+
+  // for block TileType
+
   // If the source is a memref and has static shape, then size and stride
   // arguments must not be present.
   if (isSourceMemRef() && sourceMemRefHasStaticShape() && hasSizeArgs())
@@ -125,13 +116,6 @@ mlir::LogicalResult InitTileOp::verify() {
   if (isSourceInteger() && getMixedStrides().size() != 2)
     return emitOpError("address is used as source but dynamic strides argument "
                        "is missing or it is not 2D");
-
-  auto tileTy = getType();
-  // Check for memory space validity.
-  if (getSourceMemorySpaceAsInt() !=
-      static_cast<unsigned int>(tileTy.getMemorySpaceAsInt()))
-    return emitOpError(
-        "memory space of the tile doesn't match with the source.");
 
   auto order = tileTy.getOrder();
   bool rowMajor = (order[0] == 1 && order[1] == 0);
@@ -197,9 +181,9 @@ mlir::LogicalResult InitTileOp::verify() {
       return mlir::success();
     }
 
-    auto shapeDim1 = getConstantValue(dynamicShape[1]);
-    auto strideDim0 = getConstantValue(dynamicStrides[0]);
-    auto strideDim1 = getConstantValue(dynamicStrides[1]);
+    auto shapeDim1 = getConstantIntValue(dynamicShape[1]).value();
+    auto strideDim0 = getConstantIntValue(dynamicStrides[0]).value();
+    auto strideDim1 = getConstantIntValue(dynamicStrides[1]).value();
 
     // checks for layouts where source is not memref and just an address
     if (rowMajor && (strideDim0 == 1 && strideDim1 == shapeDim1)) {
@@ -230,8 +214,8 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
         mlir::DenseI64ArrayAttr::get(builder.getContext(),
                                      staticOffsets), /* static offsets*/
         mlir::DenseI64ArrayAttr(),                   /* empty sttaic sizes*/
-        mlir::DenseI64ArrayAttr()                    /* empty static strides*/
-  );
+        mlir::DenseI64ArrayAttr(),                   /* empty static strides*/
+        nullptr);
 }
 
 void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -249,7 +233,19 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
         dynamicStrides,
         mlir::DenseI64ArrayAttr::get(builder.getContext(), staticOffsets),
         mlir::DenseI64ArrayAttr::get(builder.getContext(), staticSizes),
-        mlir::DenseI64ArrayAttr::get(builder.getContext(), staticStrides));
+        mlir::DenseI64ArrayAttr::get(builder.getContext(), staticStrides),
+        nullptr);
+}
+
+void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                       xetile::TileType resultType,
+                       mlir::TypedValue<mlir::MemRefType> source,
+                       mlir::TypedValue<mlir::VectorType> indices) {
+  auto type = source.getType();
+  assert(type.getRank() <= 1 && "source must be a 1D memref.");
+  build(builder, state, resultType, source, {} /* offsets */, {} /* sizes */,
+        {} /*strides */, {} /* static offsets*/, {} /* static sizes*/,
+        {} /* static strides */, indices);
 }
 
 bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
@@ -524,4 +520,5 @@ mlir::LogicalResult BroadcastOp::verify() {
 
 #include <imex/Dialect/XeTile/IR/XeTileOpsEnums.cpp.inc>
 #define GET_OP_CLASSES
+using namespace mlir;
 #include <imex/Dialect/XeTile/IR/XeTileOps.cpp.inc>

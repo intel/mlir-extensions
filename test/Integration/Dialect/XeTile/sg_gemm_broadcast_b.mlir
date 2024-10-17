@@ -59,10 +59,10 @@ module @gemm attributes {gpu.container_module} {
       %15 = arith.addi %12, %2 : index
       %16 = xetile.init_tile %arg0[%15, %c0] : memref<128x384xf16> -> !xetile.tile<4x32xf16>
       xetile.prefetch_tile %16 {l1_hint = #xetile.cache_hint<cached>, l2_hint = #xetile.cache_hint<cached>} : !xetile.tile<4x32xf16>
-      %17 = xetile.update_tile_offset %16, [%c0,  %c32] : !xetile.tile<4x32xf16>, index, index -> !xetile.tile<4x32xf16>
+      %17 = xetile.update_tile_offset %16, [%c0,  %c32] : !xetile.tile<4x32xf16>
       %18 = xetile.init_tile %arg1[%1, %c0] : memref<1x384xf16> -> !xetile.tile<1x32xf16>
       xetile.prefetch_tile %18 {l1_hint = #xetile.cache_hint<cached>, l2_hint = #xetile.cache_hint<cached>} : !xetile.tile<1x32xf16>
-      %19 = xetile.update_tile_offset %18, [%c0,  %c32] : !xetile.tile<1x32xf16>, index, index -> !xetile.tile<1x32xf16>
+      %19 = xetile.update_tile_offset %18, [%c0,  %c32] : !xetile.tile<1x32xf16>
       %20:6 = scf.for %arg3 = %c0 to %c384 step %c32 iter_args(%arg4 = %cst, %arg5 = %13, %arg6 = %14, %arg7 = %17, %arg8 = %19, %arg9 = %c0) -> (vector<32x32xf32>, !xetile.tile<32x32xf16>, !xetile.tile<1x32xf16>, !xetile.tile<4x32xf16>, !xetile.tile<1x32xf16>, index) {
         %22 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %23 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<1x32xf16> -> vector<1x32xf16>
@@ -76,13 +76,13 @@ module @gemm attributes {gpu.container_module} {
         xetile.prefetch_tile %arg7 {l1_hint = #xetile.cache_hint<cached>, l2_hint = #xetile.cache_hint<cached>} : !xetile.tile<4x32xf16>
         xetile.prefetch_tile %arg8 {l1_hint = #xetile.cache_hint<cached>, l2_hint = #xetile.cache_hint<cached>} : !xetile.tile<1x32xf16>
         xegpu.compile_hint
-        %27 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<4x32xf16>, index, index -> !xetile.tile<4x32xf16>
-        %28 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<1x32xf16>, index, index -> !xetile.tile<1x32xf16>
+        %27 = xetile.update_tile_offset %arg7, [%c0,  %c32] : !xetile.tile<4x32xf16>
+        %28 = xetile.update_tile_offset %arg8, [%c0,  %c32] : !xetile.tile<1x32xf16>
         %29 = vector.transpose %23, [1, 0] : vector<1x32xf16> to vector<32x1xf16>
         xegpu.compile_hint
         %30 = xetile.broadcast %29 [1] : vector<32x1xf16> -> vector<32x32xf16>
-        %31 = xetile.update_tile_offset %arg5, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-        %32 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<1x32xf16>, index, index -> !xetile.tile<1x32xf16>
+        %31 = xetile.update_tile_offset %arg5, [%c0,  %c32] :  !xetile.tile<32x32xf16>
+        %32 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<1x32xf16>
         xegpu.compile_hint
         // Use broadcast result directly
         %33 = xetile.tile_mma %22, %30, %arg4 : vector<32x32xf16>, vector<32x32xf16>, vector<32x32xf32> -> vector<32x32xf32>

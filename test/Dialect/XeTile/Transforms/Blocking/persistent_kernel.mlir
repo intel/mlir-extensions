@@ -67,11 +67,11 @@ module @gemm attributes {gpu.container_module} {
 
         //CHECK: %[[R14:.*]] = xetile.init_tile %[[arg0]][%[[R13]], %[[c0]]] : memref<4096x4096xf16> -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R14]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R15:.*]] = xetile.update_tile_offset %[[R14]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R15:.*]] = xetile.update_tile_offset %[[R14]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R15]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R16:.*]] = xetile.update_tile_offset %[[R15]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R16:.*]] = xetile.update_tile_offset %[[R15]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R16]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R17:.*]] = xetile.update_tile_offset %[[R16]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R17:.*]] = xetile.update_tile_offset %[[R16]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: %[[R18:.*]] = arith.remui %[[R4]], %[[c4]] : index
         //CHECK: %[[R19:.*]] = arith.muli %[[R18]], %[[c8]] : index
         //CHECK: %[[R20:.*]] = arith.muli %[[R5]], %[[c64]] : index
@@ -83,11 +83,11 @@ module @gemm attributes {gpu.container_module} {
 
         %A_sg_prefetch_tile_iter0 = xetile.init_tile %A[%A_sg_prefetch_offset_x, %c0] : memref<4096x4096xf16> -> !xetile.tile<8x32xf16>
         xetile.prefetch_tile %A_sg_prefetch_tile_iter0 : !xetile.tile<8x32xf16>
-        %A_sg_prefetch_tile_iter1 = xetile.update_tile_offset %A_sg_prefetch_tile_iter0, [%c0, %c32] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %A_sg_prefetch_tile_iter1 = xetile.update_tile_offset %A_sg_prefetch_tile_iter0, [%c0, %c32] : !xetile.tile<8x32xf16>
         xetile.prefetch_tile %A_sg_prefetch_tile_iter1 : !xetile.tile<8x32xf16>
-        %A_sg_prefetch_tile_iter2 = xetile.update_tile_offset %A_sg_prefetch_tile_iter1, [%c0, %c32] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %A_sg_prefetch_tile_iter2 = xetile.update_tile_offset %A_sg_prefetch_tile_iter1, [%c0, %c32] : !xetile.tile<8x32xf16>
         xetile.prefetch_tile %A_sg_prefetch_tile_iter2 : !xetile.tile<8x32xf16>
-        %A_sg_prefetch_tile_iter3 = xetile.update_tile_offset %A_sg_prefetch_tile_iter2, [%c0, %c32] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %A_sg_prefetch_tile_iter3 = xetile.update_tile_offset %A_sg_prefetch_tile_iter2, [%c0, %c32] : !xetile.tile<8x32xf16>
         %B_sg_prefetch_offset_x_temp0 = arith.remui %local_sg_id_x, %c4 : index
         %B_sg_prefetch_offset_x = arith.muli %B_sg_prefetch_offset_x_temp0, %c8 : index
         %B_sg_prefetch_offset_y_temp0 = arith.muli %local_sg_id_y, %c64 : index
@@ -98,21 +98,21 @@ module @gemm attributes {gpu.container_module} {
 
         //CHECK: %[[R25:.*]] = xetile.init_tile %[[arg1]][%[[R19]], %[[R24]]] : memref<4096x4096xf16> -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R25]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R26:.*]] = xetile.update_tile_offset %[[R25]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R26:.*]] = xetile.update_tile_offset %[[R25]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R26]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R27:.*]] = xetile.update_tile_offset %[[R26]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R27:.*]] = xetile.update_tile_offset %[[R26]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: xetile.prefetch_tile %[[R27]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-        //CHECK: %[[R28:.*]] = xetile.update_tile_offset %[[R27]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+        //CHECK: %[[R28:.*]] = xetile.update_tile_offset %[[R27]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
         //CHECK: %[[R29:.*]] = xetile.init_tile %[[arg0]][%[[R6]], %[[c0]]] : memref<4096x4096xf16> -> !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
         //CHECK: %[[R30:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[R7]]] : memref<4096x4096xf16> -> !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
         //CHECK: xegpu.alloc_nbarrier 16
         %B_sg_prefetch_tile_iter0 = xetile.init_tile %B[%B_sg_prefetch_offset_x, %B_sg_prefetch_offset_y]  : memref<4096x4096xf16> -> !xetile.tile<8x32xf16>
         xetile.prefetch_tile %B_sg_prefetch_tile_iter0 : !xetile.tile<8x32xf16>
-        %B_sg_prefetch_tile_iter1 = xetile.update_tile_offset %B_sg_prefetch_tile_iter0, [%c32, %c0] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %B_sg_prefetch_tile_iter1 = xetile.update_tile_offset %B_sg_prefetch_tile_iter0, [%c32, %c0] : !xetile.tile<8x32xf16>
         xetile.prefetch_tile %B_sg_prefetch_tile_iter1 : !xetile.tile<8x32xf16>
-        %B_sg_prefetch_tile_iter2 = xetile.update_tile_offset %B_sg_prefetch_tile_iter1, [%c32, %c0] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %B_sg_prefetch_tile_iter2 = xetile.update_tile_offset %B_sg_prefetch_tile_iter1, [%c32, %c0] : !xetile.tile<8x32xf16>
         xetile.prefetch_tile %B_sg_prefetch_tile_iter2 : !xetile.tile<8x32xf16>
-        %B_sg_prefetch_tile_iter3 = xetile.update_tile_offset %B_sg_prefetch_tile_iter2, [%c32, %c0] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
+        %B_sg_prefetch_tile_iter3 = xetile.update_tile_offset %B_sg_prefetch_tile_iter2, [%c32, %c0] : !xetile.tile<8x32xf16>
         %A_sg_init_tile = xetile.init_tile %A[%C_sg_tile_offset_x, %c0] : memref<4096x4096xf16> -> !xetile.tile<32x32xf16>
         %B_sg_init_tile = xetile.init_tile %B[%c0, %C_sg_tile_offset_y] : memref<4096x4096xf16> -> !xetile.tile<32x64xf16>
         %c_init_val = arith.constant dense<0.0> : vector<32x64xf32>
@@ -161,14 +161,14 @@ module @gemm attributes {gpu.container_module} {
           xetile.prefetch_tile %B_prefetch_tile : !xetile.tile<8x32xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
-          //CHECK: %[[R43:.*]] = xetile.update_tile_offset %[[arg8]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-          //CHECK: %[[R44:.*]] = xetile.update_tile_offset %[[arg9]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>, index, index -> !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
-          //CHECK: %[[R45:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]],  %[[c32]]] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index -> !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
-          //CHECK: %[[R46:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]],  %[[c0]]] : !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index -> !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
-          %next_A_prefetch_tile = xetile.update_tile_offset %A_prefetch_tile, [%c0, %c32] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
-          %next_B_prefetch_tile = xetile.update_tile_offset %B_prefetch_tile, [%c32, %c0] : !xetile.tile<8x32xf16>, index, index -> !xetile.tile<8x32xf16>
-          %next_A_tile = xetile.update_tile_offset %A_tile, [%c0, %c32]  : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-          %next_B_tile = xetile.update_tile_offset %B_tile, [%c32, %c0]  : !xetile.tile<32x64xf16>, index, index -> !xetile.tile<32x64xf16>
+          //CHECK: %[[R43:.*]] = xetile.update_tile_offset %[[arg8]], [%[[c0]],  %[[c32]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+          //CHECK: %[[R44:.*]] = xetile.update_tile_offset %[[arg9]], [%[[c32]],  %[[c0]]] : !xetile.tile<8x32xf16, #xetile.tile_attr<inner_blocks = [8, 32]>>
+          //CHECK: %[[R45:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]],  %[[c32]]] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+          //CHECK: %[[R46:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]],  %[[c0]]] : !xetile.tile<32x64xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
+          %next_A_prefetch_tile = xetile.update_tile_offset %A_prefetch_tile, [%c0, %c32] : !xetile.tile<8x32xf16>
+          %next_B_prefetch_tile = xetile.update_tile_offset %B_prefetch_tile, [%c32, %c0] : !xetile.tile<8x32xf16>
+          %next_A_tile = xetile.update_tile_offset %A_tile, [%c0, %c32]  :  !xetile.tile<32x32xf16>
+          %next_B_tile = xetile.update_tile_offset %B_tile, [%c32, %c0]  : !xetile.tile<32x64xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
           //CHECK: %[[R47:.*]] = xetile.tile_pack %[[R40]] {inner_blocks = array<i64: 8, 16>}  : vector<32x32xf16> -> vector<4x2x8x16xf16>
