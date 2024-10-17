@@ -49,9 +49,9 @@ gpu.module @test_kernel {
       %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value : vector<32x32xi8>, vector<32x32xi8>, vector<32x32xi32> -> vector<32x32xi32>
 
       //CHECK: {{.*}} = xegpu.update_nd_offset {{.*}} : !xegpu.tensor_desc<32x32xi8, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
-      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32] : !xetile.tile<32x32xi8>, index, index -> !xetile.tile<32x32xi8>
+      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32] : !xetile.tile<32x32xi8>
       //CHECK: {{.*}} = xegpu.update_nd_offset {{.*}} : !xegpu.tensor_desc<32x16xi8, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>
-      %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x32xi8>, index, index -> !xetile.tile<32x32xi8>
+      %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x32xi8>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value : !xetile.tile<32x32xi8>, !xetile.tile<32x32xi8>, vector<32x32xi32>
     }
     //CHECK-COUNT-8: xegpu.store_nd {{.*}} : vector<8x16xi32>, !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>

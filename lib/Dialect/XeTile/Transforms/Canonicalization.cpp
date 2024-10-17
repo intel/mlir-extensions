@@ -129,7 +129,7 @@ struct UpdateTileOffsetOpPattern final
     // Create a new update offset op with swapped offsets.
     rewriter.replaceOpWithNewOp<imex::xetile::UpdateTileOffsetOp>(
         updateOp, tileTy, adaptor.getTile(), updateOp.getOffsetY(),
-        updateOp.getOffsetX());
+        updateOp.getOffsetX(), updateOp.getIndices());
     return mlir::success();
   }
 };
@@ -408,7 +408,8 @@ struct XeTileCanonicalizationPass final
           auto newAttr = imex::xetile::XeTileAttr::get(
               tileTy.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
               mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
-              tileTy.getInnerBlocks(), tileTy.getMemorySpace());
+              tileTy.getInnerBlocks(), tileTy.getMemorySpace(),
+              tileTy.getScatterAttr());
 
           return imex::xetile::TileType::get(
               swapLastTwoElems(tileTy.getShape()), tileTy.getElementType(),

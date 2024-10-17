@@ -174,19 +174,11 @@ module @gemm attributes {gpu.container_module} {
             : vector<32x128xf16>, vector<128x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
 
           // update offsets for A subtiles
-          %a_next_subtile0 = xetile.update_tile_offset %a_subtile0, [%c0, %c128]
-            : !xetile.tile<32x128xf16>, index, index
-            -> !xetile.tile<32x128xf16>
-          %a_next_subtile1 = xetile.update_tile_offset %a_subtile1, [%c0, %c128]
-            : !xetile.tile<32x128xf16>, index, index
-            -> !xetile.tile<32x128xf16>
+          %a_next_subtile0 = xetile.update_tile_offset %a_subtile0, [%c0, %c128] : !xetile.tile<32x128xf16>
+          %a_next_subtile1 = xetile.update_tile_offset %a_subtile1, [%c0, %c128] : !xetile.tile<32x128xf16>
           // update offsets for B subtiles
-          %b_next_subtile0 = xetile.update_tile_offset %b_subtile0, [%c128, %c0]
-            : !xetile.tile<128x32xf16>, index, index
-            -> !xetile.tile<128x32xf16>
-          %b_next_subtile1 = xetile.update_tile_offset %b_subtile1, [%c128, %c0]
-            : !xetile.tile<128x32xf16>, index, index
-            -> !xetile.tile<128x32xf16>
+          %b_next_subtile0 = xetile.update_tile_offset %b_subtile0, [%c128, %c0] : !xetile.tile<128x32xf16>
+          %b_next_subtile1 = xetile.update_tile_offset %b_subtile1, [%c128, %c0] : !xetile.tile<128x32xf16>
 
           // yield subtiles and partial C results
           scf.yield %a_next_subtile0, %a_next_subtile1, %b_next_subtile0, %b_next_subtile1,

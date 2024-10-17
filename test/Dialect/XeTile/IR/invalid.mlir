@@ -212,3 +212,10 @@ func.func @test_broadcast(%source: vector<2x16xf16>) {
   %1 = xetile.broadcast %source [0] : vector<2x16xf16> -> vector<8x16xf16>
   return
 }
+
+// -----
+func.func @test_init_tile_for_scattered(%a: memref<1024x1024xf16>, %indices: vector<128xindex>) {
+  // expected-error@+1 {{Expecting a 0-D or 1-D memref as source.}}
+  %1 = xetile.init_tile %a, %indices : memref<1024x1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  return
+}

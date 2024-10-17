@@ -63,9 +63,9 @@ module @gemm attributes {gpu.container_module} {
           : vector<16x32xf16>, vector<32x32xf16>, vector<16x32xf32> -> vector<16x32xf32>
         // update the offsets for A and B tiles
         %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32]
-          : !xetile.tile<16x32xf16>, index, index -> !xetile.tile<16x32xf16>
+          : !xetile.tile<16x32xf16>
         %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0]
-          : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+          :  !xetile.tile<32x32xf16>
         // partial C tile result
         scf.yield %a_next_tile, %b_next_tile, %c_new_value
           : !xetile.tile<16x32xf16>, !xetile.tile<32x32xf16>, vector<16x32xf32>

@@ -32,8 +32,8 @@ gpu.module @test_kernel {
       %b_value = xetile.load_tile %b_tile : !xetile.tile<32x32xf16> -> vector<32x32xf16>
       %b_transpose = xetile.transpose %b_value, [1, 0] : vector<32x32xf16> -> vector<32x32xf16>
       %c_new_value = xetile.tile_mma %a_value, %b_transpose, %c_value : vector<32x32xf16>, vector<32x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
-      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-      %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32] : !xetile.tile<32x32xf16>
+      %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0] : !xetile.tile<32x32xf16>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value
         : !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>
     }

@@ -30,7 +30,7 @@ class XeTile_Op<string mnemonic, list<Trait> traits = []> :
     Op<XeTile_Dialect, mnemonic, traits>;
 
 def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
-                                    ViewLikeOpInterface, OffsetSizeAndStrideOpInterface]> {
+                                                OffsetSizeAndStrideOpInterface]> {
     let summary = "Describes an XeTile with reference to a base memref";
     let description = [{
         The "init_tile" operation is used to describe a 2D region (i.e. tile) in gloabl memory.
@@ -109,20 +109,19 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
                        Variadic<Index>: $offsets,
                        Variadic<Index>: $sizes,
                        Variadic<Index>: $strides,
-                       DenseI64ArrayAttr: $const_offsets,
+                       OptionalAttr<DenseI64ArrayAttr>: $const_offsets,
                        OptionalAttr<DenseI64ArrayAttr>: $const_sizes,
-                       OptionalAttr<DenseI64ArrayAttr>: $const_strides
-                       );
+                       OptionalAttr<DenseI64ArrayAttr>: $const_strides,
+                       Optional<VectorOfRankAndType<[1,2], [Index]>>: $indices);
 
     let results = (outs XeTile: $tile);
 
 
     let assemblyFormat = [{
-      $source ``
-      custom<DynamicIndexList>($offsets, $const_offsets)
+      $source (`,` $indices^):(``custom<DynamicIndexList>($offsets, $const_offsets))?
       (`,` custom<DynamicIndexList>($sizes, $const_sizes)^
        `,` custom<DynamicIndexList>($strides, $const_strides))?
-      attr-dict `:` type($source) `->` qualified(type($tile))
+      attr-dict `:` type($source) (`,` type($indices)^)? `->` qualified(type($tile))
     }];
 
     let builders = [
@@ -135,7 +134,11 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
             "mlir::Value":$source,
             "llvm::ArrayRef<mlir::OpFoldResult>":$offsets,
             "llvm::ArrayRef<mlir::OpFoldResult>":$sizes,
-            "llvm::ArrayRef<mlir::OpFoldResult>":$strides)>
+            "llvm::ArrayRef<mlir::OpFoldResult>":$strides)>,
+        // creating init_tile op for scattered operation
+        OpBuilder<(ins "xetile::TileType":$resultType,
+            "mlir::TypedValue<mlir::MemRefType>": $source,
+            "mlir::TypedValue<mlir::VectorType>": $indices)>
     ];
 
     let extraClassDeclaration = [{
@@ -202,11 +205,15 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
 
         /// Get static offsets.
         llvm::ArrayRef<int64_t> getStaticOffsets() {
-            return getConstOffsets();
+            if (getConstOffsets().has_value())
+                return getConstOffsets().value();
+            return llvm::ArrayRef<int64_t>();
         }
 
         /// Get the static sizes.
         llvm::ArrayRef<int64_t> getStaticSizes() {
+            if (getIndices())
+                return llvm::ArrayRef<int64_t>();
             if (getConstSizes().has_value())
                 return getConstSizes().value();
             // At this point, the source must be a memref with static shape.
@@ -216,6 +223,8 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
 
         /// Get the static strides.
         llvm::ArrayRef<int64_t> getStaticStrides() {
+            if (getIndices())
+                return llvm::ArrayRef<int64_t>();
             if (getConstStrides().has_value())
                 return getConstStrides().value();
             // At this point, the source must be a memref with static shape.
@@ -250,6 +259,11 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
         /// Return the expected rank of each of the`static_offsets`,
         /// `static_shape` and `static_strides` attributes.
         std::array<unsigned, 3> getArrayAttrMaxRanks() {
+          // for scattered tile, the static_offsets, static_shape and
+          // static_strides are not used. Their ranks are expected to be 0.
+          if (getIndices())
+            return {0, 0, 0};
+
           unsigned rank;
           if (auto ty = llvm::dyn_cast<mlir::MemRefType>(getSourceType())) {
             rank = ty.getRank();
@@ -457,7 +471,8 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     let hasVerifier = 1;
 }
 
-def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
+def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", [AttrSizedOperandSegments,
+                                                                AllTypesMatch<["tile", "result"]>]> {
     let summary = "update the offsets of a tile";
     let description = [{
         "update_tile_offset" operation is used for iterating over the tiles. It takes in a
@@ -470,27 +485,22 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
 
         Example 1:
         ```mlir
-            xetile.update_tile_offset %tile, [%offset_x, %offset_y]
-                : tile<32x32xf32>, index, index
+            xetile.update_tile_offset %tile, [%offset_x, %offset_y] : tile<32x32xf32>
         ```
     }];
 
     let arguments = (ins
         XeTile: $tile,
-        Index: $offset_x,
-        Index: $offset_y
-    );
+        Optional<Index>: $offset_x,
+        Optional<Index>: $offset_y,
+        Optional<FixedVectorOfRankAndType<[1], [Index]>>:$indices);
 
     let results = (outs
         XeTile: $result
     );
 
     let assemblyFormat = [{
-        $tile `,` ` ` `[` $offset_x `,` ` ` $offset_y `]` ` ` attr-dict `:`
-             qualified(type($tile)) `,`
-             qualified(type($offset_x)) `,`
-             qualified(type($offset_y)) ` `
-            `->` qualified(type($result))
+        $tile`,`` `(``$indices^):(`[` $offset_x `,` $offset_y `]` )? attr-dict `:` qualified(type($tile)) (`,` type($indices)^)?
     }];
 }
 
@@ -615,6 +625,42 @@ def XeTile_BroadcastOp: XeTile_Op<"broadcast", []> {
         $source $broadcast_dim attr-dict `:` type($source) `->` type($result)
     }];
     let hasVerifier = 1;
+}
+
+def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value"]>,
+                                            AllShapesMatch<["tile", "value", "mask"]>]> {
+   let summary = "load a set of scattered data points from memory.";
+   let description = [{
+        The `load` operation is used to load data with scattered tile (each element in the tile
+        is interpreted as location of the data). the `mask` operand masks out memory access so
+        that it is safe to pass out-of-boundary addresses/offsets as long as they are masked.
+        In this case, the value specified in the padding attribute will be returned. The default
+        padding value is zero.}];
+
+   let arguments = (ins XeTile: $tile,
+                        XeTile_MaskType: $mask,
+                        OptionalAttr<XeTile_PaddingValueAttr>: $padding);
+   let results = (outs XeTile_1DOr2DVector: $value);
+   let assemblyFormat = [{
+        $tile `` `,` $mask attr-dict `:` qualified(type($tile)) `` `,` type($mask) `->` type($value)
+   }];
+}
+
+def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "tile"]>,
+                                               AllShapesMatch<["value", "tile", "mask"]>]> {
+   let summary = "load a set of data to scattered memory locations.";
+   let description = [{
+        The `store` operation is used to store data into scattered tile (each element in the tile
+        is interpreted as location, one location per data element). the `mask` operand masks out
+        memory access so that it is safe to pass out-of-boundary addresses/offsets as long as they
+        are masked.
+   }];
+   let arguments = (ins XeTile_1DOr2DVector: $value,
+                        XeTile: $tile,
+                        XeTile_MaskType: $mask);
+   let assemblyFormat = [{
+    $value `,` $tile `,` $mask attr-dict `:` type($value) `,` qualified(type($tile)) `,` type($mask)
+   }];
 }
 
 

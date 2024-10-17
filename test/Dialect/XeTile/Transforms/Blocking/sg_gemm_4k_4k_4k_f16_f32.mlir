@@ -62,15 +62,11 @@ gpu.module @test_kernel {
         : vector<64x128xf16>, vector<128x128xf16>, vector<64x128xf32> -> vector<64x128xf32>
 
       //CHECK: %[[r17:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]],  %[[c128]]]
-      //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index
       //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
       //CHECK: %[[r18:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c128]],  %[[c0]]]
-      //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>, index, index
       //CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>
-      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128]
-        : !xetile.tile<64x128xf16>, index, index -> !xetile.tile<64x128xf16>
-      %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
-        : !xetile.tile<128x128xf16>, index, index -> !xetile.tile<128x128xf16>
+      %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128] : !xetile.tile<64x128xf16> %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
+        : !xetile.tile<128x128xf16>
 
       //CHECK: scf.yield %[[r17]], %[[r18]], %[[r16]]
       //CHECK-SAME: !xetile.tile<64x128xf16, #xetile.tile_attr<inner_blocks = [32, 16]>>

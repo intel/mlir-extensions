@@ -33,6 +33,24 @@ func.func @test_init_tile_for_global(%a: memref<1024x1024xf16, 0>) {
   return
 }
 
+func.func @test_init_tile_for_scattered(%a: memref<1024xf16>, %indices: vector<128xindex>) {
+  //CHECK: xetile.init_tile {{.*}} : memref<1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  return
+}
+
+func.func @test_init_tile_for_scattered_2(%a: memref<f16>, %indices: vector<128xindex>) {
+  //CHECK: xetile.init_tile {{.*}} : memref<f16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  %1 = xetile.init_tile %a, %indices : memref<f16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  return
+}
+
+func.func @test_init_tile_for_scattered_3(%a: memref<f16>, %indices: vector<128x24xindex>) {
+  //CHECK: xetile.init_tile {{.*}} : memref<f16>, vector<128x24xindex> -> !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>
+  %1 = xetile.init_tile %a, %indices : memref<f16>, vector<128x24xindex> -> !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>
+  return
+}
+
 // init_tile with a static shaped memref
 // CHECK-LABEL: func @test_init_tile_using_static_memref({{.*}}) {
 func.func @test_init_tile_using_static_memref(%src: memref<1024x1024xf16>) {
@@ -268,6 +286,37 @@ func.func @test_tile_mma(%a: !xetile.tile<64x32xf16>, %b: !xetile.tile<32x128xf1
   return
 }
 
+func.func @test_load_gather(%a: memref<1024xf16>, %indices: vector<128xindex>) {
+  %mask = arith.constant dense<1> : vector<128xi1>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  //CHECK: xetile.load {{.*}} : !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xi1> -> vector<128xf16>
+  %2 = xetile.load %1, %mask : !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xi1> -> vector<128xf16>
+  return
+}
+
+func.func @test_load_gather_2(%a: memref<1024xf16>, %indices: vector<128x24xindex>) {
+  %mask = arith.constant dense<1> : vector<128x24xi1>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128x24xindex> -> !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>
+  //CHECK: xetile.load {{.*}} : !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>, vector<128x24xi1> -> vector<128x24xf16>
+  %2 = xetile.load %1, %mask : !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>, vector<128x24xi1> -> vector<128x24xf16>
+  return
+}
+
+func.func @test_store_scatter(%a: memref<1024xf16>, %indices: vector<128xindex>, %data: vector<128xf16>) {
+  %mask = arith.constant dense<1> : vector<128xi1>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  // CHECK: xetile.store {{.*}} : vector<128xf16>, !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xi1>
+  xetile.store %data, %1, %mask : vector<128xf16>, !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xi1>
+  return
+}
+
+func.func @test_store_scatter_2(%a: memref<1024xf16>, %indices: vector<128x24xindex>, %data: vector<128x24xf16>) {
+  %mask = arith.constant dense<1> : vector<128x24xi1>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128x24xindex> -> !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>
+  // CHECK: xetile.store {{.*}} : vector<128x24xf16>, !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>, vector<128x24xi1>
+  xetile.store %data, %1, %mask : vector<128x24xf16>, !xetile.tile<128x24xf16, #xetile.tile_attr<scattered = true>>, vector<128x24xi1>
+  return
+}
 
 // CHECK-LABEL: func @test_update_tile_offset({{.*}}) {
 func.func @test_update_tile_offset(%tile: !xetile.tile<32x32xf16>, %tile1 : !xetile.tile<128x128xf16, #tile_attr>) {
@@ -277,19 +326,22 @@ func.func @test_update_tile_offset(%tile: !xetile.tile<32x32xf16>, %tile1 : !xet
   %c128 = arith.constant 128 : index
   %c0 = arith.constant 0 : index
 
-  // CHECK: xetile.update_tile_offset
-  // CHECK-SAME: : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-  %1 = xetile.update_tile_offset %tile, [%offset_x, %offset_y]
-    : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+  // CHECK: xetile.update_tile_offset {{.*}} : !xetile.tile<32x32xf16>
+  %1 = xetile.update_tile_offset %tile, [%offset_x, %offset_y] : !xetile.tile<32x32xf16>
 
   // CHECK: xetile.update_tile_offset
-  // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [2, 8], wi_data = [1, 2]>,
-  // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>>, index, index ->
   // CHECK-SAME: !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map = <wi_layout = [2, 8], wi_data = [1, 2]>,
   // CHECK-SAME: wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>>
-  %2 = xetile.update_tile_offset %tile1, [%c128, %c0]
-    : !xetile.tile<128x128xf16, #tile_attr>, index, index -> !xetile.tile<128x128xf16, #tile_attr>
+  %2 = xetile.update_tile_offset %tile1, [%c128, %c0] : !xetile.tile<128x128xf16, #tile_attr>
 
+  return
+}
+
+func.func @test_update_tile_offset_scattered(%a: memref<1024xf16>, %indices: vector<128xindex>, %data: vector<128xf16>) {
+  %step = arith.constant dense<2> : vector<128xindex>
+  %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+  // CHECK: xetile.update_tile_offset {{.*}} : !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xindex>
+  %2 = xetile.update_tile_offset %1, %step : !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>, vector<128xindex>
   return
 }
 

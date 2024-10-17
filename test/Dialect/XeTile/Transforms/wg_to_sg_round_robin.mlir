@@ -113,17 +113,13 @@ gpu.module @test_wg_to_sg_rr  {
           %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value {wg_map_a = #wg_map_a, wg_map_b = #wg_map_b, wg_map_c = #wg_map_c}
             : vector<128x128xf16>, vector<128x128xf16>, vector<128x128xf32> -> vector<128x128xf32>
 
-          //CHECK: %[[R50:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]],  %[[c128]]] : !xetile.tile<32x128xf16>, index, index -> !xetile.tile<32x128xf16>
-          //CHECK: %[[R51:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]],  %[[c128]]] : !xetile.tile<32x128xf16>, index, index -> !xetile.tile<32x128xf16>
-          %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128]
-            : !xetile.tile<128x128xf16, #tile_attr_a>, index, index
-            -> !xetile.tile<128x128xf16, #tile_attr_a>
+          //CHECK: %[[R50:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]],  %[[c128]]] : !xetile.tile<32x128xf16>
+          //CHECK: %[[R51:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]],  %[[c128]]] : !xetile.tile<32x128xf16>
+          %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128] : !xetile.tile<128x128xf16, #tile_attr_a>
 
-          //CHECK: %[[R52:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c128]],  %[[c0]]] : !xetile.tile<128x32xf16>, index, index -> !xetile.tile<128x32xf16>
-          //CHECK: %[[R53:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c128]],  %[[c0]]] : !xetile.tile<128x32xf16>, index, index -> !xetile.tile<128x32xf16>
-          %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
-            : !xetile.tile<128x128xf16, #tile_attr_b>, index, index
-            -> !xetile.tile<128x128xf16, #tile_attr_b>
+          //CHECK: %[[R52:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c128]],  %[[c0]]] : !xetile.tile<128x32xf16>
+          //CHECK: %[[R53:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c128]],  %[[c0]]] : !xetile.tile<128x32xf16>
+          %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0] : !xetile.tile<128x128xf16, #tile_attr_b>
 
           //CHECK: scf.yield %[[R50]], %[[R51]], %[[R52]], %[[R53]], %[[R46]], %[[R47]], %[[R48]], %[[R49]]
           //CHECK-SAME: !xetile.tile<32x128xf16>, !xetile.tile<32x128xf16>, !xetile.tile<128x32xf16>, !xetile.tile<128x32xf16>, vector<32x32xf32>, vector<32x32xf32>, vector<32x32xf32>, vector<32x32xf32>

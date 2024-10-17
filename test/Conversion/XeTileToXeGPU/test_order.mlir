@@ -22,8 +22,8 @@ func.func @test_func(%A : memref<128x64xf16>, %B : memref<64x128xf16, strided<[1
 
   %mma_out0 = xetile.tile_mma %A_block_value0, %B_block_value0 : vector<32x16xf16>, vector<16x32xf16> -> vector<32x32xf32>
 
-  %A_block_iter1 = xetile.update_tile_offset %A_block_iter0, [%c0, %c16] : !xetile.tile<32x16xf16>, index, index -> !xetile.tile<32x16xf16>
-  %B_block_iter1 = xetile.update_tile_offset %B_block_iter0, [%c16, %c0] : !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0,1]>>, index, index -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0,1]>>
+  %A_block_iter1 = xetile.update_tile_offset %A_block_iter0, [%c0, %c16] : !xetile.tile<32x16xf16>
+  %B_block_iter1 = xetile.update_tile_offset %B_block_iter0, [%c16, %c0] : !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0,1]>>
 
   %A_block_value1 = xetile.load_tile %A_block_iter1 : !xetile.tile<32x16xf16> -> vector<32x16xf16>
   %B_block_value1 = xetile.load_tile %B_block_iter1  : !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0,1]>> -> vector<16x32xf16>

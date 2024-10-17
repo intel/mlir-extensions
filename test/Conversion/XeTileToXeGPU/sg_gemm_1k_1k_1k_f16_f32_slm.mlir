@@ -107,9 +107,9 @@ gpu.module @test_kernel {
       //CHECK: %[[r90:.*]] = xegpu.update_nd_offset %[[arg9]], [%[[c0]], %[[c16]]] : !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = true>>
       //CHECK: %[[r91:.*]] = xegpu.update_nd_offset %[[arg10]], [%[[c0]], %[[c16]]] : !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = true>>
       //CHECK: %[[r92:.*]] = xegpu.update_nd_offset %[[arg11]], [%[[c0]], %[[c16]]] : !xegpu.tensor_desc<1x16xf16, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = true>>
-      %10 = xetile.update_tile_offset %arg4, [%c0,  %c16] : !xetile.tile<8x16xf16, #tile_attr>, index, index -> !xetile.tile<8x16xf16, #tile_attr>
+      %10 = xetile.update_tile_offset %arg4, [%c0,  %c16] : !xetile.tile<8x16xf16, #tile_attr>
       //CHECK: %[[r108:.*]] = xegpu.update_nd_offset %[[arg12]], [%[[c16]], %[[c0]]] : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = true>>
-      %11 = xetile.update_tile_offset %arg5, [%c16,  %c0] : !xetile.tile<16x16xf16, #tile_attr>, index, index -> !xetile.tile<16x16xf16, #tile_attr>
+      %11 = xetile.update_tile_offset %arg5, [%c16,  %c0] : !xetile.tile<16x16xf16, #tile_attr>
       scf.yield %10, %11, %9 : !xetile.tile<8x16xf16, #tile_attr>, !xetile.tile<16x16xf16, #tile_attr>, vector<8x16xf32>
     }
     //CHECK: xegpu.store_nd %[[r37]]#9, %[[r4]] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>

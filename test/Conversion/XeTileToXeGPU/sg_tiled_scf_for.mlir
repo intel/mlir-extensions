@@ -25,7 +25,7 @@
         %5 = xetile.load_tile %arg3 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 32]>> -> vector<1x1x32x32xf16>
 
         // CHECK: %[[R11:.*]] = xegpu.update_nd_offset %[[arg3]], [%[[c0]], %[[c64]]] : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
-        %6 = xetile.update_tile_offset %arg3, [%c0,  %c64] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, index, index -> !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
+        %6 = xetile.update_tile_offset %arg3, [%c0,  %c64] : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>
 
         // CHECK: scf.yield %[[R11]], %[[R10]] : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, vector<32x32xf16>
         scf.yield %6, %5 : !xetile.tile<32x32xf16, #xetile.tile_attr<inner_blocks = [32, 32]>>, vector<1x1x32x32xf16>

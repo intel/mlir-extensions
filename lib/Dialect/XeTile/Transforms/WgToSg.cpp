@@ -395,7 +395,7 @@ class WGToSGUpdateTileOffsetOpPattern
     for (auto tile : adaptor.getTile()) {
 
       auto newUpdateTileOffsetOp = rewriter.create<xetile::UpdateTileOffsetOp>(
-          op.getLoc(), tile.getType(), tile, op.getOffsetX(), op.getOffsetY());
+          op.getLoc(), tile.getType(), tile, op.getOffsetX(), op.getOffsetY(), op.getIndices());
       newUpdateTileOffsetOps.push_back(newUpdateTileOffsetOp);
       newResultTypes.push_back(tile.getType());
     }

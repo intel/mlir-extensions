@@ -66,8 +66,8 @@ module attributes {gpu.container_module} {
         //CHECK-COUNT-8: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<8x16xf16>
         %29 = arith.addf %27, %27 : vector<32x32xf16>
         xegpu.compile_hint
-        %30 = xetile.update_tile_offset %arg5, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
-        %31 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>, index, index -> !xetile.tile<32x32xf16>
+        %30 = xetile.update_tile_offset %arg5, [%c0,  %c32] : !xetile.tile<32x32xf16>
+        %31 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>
         xegpu.compile_hint
 
         // CHECK-COUNT-16: {{.*}} = xegpu.dpas {{.*}}, {{.*}}, {{.*}} : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
