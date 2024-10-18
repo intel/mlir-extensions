@@ -41,31 +41,6 @@ using VectorTypedValue = mlir::TypedValue<mlir::VectorType>;
 using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
                                 mlir::PatternRewriter &);
 
-// Combine vectors vertically while keeping the logical data layout.
-// As an example, given two vectors (2x4xf16) p and q, it will merge
-// them in to a 4x4xf16 vector.
-//  p1, p2, p3, p4            p1, p2, p3, p4
-//  p5, p6, p7, p8            p5, p6, p7, p8
-//                     ==>    q1, q2, q3, q4
-//  q1, q2, q3, q4            q5, q6, q7, q8
-//  q5, q6, q7, q8
-static VectorTypedValue stack(mlir::Value vecUp, mlir::Value vecDown,
-                              mlir::Location loc,
-                              mlir::PatternRewriter &rewriter) {
-  auto vecUpTy = llvm::cast<mlir::VectorType>(vecUp.getType());
-  auto vecDownTy = llvm::cast<mlir::VectorType>(vecDown.getType());
-  assert(vecUpTy.getRank() == 2 && vecDownTy.getRank() == vecUpTy.getRank() &&
-         "only supports 2D vectors.");
-  assert(vecUpTy.getShape()[1] == vecDownTy.getShape()[1] &&
-         "Operands of stack() do not have the same number of columns.");
-
-  llvm::SmallVector<int64_t> mask(vecUpTy.getShape()[0] +
-                                  vecDownTy.getShape()[0]);
-  std::iota(mask.begin(), mask.end(), 0);
-  auto op = rewriter.create<ShuffleOp>(loc, vecUp, vecDown, mask);
-  return op;
-}
-
 // generate linearized shuffle mask for concat.
 static llvm::SmallVector<int64_t>
 getShuffleMask(llvm::ArrayRef<int64_t> shape1, llvm::ArrayRef<int64_t> shape2) {

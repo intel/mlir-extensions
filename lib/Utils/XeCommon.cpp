@@ -194,4 +194,21 @@ llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape) {
   return strides;
 }
 
+mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
+                                         mlir::Location loc,
+                                         mlir::PatternRewriter &rewriter) {
+  auto vecUpTy = llvm::cast<mlir::VectorType>(vecUp.getType());
+  auto vecDownTy = llvm::cast<mlir::VectorType>(vecDown.getType());
+  assert(vecUpTy.getRank() == 2 && vecDownTy.getRank() == vecUpTy.getRank() &&
+         "only supports 2D vectors.");
+  assert(vecUpTy.getShape()[1] == vecDownTy.getShape()[1] &&
+         "Operands of stack() do not have the same number of columns.");
+
+  llvm::SmallVector<int64_t> mask(vecUpTy.getShape()[0] +
+                                  vecDownTy.getShape()[0]);
+  std::iota(mask.begin(), mask.end(), 0);
+  auto op = rewriter.create<mlir::vector::ShuffleOp>(loc, vecUp, vecDown, mask);
+  return op;
+}
+
 } // namespace imex
