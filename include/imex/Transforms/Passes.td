@@ -180,7 +180,9 @@ def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
   let summary = "Eliminate in-register vector transpose by fusing with load.";
   let constructor = "imex::createOptimizeTransposePass()";
   let dependentDialects = [
-    "::mlir::xegpu::XeGPUDialect"
+    "::mlir::xegpu::XeGPUDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::gpu::GPUDialect"
   ];
   let options = [
      Option<"device", "device", "std::string",

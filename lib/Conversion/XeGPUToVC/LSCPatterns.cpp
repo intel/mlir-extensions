@@ -143,9 +143,11 @@ static LogicalResult isValidScatterSetup(Type elemTy, int simd_lanes,
   if (!elemTy.isIntOrFloat())
     return failure();
 
-  if (simd_lanes != 16 && simd_lanes != 32)
-    return rewriter.notifyMatchFailure(
-        loc, "A valid simd lane is 16 or 32 for PVC.");
+  // TODO: temporarily disable simd_lanes check, it is fine for SIMD pipeline
+  // but may be not compatible with SIMT pipeline.
+  // if (simd_lanes != 16 && simd_lanes != 32)
+  //   return rewriter.notifyMatchFailure(
+  //       loc, "A valid simd lane is 16 or 32 for PVC.");
 
   if (!llvm::is_contained({1, 2, 3, 4, 8, 16, 32, 64}, chunk_size))
     return rewriter.notifyMatchFailure(
@@ -260,8 +262,11 @@ static func::CallOp genRawLSCIntrinsicCall(
   auto elemTy = predTy.getElementType();
   assert(predTy.getRank() == 1 && "predicate must be a 1D vector type.");
   assert(elemTy.isInteger(1) && "predicate type must be i1.");
-  assert(llvm::is_contained({1, 16, 32}, predTy.getNumElements()) &&
-         "predicate size must be 1, 16 or 32.");
+  // TODO: temporarily disable predicate_size check. It is
+  // fine for SIMD pipeline but may not match SIMT pipeline.
+  //
+  // assert(llvm::is_contained({1, 16, 32}, predTy.getNumElements()) &&
+  //        "predicate size must be 1, 16 or 32.");
 
   // arg1: i8 subopcode, LSC_LOAD for load/prefetch, LSC_STORE for store
   assert((opCode == LSC_LOAD || opCode == LSC_STORE) && "unsupported opcode.");

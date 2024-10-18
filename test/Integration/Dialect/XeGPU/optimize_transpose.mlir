@@ -9,15 +9,15 @@
 module @gemm attributes {gpu.container_module} {
   func.func @test(%arg0: memref<256x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf32>) -> memref<256x256xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
-    %c32 = arith.constant 32 : index
-    %c64 = arith.constant 64 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
     %memref = gpu.alloc  host_shared () : memref<256x256xf16>
     memref.copy %arg0, %memref : memref<256x256xf16> to memref<256x256xf16>
     %memref_0 = gpu.alloc  host_shared () : memref<256x256xf16>
     memref.copy %arg1, %memref_0 : memref<256x256xf16> to memref<256x256xf16>
     %memref_1 = gpu.alloc  host_shared () : memref<256x256xf32>
     memref.copy %arg2, %memref_1 : memref<256x256xf32> to memref<256x256xf32>
-    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c64, %c32, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<256x256xf16>, %memref_0 : memref<256x256xf16>, %memref_1 : memref<256x256xf32>)
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c16, %c8, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<256x256xf16>, %memref_0 : memref<256x256xf16>, %memref_1 : memref<256x256xf32>)
     gpu.dealloc  %memref : memref<256x256xf16>
     gpu.dealloc  %memref_0 : memref<256x256xf16>
     return %memref_1 : memref<256x256xf32>
@@ -155,6 +155,7 @@ module @gemm attributes {gpu.container_module} {
     %cast_5 = memref.cast %alloc_3 : memref<256x256xf32> to memref<*xf32>
     // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF32(%cast, %cast_5) : (memref<*xf32>, memref<*xf32>) -> ()
+    call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
     memref.dealloc %alloc : memref<256x256xf16>
     memref.dealloc %alloc_1 : memref<256x256xf16>
     memref.dealloc %alloc_2 : memref<256x256xf32>
