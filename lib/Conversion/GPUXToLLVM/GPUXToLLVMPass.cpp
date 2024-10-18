@@ -115,6 +115,9 @@ protected:
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType = mlir::LLVM::LLVMPointerType::get(context);
+  mlir::Type llvmEventType =
+      mlir::LLVM::LLVMStructType::getLiteral(context, llvmPointerType);
+  mlir::Type llvmEventsPointerType = mlir::LLVM::LLVMPointerType::get(context);
 
   FunctionCallBuilder moduleLoadCallBuilder = {
       "gpuModuleLoad",
@@ -143,18 +146,19 @@ protected:
 
   FunctionCallBuilder launchKernelCallBuilder = {
       "gpuLaunchKernel",
-      llvmVoidType,
+      llvmEventsPointerType /* void *event */,
       {
-          llvmPointerType,     /* void* stream */
-          llvmPointerType,     /* void* func */
-          llvmIndexType,       /* intptr_t gridXDim */
-          llvmIndexType,       /* intptr_t gridyDim */
-          llvmIndexType,       /* intptr_t gridZDim */
-          llvmIndexType,       /* intptr_t blockXDim */
-          llvmIndexType,       /* intptr_t blockYDim */
-          llvmIndexType,       /* intptr_t blockZDim */
-          llvmInt32Type,       /* unsigned int sharedMemBytes */
-          llvmRangePointerType /* Params */
+          llvmPointerType,      /* void* stream */
+          llvmPointerType,      /* void* func */
+          llvmIndexType,        /* intptr_t gridXDim */
+          llvmIndexType,        /* intptr_t gridyDim */
+          llvmIndexType,        /* intptr_t gridZDim */
+          llvmIndexType,        /* intptr_t blockXDim */
+          llvmIndexType,        /* intptr_t blockYDim */
+          llvmIndexType,        /* intptr_t blockZDim */
+          llvmInt32Type,        /* unsigned int sharedMemBytes */
+          llvmRangePointerType, /* Params */
+          llvmEventsPointerType /* Events */
       }};
 
   FunctionCallBuilder streamCreateCallBuilder = {
@@ -389,6 +393,27 @@ public:
 private:
   llvm::SmallString<32> gpuBinaryAnnotation;
 
+  // Given a global op that contains the name of a kernel function,
+  // this function returns a pointer to the beginning on the global op.
+  // The code is essentially:
+  //
+  // %0 = llvm.addressof @kernel_name
+  // %1 = llvm.constant (0 : index)
+  // %2 = llvm.getelementptr %0[%1, %1] : !llvm<"i8*">
+  mlir::Value getGlobalPtr(mlir::LLVM::GlobalOp global,
+                           std::vector<char> kernelName, mlir::Location loc,
+                           mlir::OpBuilder &builder) const {
+    auto type = mlir::LLVM::LLVMArrayType::get(
+        mlir::IntegerType::get(builder.getContext(), 8), kernelName.size());
+    auto ptrType = mlir::LLVM::LLVMPointerType::get(builder.getContext());
+    // Get the pointer to the first character in the global string.
+    auto globalPtr = builder.create<mlir::LLVM::AddressOfOp>(
+        loc, ptrType, global.getSymNameAttr());
+    return builder.create<mlir::LLVM::GEPOp>(
+        loc, ptrType, type, globalPtr,
+        llvm::ArrayRef<mlir::LLVM::GEPArg>{0, 0});
+  }
+
   // Generates an LLVM IR dialect global that contains the name of the given
   // kernel function as a C string, and returns a pointer to its beginning.
   // The code is essentially:
@@ -409,6 +434,19 @@ private:
 
     std::string globalName =
         std::string(llvm::formatv("{0}_{1}_kernel_name", moduleName, name));
+
+    // Check if module contains global op with the name of a given
+    // kernel. If so, return pointer to existing global op. If not,
+    // create global op.
+    // The case of an existing global op with a given kernel name occurs
+    // when the kernel has been launched before.
+    auto module =
+        builder.getBlock()->getParent()->getParentOfType<mlir::ModuleOp>();
+    assert(module);
+    auto global = module.lookupSymbol<mlir::LLVM::GlobalOp>(globalName);
+    if (global) {
+      return getGlobalPtr(global, kernelName, loc, builder);
+    }
     return mlir::LLVM::createGlobalString(
         loc, builder, globalName,
         mlir::StringRef(kernelName.data(), kernelName.size()),
@@ -439,9 +477,27 @@ private:
     auto spirvBlob = binaryAttr.getValue();
     mlir::SmallString<128> nameBuffer(kernelModule.getName());
     nameBuffer.append(kGpuBinaryStorageSuffix);
-    mlir::Value data = mlir::LLVM::createGlobalString(
-        loc, rewriter, nameBuffer.str(), binaryAttr.getValue(),
-        mlir::LLVM::Linkage::Internal);
+
+    // Check if module contains global op with the attribute of the given
+    // kernel. If so, return pointer to existing global op. If not,
+    // create global op.
+    // The case of an existing global op with a given kernel attribute occurs
+    // when the kernel has been launched before.
+    mlir::Value data;
+    auto compModule =
+        rewriter.getBlock()->getParent()->getParentOfType<mlir::ModuleOp>();
+    assert(compModule);
+    auto global =
+        compModule.lookupSymbol<mlir::LLVM::GlobalOp>(nameBuffer.str());
+    if (global) {
+      auto name = binaryAttr.getValue();
+      std::vector<char> kernelName(name.begin(), name.end());
+      data = getGlobalPtr(global, kernelName, loc, rewriter);
+    } else {
+      data = mlir::LLVM::createGlobalString(loc, rewriter, nameBuffer.str(),
+                                            binaryAttr.getValue(),
+                                            mlir::LLVM::Linkage::Internal);
+    }
 
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType,
@@ -564,6 +620,57 @@ private:
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
     /////////////////////////////////////////////////////////////////////
+    // Create an array of struct containing all events and insert
+    // these type-erased pointers to the fields of the struct. The array of
+    // struct is then passed to Runtime wrapper Kernel launch call. Generated
+    // code is essentially as follows:
+    //
+    // 1. %eventsArrayPtr = alloca(sizeof(struct{event}*))
+    // 2. %eventsArray = alloca((NumEvents + 1) * sizeof(void *))
+    // 3. for (i : [0, NumEvents))
+    //       %struct = alloca(sizeof(struct { events... }))
+    //       llvm.insertvalue %event, %struct
+    //       llvm.insertvalue %struct, %eventsArray
+    // 4. //Add null event to indicate eventsArray termination
+    //    %struct = alloca(sizeof(struct { events... }))
+    //    llvm.insertvalue %null_event, %struct
+    //    llvm.insertvalue %struct, %eventsArray
+    // 5. llvm.store %eventsArray, %eventsArrayPtr
+
+    auto events = adaptor.getAsyncDependencies();
+    auto eventsCount = static_cast<unsigned>(events.size());
+
+    auto eventsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmEventType, eventsCount + 1);
+
+    auto eventsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmPointerType,
+                                                   eventsArrayType, size, 0);
+    });
+
+    mlir::Value eventsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, eventsArrayType);
+
+    for (auto i : llvm::seq(0u, eventsCount)) {
+      mlir::Value evt =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmEventType);
+      evt = rewriter.create<mlir::LLVM::InsertValueOp>(loc, evt, events[i], 0);
+      eventsArray =
+          rewriter.create<mlir::LLVM::InsertValueOp>(loc, eventsArray, evt, i);
+    }
+
+    auto nullEvent = [&]() {
+      auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
+      mlir::Value evt =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmEventType);
+      return rewriter.create<mlir::LLVM::InsertValueOp>(loc, evt, nullPtr, 0);
+    }();
+
+    eventsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, eventsArray, nullEvent, eventsCount);
+    rewriter.create<mlir::LLVM::StoreOp>(loc, eventsArray, eventsArrayPtr);
+
+    /////////////////////////////////////////////////////////////////////////
 
     // Get pointer to array of kernel parameters and call launch kernel
     auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
@@ -574,17 +681,28 @@ private:
         adaptor.getDynamicSharedMemorySize()
             ? adaptor.getDynamicSharedMemorySize()
             : zero;
-    launchKernelCallBuilder.create(
+
+    auto event = launchKernelCallBuilder.create(
         loc, rewriter,
         {adaptor.getGpuxStream(), function->getResult(0),
          adaptor.getGridSizeX(), adaptor.getGridSizeY(), adaptor.getGridSizeZ(),
          adaptor.getBlockSizeX(), adaptor.getBlockSizeY(),
-         adaptor.getBlockSizeZ(), dynamicSharedMemorySize, paramsArrayVoidPtr});
+         adaptor.getBlockSizeZ(), dynamicSharedMemorySize, paramsArrayVoidPtr,
+         eventsArrayPtr});
 
-    // waits for operations on the stream to finish
+    // By the default, the host implicitly blocks until
+    // kernel execution has completed.
+    // If the async keyword is present, the host does not block
+    // but instead an event is returned
+    auto asyncToken = launchOp.getAsyncToken();
+    if (!asyncToken) {
+      // waits for operations on the stream to finish
+      waitCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
+      rewriter.eraseOp(launchOp);
+    } else {
+      rewriter.replaceOp(launchOp, event->getResult(0));
+    }
 
-    waitCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
-    rewriter.eraseOp(launchOp);
     return mlir::success();
   }
 };

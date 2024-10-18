@@ -92,6 +92,14 @@ struct ParamDesc {
   bool operator!=(const ParamDesc &rhs) const { return !(*this == rhs); }
 };
 
+struct EventDesc {
+  void *event;
+
+  bool operator==(const EventDesc &rhs) const { return event == rhs.event; }
+
+  bool operator!=(const EventDesc &rhs) const { return !(*this == rhs); }
+};
+
 template <typename T> size_t countUntil(T *ptr, T &&elem) {
   assert(ptr);
   auto curr = ptr;
@@ -273,7 +281,8 @@ static sycl::kernel *getKernel(GPUSYCLQUEUE *queue, ze_module_handle_t zeModule,
 
 static sycl::event enqueueKernel(sycl::queue queue, sycl::kernel *kernel,
                                  sycl::nd_range<3> NdRange, ParamDesc *params,
-                                 size_t sharedMemBytes) {
+                                 size_t sharedMemBytes, EventDesc *depEvents) {
+  auto depEventsCount = countUntil(depEvents, EventDesc{nullptr});
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
   // The assumption is, if there is a param for the shared local memory,
   // then that will always be the last argument.
@@ -281,6 +290,10 @@ static sycl::event enqueueKernel(sycl::queue queue, sycl::kernel *kernel,
     paramsCount = paramsCount - 1;
   }
   sycl::event event = queue.submit([&](sycl::handler &cgh) {
+    for (size_t i = 0; i < depEventsCount; i++) {
+      // Depend on any event that was specified by the caller.
+      cgh.depends_on(*(static_cast<sycl::event *>(depEvents[i].event)));
+    }
     for (size_t i = 0; i < paramsCount; i++) {
       auto param = params[i];
       cgh.set_arg(static_cast<uint32_t>(i),
@@ -299,13 +312,15 @@ static sycl::event enqueueKernel(sycl::queue queue, sycl::kernel *kernel,
       cgh.parallel_for(NdRange, *kernel);
     }
   });
+
   return event;
 }
 
-static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
-                         size_t gridX, size_t gridY, size_t gridZ,
-                         size_t blockX, size_t blockY, size_t blockZ,
-                         size_t sharedMemBytes, ParamDesc *params) {
+static sycl::event *launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
+                                 size_t gridX, size_t gridY, size_t gridZ,
+                                 size_t blockX, size_t blockY, size_t blockZ,
+                                 size_t sharedMemBytes, ParamDesc *params,
+                                 EventDesc *depEvents) {
   auto syclQueue = queue->syclQueue_;
   auto syclGlobalRange =
       ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
@@ -352,8 +367,8 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
 
     // warmups
     for (int r = 0; r < warmups; r++) {
-      auto e =
-          enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
+      auto e = enqueueKernel(syclQueue, kernel, syclNdRange, params,
+                             sharedMemBytes, depEvents);
       e.wait();
     }
 
@@ -363,8 +378,8 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
         int init_val = 0;
         syclQueue.memset(cache, init_val, cacheSize);
       }
-      sycl::event event =
-          enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
+      sycl::event event = enqueueKernel(syclQueue, kernel, syclNdRange, params,
+                                        sharedMemBytes, depEvents);
       event.wait();
 
       auto startTime =
@@ -385,9 +400,14 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
             "the kernel execution time is (ms):"
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
             executionTime / rounds, minTime, maxTime, rounds);
-  } else {
-    enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
   }
+
+  auto event = enqueueKernel(syclQueue, kernel, syclNdRange, params,
+                             sharedMemBytes, depEvents);
+
+  sycl::event *syclEvent = new sycl::event(event);
+
+  return syclEvent;
 }
 
 // Wrappers
@@ -458,14 +478,17 @@ gpuKernelGet(GPUSYCLQUEUE *queue, ze_module_handle_t module, const char *name) {
   });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void
+extern "C" SYCL_RUNTIME_EXPORT sycl::event *
 gpuLaunchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel, size_t gridX,
                 size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
-                size_t blockZ, size_t sharedMemBytes, void *params) {
+                size_t blockZ, size_t sharedMemBytes, void *params,
+                void *depEvents) {
   return catchAll([&]() {
     if (queue) {
-      launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
-                   sharedMemBytes, static_cast<ParamDesc *>(params));
+      return launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY,
+                          blockZ, sharedMemBytes,
+                          static_cast<ParamDesc *>(params),
+                          static_cast<EventDesc *>(depEvents));
     }
   });
 }

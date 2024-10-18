@@ -88,6 +88,14 @@ struct ParamDesc {
   bool operator!=(const ParamDesc &rhs) const { return !(*this == rhs); }
 };
 
+struct EventDesc {
+  void *event;
+
+  bool operator==(const EventDesc &rhs) const { return event == rhs.event; }
+
+  bool operator!=(const EventDesc &rhs) const { return !(*this == rhs); }
+};
+
 template <typename T> size_t countUntil(T *ptr, T &&elem) {
   assert(ptr);
   auto curr = ptr;
@@ -146,11 +154,12 @@ _IMEX_PROFILING_TRAITS_SPEC(command_end)
 // the future for programs with multiple kernels.
 struct EventPool {
   ze_event_pool_handle_t zeEventPool;
+  const uint32_t maxEvents = 256;
 
   EventPool(ze_context_handle_t zeContext_) {
     ze_event_pool_desc_t tsEventPoolDesc = {
         ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, 256};
+        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, maxEvents};
     CHECK_ZE_RESULT(zeEventPoolCreate(zeContext_, &tsEventPoolDesc, 0, nullptr,
                                       &zeEventPool));
   }
@@ -170,6 +179,8 @@ public:
   Event(ze_context_handle_t zeContext_, ze_device_handle_t zeDevice_) {
     static EventPool pool(zeContext_);
 
+    static std::atomic<uint32_t> eventIndex{0};
+
     // timestamp and timer resolution is a device properties.
     // They are required to compute the final wall time.
     ze_device_properties_t deviceProperties{};
@@ -181,9 +192,9 @@ public:
 
     ze_event_desc_t eventDesc = {
         ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr,
-        0, // index
-        0, // no additional memory/cache coherency required on signal
-        0  // no additional memory/cache coherency required on wait
+        eventIndex++, // index
+        0,            // no additional memory/cache coherency required on signal
+        0             // no additional memory/cache coherency required on wait
     };
     CHECK_ZE_RESULT(zeEventCreate(pool.zeEventPool, &eventDesc, &zeEvent));
   }
@@ -434,10 +445,18 @@ static void enqueueKernel(ze_command_list_handle_t zeCommandList,
                           ze_kernel_handle_t kernel,
                           const ze_group_count_t *pLaunchArgs,
                           ParamDesc *params, size_t sharedMemBytes,
-                          ze_event_handle_t waitEvent = nullptr,
-                          uint32_t numWaitEvents = 0,
-                          ze_event_handle_t *phWaitEvents = nullptr) {
+                          ze_event_handle_t waitEvent, EventDesc *depEvents) {
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
+  auto depEventsCount = countUntil(depEvents, EventDesc{nullptr});
+
+  // Create handle of events to wait on
+  ze_event_handle_t *phWaitEvents = nullptr;
+  if (depEventsCount) {
+    phWaitEvents = new ze_event_handle_t[depEventsCount];
+    for (size_t i = 0; i < depEventsCount; i++) {
+      phWaitEvents[i] = static_cast<ze_event_handle_t>(depEvents[i].event);
+    }
+  }
 
   if (sharedMemBytes) {
     paramsCount = paramsCount - 1;
@@ -454,9 +473,9 @@ static void enqueueKernel(ze_command_list_handle_t zeCommandList,
         zeKernelSetArgumentValue(kernel, paramsCount, sharedMemBytes, nullptr));
   }
 
-  CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(zeCommandList, kernel,
-                                                  pLaunchArgs, waitEvent,
-                                                  numWaitEvents, phWaitEvents));
+  CHECK_ZE_RESULT(
+      zeCommandListAppendLaunchKernel(zeCommandList, kernel, pLaunchArgs,
+                                      waitEvent, depEventsCount, phWaitEvents));
 }
 
 // Utility to discover the Global memory cache (L3) size of the device
@@ -484,10 +503,12 @@ static size_t getGlobalMemoryCacheSize(ze_device_handle_t zeDevice) {
   return globaMemoryCacheSize;
 }
 
-static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
-                         size_t gridX, size_t gridY, size_t gridZ,
-                         size_t blockX, size_t blockY, size_t blockZ,
-                         size_t sharedMemBytes, ParamDesc *params) {
+static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
+                                      ze_kernel_handle_t kernel, size_t gridX,
+                                      size_t gridY, size_t gridZ, size_t blockX,
+                                      size_t blockY, size_t blockZ,
+                                      size_t sharedMemBytes, ParamDesc *params,
+                                      EventDesc *depEvents) {
   assert(kernel);
 
   auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
@@ -534,7 +555,7 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
     // warmup
     for (int r = 0; r < warmups; r++) {
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
-                    sharedMemBytes, nullptr, 0, nullptr);
+                    sharedMemBytes, nullptr, depEvents);
     }
 
     // profiling using timestamp event privided by level-zero
@@ -549,7 +570,9 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
       }
 
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
-                    sharedMemBytes, event.zeEvent, 0, nullptr);
+                    sharedMemBytes, event.zeEvent, depEvents);
+
+      CHECK_ZE_RESULT(zeEventHostSynchronize(event.zeEvent, 0));
 
       auto startTime =
           event.get_profiling_info<imex::profiling::command_start>();
@@ -560,16 +583,20 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
         maxTime = duration;
       if (duration < minTime)
         minTime = duration;
+
+      CHECK_ZE_RESULT(zeEventDestroy(event.zeEvent));
     }
     deallocDeviceMemory(queue, cache);
     fprintf(stdout,
             "the kernel execution time is (ms, on L0 runtime):"
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
             executionTime / rounds, minTime, maxTime, rounds);
-  } else {
-    enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
-                  sharedMemBytes, nullptr, 0, nullptr);
   }
+
+  Event *event = new Event(queue->zeContext_, queue->zeDevice_);
+  enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
+                sharedMemBytes, event->zeEvent, depEvents);
+  return event->zeEvent;
 }
 
 // Wrappers
@@ -621,13 +648,15 @@ gpuKernelGet(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   return catchAll([&]() { return getKernel(queue, module, name); });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
-gpuLaunchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
-                size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
-                size_t blockZ, size_t sharedMemBytes, void *params) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_event_handle_t gpuLaunchKernel(
+    GPUL0QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX, size_t gridY,
+    size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
+    size_t sharedMemBytes, void *params, void *depEvents) {
   return catchAll([&]() {
-    launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
-                 sharedMemBytes, static_cast<ParamDesc *>(params));
+    return launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY,
+                        blockZ, sharedMemBytes,
+                        static_cast<ParamDesc *>(params),
+                        static_cast<EventDesc *>(depEvents));
   });
 }
 
