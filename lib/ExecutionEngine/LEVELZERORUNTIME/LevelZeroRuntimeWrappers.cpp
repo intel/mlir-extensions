@@ -416,7 +416,6 @@ static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
     build_flags += "-doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
                    "-DPASTokenReduction -Xfinalizer -SWSBDepReduction "
                    "-Xfinalizer -printregusage -Xfinalizer -enableBCR";
-    ;
   }
 
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
