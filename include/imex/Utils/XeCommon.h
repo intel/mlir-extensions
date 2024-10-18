@@ -29,6 +29,18 @@
 using namespace mlir::xegpu;
 namespace imex {
 
+// Combine vectors vertically while keeping the logical data layout.
+// As an example, given two vectors (2x4xf16) p and q, it will merge
+// them in to a 4x4xf16 vector.
+//  p1, p2, p3, p4            p1, p2, p3, p4
+//  p5, p6, p7, p8            p5, p6, p7, p8
+//                     ==>    q1, q2, q3, q4
+//  q1, q2, q3, q4            q5, q6, q7, q8
+//  q5, q6, q7, q8
+mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
+                                         mlir::Location loc,
+                                         mlir::PatternRewriter &rewriter);
+
 // It checks each GPUFuncOp in the module to see
 // whether they have arguments and outputs with
 // xetile.TileType. They are currently not supported yet.
