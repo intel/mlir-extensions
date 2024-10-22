@@ -137,9 +137,8 @@ jobs:
           tar zcf cov-int.tgz cov-int
 
       - name: Create coverity artifact
-        if: github.repository == 'leshikus/mlir-extensions'
+        if: github.repository == 'intel/mlir-extensions'
         run: |
-          exit 1
           cd $HOME
           curl -X POST \
             -d version="$version" \
@@ -154,9 +153,8 @@ jobs:
           echo "build_id=$build_id" | tee -a $GITHUB_ENV
 
       - name: Upload coverity build
-        if: github.repository == 'leshikus/mlir-extensions'
+        if: github.repository == 'intel/mlir-extensions'
         run: |
-          exit 1
           cd $HOME
           curl -X PUT \
             --header 'Content-Type: application/json' \
