@@ -627,6 +627,22 @@ def XeTile_BroadcastOp: XeTile_Op<"broadcast", []> {
     let hasVerifier = 1;
 }
 
+def XeTile_ConvertLayoutOp: XeTile_Op<"convert_layout", [AllTypesMatch<["source", "result"]>]> {
+    let summary = "Convert the sg layout of the input operand";
+    let description = [{
+        convert_layout with wg_map attributes remaps the SG layout
+        into a new layout which shuffles the data between subgroups with a workgroup
+    }];
+    let arguments = (ins XeTile_2DOr4DVector: $source,
+                         XeTile_WorkGroupMapAttr: $wg_map_result,
+                         OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_source
+                         );
+    let results = (outs XeTile_2DOr4DVector: $result);
+    let assemblyFormat = [{
+        $source attr-dict `:` type($source)
+    }];
+}
+
 def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value"]>,
                                             AllShapesMatch<["tile", "value", "mask"]>]> {
    let summary = "load a set of scattered data points from memory.";
