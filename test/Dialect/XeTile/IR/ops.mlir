@@ -21,6 +21,8 @@
 #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>
 #wg_map_b2 = #xetile.wg_map<sg_layout = [4, 4], sg_data = [64, 64]>
 
+#wg_map_new_layout = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>
+
 func.func @test_init_tile_for_slm(%a: memref<1024x1024xf16, 3>) {
   //CHECK: xetile.init_tile {{.*}}[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_space = 3 : i64>>
   %1 = xetile.init_tile %a[8, 16] : memref<1024x1024xf16, 3> -> !xetile.tile<32x64xf16, #xetile.tile_attr<memory_space = 3>>
@@ -408,5 +410,13 @@ func.func @test_tile_mma_map(%a : vector<256x256xf16>, %b : vector<256x256xf16>,
 // CHECK-SAME : {wg_map_a =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>, wg_map_b =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>, wg_map_c =#xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>}
  %result = xetile.tile_mma %a, %b, %c {wg_map_a = #wg_map_mma_a, wg_map_b = #wg_map_mma_b, wg_map_c = #wg_map_mma_c} :
      vector<256x256xf16>, vector<256x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
+  return
+}
+
+func.func @test_convert_layout(%source: vector<256x256xf16>) {
+  // CHECK: xetile.convert_layout {{.*}} {wg_map_result = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>} : vector<256x256xf16>
+  // CHECK: xetile.convert_layout {{.*}} {wg_map_result = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>, wg_map_source = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>} : vector<256x256xf16>
+  %1 = xetile.convert_layout %source {wg_map_result = #wg_map_new_layout}  : vector<256x256xf16>
+  %2 = xetile.convert_layout %source {wg_map_result = #wg_map_new_layout, wg_map_source = #wg_map_mma_b}  : vector<256x256xf16>
   return
 }
