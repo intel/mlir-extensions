@@ -132,6 +132,7 @@ jobs:
           tar zcf cov-int.tgz cov-int
 
       - name: Create coverity artifact
+        if: github.repository == 'intel/mlir-extensions'
         run: |
           cd $HOME
           curl -X POST \
