@@ -137,6 +137,7 @@ jobs:
           tar zcf cov-int.tgz cov-int
 
       - name: Create coverity artifact
+        if: github.repository == 'intel/mlir-extensions'
         run: |
           cd $HOME
           curl -X POST \
@@ -152,6 +153,7 @@ jobs:
           echo "build_id=$build_id" | tee -a $GITHUB_ENV
 
       - name: Upload coverity build
+        if: github.repository == 'intel/mlir-extensions'
         run: |
           cd $HOME
           curl -X PUT \
