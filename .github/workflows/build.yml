@@ -84,7 +84,6 @@ jobs:
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
           cmake --build _build --target install
-          popd
 
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
