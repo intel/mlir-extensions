@@ -354,7 +354,7 @@ In the example above, wi_data_size is 1, sg_map_size is 16, tensor_size is 128.
  	distribute_unit_size = sg_map_size[0] x sg_map_size[1] = subgroup_size x wi_data_size
   	tensor_size = tensor_desc[0] x tensor_desc[1]
 ```
-wi_data_size can be larger than 1, meaning that each work item operates on multiple elements, which is eventually lowered to "SIMT-flavor" vector, like SPIR-V vector or llvm vector. The multiple elements indicated by wi_data can only be from one dimension and must be contiguous in the memory along either dimension.
+wi_data_size can be larger than 1, meaning that each work item operates on multiple elements, which is eventually lowered to "SIMT-flavor" vector, like SPIR-V vector or llvm vector, or packed to a storage data type for matrix operations. The multiple elements indicated by wi_data can only be from one dimension and must be contiguous in the memory along either dimension.
 
 To distribute a tensor, tensor_size must be divisible by distribute_unit_size. More specifically, tensor_desc[0] must be divisible by wi_layout[0] x wi_data[0], tensor_desc[1] by wi_layout[1] x wi_data[1]. The 2D subtensor is evenly distributed to work items, so each work item gets a 2D data fragment, which may contain mulitple distribution of wi_data elements.
 
@@ -400,12 +400,12 @@ For load_nd with `transpose` attribute, wi_layout is transposed to match with th
           tensor_desc<16xfp32, #tdesc_attr, #sg_map_t>, vector<1xi1> -> vector<1xfp32>
 ```
 
-Below example shows that each WI loads 4 fp32 data element with the chunk_size_per_lane. This load with chunk_size_per_lane is effectively load 2D tensor and transpose. The data fragement <1x4xf32> is loaded and transposed as <4x1xf32>.
+Below example shows that each WI loads 4 fp32 data element with the chunk_size. This load with chunk_size is effectively load 2D tensor and transpose. The data fragement <1x4xf32> is loaded and transposed as <4x1xf32>.
 ```mlir
   #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 4]>
   #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
   %scatter_tdesc_chunk = xegpu.create_tdesc, %src_addr, %offsets
-		{chunk_size_per_lane=4} :
+		{chunk_size=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
 
   %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
@@ -473,15 +473,15 @@ user must use for the WI data distribution of 1d block load and regular load wit
   # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 
-  For regular load with chunk_size_per_lane  // PVC subgroup_size = 16
-  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  For regular load with chunk_size  // PVC subgroup_size = 16
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, chunk_size]>
 
   For 1d block load
   # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
   #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
 
-  For regular load with chunk_size_per_lane // ARC subgroup_size = 8
-  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>
+  For regular load with chunk_size // ARC subgroup_size = 8
+  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, chunk_size]>
 ```
 
 ## Rules of sg_map setting for DPAS on PVC and ARC
@@ -549,14 +549,14 @@ An example on how to load a 2d block, perform dpas, and store back to memory.
 ```
 
 ## sg_map use case - regular load:
-An example on how to perform transpose using load_gather with chunk_size_per_lane in SIMT flavor.
+An example on how to perform transpose using load_gather with chunk_size in SIMT flavor.
 
 ```mlir
 
-  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 4]>
   #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
   %scatter_tdesc_chunk = xegpu.create_tdesc, %src_addr, %offsets
-		{chunk_size_per_lane=4} :
+		{chunk_size=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
 
   %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
