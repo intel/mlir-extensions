@@ -688,16 +688,31 @@ gen2DPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
   auto intrinsicStr = getBlockIntrinsicStr("prefetch");
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
-  auto elemTy = tdescTy.getElementType();
   auto noRetTy = TypeRange({});
+  auto bitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
-  // for arg8: dummy value
-  auto attr = elemTy.isInteger()
-                  ? (TypedAttr)rewriter.getIntegerAttr(elemTy, 0)
-                  : (TypedAttr)rewriter.getFloatAttr(elemTy, 0.0);
+  // Sub 32bit data types are packed into 32bit data types (i32).
+  auto packFactor = 32 / bitWidth;
+
+  // If packing is needed, the innermost dimensions gets scaled by the packing
+  // factor. In such case, the shape[1] must be a multiple of the pack factor.
+  // Otherwise, packing cannot be done correctly
+  if (packFactor > 1) {
+    assert(
+        shape[1] % packFactor == 0 &&
+        "shape[1] must be a multiple of pack factor (32 / element bitwidth)");
+  }
+
+  // for arg8: dummy value, type has to be always the same since intrinsic
+  // func name for prefetch is the same regardless of the element type.
+  // Different type used for dummy causes type conflict in case of multiple
+  // calls with different dummy arg type.
+  auto attr = (TypedAttr)rewriter.getIntegerAttr(rewriter.getI32Type(), 0);
   auto dummy = constant_val(attr);
-  return gen2DBlockIntrinsicCall(rewriter, loc, intrinsicStr, noRetTy, l1, l3,
-                                 nblks, shape, payload, dummy);
+  return gen2DBlockIntrinsicCall(
+      rewriter, loc, intrinsicStr, noRetTy, l1, l3, nblks,
+      {shape[0], bitWidth == 64 ? shape[1] * 2 : shape[1] / packFactor},
+      payload, dummy);
 }
 
 // generate a call to lsc.store.2d.ugm.* intrinsic for 2D block store, which is
