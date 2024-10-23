@@ -84,13 +84,12 @@ jobs:
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
           cmake --build _build --target install
-          popd
 
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
         run: |
           ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit) -DMLIR_DIR=${{ github.workspace }}/mlir/llvm-project/mlir/lib/cmake/mlir
-          cmake --build _build --target check-imex
+          cmake --build build --target check-imex
 
       - name: Build doxygen docs
         shell: bash -le {0}
