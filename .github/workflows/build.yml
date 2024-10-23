@@ -16,9 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 450
 
-    env:
-      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
-
     strategy:
       matrix:
         python: [3.9]
@@ -53,9 +50,7 @@ jobs:
 
       - name: Setup Cache Vars
         run: |
-          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
-          cat $LLVM_SHA_FILE >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+          echo LLVM_SHA=$(cat build_tools/llvm_version.txt) | tee -a $GITHUB_ENV
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
@@ -64,7 +59,7 @@ jobs:
           LLVM_CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
-            /home/runner/work/llvm-mlir/_mlir_install/**
+            ${{ github.workspace }}/mlir
           key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Build LLVM-MLIR
@@ -72,15 +67,12 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 420
         run: |
-          mkdir -p /home/runner/work/llvm-mlir
-          pushd /home/runner/work/llvm-mlir
-          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
-          np=`nproc`
-          echo "INFO: nproc $np"
           git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
-          git checkout ${LLVM_SHA}
-          git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
+
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           cmake -G Ninja -B _build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
@@ -90,18 +82,17 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD=X86                                    \
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
-            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
           cmake --build _build --target install
           popd
 
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
         run: |
-          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit)
+          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit) -DMLIR_DIR=${{ github.workspace }}/mlir/llvm-project/mlir/lib/cmake/mlir
           cmake --build _build --target check-imex
 
       - name: Build doxygen docs
         shell: bash -le {0}
         run: |
-          cd /home/runner/work/mlir-extensions/mlir-extensions
           cmake --build _build --target doc_doxygen
