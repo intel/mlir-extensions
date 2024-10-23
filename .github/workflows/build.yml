@@ -80,7 +80,7 @@ jobs:
           git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
           git checkout ${LLVM_SHA}
-          if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
+          git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch
           cmake -G Ninja -B _build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
@@ -97,14 +97,7 @@ jobs:
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
         run: |
-          external_lit=`which lit`
-          echo ${external_lit}
-          cd /home/runner/work/mlir-extensions/mlir-extensions
-          cmake -S . -B _build -GNinja  \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_EXTERNAL_LIT=${external_lit} \
-            -DMLIR_DIR=/home/runner/work/llvm-mlir/_mlir_install/lib/cmake/mlir \
-            -DLLVM_LIT_ARGS=-a
+          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit)
           cmake --build _build --target check-imex
 
       - name: Build doxygen docs
