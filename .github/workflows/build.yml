@@ -86,3 +86,8 @@ jobs:
         run: |
           ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit) -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir
           cmake --build build --target check-imex
+
+      - name: Build doxygen docs
+        shell: bash -le {0}
+        run: |
+          cmake --build build --target doc_doxygen
