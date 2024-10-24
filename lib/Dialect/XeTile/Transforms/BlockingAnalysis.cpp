@@ -563,7 +563,7 @@ void BlockingAnalysisImpl::visitVectorizableOp(
     return;
 
   auto type = mlir::dyn_cast<mlir::VectorType>(op->getResult(0).getType());
-  if (!type)
+  if (!type || type.getRank() != 2)
     return;
 
   auto lattice = results[0]->getValue();
