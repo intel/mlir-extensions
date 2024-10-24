@@ -84,7 +84,7 @@ jobs:
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
         run: |
-          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit) -DMLIR_DIR=${{ github.workspace }}/mlir/lib
+          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DLLVM_EXTERNAL_LIT=$(which lit) -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir
           cmake --build build --target check-imex
 
       - name: Build doxygen docs
