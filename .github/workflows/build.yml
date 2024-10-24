@@ -73,7 +73,7 @@ jobs:
           git apply ../build_tools/patches/*.patch
 
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
-          cmake -G Ninja -B _build -S llvm                                  \
+          cmake -G Ninja -B build -S llvm                                  \
             -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
             -DLLVM_ENABLE_PROJECTS=mlir                                    \
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
@@ -83,7 +83,7 @@ jobs:
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
-          cmake --build _build --target install
+          cmake --build build --target install
 
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
@@ -94,4 +94,4 @@ jobs:
       - name: Build doxygen docs
         shell: bash -le {0}
         run: |
-          cmake --build _build --target doc_doxygen
+          cmake --build build --target doc_doxygen
