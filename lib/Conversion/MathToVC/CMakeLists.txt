@@ -1,9 +1,9 @@
-add_imex_conversion_library(IMEXXeGPUToVC
-  LSCPatterns.cpp
-  XeGPUToVC.cpp
+add_imex_conversion_library(IMEXMathToVC
+  MathToVC.cpp
+
 
   ADDITIONAL_HEADER_DIRS
-  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/XeGPUToVC
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/MathToVC
 
   DEPENDS
   IMEXConversionPassIncGen

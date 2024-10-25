@@ -427,4 +427,34 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
   let constructor = "imex::createConvertXeGPUToVCPass()";
 }
 
+
+//===----------------------------------------------------------------------===//
+// MathToVC
+//===----------------------------------------------------------------------===//
+// high-precision-interim-calculation
+def ConvertMathToVC : Pass<"convert-math-to-vc", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Generate vc-intrinsics functions for select math dialect operations";
+  let description = [{
+    Convert select math dialect operations into the Func dialect calls to vc-intrinsics
+    functions.
+    Some math operations are not supported by the VC compiler (IGC vector backend)
+    and need to be converted to vc-intrinsic calls.
+    This pass converts these math operations to vc-intrinsics.
+    }];
+  let options = [
+    Option<"enableHighPrecisionInterimCalculation", "enable-high-precision-interim-calculation", "bool",
+           /*default=*/"false",
+           "Enables high precision (f32) interim  calculation for math operations."
+           "For any interim instruction added as part of the conversion will be high precision(f32).">
+  ];
+
+  let dependentDialects = ["::mlir::math::MathDialect",
+                           "::mlir::vector::VectorDialect",
+                            "::mlir::LLVM::LLVMDialect",
+                            "::mlir::func::FuncDialect",
+                           "::mlir::arith::ArithDialect"
+                            ];
+  let constructor = "imex::createConvertMathToVCPass()";
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

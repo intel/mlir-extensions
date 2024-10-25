@@ -8,10 +8,11 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements some utils used in XeGPUToVC pass
+/// This file implements some utils used in ConversionToVC passes
 ///
 //===----------------------------------------------------------------------===//
 
+#include "imex/Utils/VCUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -28,7 +29,7 @@ FlatSymbolRefAttr getFuncRefAttr(gpu::GPUModuleOp module, StringRef name,
                                  TypeRange resultType, ValueRange operands,
                                  bool isVectorComputeFunction,
                                  bool emitCInterface,
-                                 bool emitSPIRVLinkage = true) {
+                                 bool emitSPIRVLinkage /* = true*/) {
   MLIRContext *context = module.getContext();
   auto result = SymbolRefAttr::get(context, name);
 
