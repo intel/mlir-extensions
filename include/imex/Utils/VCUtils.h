@@ -8,14 +8,20 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines some utils used in XeGPUToVC pass
+/// This file defines some utils used in ConversionToVC passes
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef XEGPU_VC_UTILS_H
-#define XEGPU_VC_UTILS_H
+#ifndef VC_UTILS_H
+#define VC_UTILS_H
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 

@@ -34,12 +34,12 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 
+#include "imex/Conversion/MathToVC/MathToVC.h"
+#include "imex/Utils/VCUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
-
-#include "Utils.h"
 
 namespace imex {
 #define GEN_PASS_DEF_CONVERTXEGPUTOVC
@@ -889,15 +889,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       return true;
     });
 
-    target.addDynamicallyLegalOp<math::ExpOp>([&](math::ExpOp op) {
-      if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-        if (vecTy.getRank() != 1)
-          return true;
-        return false;
-      }
-      return true;
-    });
-
     target.addIllegalOp<ShapeCastOp>();
 
     // TODO: can we change it to addDynamicLegalOp?
@@ -962,14 +953,17 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     // Ops to llvm.genx only Patterns
     patterns.add<NbarrierWaitPattern, CompilerHintPattern,
-                 ElementwiseToVCPattern<arith::MaximumFOp>,
-                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern,
+                 ElementwiseToVCPattern<arith::MaximumFOp>, DpasPattern,
                  NbarrierArrivePattern>(patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
 
     populateLoadStoreLSCPatterns(typeConverter, patterns);
+
+    populateMathToVCPatterns(typeConverter, patterns);
+
+    configureMathToVCConversionLegality(target);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();

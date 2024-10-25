@@ -38,7 +38,7 @@
 #include "llvm/Support/FormatVariadic.h"
 
 #include "LscIntrinsicEnums.h"
-#include "Utils.h"
+#include "imex/Utils/VCUtils.h"
 
 using namespace mlir;
 using mlir::xegpu::AtomicRMWOp;

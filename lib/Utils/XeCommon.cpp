@@ -12,10 +12,10 @@
 /// routines used by Xe related dialects.
 ///
 //===----------------------------------------------------------------------===//
-
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <unordered_set>
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
@@ -209,6 +209,18 @@ mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
   std::iota(mask.begin(), mask.end(), 0);
   auto op = rewriter.create<mlir::vector::ShuffleOp>(loc, vecUp, vecDown, mask);
   return op;
+}
+
+/// Checks if the given `type` is a 1-D vector type that requires VectorAnyINTEL
+/// capability. In other words, the vector size is not supported by SPIR-V.
+/// SPIR-V only supports 2, 3, 4, 8, 16 elements (8 and 16 with Vector16
+/// capability).
+bool isVectorAnyINTELType(mlir::Type type) {
+  std::unordered_set<int64_t> spirvSupportedSizes = {2, 3, 4, 8, 16};
+  auto vecType = mlir::dyn_cast<mlir::VectorType>(type);
+  return vecType && vecType.getRank() == 1 &&
+         (spirvSupportedSizes.find(vecType.getNumElements()) ==
+          spirvSupportedSizes.end());
 }
 
 } // namespace imex

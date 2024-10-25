@@ -617,6 +617,12 @@ llvm::SmallVector<T> swapLastTwoElements(llvm::ArrayRef<T> shape) {
 ///   output strides = 60x20x5x1
 llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape);
 
+/// Checks if the given `type` is a 1-D vector type that requires VectorAnyINTEL
+/// capability. In other words, the vector size is not supported by SPIR-V.
+/// SPIR-V only supports 2, 3, 4, 8, 16 elements (8 and 16 with Vector16
+/// capability).
+bool isVectorAnyINTELType(mlir::Type type);
+
 } // namespace imex
 
 #endif

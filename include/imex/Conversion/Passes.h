@@ -22,6 +22,7 @@
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h>
+#include <imex/Conversion/MathToVC/MathToVC.h>
 #include <imex/Conversion/NDArrayToLinalg/NDArrayToLinalg.h>
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
