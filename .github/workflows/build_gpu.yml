@@ -13,13 +13,9 @@ jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
     runs-on: [self-hosted, pvc]
-    timeout-minutes: 450
-
-    env:
-      TBB_VER: 2021.6.0
-      LEVEL_ZERO_VER: v1.8.1
-      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
-      LLVM_SHA_FILE: llvm_version.txt
+    defaults:
+      run:
+        shell: bash -noprofile --norc -eo pipefail {0}
 
     steps:
       - uses: actions/checkout@v4
@@ -30,26 +26,17 @@ jobs:
 
       - name: Checkout MLIR
         run: |
-          if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
+          git clone https://github.com/llvm/llvm-project
           export LLVM_SHA=$(cat build_tools/llvm_version.txt)
           cd llvm-project
-          git reset --hard HEAD
-          git fetch --prune
           git checkout $LLVM_SHA
           git apply ../build_tools/patches/*.patch
 
       - name: Setup IMEX and run tests
         run: |
           source /opt/intel/oneapi/setvars.sh
-
           pip install psutil
-          cmake -S llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  \
-                -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
-                -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold \
-                -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. \
-                -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 \
-                -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DIMEX_ENABLE_PVC_TARGET=1
-          set -o pipefail
+          ./scripts/compile.sh -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800"
           cmake --build build --target check-imex | tee build/tests.txt
 
       - name: Run SG-level XeTile generated cases

@@ -12,53 +12,29 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: [self-hosted, icx, glados]
-    timeout-minutes: 450
-
-    env:
-      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu
-      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
-      HOME: /github/home
-      LLVM_SHA_FILE: llvm_version.txt
+    runs-on: [self-hosted, icx]
+    defaults:
+      run:
+        shell: bash -noprofile --norc -eo pipefail {0}
 
     steps:
-      - name: Check build root
-        run: |
-          export BUILD_ROOT=$(pwd)/build_cpu
-            echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
-            export HOME_DIR=${BUILD_ROOT}/home
-            echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
-            if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
-
-      - name: Clear home dir
-        run: |
-          mkdir -p $HOME_DIR
-          cd $HOME_DIR
-          rm -rf *
-
       - uses: actions/checkout@v4
-        with:
-          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-          token: ${{secrets.WORKFLOW_TOKEN}}
-          fetch-depth: 0
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+
+      - name: Collect info
+        run: |
+          sh scripts/sysinfo.sh
 
       - name: Checkout MLIR
         run: |
-          cd $BUILD_ROOT
-          if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
-          cd $BUILD_ROOT/llvm-project
-          git reset --hard HEAD
-          export LLVM_SHA=`cat $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
-          git fetch --prune
-          git checkout $LLVM_SHA || exit 1
-          if [ -d "$HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+          git clone https://github.com/llvm/llvm-project
+          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          cd llvm-project
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
 
       - name: Setup IMEX and run tests
         run: |
-          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DLLVM_LIT_ARGS="-a -j 4"
-          set -o pipefail
+          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a -j 4"
           cmake --build build --target check-imex | tee build/tests.txt
 
       - name: Upload tests.txt
@@ -66,4 +42,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tests_cpu.txt
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
+          path: build/tests.txt

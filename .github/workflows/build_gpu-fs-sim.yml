@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - upstream
       - 'dist-ndarray'
       - imex-embargo
   workflow_dispatch:
@@ -17,86 +16,51 @@ jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
     runs-on: [self-hosted, icx, fs-sim]
-    timeout-minutes: 450
-
-    env:
-      TBB_VER: 2021.6.0
-      LEVEL_ZERO_VER: v1.8.1
-      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
-      LLVM_SHA_FILE: llvm_version.txt
+    defaults:
+      run:
+        shell: bash -noprofile --norc -eo pipefail {0}
 
     steps:
-      - name: Check build root
-        run: |
-            echo BUILD_REF=${{ inputs.ref || github.sha }} >>$GITHUB_ENV
-            export BUILD_ROOT=$(pwd)/build_gpu
-            echo BUILD_ROOT=${BUILD_ROOT} >>$GITHUB_ENV
-            export HOME_DIR=${BUILD_ROOT}/home
-            echo HOME_DIR=${HOME_DIR} >>$GITHUB_ENV
-            mkdir -p $BUILD_ROOT
-
-      - name: Clear home dir
-        run: |
-          mkdir -p $HOME_DIR
-          cd $HOME_DIR
-          rm -rf *
-
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-          fetch-depth: 0
-          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Collect info
+        run: |
+          ./scripts/sysinfo.sh
 
       - name: Checkout MLIR
         run: |
-          cd $BUILD_ROOT
-          if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
-          cd $BUILD_ROOT/llvm-project
-          git reset --hard HEAD
-          export LLVM_SHA=`cat $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
-          git fetch --prune
-          git checkout $LLVM_SHA || exit 1
-          if [ -d "$HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+          git clone https://github.com/llvm/llvm-project
+          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          cd llvm-project
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
 
       - name: Setup IMEX and run tests on FS simulator
-        shell: bash -l {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
-          set -x
-          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
 
-          cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a --time-tests -j 1 --debug --timeout=1500 --filter=Integration/Dialect/Xe*/*" -DIMEX_ENABLE_FS_SIMULATOR=ON || exit
-          sed -e 's,-printAllFeatures,,g' -i ${WORK_ROOT}/fs/scripts/run_in_a_loop_rasty.sh
+          ./scripts/compile.sh -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DIMEX_ENABLE_FS_SIMULATOR=ON -DLLVM_LIT_ARGS="-a --time-tests -j 1 --debug --timeout=1500 --filter=Integration/Dialect/Xe*/*"
+
+          echo WORK_ROOT=$WORK_ROOT | tee -a $GITHUB_ENV
           export NEO_BINARIES_ROOT="$HOME"/neo
-          (cd ${WORK_ROOT}/fs/scripts && source setup.sh && umd_driver_env_variables_export && run_coral_fs -r -m umd -l) &> fs-sim.log &
-          SIM_PID=$!
+          (set +o pipefail && cd $WORK_ROOT/fs/scripts && source setup.sh && umd_driver_env_variables_export && run_coral_fs -r -m umd -l) &> fs-sim.log &
           cmake --build build --target check-static | tee build/tests.txt
-          TEST_RESULT=${PIPESTATUS[0]}
-          kill $SIM_PID
-          wait $SIM_PID
-          cd ${WORK_ROOT}/fs/scripts
-          zip -qr9 /tmp/fs-sim-tbx-logs.zip tbx*.log
-          exit $TEST_RESULT
 
       - name: Upload tests.txt
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: tests_gpu-fs-sim.txt
-          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
+          path: build/tests.txt
 
       - name: Upload fs-sim.log
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: fs-sim.log
-          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/fs-sim.log
-
-      - name: Upload fs-sim-tbx-logs.zip
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: fs-sim-tbx-logs.zip
-          path: /tmp/fs-sim-tbx-logs.zip
+          path: |
+            fs-sim.log
+            ${{ env.WORK_ROOT }}/fs/scripts/tbx*.log
