@@ -72,7 +72,6 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
   ];
 
   let extraClassDeclaration = [{
-    using TensorType::clone;
     using mlir::ShapedType::Trait<TileType>::getElementTypeBitWidth;
     using mlir::ShapedType::Trait<TileType>::getRank;
     using mlir::ShapedType::Trait<TileType>::getNumElements;
@@ -81,6 +80,10 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
     using mlir::ShapedType::Trait<TileType>::getNumDynamicDims;
     using mlir::ShapedType::Trait<TileType>::getDimSize;
     using mlir::ShapedType::Trait<TileType>::getDynamicDimIndex;
+
+    TileType cloneWith(std::optional<llvm::ArrayRef<int64_t>> shape, mlir::Type elementType) {
+      return TileType::get(shape.value_or(getShape()), elementType, getEncoding());
+    }
 
     TileType clone(mlir::Type elementType) {
       return llvm::cast<TileType>(cloneWith(getShape(), elementType));
@@ -156,7 +159,7 @@ def XeTile_IntType : AnyTypeOf<[I1, I8, I16, I32, I64, SI1, SI8, SI16, SI32, SI6
 def XeTile_FloatType : AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
 
 // Define the scalar type for XeTile
-def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType]>;
+def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType, Index]>;
 
 // define the source type for XeTile init_tile
 def XeTile_BaseAddrType : AnyTypeOf<[MemRefOf<[XeTile_ScalarType]>, UI64, UI32, I64, I32]>;
@@ -167,12 +170,12 @@ def XeTile_2DVector : VectorOfRankAndType<[2], [XeTile_ScalarType]>;
 def XeTile_4DVector : VectorOfRankAndType<[4], [XeTile_ScalarType]>;
 
 // define the value type for XeTile load_gather and store_scatter op
-def XeTile_1DOr2DVector: VectorOfRankAndType<[1, 2], [XeTile_ScalarType]>;
+def XeTile_1DOr2DOr4DVector: VectorOfRankAndType<[1, 2, 4], [XeTile_ScalarType]>;
 
 // define the value type for XeTile load_tile and store_tile op
 def XeTile_2DOr4DVector: VectorOfRankAndType<[2, 4], [XeTile_ScalarType]>;
 
-def XeTile_MaskType: VectorOfRankAndType<[1, 2], [I1]>;
+def XeTile_MaskType: VectorOfRankAndType<[1, 2, 4], [I1]>;
 
 // define the attribute type allowed for padding values for load op
 def XeTile_PaddingValueAttr : AnyAttrOf<[I32Attr, F32Attr]>;

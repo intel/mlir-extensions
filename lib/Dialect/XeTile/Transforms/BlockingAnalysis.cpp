@@ -226,6 +226,10 @@ public:
   void setToExitState(BlockingLattice *lattice) override {}
 
 private:
+  void visitInitTileOp(xetile::InitTileOp op,
+                       mlir::ArrayRef<BlockingLattice *> operands,
+                       mlir::ArrayRef<const BlockingLattice *> results);
+
   void visitPrefetchTileOp(xetile::PrefetchTileOp op,
                            mlir::ArrayRef<BlockingLattice *> operands,
                            mlir::ArrayRef<const BlockingLattice *> results);
@@ -237,6 +241,14 @@ private:
   void visitStoreTileOp(xetile::StoreTileOp op,
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
+
+  void visitLoadGatherOp(xetile::LoadGatherOp op,
+                         mlir::ArrayRef<BlockingLattice *> operands,
+                         mlir::ArrayRef<const BlockingLattice *> results);
+
+  void visitStoreScatterOp(xetile::StoreScatterOp op,
+                           mlir::ArrayRef<BlockingLattice *> operands,
+                           mlir::ArrayRef<const BlockingLattice *> results);
 
   void visitUpdateTileOp(xetile::UpdateTileOffsetOp op,
                          mlir::ArrayRef<BlockingLattice *> operands,
@@ -289,6 +301,9 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
     mlir::Operation *op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
 
+  if (auto initTileOp = mlir::dyn_cast<xetile::InitTileOp>(op))
+    visitInitTileOp(initTileOp, operands, results);
+
   if (auto updateTileOp = mlir::dyn_cast<xetile::UpdateTileOffsetOp>(op))
     visitUpdateTileOp(updateTileOp, operands, results);
 
@@ -298,8 +313,14 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
   if (auto loadOp = mlir::dyn_cast<xetile::LoadTileOp>(op))
     visitLoadTileOp(loadOp, operands, results);
 
+  if (auto gatherOp = mlir::dyn_cast<xetile::LoadGatherOp>(op))
+    visitLoadGatherOp(gatherOp, operands, results);
+
   if (auto storeOp = mlir::dyn_cast<xetile::StoreTileOp>(op))
     visitStoreTileOp(storeOp, operands, results);
+
+  if (auto scatterOp = mlir::dyn_cast<xetile::StoreScatterOp>(op))
+    visitStoreScatterOp(scatterOp, operands, results);
 
   if (auto tileMMAOp = mlir::dyn_cast<xetile::TileMMAOp>(op))
     visitTileMMAOp(tileMMAOp, operands, results);
@@ -323,6 +344,29 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
     visitCreateMaskOp(createMaskOp, operands, results);
 
   return mlir::success();
+}
+
+void BlockingAnalysisImpl::visitInitTileOp(
+    xetile::InitTileOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto lattice = results[0]->getValue();
+
+  if (!lattice.isInitialized())
+    return;
+
+  assert(lattice.getNumUniqRequests() == 1 &&
+         "InitTileOp should have only one request.");
+
+  auto block = lattice.getRequests()[0];
+
+  BlockingRequests &def = getLatticeElement(op.getTile())->getValue();
+  def.updateDefBlock(block);
+
+  // only work on scattered init_tile, which has indices
+  if (op.getIndices()) {
+    auto req = BlockingRequests(block, UsePoint(op, 1));
+    propagateIfChanged(operands[1], operands[1]->join(req));
+  }
 }
 
 void BlockingAnalysisImpl::visitPrefetchTileOp(
@@ -385,6 +429,29 @@ void BlockingAnalysisImpl::visitLoadTileOp(
   def.updateDefBlock(block);
 }
 
+void BlockingAnalysisImpl::visitLoadGatherOp(
+    xetile::LoadGatherOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+
+  auto tileTy = op.getTile().getType();
+  auto elemTy = tileTy.getElementType();
+  auto shape = tileTy.getShape();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
+
+  // TODO: currently 1D gather is not considered.
+  if (shape.size() == 1)
+    return;
+
+  auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
+  if (!size)
+    return;
+
+  for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
+    auto blockingRequest = BlockingRequests(size, UsePoint(op, i));
+    propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
+  }
+}
+
 void BlockingAnalysisImpl::visitStoreTileOp(
     xetile::StoreTileOp op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
@@ -403,6 +470,28 @@ void BlockingAnalysisImpl::visitStoreTileOp(
   }
 }
 
+void BlockingAnalysisImpl::visitStoreScatterOp(
+    xetile::StoreScatterOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto tileTy = op.getTile().getType();
+  auto elemTy = tileTy.getElementType();
+  auto shape = tileTy.getShape();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
+
+  // TODO: currently 1D scatter is not considered.
+  if (shape.size() == 1)
+    return;
+
+  auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
+  if (!size)
+    return;
+
+  for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
+    auto blockingRequest = BlockingRequests(size, UsePoint(op, i));
+    propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
+  }
+}
+
 void BlockingAnalysisImpl::visitUpdateTileOp(
     xetile::UpdateTileOffsetOp op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
@@ -411,6 +500,10 @@ void BlockingAnalysisImpl::visitUpdateTileOp(
     auto block = lattice.getRequests()[0];
     auto request = BlockingRequests(block, UsePoint(op, 0));
     propagateIfChanged(operands[0], operands[0]->join(request));
+    if (op.getIndices()) {
+      auto request = BlockingRequests(block, UsePoint(op, 1));
+      propagateIfChanged(operands[1], operands[1]->join(request));
+    }
   }
 }
 
@@ -572,6 +665,10 @@ void BlockingAnalysisImpl::visitVectorizableOp(
   auto shape = type.getShape();
   Block block = getInnerBlockSize(op, elemTy, shape);
 
+  // TODO: only consider 2D shape for now
+  if (shape.size() != 2)
+    return;
+
   // Wait for requests from users, unless all of its users are terminators.
   if (!op->use_empty() && !lattice.isInitialized()) {
     for (auto user : op->getUsers()) {
@@ -660,7 +757,9 @@ Block BlockingAnalysisImpl::getInnerBlockSize(
 
   int maxHeight = 0, minHeight = 0, maxWidth = 0, minWidth = 0;
   if (mlir::isa<xetile::ReductionOp>(op) ||
-      mlir::isa<xetile::BroadcastOp>(op)) {
+      mlir::isa<xetile::BroadcastOp>(op) ||
+      mlir::isa<xetile::LoadGatherOp>(op) ||
+      mlir::isa<xetile::StoreScatterOp>(op)) {
     // for reduction and broadcast ops, we simply using
     // [1, subgroupSize] as innerblock size
     maxWidth = subgroupSize;

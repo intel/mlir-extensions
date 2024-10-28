@@ -553,4 +553,75 @@ gpu.module @test_kernel {
     gpu.return
   }
 
+  //CHECK-LABEL: gpu.func @sg_loadgather
+  //CHECK-SAME: %[[arg0:.*]]: memref<1024xf16>, %[[arg1:.*]]: vector<4x32xindex>
+  gpu.func @sg_loadgather(%a: memref<1024xf16>, %indices: vector<4x32xindex>) {
+    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<4x1x1x32xi1>
+    //CHECK: %[[r0:.*]] = xetile.tile_pack %[[arg1]] {inner_blocks = array<i64: 1, 32>} : vector<4x32xindex> -> vector<4x1x1x32xindex>
+    //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]], %[[r0]] : memref<1024xf16>, vector<4x1x1x32xindex> -> !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>
+    //CHECK: %[[r2:.*]] = xetile.load %[[r1]], %[[cst]] : !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>, vector<4x1x1x32xi1> -> vector<4x1x1x32xf16>
+    %mask = arith.constant dense<1> : vector<4x32xi1>
+    %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<4x32xindex> -> !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>
+    %2 = xetile.load %1, %mask : !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>, vector<4x32xi1> -> vector<4x32xf16>
+    gpu.return
+  }
+
+  //CHECK-LABEL: gpu.func @sg_storescatter
+  //CHECK-SAME: %[[arg0:.*]]: memref<1024xf16>, %[[arg1:.*]]: vector<4x32xindex>
+  gpu.func @sg_storescatter(%a: memref<1024xf16>, %indices: vector<4x32xindex>) {
+
+    //CHECK: %[[cst:.*]] = arith.constant dense<4.200000e+01> : vector<4x1x1x32xf16>
+    //CHECK: %[[cst_0:.*]] = arith.constant dense<true> : vector<4x1x1x32xi1>
+    //CHECK: %[[cst_1:.*]] = arith.constant dense<1> : vector<4x1x1x32xindex>
+    //CHECK: %[[r0:.*]] = xetile.tile_pack %[[arg1]] {inner_blocks = array<i64: 1, 32>} : vector<4x32xindex> -> vector<4x1x1x32xindex>
+    //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]], %[[r0]] : memref<1024xf16>, vector<4x1x1x32xindex> -> !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>
+    //CHECK: xetile.store %[[cst]], %[[r1]], %[[cst_0]] : vector<4x1x1x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>, vector<4x1x1x32xi1>
+    //CHECK: %[[r2]] = xetile.update_tile_offset %[[r1]], %[[cst_1]] : !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>, vector<4x1x1x32xindex>
+    //CHECK: xetile.store %[[cst]], %[[r2]], %[[cst_0]] : vector<4x1x1x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<inner_blocks = [1, 32], scattered = true>>, vector<4x1x1x32xi1>
+    %offsets = arith.constant dense<1> : vector<4x32xindex>
+    %mask = arith.constant dense<1> : vector<4x32xi1>
+    %data = arith.constant dense<42.0> : vector<4x32xf16>
+    %tile = xetile.init_tile %a, %indices : memref<1024xf16>, vector<4x32xindex> -> !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>
+    xetile.store %data, %tile, %mask : vector<4x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>, vector<4x32xi1>
+    %next = xetile.update_tile_offset %tile, %offsets : !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>, vector<4x32xindex>
+    xetile.store %data, %next, %mask : vector<4x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>, vector<4x32xi1>
+    gpu.return
+  }
+
+  //CHECK-LABEL: gpu.func @add_kernel
+  //CHECK-SAME: %[[arg0:.*]]: memref<*xf32>, %[[arg1:.*]]: memref<*xf32>, %[[arg2:.*]]: memref<*xf32>
+  gpu.func @add_kernel(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>) {
+    //CHECK: %[[c1024:.*]] = arith.constant 1024 : index
+    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<1x2x1x16xi1>
+    //CHECK: %[[cast:.*]] = memref.cast %[[arg0:.*]] : memref<*xf32> to memref<?xf32>
+    //CHECK: %[[cast_0:.*]] = memref.cast %[[arg1:.*]] : memref<*xf32> to memref<?xf32>
+    //CHECK: %[[cast_1:.*]] = memref.cast %[[arg2:.*]] : memref<*xf32> to memref<?xf32>
+    //CHECK: %[[block_id_x:.*]] = gpu.block_id  x
+    //CHECK: %[[r0:.*]] = arith.muli %[[block_id_x]], %c1024 : index
+    //CHECK: %[[r1:.*]] = vector.splat %[[r0]] : vector<1x2x1x16xindex>
+    //CHECK: %[[r2:.*]] = xetile.init_tile %[[cast]], %[[r1]] : memref<?xf32>, vector<1x2x1x16xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>
+    //CHECK: %[[r3:.*]] = xetile.load %[[r2]], %[[cst]] : !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>, vector<1x2x1x16xi1> -> vector<1x2x1x16xf32>
+    //CHECK: %[[r4:.*]] = xetile.init_tile %[[cast_0]], %[[r1]] : memref<?xf32>, vector<1x2x1x16xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>
+    //CHECK: %[[r5:.*]] = xetile.load %[[r4]], %[[cst]] : !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>, vector<1x2x1x16xi1> -> vector<1x2x1x16xf32>
+    //CHECK: %[[r6:.*]] = arith.addf %[[r3]], %[[r5]] : vector<1x2x1x16xf32>
+    //CHECK: %[[r7:.*]] = xetile.init_tile %[[cast_1]], %[[r1]] : memref<?xf32>, vector<1x2x1x16xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>
+    //CHECK: xetile.store %[[r6]], %[[r7]], %[[cst]] : vector<1x2x1x16xf32>, !xetile.tile<1x32xf32, #xetile.tile_attr<inner_blocks = [1, 16], scattered = true>>, vector<1x2x1x16xi1>
+
+    %cst = arith.constant dense<true> : vector<1x32xi1>
+    %c1024 = arith.constant 1024 : index
+    %cast = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+    %cast_0 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+    %cast_1 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
+    %block_id_x = gpu.block_id  x
+    %0 = arith.muli %block_id_x, %c1024 : index
+    %1 = vector.splat %0 : vector<1x32xindex>
+    %2 = xetile.init_tile %cast, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
+    %3 = xetile.load %2, %cst : !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf32>
+    %4 = xetile.init_tile %cast_0, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
+    %5 = xetile.load %4, %cst : !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf32>
+    %6 = arith.addf %3, %5 : vector<1x32xf32>
+    %7 = xetile.init_tile %cast_1, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
+    xetile.store %6, %7, %cst : vector<1x32xf32>, !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    gpu.return
+  }
 }
