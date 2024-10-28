@@ -51,6 +51,8 @@
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeArch.h"
 
+#define DEBUG_TYPE "xetile-blocking"
+
 using namespace mlir;
 using namespace llvm;
 using namespace imex;
@@ -218,9 +220,16 @@ struct InitTileOpPattern
     auto elemTy = tileTy.getElementType();
     auto newTileTy = imex::xetile::TileType::get(shape, elemTy, attr);
 
+    llvm::SmallVector<mlir::Value> operands =
+        llvm::to_vector(adaptor.getOperands());
+    if (tileTy.getScatterAttr() == mlir::BoolAttr::get(getContext(), true)) {
+      auto indices =
+          addPackOp(adaptor.getIndices(), blockSize.asArrayRef(), rewriter);
+      operands[1] = indices;
+    }
+
     auto newOp = rewriter.create<xetile::InitTileOp>(
-        op.getLoc(), mlir::TypeRange({newTileTy}), op->getOperands(),
-        op->getAttrs());
+        op.getLoc(), mlir::TypeRange({newTileTy}), operands, op->getAttrs());
 
     rewriter.replaceOp(op, newOp);
 
@@ -291,6 +300,40 @@ struct LoadTileOpPattern
   }
 };
 
+struct LoadGatherOpPattern
+    : public OpConversionPatternWithAnalysis<xetile::LoadGatherOp,
+                                             BlockingAnalysis> {
+
+  using OpConversionPatternWithAnalysis<
+      xetile::LoadGatherOp, BlockingAnalysis>::OpConversionPatternWithAnalysis;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(xetile::LoadGatherOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto source = adaptor.getTile();
+    auto tileTy = mlir::cast<xetile::TileType>(source.getType());
+    auto blockSize = tileTy.getInnerBlocks();
+    auto rank = op.getValue().getType().getRank();
+
+    if (!blockSize || rank == 4)
+      return rewriter.notifyMatchFailure(
+          op, "Input is not updated or the op has been updated.\n");
+
+    auto shape = tileTy.getShape();
+    auto vecTy = ::mlir::VectorType::get({shape[0] / blockSize[0],
+                                          shape[1] / blockSize[1], blockSize[0],
+                                          blockSize[1]},
+                                         tileTy.getElementType());
+    auto mask = addPackOp(adaptor.getMask(), blockSize.asArrayRef(), rewriter);
+    mlir::Value newOp = rewriter.create<xetile::LoadGatherOp>(
+        op.getLoc(), vecTy, source, mask,
+        op.getPadding().value_or(mlir::Attribute()));
+    newOp = addUnpackOp(newOp, rewriter);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
 // It updates store_tile to reveal effects of innerblock attribute.
 // It uses pack op to align the shape of its vector value to the tile shape.
 struct StoreTileOpPattern
@@ -319,6 +362,36 @@ struct StoreTileOpPattern
   }
 };
 
+struct StoreScatterOpPattern
+    : public OpConversionPatternWithAnalysis<xetile::StoreScatterOp,
+                                             BlockingAnalysis> {
+
+  using OpConversionPatternWithAnalysis<
+      xetile::StoreScatterOp,
+      BlockingAnalysis>::OpConversionPatternWithAnalysis;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(xetile::StoreScatterOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto value = adaptor.getValue();
+    auto valTy = mlir::dyn_cast<mlir::VectorType>(value.getType());
+    auto tile = adaptor.getTile();
+    auto tileTy = mlir::cast<xetile::TileType>(tile.getType());
+    auto blockSize = tileTy.getInnerBlocks();
+
+    // its inputs has not been updated yet.
+    if (blockSize && valTy.getRank() == 2) {
+      value = addPackOp(value, blockSize.asArrayRef(), rewriter);
+      auto mask =
+          addPackOp(adaptor.getMask(), blockSize.asArrayRef(), rewriter);
+      rewriter.replaceOpWithNewOp<xetile::StoreScatterOp>(op, value, tile,
+                                                          mask);
+      return mlir::success();
+    }
+    return mlir::failure();
+  }
+};
+
 // It updates update_tile_offset to reveal effects of innerblock attribute
 // by updating the type of it result.
 struct UpdateTileOffsetOpPattern
@@ -339,9 +412,15 @@ struct UpdateTileOffsetOpPattern
     if (!blockSize)
       return failure();
 
-    rewriter.replaceOpWithNewOp<xetile::UpdateTileOffsetOp>(
-        op, tileTy, tile, adaptor.getOffsetX(), adaptor.getOffsetY(),
-        adaptor.getIndices());
+    llvm::SmallVector<mlir::Value> operands =
+        llvm::to_vector(adaptor.getOperands());
+    if (tileTy.getScatterAttr() == mlir::BoolAttr::get(getContext(), true)) {
+      auto indices =
+          addPackOp(adaptor.getIndices(), blockSize.asArrayRef(), rewriter);
+      operands[1] = indices;
+    }
+    rewriter.replaceOpWithNewOp<xetile::UpdateTileOffsetOp>(op, operands,
+                                                            op->getAttrs());
     return mlir::success();
   }
 };
@@ -822,6 +901,34 @@ struct VectorCreateMaskOpPattern
   }
 };
 
+struct VectorSplatOpPattern
+    : public OpConversionPatternWithAnalysis<mlir::vector::SplatOp,
+                                             BlockingAnalysis> {
+  using OpConversionPatternWithAnalysis<
+      mlir::vector::SplatOp, BlockingAnalysis>::OpConversionPatternWithAnalysis;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::SplatOp op, OpAdaptor adaptor,
+                  OpPatternRewriter &rewriter) const override {
+    auto res = op.getAggregate();
+    auto resTy = res.getType();
+    auto block = analysis.getDefBlockSize(res);
+    if (!block || resTy.getRank() != 2)
+      return mlir::failure();
+
+    auto shape = resTy.getShape();
+    auto newTy = mlir::VectorType::get(
+        {shape[0] / block[0], shape[1] / block[1], block[0], block[1]},
+        resTy.getElementType());
+
+    auto newOp = rewriter.create<mlir::vector::SplatOp>(
+        op.getLoc(), newTy, op->getOperands(), op->getAttrs());
+    auto unpack = addUnpackOp(newOp, rewriter);
+    rewriter.replaceOp(op, unpack);
+    return mlir::success();
+  }
+};
+
 } // namespace Blocking
 
 void populateXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
@@ -830,11 +937,12 @@ void populateXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
       Blocking::ArithConstantOpPattern, Blocking::InitTileOpPattern,
       Blocking::PrefetchTileOpPattern, Blocking::LoadTileOpPattern,
       Blocking::StoreTileOpPattern, Blocking::UpdateTileOffsetOpPattern,
+      Blocking::LoadGatherOpPattern, Blocking::StoreScatterOpPattern,
       Blocking::TileMMAOpPattern, Blocking::TileReductionOpPattern,
       Blocking::TileBroadcastOpPattern, Blocking::TileTransposeOpPattern,
       Blocking::VectorizableOpPattern, Blocking::SCFForOpPattern,
-      Blocking::SCFYieldOpPattern, Blocking::VectorCreateMaskOpPattern>(
-      patterns.getContext(), analysis);
+      Blocking::SCFYieldOpPattern, Blocking::VectorCreateMaskOpPattern,
+      Blocking::VectorSplatOpPattern>(patterns.getContext(), analysis);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
@@ -882,7 +990,7 @@ public:
     if (mlir::failed(analysis.run(mod)))
       return signalPassFailure();
 
-    // analysis.printAnalysisResult();
+    LLVM_DEBUG(analysis.printAnalysisResult());
 
     mlir::MLIRContext &context = getContext();
 

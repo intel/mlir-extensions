@@ -112,7 +112,7 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
                        OptionalAttr<DenseI64ArrayAttr>: $const_offsets,
                        OptionalAttr<DenseI64ArrayAttr>: $const_sizes,
                        OptionalAttr<DenseI64ArrayAttr>: $const_strides,
-                       Optional<VectorOfRankAndType<[1,2], [Index]>>: $indices);
+                       Optional<VectorOfRankAndType<[1,2,4], [Index]>>: $indices);
 
     let results = (outs XeTile: $tile);
 
@@ -493,7 +493,7 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", [AttrSizedOperan
         XeTile: $tile,
         Optional<Index>: $offset_x,
         Optional<Index>: $offset_y,
-        Optional<FixedVectorOfRankAndType<[1], [Index]>>:$indices);
+        Optional<FixedVectorOfRankAndType<[1,2,4], [Index]>>:$indices);
 
     let results = (outs
         XeTile: $result
@@ -644,7 +644,7 @@ def XeTile_ConvertLayoutOp: XeTile_Op<"convert_layout", [AllTypesMatch<["source"
 }
 
 def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value"]>,
-                                            AllShapesMatch<["tile", "value", "mask"]>]> {
+                                            AllShapesMatch<["value", "mask"]>]> {
    let summary = "load a set of scattered data points from memory.";
    let description = [{
         The `load` operation is used to load data with scattered tile (each element in the tile
@@ -656,14 +656,14 @@ def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value
    let arguments = (ins XeTile: $tile,
                         XeTile_MaskType: $mask,
                         OptionalAttr<XeTile_PaddingValueAttr>: $padding);
-   let results = (outs XeTile_1DOr2DVector: $value);
+   let results = (outs XeTile_1DOr2DOr4DVector: $value);
    let assemblyFormat = [{
         $tile `` `,` $mask attr-dict `:` qualified(type($tile)) `` `,` type($mask) `->` type($value)
    }];
 }
 
 def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "tile"]>,
-                                               AllShapesMatch<["value", "tile", "mask"]>]> {
+                                               AllShapesMatch<["value", "mask"]>]> {
    let summary = "load a set of data to scattered memory locations.";
    let description = [{
         The `store` operation is used to store data into scattered tile (each element in the tile
@@ -671,7 +671,7 @@ def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "t
         memory access so that it is safe to pass out-of-boundary addresses/offsets as long as they
         are masked.
    }];
-   let arguments = (ins XeTile_1DOr2DVector: $value,
+   let arguments = (ins XeTile_1DOr2DOr4DVector: $value,
                         XeTile: $tile,
                         XeTile_MaskType: $mask);
    let assemblyFormat = [{
