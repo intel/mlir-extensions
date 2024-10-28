@@ -79,8 +79,10 @@ mlir::LogicalResult InitTileOp::verify() {
     if (!tileTy.getScatterAttr())
       return emitOpError("Expecting a scattered TileType.");
 
-    if (tileTy.getShape() != indices.getType().getShape())
-      return emitOpError("Shape mismatch between indices and result tile.");
+    // TODO: temoprary disable it in favor of 4D representation of
+    // blocking pass
+    // if (tileTy.getShape() != indices.getType().getShape())
+    //   return emitOpError("Shape mismatch between indices and result tile.");
 
     return mlir::success();
   }
