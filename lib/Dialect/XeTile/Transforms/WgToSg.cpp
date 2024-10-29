@@ -36,17 +36,11 @@
 #include <llvm/ADT/SetVector.h>
 #include <llvm/Support/Debug.h>
 
-#include <algorithm>
 #include <cassert>
-#include <optional>
 
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
-#include "imex/Utils/DebugUtils.h"
-#include "imex/Utils/XeArch.h"
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
-
-#include <iostream>
 
 using namespace mlir;
 using namespace imex;

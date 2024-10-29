@@ -37,8 +37,6 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
-#include <iostream>
-
 namespace imex {
 #define GEN_PASS_DEF_NDARRAYDIST
 #include <imex/Dialect/NDArray/Transforms/Passes.h.inc>

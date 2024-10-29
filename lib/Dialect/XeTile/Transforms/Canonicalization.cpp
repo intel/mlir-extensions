@@ -21,7 +21,6 @@
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -30,7 +29,6 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
@@ -41,11 +39,8 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
 #include <cassert>
@@ -425,16 +420,17 @@ struct XeTileCanonicalizationPass final
       target.addLegalOp<mlir::memref::ReinterpretCastOp>();
       target.addLegalOp<imex::xetile::TransposeOp>();
       // Col-major tile creattion is not allowed.
-      target.addDynamicallyLegalOp<
-          imex::xetile::InitTileOp>([&](imex::xetile::InitTileOp op) {
-        return op.getType().getOrder().asArrayRef() != mlir::ArrayRef({0, 1});
-      });
+      target.addDynamicallyLegalOp<imex::xetile::InitTileOp>(
+          [&](imex::xetile::InitTileOp op) {
+            return op.getType().getOrder().asArrayRef() !=
+                   mlir::ArrayRef({0, 1});
+          });
       // UpdateTileOffsetOp is legal if it does not consume col-major tiles.
-      target.addDynamicallyLegalOp<
-          imex::xetile::UpdateTileOffsetOp>([&](imex::xetile::UpdateTileOffsetOp
-                                                    op) {
-        return op.getType().getOrder().asArrayRef() != mlir::ArrayRef({0, 1});
-      });
+      target.addDynamicallyLegalOp<imex::xetile::UpdateTileOffsetOp>(
+          [&](imex::xetile::UpdateTileOffsetOp op) {
+            return op.getType().getOrder().asArrayRef() !=
+                   mlir::ArrayRef({0, 1});
+          });
       // PrefetchTileOp is legal if it does not consume col-major tiles.
       target.addDynamicallyLegalOp<imex::xetile::PrefetchTileOp>(
           [&](imex::xetile::PrefetchTileOp op) {
