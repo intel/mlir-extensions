@@ -14,8 +14,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "XeTileOpConversion.h"
-#include "ArithOpConversion.h"
-#include "SCFOpConversion.h"
 #include "imex/Utils/XeArch.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinTypes.h"

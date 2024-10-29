@@ -47,7 +47,6 @@
 #include <mlir/Dialect/Tosa/IR/TosaOps.h>
 #include <mlir/Pass/Pass.h>
 
-#include <iostream>
 #include <optional>
 
 namespace imex {

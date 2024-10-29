@@ -23,8 +23,6 @@
 #include <mlir/IR/OpImplementation.h>
 #include <mlir/Pass/Pass.h>
 
-#include <iostream>
-
 namespace imex {
 
 /// @return new index ::mlir::Value with given Value

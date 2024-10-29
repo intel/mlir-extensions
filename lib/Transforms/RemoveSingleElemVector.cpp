@@ -21,13 +21,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include "imex/Transforms/Passes.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
-#include <cstdint>
-#include <numeric>
 
 namespace imex {
 #define GEN_PASS_DEF_REMOVESINGLEELEMVECTOR

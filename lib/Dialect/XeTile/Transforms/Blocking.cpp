@@ -41,14 +41,11 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Debug.h>
 
-#include <algorithm>
 #include <optional>
-#include <set>
 #include <tuple>
 
 #include "imex/Dialect/XeTile/Transforms/BlockingAnalysis.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
-#include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeArch.h"
 
 #define DEBUG_TYPE "xetile-blocking"

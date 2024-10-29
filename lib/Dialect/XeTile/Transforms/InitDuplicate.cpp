@@ -35,10 +35,7 @@
 #include <llvm/ADT/SetVector.h>
 #include <llvm/Support/Debug.h>
 
-#include <optional>
-
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
-#include "imex/Utils/DebugUtils.h"
 
 using namespace mlir;
 using namespace imex;
