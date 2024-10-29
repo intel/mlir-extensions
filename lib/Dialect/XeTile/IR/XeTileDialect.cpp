@@ -2,10 +2,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 #include <cstdint>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 #include <llvm/ADT/TypeSwitch.h>

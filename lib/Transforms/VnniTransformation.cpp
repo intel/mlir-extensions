@@ -20,9 +20,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 
 #include "imex/Transforms/Passes.h"
-#include "imex/Utils/DebugUtils.h"
 
-#include <numeric>
 #include <optional>
 
 namespace imex {

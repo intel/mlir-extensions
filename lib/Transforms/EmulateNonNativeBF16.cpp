@@ -19,16 +19,12 @@
 
 #include "imex/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
-#include <algorithm>
 #include <unordered_set>
-#include <vector>
 
 namespace imex {
 #define GEN_PASS_DEF_EMULATENONNATIVEBF16

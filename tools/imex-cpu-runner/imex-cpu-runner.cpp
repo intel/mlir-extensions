@@ -29,9 +29,7 @@
 // This file is copied from upstream mlir-cpu-runner
 // https://github.com/llvm/llvm-project/blob/main/mlir/tools/mlir-cpu-runner/mlir-cpu-runner.cpp
 
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/ExecutionEngine/JitRunner.h"
-#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 

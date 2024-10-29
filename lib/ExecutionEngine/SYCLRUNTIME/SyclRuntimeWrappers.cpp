@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <array>
-#include <atomic>
 #include <cassert>
 #include <cfloat>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
-#include <tuple>
 #include <vector>
 
 #include <level_zero/ze_api.h>

@@ -18,7 +18,6 @@
 #include <unordered_set>
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
-#include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeCommon.h"
 #include "llvm/Support/FormatVariadic.h"
 
