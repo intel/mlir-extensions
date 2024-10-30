@@ -208,7 +208,6 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     mlir::OneToNTypeMapping newMapping(op.getResult().getType());
     newMapping.addInputs(0, newResultTypes);
     rewriter.replaceOp(op, newInitTileOps, newMapping);
-
     return mlir::success();
   }
 };
@@ -358,7 +357,6 @@ struct WGToSGSCFYieldOpPattern : public XeOneToNConversion<mlir::scf::YieldOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::YieldOp op, OpAdaptor adaptor,
                   imex::XeOneToNPatternRewriter &rewriter) const override {
-
     llvm::SmallVector<mlir::Value> convertedResults;
     llvm::SmallVector<mlir::Type> newResultTypes;
     for (auto &values : adaptor.getResults())
@@ -383,7 +381,6 @@ class WGToSGUpdateTileOffsetOpPattern
   mlir::LogicalResult
   matchAndRewrite(xetile::UpdateTileOffsetOp op, OpAdaptor adaptor,
                   XeOneToNPatternRewriter &rewriter) const override {
-
     llvm::SmallVector<::mlir::Value> newUpdateTileOffsetOps;
     llvm::SmallVector<mlir::Type> newResultTypes;
     for (auto tile : adaptor.getTile()) {
@@ -582,6 +579,47 @@ class WGToSGVectorTranspose
 };
 
 
+
+class WGToSGVectorBroadcast
+    :public XeOneToNConversion<mlir::vector::BroadcastOp> {
+  using XeOneToNConversion<mlir::vector::BroadcastOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::BroadcastOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+    if (op.getVector().getType().getRank() != 2)
+      return mlir::failure();
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto srcTy =  mlir::dyn_cast<mlir::VectorType>((adaptor.getSource()[0]).getType());
+    auto srcShape = srcTy.getShape();
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+    auto newTy = mlir::VectorType::get({sgData[0], sgData[1]},
+                                       resType.getElementType());
+    auto dstShape = newTy.getShape();
+
+    if (!(srcShape[0] == 1 && srcShape[1] == dstShape[1]) &&
+        !(srcShape[1] == 1 && srcShape[0] == dstShape[0]))
+      return mlir::failure();
+
+    auto newOp = rewriter.create<mlir::vector::BroadcastOp>(
+            op.getLoc(), newTy, adaptor.getSource()[0]);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+
 // TODO: Add more pre-ops
 bool isElementWiseOp(mlir::Operation *op) {
   return llvm::isa<mlir::arith::AddFOp>(op) ||
@@ -639,18 +677,15 @@ void analyzeInitTileOps(mlir::Operation *op) {
         llvm::cast<mlir::vector::TransposeOp>(*loadUser->user_begin());
     ops.push_back(transposeOp);
 
-    // Check if the transpose has only one user and that user is a TileMMAOp
-    // or a pre-op followed by TileMMA
-    if (!transposeOp->hasOneUse())
-      return mlir::WalkResult::skip();
-
     auto consumerOp = *transposeOp->user_begin();
 
     // Check if vector.transpose is consumed by TileMMA directly or
     // is consumed by some pre-op and then TileMMA.
     if(!llvm::isa<imex::xetile::TileMMAOp>(consumerOp)){
-      if(!isElementWiseOp(consumerOp))
+      if(!isElementWiseOp(consumerOp) &&
+         !(llvm::isa<mlir::vector::BroadcastOp>(consumerOp))) {
         return mlir::WalkResult::skip();
+      }
       else {
         if (!(consumerOp->hasOneUse() &&
               llvm::isa<imex::xetile::TileMMAOp>(*consumerOp->user_begin())))
@@ -676,7 +711,8 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
   patterns.insert<WGToSGInitTileOpPattern, WGToSGLoadTileOpPattern,
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
-                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose>(patterns.getContext(), converter,
+                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose,
+                  WGToSGVectorBroadcast>(patterns.getContext(), converter,
                                            analysis);
   patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
@@ -777,7 +813,8 @@ public:
         });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
-                                 mlir::math::ExpOp, mlir::vector::TransposeOp>(
+                                 mlir::math::ExpOp, mlir::vector::TransposeOp,
+                                 mlir::vector::BroadcastOp>(
         [&](mlir::Operation *op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
               op->getAttr("map"));
