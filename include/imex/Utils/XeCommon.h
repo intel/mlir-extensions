@@ -17,6 +17,7 @@
 #define _IMEX_XECOMMON_H_
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/SmallVector.h"
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
@@ -120,6 +121,8 @@ public:
             // info is needed for downstream optimizations.
             transposeBeforeDPAS = true;
             q.push_back(transpose);
+          } else if (mlir::OpTrait::hasElementwiseMappableTraits(user)) {
+            q.push_back(user->getResult(0));
           }
         }
       }
