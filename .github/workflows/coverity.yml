@@ -67,7 +67,7 @@ jobs:
       - name: Add coverity inputs to env
         run: |
           version="$(git rev-parse --short HEAD)"
-          email="alexei.fedotov@intel.com"
+          email="igor.zamyatin@intel.com"
           project_id=30755
 
           echo "project_id=$project_id" | tee -a $GITHUB_ENV

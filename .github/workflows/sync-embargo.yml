@@ -39,8 +39,8 @@ jobs:
       - name: Merge Upstream to imex-embargo
         run: |
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
-          git config --global user.email "alexei.fedotov@gmail.com"
-          git config --global user.name "Alexei Fedotov"
+          git config --global user.email "igor.zamyatin@intel.com"
+          git config --global user.name "Igor Zamyatin"
           git merge origin/main --no-edit
       - name: Push
         run: |
