@@ -199,7 +199,7 @@ static std::string getLSCIntrinsicStr(llvm::StringRef opName, int simd_lanes,
 // lsc.load/store/prefetch.2d.ugm. The fullname is in format of
 //    1. lsc.load.2d.ugm.desc.<transform>.<retType>.<cache_controls>
 //    2. lsc.store.2d.ugm.desc.<cacheCtrType>.<dataType>
-//    3. lsc.prefetch.2d.ugm.desc.<predType>
+//    3. lsc.prefetch.2d.ugm.desc.<predType>.<dataType>
 // All the types are encoded as vN[i/f]M, where N is the number of elements,
 // and M is the bit width. So for vector<16xf32>, it will be v16f32, and for
 // vector<16xi1>, it will be v16i1. cacheCtrType is fixed to vNi8, where N is
@@ -228,8 +228,8 @@ static std::string getBlockIntrinsicStr(llvm::StringRef opName,
                          cache_levels, dataTyStr)
         .str();
   } else if (opName == "prefetch") {
-    return llvm::formatv("llvm.genx.lsc.prefetch.2d.ugm.desc.v{0}i8",
-                         cache_levels)
+    return llvm::formatv("llvm.genx.lsc.prefetch.2d.ugm.desc.v{0}i8.{1}",
+                         cache_levels, dataTyStr)
         .str();
   }
   llvm_unreachable("unsupported opName");
@@ -675,34 +675,22 @@ gen2DPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
   assert(tdescTy.getRank() == 2 && !tdescTy.isScattered() &&
          "Only works on 2D block TensorDesc.");
 
-  auto intrinsicStr = getBlockIntrinsicStr("prefetch");
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
+  auto elemTy = tdescTy.getElementType();
   auto noRetTy = TypeRange({});
-  auto bitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
+  auto bitWidth = elemTy.getIntOrFloatBitWidth();
+  auto prefix = elemTy.isInteger() ? "i" : elemTy.isBF16() ? "bf" : "f";
+  auto typeStr = llvm::formatv("{0}{1}", prefix, bitWidth).str();
+  auto intrinsicStr = getBlockIntrinsicStr("prefetch", typeStr);
 
-  // Sub 32bit data types are packed into 32bit data types (i32).
-  auto packFactor = 32 / bitWidth;
-
-  // If packing is needed, the innermost dimensions gets scaled by the packing
-  // factor. In such case, the shape[1] must be a multiple of the pack factor.
-  // Otherwise, packing cannot be done correctly
-  if (packFactor > 1) {
-    assert(
-        shape[1] % packFactor == 0 &&
-        "shape[1] must be a multiple of pack factor (32 / element bitwidth)");
-  }
-
-  // for arg8: dummy value, type has to be always the same since intrinsic
-  // func name for prefetch is the same regardless of the element type.
-  // Different type used for dummy causes type conflict in case of multiple
-  // calls with different dummy arg type.
-  auto attr = (TypedAttr)rewriter.getIntegerAttr(rewriter.getI32Type(), 0);
+  // for arg8: dummy value
+  auto attr = elemTy.isInteger()
+                  ? (TypedAttr)rewriter.getIntegerAttr(elemTy, 0)
+                  : (TypedAttr)rewriter.getFloatAttr(elemTy, 0.0);
   auto dummy = constant_val(attr);
-  return gen2DBlockIntrinsicCall(
-      rewriter, loc, intrinsicStr, noRetTy, l1, l3, nblks,
-      {shape[0], bitWidth == 64 ? shape[1] * 2 : shape[1] / packFactor},
-      payload, dummy);
+  return gen2DBlockIntrinsicCall(rewriter, loc, intrinsicStr, noRetTy, l1, l3,
+                                 nblks, shape, payload, dummy);
 }
 
 // generate a call to lsc.store.2d.ugm.* intrinsic for 2D block store, which is
