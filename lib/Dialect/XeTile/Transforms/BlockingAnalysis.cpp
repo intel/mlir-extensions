@@ -750,9 +750,11 @@ template <typename Integertype>
 Block BlockingAnalysisImpl::getInnerBlockSize(
     mlir::Operation *op, mlir::Type elemTy, llvm::ArrayRef<Integertype> &shape,
     int memorySpace) {
-  assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
-  int elemSize = elemTy.getIntOrFloatBitWidth();
+  // TODO: is it safe to treat index as 32 bit integer?
+  // Expecting index vector is mainly used for gather/scatter ops on SLM.
+  // in which the address is 32-bit.
+  int elemSize = elemTy.isIntOrFloat() ? elemTy.getIntOrFloatBitWidth() : 32;
   const int64_t subgroupSize = uArch->getOneGRFSizeBits() / elemSize;
 
   int maxHeight = 0, minHeight = 0, maxWidth = 0, minWidth = 0;
