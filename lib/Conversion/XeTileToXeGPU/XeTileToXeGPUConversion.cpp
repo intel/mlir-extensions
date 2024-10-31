@@ -185,8 +185,12 @@ XeOneToNTypeConverter::computeTypeMapping(mlir::ValueRange original,
         return mlir::failure();
       auto shape = tileTy.getShape();
       auto blkSZ = tdescTy.getShape();
-      auto arr_len = tdescTy.getArrayLength();
-      auto size = shape[0] / blkSZ[0] * shape[1] / (blkSZ[1] * arr_len);
+      auto arr_len = tdescTy.isScattered() ? 1 : tdescTy.getArrayLength();
+      auto totalNumElems =
+          std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<>{});
+      auto blockNumElems =
+          std::accumulate(blkSZ.begin(), blkSZ.end(), 1, std::multiplies<>{});
+      auto size = totalNumElems / blockNumElems / arr_len;
       llvm::ArrayRef<mlir::Type> types(convertedTypes.begin() + j,
                                        convertedTypes.begin() + j + size);
       resultMap.addInputs(i, types);

@@ -54,7 +54,6 @@ public:
     addLegalOp<mlir::vector::ReductionOp>();
     addLegalOp<mlir::vector::ShuffleOp>();
     addLegalOp<mlir::vector::ShapeCastOp>();
-    addLegalOp<mlir::vector::SplatOp>();
     addLegalOp<mlir::memref::ReinterpretCastOp>();
 
     addLegalDialect<mlir::xegpu::XeGPUDialect>();
@@ -168,6 +167,10 @@ public:
         [](mlir::vector::TransposeOp op) {
           return op.getResult().getType().getRank() == 2;
         });
+
+    addDynamicallyLegalOp<mlir::vector::SplatOp>([&](mlir::vector::SplatOp op) {
+      return op.getAggregate().getType().getRank() != 4;
+    });
   }
 
 private:
