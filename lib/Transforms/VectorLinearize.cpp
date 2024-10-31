@@ -33,6 +33,34 @@ namespace imex {
 } // namespace imex
 
 namespace {
+
+// rewrite arith.constant op in form of vector<1xmxindex> into 1D form
+// (vector<mxindex>)
+struct ArithConstantOpConversion final
+    : public mlir::OpConversionPattern<mlir::arith::ConstantOp> {
+  using mlir::OpConversionPattern<mlir::arith::ConstantOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::ConstantOp constOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(constOp.getValue());
+    if (!value || value.getType().getRank() != 2)
+      return mlir::failure();
+    auto type = value.getType();
+    auto shape = type.getShape();
+    auto elemTy = type.getElementType();
+    if (shape[0] != 1 || !elemTy.isIndex())
+      return mlir::failure();
+    auto newTy = mlir::VectorType::get({shape[1]}, elemTy);
+    value = value.reshape(newTy);
+    auto newOp =
+        rewriter.create<mlir::arith::ConstantOp>(constOp.getLoc(), value);
+    auto castOp = rewriter.create<mlir::vector::ShapeCastOp>(constOp.getLoc(),
+                                                             type, newOp);
+    rewriter.replaceOp(constOp, castOp);
+    return mlir::success();
+  }
+};
+
 struct VectorLoadOpConversion final
     : public mlir::OpConversionPattern<mlir::vector::LoadOp> {
   using mlir::OpConversionPattern<mlir::vector::LoadOp>::OpConversionPattern;
@@ -485,11 +513,29 @@ struct VectorLinearizePass final
           return (op && op.getAggregate().getType().getRank() == 1);
         });
 
+    // borrowed from upstream with hacking for index type. Currently
+    // we only target vector<1xmxindex> to vector<mxindex> conversion. It is
+    // unclear whether others are valid or not; thus they are left untouched.
+    target.addDynamicallyLegalOp<mlir::arith::ConstantOp>(
+        [&](mlir::arith::ConstantOp op) -> bool {
+          auto vecTy = mlir::dyn_cast<mlir::VectorType>(op.getType());
+          if (!vecTy || vecTy.getRank() == 0)
+            return true;
+
+          auto elemTy = vecTy.getElementType();
+          if (elemTy.isIndex()) {
+            if (vecTy.getRank() == 2 && vecTy.getShape()[0] == 1)
+              return false;
+            return true;
+          }
+          return !mlir::vector::isLinearizableVector(vecTy);
+        });
+
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,
-                 VectorStoreOpConversion, VectorCreateMaskOpConversion>(
-        typeConverter, context);
+                 VectorStoreOpConversion, VectorCreateMaskOpConversion,
+                 ArithConstantOpConversion>(typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

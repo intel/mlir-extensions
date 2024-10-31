@@ -113,6 +113,9 @@ static bool isVNNIApplicable(mlir::Type type) {
   // VNNI transform only available for 2D vectors.
   if (!vecTy || vecTy.getRank() != 2)
     return false;
+  auto elemTy = vecTy.getElementType();
+  if (!elemTy.isIntOrFloat())
+    return false;
   auto factor = getVnniFactor(vecTy.getElementType());
   auto shape = vecTy.getShape();
   // factor == 1 means 32-bit data, and no need to apply VNNI.
