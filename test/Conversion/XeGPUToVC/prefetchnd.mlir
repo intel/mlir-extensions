@@ -4,6 +4,7 @@
 module @gemm attributes {gpu.container_module} {
 
   gpu.module @test_kernel {
+
     gpu.func @test_prefetch(%arg0: memref<8x16xf16>, %arg1: memref<16x16xf16>, %arg2: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
 
       //CHECK: %[[intptr:.*]] = memref.extract_aligned_pointer_as_index %{{.*}} : memref<8x16xf16> -> index
@@ -50,14 +51,15 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r26:.*]] = vector.insert %[[c1807_i32]], %[[r25]] [7] : i32 into vector<16xi32>
       %2 = xegpu.create_nd_tdesc %arg2[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
 
+      //LSC: %[[cst_2:.*]] = arith.constant 0.000000e+00 : f16
       //LSC: %[[true:.*]] = arith.constant true
       //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
       //LSC: %[[r27:.*]] = vector.from_elements %[[c0_i8]], %[[c0_i8]] : vector<2xi8>
       //LSC: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
-      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8(%[[true]], %[[r27]], %[[c1_i8]], %[[c8_i16]], %[[c8_i16]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[c0_i32]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, i32) -> ()
       //LSC: %[[c16_i16:.*]] = arith.constant 16 : i16
-      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8(%[[true]], %[[r27]], %[[c1_i8]], %[[c8_i16]], %[[c16_i16]], %[[r17]], %[[c0_i32]], %[[c0_i32]], %[[c0_i32]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, i32) -> ()
+      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
+      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8.f16(%[[true]], %[[r27]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[cst_2]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, f16) -> ()
+      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8.f16(%[[true]], %[[r27]], %[[c1_i8]], %[[c16_i16]], %[[c16_i16]], %[[r17]], %[[c0_i32]], %[[c0_i32]], %[[cst_2]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, f16) -> ()
       xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
       xegpu.prefetch_nd %1 : !xegpu.tensor_desc<16x16xf16>
 
@@ -94,14 +96,16 @@ module @two_type attributes {gpu.container_module} {
       %2 = xegpu.create_nd_tdesc %arg2[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
 
       //LSC: %[[c0_i32:.*]] = arith.constant 0 : i32
+      //LSC: %[[c0_f16:.*]] = arith.constant 0.000000e+00 : f16
       //LSC: %[[true:.*]] = arith.constant true
       //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
       //LSC: %[[r27:.*]] = vector.from_elements %[[c0_i8]], %[[c0_i8]] : vector<2xi8>
       //LSC: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
-      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8(%[[true]], %[[r27]], %[[c1_i8]], %[[c8_i16]], %[[c8_i16]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[c0_i32]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, i32) -> ()
       //LSC: %[[c16_i16:.*]] = arith.constant 16 : i16
-      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8(%[[true]], %[[r27]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r17]], %[[c0_i32]], %[[c0_i32]], %[[c0_i32]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, i32) -> ()
+      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
+      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8.f16(%[[true]], %[[r27]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r8]], %[[c0_i32]], %[[c0_i32]], %[[c0_f16]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, f16) -> ()
+      //LSC: %[[c0_f32:.*]] = arith.constant 0.000000e+00 : f32
+      //LSC: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8.f32(%[[true]], %[[r27]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r17]], %[[c0_i32]], %[[c0_i32]], %[[c0_f32]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, f32) -> ()
       xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
       xegpu.prefetch_nd %1 : !xegpu.tensor_desc<8x16xf32>
 
