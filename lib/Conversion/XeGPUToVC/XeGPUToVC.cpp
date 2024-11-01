@@ -865,6 +865,9 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     RewritePatternSet patterns(&getContext());
     ConversionTarget target(getContext());
 
+    // Configure the legality of the conversion target for MathToVC patterns.
+    configureMathToVCConversionLegality(target);
+
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
                            memref::MemRefDialect, vector::VectorDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
@@ -959,8 +962,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     populateLoadStoreLSCPatterns(typeConverter, patterns);
 
     populateMathToVCPatterns(typeConverter, patterns);
-
-    configureMathToVCConversionLegality(target);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();

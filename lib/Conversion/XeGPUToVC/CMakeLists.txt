@@ -11,6 +11,7 @@ add_imex_conversion_library(IMEXXeGPUToVC
   #LINK_COMPONENTS
 
   LINK_LIBS PUBLIC
+  IMEXMathToVC
   MLIRIR
   MLIRSupport
   # MLIRTransforms
