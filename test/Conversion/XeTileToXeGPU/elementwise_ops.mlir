@@ -22,6 +22,38 @@
         gpu.return
     }
 
+    gpu.func @arith_binary_ops_int() {
+        %0 = arith.constant dense<1>: vector<4x4x16x16xi16>
+        %1 = arith.constant dense<2>: vector<64x4x1x16xi16>
+        %2 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}: vector<4x4x16x16xi16> -> vector<64x64xi16>
+        %3 = xetile.tile_pack %2 {inner_blocks = array<i64: 1, 16>}: vector<64x64xi16> -> vector<64x4x1x16xi16>
+        // CHECK-COUNT-256: arith.addi {{.*}}, {{.*}} : vector<1x16xi16>
+        // CHECK-COUNT-256: arith.subi
+        // CHECK-COUNT-256: arith.muli
+        // CHECK-COUNT-256: arith.maxsi
+        // CHECK-COUNT-256: arith.maxui
+        // CHECK-COUNT-256: arith.minsi
+        // CHECK-COUNT-256: arith.minui
+        // CHECK-COUNT-256: arith.divsi
+        // CHECK-COUNT-256: arith.divui
+        // CHECK-COUNT-256: arith.remsi
+        // CHECK-COUNT-256: arith.remui
+        // CHECK-COUNT-256: arith.andi
+        %result = arith.addi %3, %1 : vector<64x4x1x16xi16>
+        %subi_result = arith.subi %3, %1 : vector<64x4x1x16xi16>
+        %muli_result = arith.muli %subi_result, %1 : vector<64x4x1x16xi16>
+        %maxsi_result = arith.maxsi %muli_result, %1 : vector<64x4x1x16xi16>
+        %maxui_result = arith.maxui %muli_result, %1 : vector<64x4x1x16xi16>
+        %minsi_result = arith.minsi %maxsi_result, %muli_result : vector<64x4x1x16xi16>
+        %minui_result = arith.minui %maxui_result, %muli_result : vector<64x4x1x16xi16>
+        %divsi_result = arith.divsi %minui_result, %1 : vector<64x4x1x16xi16>
+        %divui_result = arith.divui %minui_result, %1 : vector<64x4x1x16xi16>
+        %remsi_result = arith.remsi %minsi_result, %divsi_result : vector<64x4x1x16xi16>
+        %remui_result = arith.remui %minui_result, %divui_result : vector<64x4x1x16xi16>
+        %and_result = arith.andi %remsi_result, %remui_result : vector<64x4x1x16xi16>
+        gpu.return
+    }
+
     gpu.func @arith_xori_ops() {
         %0 = arith.constant dense<1>: vector<4x4x16x16xi16>
         %1 = arith.constant dense<2>: vector<64x4x1x16xi16>
