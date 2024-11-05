@@ -91,11 +91,19 @@ public:
     // Arith ops
     addDynamicallyLegalOp<mlir::arith::AddFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::AddIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::AndIOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::DivFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::DivSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::DivUIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::MulFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::MulIOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::CmpFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
@@ -105,15 +113,27 @@ public:
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::SubFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::SubIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::MaximumFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::MaxSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::MaxUIOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::RemFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::RemSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::RemUIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::NegFOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
-    addDynamicallyLegalOp<mlir::arith::MaximumFOp>(
-        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::MinimumFOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::MinSIOp>(
+        [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
+    addDynamicallyLegalOp<mlir::arith::MinUIOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
     addDynamicallyLegalOp<mlir::arith::SelectOp>(
         [&](mlir::Operation *op) -> bool { return isLegalElementWiseOp(op); });
