@@ -1258,6 +1258,8 @@ void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
       SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern,
       SgTileReductionOpPattern, SgVectorCreateMaskOpPattern>(
       patterns.getContext(), converter, analysis);
+
+  // Element-wise math operations
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
                   ElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   ElementWiseOpPattern<mlir::math::SinOp, 1>,
@@ -1267,16 +1269,30 @@ void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
                   ElementWiseOpPattern<mlir::math::LogOp, 1>,
                   ElementWiseOpPattern<mlir::math::RsqrtOp, 1>,
                   ElementWiseOpPattern<mlir::math::ErfOp, 1>,
-                  ElementWiseOpPattern<mlir::arith::AddFOp, 2>,
-                  ElementWiseOpPattern<mlir::arith::AndIOp, 2>,
-                  ElementWiseOpPattern<mlir::arith::RemFOp, 2>,
+                  ElementWiseOpPattern<mlir::math::PowFOp, 2>>(
+      patterns.getContext(), converter, analysis);
+
+  // Element-wise arithmetic operations
+  patterns.insert<ElementWiseOpPattern<mlir::arith::AddFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::AddIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::DivFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::DivSIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::DivUIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::MulFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MulIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::MaximumFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MaxSIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MaxUIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::MinimumFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MinSIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::MinUIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::RemFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::RemSIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::RemUIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::SubFOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::SubIOp, 2>,
+                  ElementWiseOpPattern<mlir::arith::AndIOp, 2>,
                   ElementWiseOpPattern<mlir::arith::XOrIOp, 2>,
-                  ElementWiseOpPattern<mlir::math::PowFOp, 2>,
                   ElementWiseOpPattern<mlir::arith::SelectOp, 3>>(
       patterns.getContext(), converter, analysis);
   patterns.insert<TypecastOpPattern<mlir::arith::ExtFOp>,
