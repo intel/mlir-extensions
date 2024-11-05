@@ -77,3 +77,4 @@ module @eltwise_int attributes {gpu.container_module} {
 
   func.func private @printMemrefI32(memref<*xi32>) attributes {llvm.emit_c_interface}
 }
+
