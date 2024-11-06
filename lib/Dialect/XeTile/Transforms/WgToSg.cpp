@@ -585,9 +585,9 @@ class WGToSGVectorTranspose
 // 3. Load the vector from slm using the result layout
 
 // Example:
-// WG IR 
-// #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]> 
-// #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> 
+// WG IR
+// #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+// #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]>
 // %vector_a = xetile.tile_conv_layout %vector_b {wg_map_result = #wg_map_a, wg_map_source = #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 
 // SG IR
@@ -613,7 +613,7 @@ class WGToSGXeTileConvertLayout
     auto elemTy = resType.getElementType();
     auto resShape = resType.getShape();
 
-    auto dstMapAttr = 
+    auto dstMapAttr =
         llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("wg_map_result"));
 
     xetile::WorkGroupMapAttr srcMapAttr;
@@ -622,7 +622,7 @@ class WGToSGXeTileConvertLayout
     if (!dstMapAttr) {
       return mlir::failure();
     }
-    
+
     if(!srcMapAttr) {
       // Get the map from operand
       auto operand = op.getSource().getDefiningOp();
@@ -642,7 +642,7 @@ class WGToSGXeTileConvertLayout
       return rewriter.create<mlir::arith::ConstantOp>(loc, type, attr);
     };
 
-    rewriter.setInsertionPoint(op);  
+    rewriter.setInsertionPoint(op);
     // Allocate SLM
     // TODO: Allocate slm as 1D array of i8, and then create the expected view on it.
     auto slmTy = mlir::MemRefType::get({resShape[0], resShape[1]}, elemTy, {}, 3);
@@ -675,11 +675,11 @@ class WGToSGXeTileConvertLayout
         nullptr /*scatterAttr*/);
     xetile::TileType srcTileTy =
       imex::xetile::TileType::get({srcMapSgData[0], srcMapSgData[1]}, elemTy, attr);
-   
+
     auto storeOffsetX = rewriter.createOrFold<mlir::index::MulOp>(
                 loc, storeSgIdX, createIndexConstant(indexType, srcMapSgData[0]));
     auto storeOffsetY = rewriter.createOrFold<mlir::index::MulOp>(
-                loc, storeSgIdY, createIndexConstant(indexType, srcMapSgData[1]));  
+                loc, storeSgIdY, createIndexConstant(indexType, srcMapSgData[1]));
     auto storeInitTileOp = rewriter.create<xetile::InitTileOp>(
           loc, srcTileTy, slm, llvm::ArrayRef<mlir::OpFoldResult>({storeOffsetX, storeOffsetY}));
     rewriter.create<xetile::StoreTileOp>(loc, adaptor.getSource()[0],
@@ -687,13 +687,13 @@ class WGToSGXeTileConvertLayout
 
     // Add barrier
     rewriter.create<mlir::gpu::BarrierOp>(loc);
-    
+
     // Load from SLM with result map
     xetile::TileType dstTileTy =
       imex::xetile::TileType::get({dstMapSgData[0], dstMapSgData[1]}, elemTy, attr);
     auto newResTy =
           mlir::VectorType::get({dstMapSgData[0], dstMapSgData[1]}, elemTy);
-    
+
     auto dstMapDimY = createIndexConstant(indexType, dstSgLayout[1]);
     auto loadSgIdX = rewriter.create<mlir::index::FloorDivSOp>(loc, sgId, dstMapDimY);
     auto loadSgIdY =  rewriter.create<mlir::index::RemUOp>(loc, sgId, dstMapDimY);
@@ -705,7 +705,7 @@ class WGToSGXeTileConvertLayout
           loc, dstTileTy, slm, llvm::ArrayRef<mlir::OpFoldResult>({loadOffsetX, loadOffsetY}));
     auto loadTile = rewriter.create<xetile::LoadTileOp>(
           loc, newResTy, loadInitTileOp, mlir::Attribute());
-    
+
     rewriter.replaceOp(op, loadTile);
     return mlir::success();
     }
