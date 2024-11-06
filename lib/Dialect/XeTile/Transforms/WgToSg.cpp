@@ -750,14 +750,6 @@ class WGToSGVectorBroadcast
   }
 };
 
-
-// TODO: Add more pre-ops
-bool isElementWiseOp(mlir::Operation *op) {
-  return llvm::isa<mlir::arith::AddFOp>(op) ||
-         llvm::isa<mlir::arith::MulFOp>(op) ||
-         llvm::isa<mlir::math::ExpOp>(op);
-}
-
 // Helper function to analyze the def-use chain of initTileOps. Currently we
 // pattern match the following def-use chain as a candidate for
 // load + tranpose optimization.
@@ -813,7 +805,7 @@ void analyzeInitTileOps(mlir::Operation *op) {
     // Check if vector.transpose is consumed by TileMMA directly or
     // is consumed by some pre-op and then TileMMA.
     if(!llvm::isa<imex::xetile::TileMMAOp>(consumerOp)){
-      if(!isElementWiseOp(consumerOp) &&
+      if(!OpTrait::hasElementwiseMappableTraits(consumerOp) &&
          !(llvm::isa<mlir::vector::BroadcastOp>(consumerOp))) {
         return mlir::WalkResult::skip();
       }
@@ -833,7 +825,6 @@ void analyzeInitTileOps(mlir::Operation *op) {
     return mlir::WalkResult::advance();
   });
 }
-
 
 void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
                                   mlir::RewritePatternSet &patterns,
