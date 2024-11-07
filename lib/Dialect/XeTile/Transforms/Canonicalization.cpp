@@ -272,10 +272,11 @@ struct VectorBroadcastToXetileBroadcastOpPattern
       newOp->setDiscardableAttrs(discardableAttrs);
       return mlir::success();
     }
-    // If ranks are same, inner dimension is stretched in vector.broadcast. So
-    // broadcast dimension is 1 for this case.
+    // If ranks are same, decide the broadcast dimension based on the source
+    // vector shape.
+    auto broadcastDim = (sourceShape[0] == 1) ? 0 : 1;
     auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
-        op, resultTy, op.getSource(), llvm::ArrayRef<int64_t>({1}));
+        op, resultTy, op.getSource(), llvm::ArrayRef<int64_t>({broadcastDim}));
     newOp->setDiscardableAttrs(discardableAttrs);
     return mlir::success();
   }

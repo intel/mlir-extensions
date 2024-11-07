@@ -270,6 +270,19 @@ gpu.module @test_module {
 
 // -----
 gpu.module @test_module {
+  gpu.func @test_broadcast_3(%arg0 : vector<1x16xf32>) -> vector<8x16xf32> {
+    %0 = vector.broadcast %arg0 : vector<1x16xf32> to vector<8x16xf32>
+    gpu.return %0 : vector<8x16xf32>
+  }
+}
+
+// CHECK-LABEL: @test_broadcast_3
+// CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: vector<1x16xf32>) -> vector<8x16xf32>
+// CHECK: %[[T0:.*]] = xetile.broadcast %[[ARG0]] [0] : vector<1x16xf32> -> vector<8x16xf32>
+// CHECK: gpu.return %[[T0]] : vector<8x16xf32>
+
+// -----
+gpu.module @test_module {
   gpu.func @test_multireduction_1(%arg0 : vector<64x256xf32>, %arg1 : vector<256xf32>) -> vector<256xf32> {
     %0 = vector.multi_reduction <add>, %arg0, %arg1 [0] : vector<64x256xf32> to vector<256xf32>
     gpu.return %0 : vector<256xf32>
