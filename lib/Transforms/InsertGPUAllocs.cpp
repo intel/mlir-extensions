@@ -277,8 +277,20 @@ public:
     // address space.
     auto isGpuAddrSpace = [&](mlir::Value memref) {
       if (auto type = mlir::dyn_cast<mlir::MemRefType>(memref.getType())) {
-        return mlir::isa_and_nonnull<mlir::gpu::AddressSpaceAttr>(
-            type.getMemorySpace());
+        auto memSpace = type.getMemorySpace();
+        if (!memSpace)
+          return false;
+
+        if (mlir::dyn_cast<mlir::gpu::AddressSpaceAttr>(memSpace))
+          return true;
+
+        // HACK: XeGPU dialect only understands integer memory spaces, meaning
+        // that we also have to check for them in order for XeGPU pipelines to
+        // work properly. MemSpace = 3 (gpu::Private) is used to describe SLM
+        // (shared local memory on GPU).
+        if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(memSpace))
+          return intAttr.getValue() ==
+                 static_cast<int64_t>(mlir::gpu::AddressSpace::Private);
       }
       return false;
     };
@@ -410,6 +422,8 @@ public:
     if (m_clientAPI == "opencl") {
       for (const auto &it : gpuBufferAllocs) {
         auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
+        if (isGpuAddrSpace(alloc))
+          continue;
         auto access = getAccessType(alloc);
         auto loc = alloc.getLoc();
         builder.setInsertionPoint(alloc);
