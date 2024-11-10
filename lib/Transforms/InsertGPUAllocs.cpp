@@ -286,10 +286,11 @@ public:
 
         // HACK: XeGPU dialect only understands integer memory spaces, meaning
         // that we also have to check for them in order for XeGPU pipelines to
-        // work properly. MemSpace = 3 is used to describe SLM (shared local
-        // memory on GPU).
+        // work properly. MemSpace = 3 (gpu::Private) is used to describe SLM
+        // (shared local memory on GPU).
         if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(memSpace))
-          return intAttr.getValue() == 3;
+          return intAttr.getValue() ==
+                 static_cast<int64_t>(mlir::gpu::AddressSpace::Private);
       }
       return false;
     };
