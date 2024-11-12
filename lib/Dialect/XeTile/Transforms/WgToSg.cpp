@@ -951,7 +951,7 @@ public:
             if (tileTy && tileTy.getWgMap())
               return false;
           }
-            return true;
+          return true;
         });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
@@ -965,7 +965,7 @@ public:
           else
             return false;
         });
-    
+
     target.addDynamicallyLegalOp<xetile::PrefetchTileOp>(
         [&](xetile::PrefetchTileOp op) -> bool {
           if (!op.getTile().getType().getWgMap())
