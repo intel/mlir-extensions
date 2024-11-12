@@ -750,6 +750,27 @@ class WGToSGVectorBroadcast
   }
 };
 
+
+class WGToSGPrefetchOpPattern : public XeOneToNConversion<xetile::PrefetchTileOp> {
+  using XeOneToNConversion<xetile::PrefetchTileOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::PrefetchTileOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+
+    auto L1 = op.getL1HintAttr();
+    auto L2 = op.getL2HintAttr();
+    auto L3 = op.getL3HintAttr();
+
+    for(auto tile : adaptor.getTile()) {
+      rewriter.create<xetile::PrefetchTileOp>(op.getLoc(),  tile, L1, L2, L3);
+    }
+
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 // Helper function to analyze the def-use chain of initTileOps. Currently we
 // pattern match the following def-use chain as a candidate for
 // load + tranpose optimization.
@@ -832,8 +853,10 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
   patterns.insert<WGToSGInitTileOpPattern, WGToSGLoadTileOpPattern,
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
-                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose, WGToSGVectorBroadcast,
-                  WGToSGXeTileConvertLayout>(patterns.getContext(), converter, analysis);
+                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose,
+                  WGToSGVectorBroadcast, WGToSGPrefetchOpPattern,
+                  WGToSGXeTileConvertLayout>(patterns.getContext(),
+                                             converter, analysis);
   patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
                   WGToSGArithConstantOpPattern>(patterns.getContext(),
@@ -922,14 +945,13 @@ public:
 
     target.addDynamicallyLegalOp<mlir::scf::YieldOp>(
         [&](mlir::scf::YieldOp op) -> bool {
-          for (auto result : op.getResults()) {
+          // For cases with scf.if having hidden yield
+          for (auto result: op.getResults()) {
             auto tileTy = mlir::dyn_cast<xetile::TileType>(result.getType());
-            if (!tileTy)
-              continue;
-            else if (!tileTy.getWgMap())
-              return true;
+            if (tileTy && tileTy.getWgMap())
+              return false;
           }
-          return false;
+            return true;
         });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
@@ -943,6 +965,19 @@ public:
           else
             return false;
         });
+    
+    target.addDynamicallyLegalOp<xetile::PrefetchTileOp>(
+        [&](xetile::PrefetchTileOp op) -> bool {
+          if (!op.getTile().getType().getWgMap())
+            return true;
+          else
+            return false;
+        });
+
+    target.addDynamicallyLegalOp<mlir::scf::IfOp>(
+    [&](mlir::scf::IfOp op) -> bool {
+          return true;
+    });
 
     target.addIllegalOp<xetile::ConvertLayoutOp>();
 
