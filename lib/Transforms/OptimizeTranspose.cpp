@@ -315,7 +315,7 @@ static mlir::Value createBlockLoad(mlir::TypedValue<mlir::MemRefType> slm,
         loc, tdescTy, slm, llvm::ArrayRef<mlir::OpFoldResult>({offset}));
     mlir::Value value = rewriter.create<mlir::xegpu::LoadNdOp>(
         loc, loadTy, tdesc, nullptr /*packed*/, nullptr /*transpose*/,
-        nullptr /*transpose_bit_width*/, nullptr /*l1_hint*/,
+        /* nullptr transpose_bit_width,*/ nullptr /*l1_hint*/,
         nullptr /*l2_hint*/, nullptr /*l3_hint*/);
     // if original data is not 32-bit, need to bitcast current 32-bit data
     //  back to original element type.
@@ -525,12 +525,12 @@ struct TransposeRewritePattern
       auto packedAttr = mlir::UnitAttr(); // empty packed attribute.
       auto transposeAttr =
           mlir::DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
-      auto transposeBitWidthAttr = mlir::IntegerAttr::get(
-          rewriter.getIntegerType(32),
-          32); // need to do a 32 bit transpose to get the packed layout.
+      // auto transposeBitWidthAttr = mlir::IntegerAttr::get(
+      //     rewriter.getIntegerType(32),
+      //     32); // need to do a 32 bit transpose to get the packed layout.
       auto newLoadOp = rewriter.create<mlir::xegpu::LoadNdOp>(
           loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), packedAttr,
-          transposeAttr, transposeBitWidthAttr, loadOp.getL1HintAttr(),
+          transposeAttr, /*transposeBitWidthAttr,*/ loadOp.getL1HintAttr(),
           loadOp.getL2HintAttr(), loadOp.getL3HintAttr());
       // Replace the uses of the packed layout conversion with new load.
       rewriter.replaceAllUsesWith(packedLayoutOps.back()->getResult(0),
@@ -554,7 +554,7 @@ struct TransposeRewritePattern
           mlir::DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
       auto newLoadOp = rewriter.create<mlir::xegpu::LoadNdOp>(
           loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), packedAttr,
-          transposeAttr, mlir::IntegerAttr(), loadOp.getL1HintAttr(),
+          transposeAttr, /*mlir::IntegerAttr(),*/ loadOp.getL1HintAttr(),
           loadOp.getL2HintAttr(), loadOp.getL3HintAttr());
       rewriter.replaceAllUsesWith(op.getResult(), newLoadOp.getResult());
     }

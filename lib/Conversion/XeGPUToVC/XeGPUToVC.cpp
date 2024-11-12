@@ -48,7 +48,7 @@ using mlir::scf::ForOp;
 using mlir::scf::YieldOp;
 using mlir::vector::ShapeCastOp;
 using mlir::xegpu::AllocNbarrierOp;
-using mlir::xegpu::CompileHintOp;
+// using mlir::xegpu::CompileHintOp;
 using mlir::xegpu::CreateDescOp;
 using mlir::xegpu::CreateNdDescOp;
 using mlir::xegpu::InitNbarrierOp;
@@ -592,13 +592,13 @@ public:
     OpBuilder::InsertionGuard guard(rewriter);
     auto func = op->getParentOfType<gpu::GPUFuncOp>();
     rewriter.setInsertionPointAfter(func);
-    auto executionModeAttr = spirv::ExecutionModeAttr::get(
-        rewriter.getContext(), spirv::ExecutionMode::NamedBarrierCountINTEL);
+    // auto executionModeAttr = spirv::ExecutionModeAttr::get(
+    //     rewriter.getContext(), spirv::ExecutionMode::NamedBarrierCountINTEL);
 
-    auto execModeFuncAttr = spirv::ExecutionModeFuncAttributeAttr::get(
-        rewriter.getContext(), executionModeAttr, op.getNbarrierNum());
+    // auto execModeFuncAttr = spirv::ExecutionModeFuncAttributeAttr::get(
+    //     rewriter.getContext(), executionModeAttr, op.getNbarrierNum());
 
-    func->setAttr("spirv.execution_mode", execModeFuncAttr);
+    // func->setAttr("spirv.execution_mode", execModeFuncAttr);
 
     rewriter.eraseOp(op);
     return success();
@@ -754,24 +754,24 @@ public:
   }
 };
 
-class CompilerHintPattern : public OpConversionPattern<CompileHintOp> {
-public:
-  using OpConversionPattern<CompileHintOp>::OpConversionPattern;
+// class CompilerHintPattern : public OpConversionPattern<CompileHintOp> {
+// public:
+//   using OpConversionPattern<CompileHintOp>::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(CompileHintOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
+//   LogicalResult
+//   matchAndRewrite(CompileHintOp op, OpAdaptor adaptor,
+//                   ConversionPatternRewriter &rewriter) const override {
+//     auto loc = op.getLoc();
 
-    std::string funcName = "llvm.genx.fence";
-    Value fence_flag = i8_val(-128);
-    SmallVector<Value> args{fence_flag};
+//     std::string funcName = "llvm.genx.fence";
+//     Value fence_flag = i8_val(-128);
+//     SmallVector<Value> args{fence_flag};
 
-    createFuncCall(rewriter, loc, funcName, TypeRange{}, args, false);
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
+//     createFuncCall(rewriter, loc, funcName, TypeRange{}, args, false);
+//     rewriter.eraseOp(op);
+//     return success();
+//   }
+// };
 
 static bool isGenericVectorTy(Type type) {
   if (isa<spirv::ScalarType>(type))
@@ -952,7 +952,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                                                         patterns.getContext());
 
     // Ops to llvm.genx only Patterns
-    patterns.add<NbarrierWaitPattern, CompilerHintPattern,
+    patterns.add<NbarrierWaitPattern, // CompilerHintPattern,
                  ElementwiseToVCPattern<arith::MaximumFOp>, DpasPattern,
                  NbarrierArrivePattern>(patterns.getContext());
 

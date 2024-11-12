@@ -55,7 +55,7 @@ public:
         // clang-format off
         spirv::Capability::Addresses,
         spirv::Capability::Bfloat16ConversionINTEL,
-        spirv::Capability::BFloat16TypeKHR,
+        // spirv::Capability::BFloat16TypeKHR,
         spirv::Capability::Float16Buffer,
         spirv::Capability::Int64,
         spirv::Capability::Int16,
@@ -81,7 +81,7 @@ public:
     spirv::Extension exts_opencl[] = {
         // clang-format off
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
-        spirv::Extension::SPV_KHR_bfloat16,
+        // spirv::Extension::SPV_KHR_bfloat16,
         spirv::Extension::SPV_KHR_expect_assume,
         spirv::Extension::SPV_INTEL_bfloat16_conversion,
         spirv::Extension::SPV_INTEL_vector_compute
