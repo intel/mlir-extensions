@@ -1090,6 +1090,32 @@ struct TypecastOpPattern : public XeOneToNConversion<CastOp> {
   }
 };
 
+struct SgArithCmpIOpPattern : public XeOneToNConversion<mlir::arith::CmpIOp> {
+  using XeOneToNConversion<mlir::arith::CmpIOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::CmpIOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+    if (!resType || resType.getRank() != 4)
+      return mlir::failure();
+
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+
+    llvm::SmallVector<mlir::Value> newOps;
+    for (auto [l, r] : llvm::zip_equal(lhs, rhs)) {
+      auto newOp = rewriter.create<mlir::arith::CmpIOp>(
+          op.getLoc(), op.getPredicate(), l, r);
+      newOps.push_back(newOp);
+    }
+
+    rewriter.replaceOp(op, newOps);
+    return mlir::success();
+  }
+};
+
 struct SgBroadcastOpPattern : public XeOneToNConversion<xetile::BroadcastOp> {
   using XeOneToNConversion<xetile::BroadcastOp>::XeOneToNConversion;
 
@@ -1256,8 +1282,8 @@ void populateXeTileOpConversionPatterns(imex::XeOneToNTypeConverter &converter,
       SgVectorSplatOpPattern, SgUpdateTileOffsetOpPattern,
       SgTransposeOpPattern<mlir::vector::TransposeOp>,
       SgTransposeOpPattern<xetile::TransposeOp>, SgBroadcastOpPattern,
-      SgTileReductionOpPattern, SgVectorCreateMaskOpPattern>(
-      patterns.getContext(), converter, analysis);
+      SgTileReductionOpPattern, SgVectorCreateMaskOpPattern,
+      SgArithCmpIOpPattern>(patterns.getContext(), converter, analysis);
 
   // Element-wise math operations
   patterns.insert<ElementWiseOpPattern<mlir::arith::NegFOp, 1>,
