@@ -178,15 +178,15 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
     if (it != opSgLayoutMap.end()){
      assert((opSgLayoutMap[op->getResult(0)] == std::array<int, 2>{0, 1}));
      calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
-                           sgLayout[0], sgDataDimYConst, sgIdX, offsets[0]);
+                           sgLayout[0], sgDataDimYConst, sgIdX, offsets[offsets.size() - 2]);
      calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
-                           sgLayout[1], sgDataDimXConst, sgIdY, offsets[1]);
+                           sgLayout[1], sgDataDimXConst, sgIdY, offsets[offsets.size() - 1]);
     }
     else {
     calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
-                           sgLayout[0], sgDataDimYConst, sgIdY, offsets[0]);
+                           sgLayout[0], sgDataDimYConst, sgIdY, offsets[offsets.size() - 2]);
     calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
-                           sgLayout[1], sgDataDimXConst, sgIdX, offsets[1]);
+                           sgLayout[1], sgDataDimXConst, sgIdX, offsets[offsets.size() - 1]);
     }
     // TODO: check for how to broadcast
     for (auto y : globalOffsetsY) {
@@ -197,9 +197,16 @@ class WGToSGInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 
     mlir::SmallVector<mlir::Value> newInitTileOps;
     llvm::SmallVector<mlir::Type> newResultTypes;
+    llvm::SmallVector<mlir::OpFoldResult> newOffsets;
+    for (size_t j = 0; j < offsets.size() - 2; ++j) {
+        newOffsets.push_back(offsets[j]);
+    }
     for (size_t i = 0; i < offsetPermutations.size(); i++) {
+      newOffsets.push_back(offsetPermutations[i][0]);
+      newOffsets.push_back(offsetPermutations[i][1]);
       auto newInitTileOp = rewriter.create<xetile::InitTileOp>(
-          loc, newTileTy, source, offsetPermutations[i]);
+          loc, newTileTy, source, newOffsets);
+      newOffsets.clear();
       newInitTileOps.push_back(newInitTileOp);
       newResultTypes.push_back(newTileTy);
     }
@@ -988,6 +995,8 @@ public:
 
     target.addDynamicallyLegalOp<mlir::scf::ForOp>(
         [&](mlir::scf::ForOp op) -> bool {
+          if(op.getInitArgs().empty())
+            return true;
           for (auto arg : op.getInitArgs()) {
             auto tileTy = mlir::dyn_cast<xetile::TileType>(arg.getType());
             if (!tileTy)
