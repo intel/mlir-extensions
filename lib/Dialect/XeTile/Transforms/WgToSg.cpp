@@ -538,6 +538,63 @@ class WGToSGArithConstantOpPattern
   }
 };
 
+// TODO: Templatize this pattern for similar elementwise ops
+class WGToSGArithExtFOpPattern
+    : public XeOneToNConversion<mlir::arith::ExtFOp> {
+  using XeOneToNConversion<mlir::arith::ExtFOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::ExtFOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+
+    auto newTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
+
+    auto newOp = rewriter.create<mlir::arith::ExtFOp>(op.getLoc(), newTy, adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+class WGToSGArithTruncFOpPattern
+    : public XeOneToNConversion<mlir::arith::TruncFOp> {
+  using XeOneToNConversion<mlir::arith::TruncFOp>::XeOneToNConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::TruncFOp op, OpAdaptor adaptor,
+                  XeOneToNPatternRewriter &rewriter) const override {
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+
+    auto newTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
+
+    auto newOp = rewriter.create<mlir::arith::TruncFOp>(op.getLoc(), newTy, adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
 class WGToSGVectorTranspose
     :public XeOneToNConversion<mlir::vector::TransposeOp> {
   using XeOneToNConversion<mlir::vector::TransposeOp>::XeOneToNConversion;
@@ -577,7 +634,6 @@ class WGToSGVectorTranspose
     }
   }
 };
-
 
 // This pattern transforms the convert layout op in the following manner:
 // 1. Store the original vector to slm using input operand layout
@@ -853,10 +909,9 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
   patterns.insert<WGToSGInitTileOpPattern, WGToSGLoadTileOpPattern,
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
-                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose,
-                  WGToSGVectorBroadcast, WGToSGPrefetchOpPattern,
-                  WGToSGXeTileConvertLayout>(patterns.getContext(),
-                                             converter, analysis);
+                  WGToSGSCFYieldOpPattern, WGToSGVectorTranspose, WGToSGVectorBroadcast,
+                  WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern, WGToSGArithExtFOpPattern,
+                  WGToSGArithTruncFOpPattern>(patterns.getContext(), converter, analysis);
   patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
                   WGToSGArithConstantOpPattern>(patterns.getContext(),
@@ -955,7 +1010,8 @@ public:
         });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
-                                 mlir::math::ExpOp, mlir::vector::TransposeOp,
+                                 mlir::math::ExpOp, mlir::arith::ExtFOp,
+                                 mlir::arith::TruncFOp, mlir::vector::TransposeOp,
                                  mlir::vector::BroadcastOp>(
         [&](mlir::Operation *op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
