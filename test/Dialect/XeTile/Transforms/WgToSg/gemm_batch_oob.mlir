@@ -65,4 +65,3 @@ module attributes {gpu.container_module} {
     }
   }
 }
-
