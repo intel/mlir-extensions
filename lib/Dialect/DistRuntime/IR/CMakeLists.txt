@@ -1,6 +1,5 @@
 add_imex_dialect_library(IMEXDistRuntimeDialect
   DistRuntimeOps.cpp
-  GetHaloOp.cpp
   CopyReshapeOp.cpp
   CopyPermuteOp.cpp
 
