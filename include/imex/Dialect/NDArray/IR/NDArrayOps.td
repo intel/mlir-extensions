@@ -59,8 +59,8 @@ def NDArray_Dialect : Dialect {
     let useDefaultAttributePrinterParser = true;
 }
 
-def NDArray_EnvironmentAttr : AttrDef<NDArray_Dialect, "Environment"> {
-  let mnemonic = "environment";
+def NDArray_EnvsAttr : AttrDef<NDArray_Dialect, "Envs"> {
+  let mnemonic = "envs";
   let parameters = (ins ArrayRefParameter<"::mlir::Attribute">:$envs);
   let assemblyFormat = "`<` $envs `>`";
 }
