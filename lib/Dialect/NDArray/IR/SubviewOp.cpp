@@ -22,8 +22,8 @@
 #include <mlir/IR/OpImplementation.h>
 
 mlir::RankedTensorType imex::ndarray::SubviewOp::inferResultType(
-    mlir::RankedTensorType sourceType,
-    mlir::ArrayRef<int64_t> staticOffsets, mlir::ArrayRef<int64_t> staticSizes,
+    mlir::RankedTensorType sourceType, mlir::ArrayRef<int64_t> staticOffsets,
+    mlir::ArrayRef<int64_t> staticSizes,
     mlir::ArrayRef<int64_t> staticStrides) {
   unsigned rank = sourceType.getRank();
   (void)rank;
@@ -120,8 +120,8 @@ void imex::ndarray::SubviewOp::build(
     mlir::ArrayRef<mlir::OpFoldResult> sizes,
     mlir::ArrayRef<mlir::OpFoldResult> strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
-        strides, attrs);
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes, strides,
+        attrs);
 }
 
 // Build a SubViewOp with static entries and inferred result type.
@@ -193,8 +193,8 @@ void imex::ndarray::SubviewOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
-        strides, attrs);
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes, strides,
+        attrs);
 }
 
 // Build a ExtractSliceOp with mixed static and dynamic entries and custom
@@ -248,8 +248,8 @@ void imex::ndarray::ExtractSliceOp::build(
     mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
     mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
     mlir::ArrayRef<mlir::NamedAttribute> attrs) {
-  build(b, result, mlir::RankedTensorType(), source, offsets, sizes,
-        strides, attrs);
+  build(b, result, mlir::RankedTensorType(), source, offsets, sizes, strides,
+        attrs);
 }
 
 // Copypasted from upstream tensor.
@@ -455,8 +455,7 @@ public:
       return mlir::failure();
     }
 
-    size_t rank =
-        mlir::cast<::mlir::RankedTensorType>(src.getType()).getRank();
+    size_t rank = mlir::cast<::mlir::RankedTensorType>(src.getType()).getRank();
     auto myOffs = op.getStaticOffsets();
     auto mySizes = op.getStaticSizes();
     auto myStrides = op.getStaticStrides();
@@ -502,7 +501,7 @@ public:
     if (!castOp)
       return mlir::failure();
 
-    if (!imex::ndarray::canFoldIntoConsumerOp(castOp))
+    if (!mlir::tensor::canFoldIntoConsumerOp(castOp))
       return mlir::failure();
 
     // Create folded extract.
@@ -512,8 +511,8 @@ public:
         sliceOp.getSizes(), sliceOp.getStrides(), sliceOp.getStaticOffsets(),
         sliceOp.getStaticSizes(), sliceOp.getStaticStrides());
     if (newResult.getType() != sliceOp.getType())
-      newResult = rewriter.create<::mlir::tensor::CastOp>(loc, sliceOp.getType(),
-                                                         newResult);
+      newResult = rewriter.create<::mlir::tensor::CastOp>(
+          loc, sliceOp.getType(), newResult);
     rewriter.replaceOp(sliceOp, newResult);
     return mlir::success();
   }

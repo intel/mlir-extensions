@@ -54,8 +54,8 @@ public:
     auto newOp = rewriter.create<imex::ndarray::CreateOp>(
         loc, newReturnType, shape, createOp.getValue());
     // cast to original type
-    rewriter.replaceOpWithNewOp<imex::ndarray::CastOp>(createOp, oldReturnType,
-                                                       newOp);
+    rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(createOp, oldReturnType,
+                                                        newOp);
 
     return mlir::success();
   }

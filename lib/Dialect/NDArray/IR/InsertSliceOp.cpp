@@ -152,7 +152,7 @@ public:
 #if 0 // FIXME
     auto srcTyp = ::mlir::dyn_cast<mlir::RankedTensorType>(
         insertSliceOp.getSource().getType());
-    if (srcTyp && srcTyp.hasZeroSize()) {
+    if (srcTyp && hasZeroSize(srcTyp.getShape())) {
       if (insertSliceOp->getNumResults() == 0) {
         rewriter.eraseOp(insertSliceOp);
       } else {
@@ -230,8 +230,8 @@ struct InsertSliceOpCastFolder final
       return mlir::failure();
 
     auto getSourceOfCastOp = [](mlir::Value v) -> std::optional<mlir::Value> {
-      auto castOp = v.getDefiningOp<imex::ndarray::CastOp>();
-      if (!castOp || !imex::ndarray::canFoldIntoConsumerOp(castOp))
+      auto castOp = v.getDefiningOp<mlir::tensor::CastOp>();
+      if (!castOp || !mlir::tensor::canFoldIntoConsumerOp(castOp))
         return std::nullopt;
       return castOp.getSource();
     };
@@ -253,7 +253,7 @@ struct InsertSliceOpCastFolder final
 
     if (hasReturnValue &&
         (dst.getType() != insertSliceOp.getDestinationType())) {
-      replacement = rewriter.create<imex::ndarray::CastOp>(
+      replacement = rewriter.create<mlir::tensor::CastOp>(
           insertSliceOp.getLoc(), insertSliceOp.getDestinationType(),
           replacement->getResult(0));
     }

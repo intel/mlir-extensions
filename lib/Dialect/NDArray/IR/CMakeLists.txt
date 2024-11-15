@@ -4,12 +4,8 @@ add_imex_dialect_library(IMEXNDArrayDialect
   InsertSliceOp.cpp
   CreateOp.cpp
   LinSpaceOp.cpp
-  CastOp.cpp
-  DimOp.cpp
-  EWBinOp.cpp
-  EWUnyOp.cpp
-  PermuteDimsOp.cpp
   DeleteOp.cpp
+  CastElemTypeOp.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/mlir/Dialect/NDArray

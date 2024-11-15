@@ -17,8 +17,6 @@
 
 #include "mlir/Pass/Pass.h"
 
-#include <imex/Conversion/ArithToVC/ArithToVC.h>
-#include <imex/Conversion/DistToStandard/DistToStandard.h>
 #include <imex/Conversion/DropRegions/DropRegions.h>
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
