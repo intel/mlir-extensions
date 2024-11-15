@@ -15,4 +15,5 @@ add_imex_dialect_library(IMEXNDArrayDialect
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRTensorDialect
 )
