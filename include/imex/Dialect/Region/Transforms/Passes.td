@@ -18,7 +18,7 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// DistCoalesce
+// RegionBufferize
 //===----------------------------------------------------------------------===//
 
 def RegionBufferize : Pass<"region-bufferize"> {
