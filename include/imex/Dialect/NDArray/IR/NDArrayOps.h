@@ -84,7 +84,7 @@ namespace ndarray {
 /// @return true if given NDArrayTYpe has this specific environment attribute
 template <typename T> bool hasEnv(const ::mlir::RankedTensorType &t) {
   auto encoding = t.getEncoding();
-  if (auto envs = ::mlir::dyn_cast<EnvironmentAttr>(encoding)) {
+  if (auto envs = ::mlir::dyn_cast<EnvsAttr>(encoding)) {
     for (auto a : envs.getEnvs()) {
       if (::mlir::isa<T>(a)) {
         return true;
@@ -103,7 +103,7 @@ inline bool hasGPUEnv(const ::mlir::Type &t) {
 inline ::imex::region::GPUEnvAttr getGPUEnv(const ::mlir::Type &t) {
   if (auto tt = ::mlir::dyn_cast<::mlir::RankedTensorType>(t)) {
     auto encoding = tt.getEncoding();
-    if (auto envs = ::mlir::dyn_cast<EnvironmentAttr>(encoding)) {
+    if (auto envs = ::mlir::dyn_cast<EnvsAttr>(encoding)) {
       for (auto a : envs.getEnvs()) {
         if (auto g = ::mlir::dyn_cast<::imex::region::GPUEnvAttr>(a)) {
           return g;
