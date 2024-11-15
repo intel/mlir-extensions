@@ -671,7 +671,7 @@ def ReshapeOp : NDArray_Op<"reshape", []> {
 def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
     let summary = "Cast array from one element type to another";
 
-    let arguments = (ins AnyType:$input, OptionalAttr<I1Attr>:$copy);
+    let arguments = (ins AnyRankedTensor:$input, OptionalAttr<I1Attr>:$copy);
     let results = (outs AnyRankedTensor:$output);
 
     let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type($output))";

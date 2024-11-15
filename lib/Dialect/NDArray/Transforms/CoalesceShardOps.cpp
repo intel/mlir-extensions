@@ -55,7 +55,6 @@ namespace imex {
 #define GEN_PASS_DEF_COALESCESHARDOPS
 #include "imex/Dialect/NDArray/Transforms/Passes.h.inc"
 
-
 namespace {
 
 bool isCreator(::mlir::Operation *op) {
@@ -63,34 +62,19 @@ bool isCreator(::mlir::Operation *op) {
 }
 
 bool isElementwise(::mlir::Operation *op) {
-  return ::mlir::isa<::mlir::linalg::AbsOp,
-                    ::mlir::linalg::AddOp,
-                    ::mlir::linalg::CeilOp,
-                    ::mlir::linalg::Conv3DOp,
-                    ::mlir::linalg::CopyOp,
-                    ::mlir::linalg::DivOp,
-                    ::mlir::linalg::DivUnsignedOp,
-                    ::mlir::linalg::ElemwiseBinaryOp,
-                    ::mlir::linalg::ElemwiseUnaryOp,
-                    ::mlir::linalg::ErfOp,
-                    ::mlir::linalg::ExpOp,
-                    ::mlir::linalg::FillOp,
-                    ::mlir::linalg::FillRng2DOp,
-                    ::mlir::linalg::FloorOp,
-                    ::mlir::linalg::LogOp,
-                    ::mlir::linalg::MapOp,
-                    ::mlir::linalg::MaxOp,
-                    ::mlir::linalg::MinOp,
-                    ::mlir::linalg::MulOp,
-                    ::mlir::linalg::NegFOp,
-                    ::mlir::linalg::PowFOp,
-                    ::mlir::linalg::ReciprocalOp,
-                    ::mlir::linalg::RoundOp,
-                    ::mlir::linalg::RsqrtOp,
-                    ::mlir::linalg::SqrtOp,
-                    ::mlir::linalg::SquareOp,
-                    ::mlir::linalg::SubOp,
-                    ::mlir::linalg::TanhOp>(op);
+  return ::mlir::isa<
+      ::mlir::linalg::AbsOp, ::mlir::linalg::AddOp, ::mlir::linalg::CeilOp,
+      ::mlir::linalg::Conv3DOp, ::mlir::linalg::CopyOp, ::mlir::linalg::DivOp,
+      ::mlir::linalg::DivUnsignedOp, ::mlir::linalg::ElemwiseBinaryOp,
+      ::mlir::linalg::ElemwiseUnaryOp, ::mlir::linalg::ErfOp,
+      ::mlir::linalg::ExpOp, ::mlir::linalg::FillOp,
+      ::mlir::linalg::FillRng2DOp, ::mlir::linalg::FloorOp,
+      ::mlir::linalg::LogOp, ::mlir::linalg::MapOp, ::mlir::linalg::MaxOp,
+      ::mlir::linalg::MinOp, ::mlir::linalg::MulOp, ::mlir::linalg::NegFOp,
+      ::mlir::linalg::PowFOp, ::mlir::linalg::ReciprocalOp,
+      ::mlir::linalg::RoundOp, ::mlir::linalg::RsqrtOp, ::mlir::linalg::SqrtOp,
+      ::mlir::linalg::SquareOp, ::mlir::linalg::SubOp, ::mlir::linalg::TanhOp>(
+      op);
 }
 
 // *******************************
@@ -114,13 +98,13 @@ struct CoalesceShardOpsPass
     } else if (auto op = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(defOp)) {
       return getBaseArray(op.getSource());
     } else if (auto op =
-                  ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(defOp)) {
+                   ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(defOp)) {
       return getBaseArray(op.getDestination());
     } else if (auto op = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(defOp)) {
       // this is the only place where we expect block args
       return op.getSrc().getDefiningOp() ? getBaseArray(op.getSrc()) : op;
     } else if (auto op = ::mlir::dyn_cast<::mlir::UnrealizedConversionCastOp>(
-                  defOp)) {
+                   defOp)) {
       if (op.getInputs().size() == 1) {
         return getBaseArray(op.getInputs().front());
       }
@@ -139,20 +123,24 @@ struct CoalesceShardOpsPass
   /// propagates as it follows only supported ops, all other ops act as
   /// propagation barriers (e.g. InsertSliceOps) on the way it updates target
   /// info on SubviewOps and marks shardOps for elimination
-  bool backPropagateShardSizes(::mlir::IRRewriter &builder, ::mlir::Operation *op,
+  bool backPropagateShardSizes(::mlir::IRRewriter &builder,
+                               ::mlir::Operation *op,
                                const ::mlir::mesh::MeshSharding &sharding,
                                ::mlir::Operation *&nOp) {
     nOp = nullptr;
-    if (op == nullptr) return false;
+    if (op == nullptr)
+      return false;
 
-    auto assignSharding = [&](::mlir::Operation *op, const ::mlir::mesh::MeshSharding& sh) -> bool {
+    auto assignSharding = [&](::mlir::Operation *op,
+                              const ::mlir::mesh::MeshSharding &sh) -> bool {
       if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
         ::mlir::mesh::MeshSharding currSharding(typedOp.getSharding());
-        if(currSharding.equalSplitAndPartialAxes(sharding)) {
+        if (currSharding.equalSplitAndPartialAxes(sharding)) {
           assert(currSharding.getStaticHaloSizes().empty());
-          if(!currSharding.equalHaloAndShardSizes(sharding)) {
+          if (!currSharding.equalHaloAndShardSizes(sharding)) {
             builder.setInsertionPoint(op);
-            auto newSharding = builder.create<::mlir::mesh::ShardingOp>(op->getLoc(), sh);
+            auto newSharding =
+                builder.create<::mlir::mesh::ShardingOp>(op->getLoc(), sh);
             typedOp.getShardingMutable().assign(newSharding.getResult());
             return true;
           }
@@ -165,10 +153,14 @@ struct CoalesceShardOpsPass
     if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
       if (typedOp.getAnnotateForUsers()) {
         modified = assignSharding(typedOp, sharding);
-        if (modified) backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(), sharding, nOp);
+        if (modified)
+          backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(),
+                                  sharding, nOp);
       } else {
         auto srcOp = typedOp.getSrc().getDefiningOp();
-        if (srcOp && backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(), sharding, nOp)) {
+        if (srcOp &&
+            backPropagateShardSizes(builder, typedOp.getSrc().getDefiningOp(),
+                                    sharding, nOp)) {
           assignSharding(typedOp, sharding);
         }
       }
@@ -176,11 +168,14 @@ struct CoalesceShardOpsPass
       modified = isCreator(op);
       for (auto oprnd : op->getOperands()) {
         if (::mlir::isa<::mlir::RankedTensorType>(oprnd.getType())) {
-          modified |= backPropagateShardSizes(builder, oprnd.getDefiningOp(), sharding, nOp);
+          modified |= backPropagateShardSizes(builder, oprnd.getDefiningOp(),
+                                              sharding, nOp);
         }
       }
-    } else if(auto typedOp = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(op)) {
-      modified = backPropagateShardSizes(builder, typedOp.getSource().getDefiningOp(), sharding, nOp);
+    } else if (auto typedOp =
+                   ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(op)) {
+      modified = backPropagateShardSizes(
+          builder, typedOp.getSource().getDefiningOp(), sharding, nOp);
     }
 
     assert(nOp == nullptr);
@@ -193,7 +188,8 @@ struct CoalesceShardOpsPass
     ::mlir::Operation *nOp = nullptr;
     auto sharding = op.getSharding();
     assert(sharding);
-    backPropagateShardSizes(builder, op.getSrc().getDefiningOp(), sharding, nOp);
+    backPropagateShardSizes(builder, op.getSrc().getDefiningOp(), sharding,
+                            nOp);
     assert(nOp == nullptr);
     return;
   }
@@ -203,7 +199,7 @@ struct CoalesceShardOpsPass
     if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
       return typedOp;
     }
-    if(op->hasOneUse()) {
+    if (op->hasOneUse()) {
       op = *op->user_begin();
       if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
         assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
@@ -228,40 +224,44 @@ struct CoalesceShardOpsPass
     assert(op->hasOneUse());
     return ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op);
   }
-  
-  template<typename T>
+
+  template <typename T>
   static auto getBaseShardDimSize(T shard, T numShards, T extend) {
-    return extend / numShards + shard.sge(numShards - (extend % numShards)).select(1l, 0l);
+    return extend / numShards +
+           shard.sge(numShards - (extend % numShards)).select(1l, 0l);
   };
 
-  static auto getBaseShardDimSize(int64_t shard, int64_t numShards, int64_t extend) {
-    return extend / numShards + (shard >= numShards - (extend % numShards) ? 1 : 0);
+  static auto getBaseShardDimSize(int64_t shard, int64_t numShards,
+                                  int64_t extend) {
+    return extend / numShards +
+           (shard >= numShards - (extend % numShards) ? 1 : 0);
   };
 
-  static ::mlir::SmallVector<::imex::EasyI64> extendHaloForSliceOp(
-          ::mlir::IRRewriter &rewriter,
-          mlir::Operation * op,
-          ::mlir::ArrayRef<int64_t> baseShape,
-          ::mlir::FlatSymbolRefAttr mesh,
-          ::mlir::mesh::MeshAxesArrayAttr splitAxes,
-          const ::mlir::SmallVector<::imex::EasyI64> &dynHaloSizes,
-          ::mlir::ArrayRef<int64_t> staticOffsets,
-          ::mlir::ArrayRef<int64_t> staticSizes,
-          ::mlir::ArrayRef<int64_t> staticStrides,
-          ::mlir::ArrayRef<int64_t> staticTargetOffsets) {
-            
+  static ::mlir::SmallVector<::imex::EasyI64>
+  extendHaloForSliceOp(::mlir::IRRewriter &rewriter, mlir::Operation *op,
+                       ::mlir::ArrayRef<int64_t> baseShape,
+                       ::mlir::FlatSymbolRefAttr mesh,
+                       ::mlir::mesh::MeshAxesArrayAttr splitAxes,
+                       const ::mlir::SmallVector<::imex::EasyI64> &dynHaloSizes,
+                       ::mlir::ArrayRef<int64_t> staticOffsets,
+                       ::mlir::ArrayRef<int64_t> staticSizes,
+                       ::mlir::ArrayRef<int64_t> staticStrides,
+                       ::mlir::ArrayRef<int64_t> staticTargetOffsets) {
+
     const ::mlir::Location loc = op->getLoc();
     ::mlir::SymbolTableCollection symbolTable;
     auto meshOp = ::mlir::mesh::getMesh(op, mesh, symbolTable);
     assert(meshOp);
-    
+
     // compute number of shards along split axes
-    // compute sharded dims extends (element count per sharded dim of base array)
+    // compute sharded dims extends (element count per sharded dim of base
+    // array)
     ::mlir::SmallVector<int64_t> numShards, shardedDims;
-    for (auto dim = 0; dim<(int64_t)splitAxes.size(); ++dim) {
+    for (auto dim = 0; dim < (int64_t)splitAxes.size(); ++dim) {
       auto axes = splitAxes.getAxes()[dim];
-      if(!axes.empty()) {
-        numShards.emplace_back(::mlir::mesh::collectiveProcessGroupSize(axes.asArrayRef(), meshOp));
+      if (!axes.empty()) {
+        numShards.emplace_back(::mlir::mesh::collectiveProcessGroupSize(
+            axes.asArrayRef(), meshOp));
         assert(!::mlir::ShapedType::isDynamic(numShards.back()));
         shardedDims.emplace_back(dim);
       }
@@ -272,37 +272,47 @@ struct CoalesceShardOpsPass
     auto zero = easyI64(loc, rewriter, 0);
     auto one = easyI64(loc, rewriter, 1);
     if (haloSizes.empty()) {
-      haloSizes.resize(numShards.size()*2, zero);
+      haloSizes.resize(numShards.size() * 2, zero);
     }
-    assert(haloSizes.size() == numShards.size()*2);
+    assert(haloSizes.size() == numShards.size() * 2);
 
     // iterate split axes and compute lower/upper halo bounds for each dim
     int64_t curr = 0;
-    for (size_t dim=0; dim<numShards.size(); ++dim) {
+    for (size_t dim = 0; dim < numShards.size(); ++dim) {
       auto num = numShards[dim];
       auto tensorDim = shardedDims[dim];
       auto baseOff = zero;
-      auto baseEnd = easyI64(loc, rewriter, getBaseShardDimSize(0, num, baseShape[tensorDim]));
+      auto baseEnd = easyI64(loc, rewriter,
+                             getBaseShardDimSize(0, num, baseShape[tensorDim]));
       auto targetOff = easyI64(loc, rewriter, staticOffsets[tensorDim]);
       auto stride = easyI64(loc, rewriter, staticStrides[tensorDim]);
       auto sz = staticTargetOffsets[++curr]; // ++curr to skip the first offset
-      auto targetEnd = targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+      auto targetEnd =
+          targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
 
       // FIXME what about staticSizes?
-      for (auto i = 0; i<num; ++i, ++curr) {
+      for (auto i = 0; i < num; ++i, ++curr) {
         if (sz != 0) {
           auto targetSz = easyI64(loc, rewriter, sz);
-          haloSizes[dim*2] = targetSz.sgt(zero).select(haloSizes[dim*2].max(zero.max(baseOff - targetOff)), haloSizes[dim*2]);
-          haloSizes[dim*2+1] = targetSz.sgt(zero).select(haloSizes[dim*2+1].max(zero.max(targetEnd - baseEnd)), haloSizes[dim*2+1]);
-          if (i+1 < num) {
-            sz = staticTargetOffsets[curr+1] - staticTargetOffsets[curr];
+          haloSizes[dim * 2] = targetSz.sgt(zero).select(
+              haloSizes[dim * 2].max(zero.max(baseOff - targetOff)),
+              haloSizes[dim * 2]);
+          haloSizes[dim * 2 + 1] = targetSz.sgt(zero).select(
+              haloSizes[dim * 2 + 1].max(zero.max(targetEnd - baseEnd)),
+              haloSizes[dim * 2 + 1]);
+          if (i + 1 < num) {
+            sz = staticTargetOffsets[curr + 1] - staticTargetOffsets[curr];
             targetOff = targetOff + stride * targetSz;
-            targetEnd = targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+            targetEnd =
+                targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
           }
         }
-        if (i+1 < num) {
+        if (i + 1 < num) {
           baseOff = baseEnd;
-          baseEnd = baseOff + easyI64(loc, rewriter, getBaseShardDimSize(i+1, num, baseShape[tensorDim]));
+          baseEnd =
+              baseOff +
+              easyI64(loc, rewriter,
+                      getBaseShardDimSize(i + 1, num, baseShape[tensorDim]));
         }
       }
     }
@@ -334,7 +344,6 @@ struct CoalesceShardOpsPass
     ::mlir::SymbolTableCollection symbolTableCollection;
 
     // back-propagate targets from RePartitionOps
-
 
     // find InsertSliceOp and SubviewOp operating on the same base pointer
     // opsGroups holds independent partial operation sequences operating on a
@@ -379,39 +388,49 @@ struct CoalesceShardOpsPass
         continue;
 
       auto &base = grpP.first;
-      auto baseShape = ::mlir::cast<::mlir::ShapedType>(base->getResult(0).getType());
+      auto baseShape =
+          ::mlir::cast<::mlir::ShapedType>(base->getResult(0).getType());
       assert(baseShape.hasStaticShape() && "Base array must have static shape");
 
       auto shardOp = getShardOp(base);
       ::mlir::SmallVector<::mlir::mesh::ShardOp> shardOps;
       ::mlir::SmallVector<::imex::EasyI64> halos;
       int numHalos = 0;
-      for (auto axes : shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>().getSplitAxes()) {
+      for (auto axes : shardOp.getSharding()
+                           .getDefiningOp<::mlir::mesh::ShardingOp>()
+                           .getSplitAxes()) {
         if (!axes.empty()) {
           ++numHalos;
         }
       }
-      ::mlir::SmallVector<::mlir::Type> haloResultTypes(numHalos*2, builder.getI64Type());
+      ::mlir::SmallVector<::mlir::Type> haloResultTypes(numHalos * 2,
+                                                        builder.getI64Type());
 
       for (auto currOp : grpP.second) {
         // collect SubviewOps until we meet a InsertSliceOp
-        if (auto subviewOp = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(*currOp)) {
+        if (auto subviewOp =
+                ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(*currOp)) {
           if (!subviewOp->hasAttr("final")) {
             auto sOffs = subviewOp.getStaticOffsets();
             auto sSizes = subviewOp.getStaticSizes();
             auto sStrides = subviewOp.getStaticStrides();
-            assert(
-                !(::mlir::ShapedType::isDynamicShape(sSizes) ||
-                  ::mlir::ShapedType::isDynamicShape(sOffs) ||
-                  ::mlir::ShapedType::isDynamicShape(sStrides))
-                && "SubviewOp must have static offsets, sizes and strides");
-            if(auto svShardOp = getShardOp(subviewOp)) {
-              auto svShardingOp = svShardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
+            assert(!(::mlir::ShapedType::isDynamicShape(sSizes) ||
+                     ::mlir::ShapedType::isDynamicShape(sOffs) ||
+                     ::mlir::ShapedType::isDynamicShape(sStrides)) &&
+                   "SubviewOp must have static offsets, sizes and strides");
+            if (auto svShardOp = getShardOp(subviewOp)) {
+              auto svShardingOp =
+                  svShardOp.getSharding()
+                      .getDefiningOp<::mlir::mesh::ShardingOp>();
               assert(svShardingOp);
               auto target = svShardingOp.getStaticShardedDimsOffsets();
-              assert(!::mlir::ShapedType::isDynamicShape(target) && "ShardOp of Subview must have static sharded dims sizes");
+              assert(!::mlir::ShapedType::isDynamicShape(target) &&
+                     "ShardOp of Subview must have static sharded dims sizes");
               builder.setInsertionPoint(shardOp);
-              halos = extendHaloForSliceOp(builder, subviewOp, baseShape.getShape(), svShardingOp.getMeshAttr(), svShardingOp.getSplitAxes(), halos, sOffs, sSizes, sStrides, target);
+              halos = extendHaloForSliceOp(
+                  builder, subviewOp, baseShape.getShape(),
+                  svShardingOp.getMeshAttr(), svShardingOp.getSplitAxes(),
+                  halos, sOffs, sSizes, sStrides, target);
               shardOps.emplace_back(getShardOpOfOperand(subviewOp.getSource()));
               // subviewOps.emplace_back(subviewOp);
             }
@@ -429,13 +448,21 @@ struct CoalesceShardOpsPass
       for (auto sz : halos) {
         haloVals.emplace_back(sz.get());
       }
-      auto orgSharding = shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
+      auto orgSharding =
+          shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
       builder.setInsertionPointAfter(shardOp);
       auto newSharding = builder.create<::mlir::mesh::ShardingOp>(
-        shardOp->getLoc(), ::mlir::mesh::ShardingType::get(shardOp->getContext()),
-        orgSharding.getMeshAttr(), orgSharding.getSplitAxesAttr(), orgSharding.getPartialAxesAttr(), orgSharding.getPartialTypeAttr(),
-        ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), {}), ::mlir::ValueRange{},
-        ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), ::mlir::SmallVector<int64_t>(haloVals.size(), ::mlir::ShapedType::kDynamic)), haloVals);
+          shardOp->getLoc(),
+          ::mlir::mesh::ShardingType::get(shardOp->getContext()),
+          orgSharding.getMeshAttr(), orgSharding.getSplitAxesAttr(),
+          orgSharding.getPartialAxesAttr(), orgSharding.getPartialTypeAttr(),
+          ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), {}),
+          ::mlir::ValueRange{},
+          ::mlir::DenseI64ArrayAttr::get(
+              shardOp->getContext(),
+              ::mlir::SmallVector<int64_t>(haloVals.size(),
+                                           ::mlir::ShapedType::kDynamic)),
+          haloVals);
       auto newShardOp = builder.create<::mlir::mesh::ShardOp>(
           shardOp->getLoc(), shardOp, newSharding.getResult());
 
@@ -444,19 +471,21 @@ struct CoalesceShardOpsPass
         svShardOp.getSrcMutable().assign(newShardOp.getResult());
         svShardOp.getShardingMutable().assign(newSharding);
       }
-      // barriers/halo-updates get inserted when InsertSliceOps (or other write ops) get spmdized
+      // barriers/halo-updates get inserted when InsertSliceOps (or other write
+      // ops) get spmdized
     } // for (auto grpP : opsGroups)
 
     mlir::SmallVector<mlir::mesh::ShardingOp> prevShardings;
     root->walk([&](::mlir::mesh::ShardingOp op) {
-      for(auto prev : prevShardings) {
-        if(mlir::mesh::MeshSharding(op.getResult()) == mlir::mesh::MeshSharding(prev.getResult())) {
+      for (auto prev : prevShardings) {
+        if (mlir::mesh::MeshSharding(op.getResult()) ==
+            mlir::mesh::MeshSharding(prev.getResult())) {
           builder.replaceOp(op, prev.getResult());
           op = nullptr;
           break;
         }
       }
-      if(op) {
+      if (op) {
         prevShardings.emplace_back(op);
       }
     });
