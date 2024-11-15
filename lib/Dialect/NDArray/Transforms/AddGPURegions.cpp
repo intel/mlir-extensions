@@ -12,7 +12,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Passes.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
@@ -26,9 +25,7 @@
 namespace imex {
 #define GEN_PASS_DEF_ADDGPUREGIONS
 #include <imex/Dialect/NDArray/Transforms/Passes.h.inc>
-} // namespace imex
 
-namespace imex {
 namespace {
 
 // Base-class for RewriterPatterns which handle recursion
@@ -113,37 +110,18 @@ struct AddGPURegionsPass
     ::mlir::FrozenRewritePatternSet patterns;
     // It would be nicer to have a single rewrite-pattern which covers all
     // NDArrayOps
-    insertPatterns<NDArrayOpRWP<::imex::ndarray::ToTensorOp>,
-                   NDArrayOpRWP<::imex::ndarray::FromMemRefOp>,
-                   NDArrayOpRWP<::imex::ndarray::DeleteOp>,
-                   NDArrayOpRWP<::imex::ndarray::DimOp>,
+    insertPatterns<NDArrayOpRWP<::imex::ndarray::DeleteOp>,
                    NDArrayOpRWP<::imex::ndarray::SubviewOp>,
                    NDArrayOpRWP<::imex::ndarray::ExtractSliceOp>,
                    NDArrayOpRWP<::imex::ndarray::InsertSliceOp>,
                    NDArrayOpRWP<::imex::ndarray::ImmutableInsertSliceOp>,
-                   NDArrayOpRWP<::imex::ndarray::LoadOp>,
-                   NDArrayOpRWP<::imex::ndarray::CopyOp, false>,
-                   NDArrayOpRWP<::imex::ndarray::CastOp>,
+                   NDArrayOpRWP<::mlir::tensor::CastOp>,
                    NDArrayOpRWP<::imex::ndarray::CastElemTypeOp>,
                    NDArrayOpRWP<::imex::ndarray::LinSpaceOp>,
                    NDArrayOpRWP<::imex::ndarray::CreateOp>,
-                   NDArrayOpRWP<::imex::ndarray::ReshapeOp>,
-                   NDArrayOpRWP<::imex::ndarray::EWBinOp>,
-                   NDArrayOpRWP<::imex::ndarray::EWUnyOp>,
-                   NDArrayOpRWP<::imex::ndarray::ReductionOp>,
-                   NDArrayOpRWP<::imex::ndarray::PermuteDimsOp>,
-                   NDArrayOpRWP<::imex::dist::InitDistArrayOp>,
-                   NDArrayOpRWP<::imex::dist::LocalOffsetsOfOp>,
-                   NDArrayOpRWP<::imex::dist::PartsOfOp>,
-                   NDArrayOpRWP<::imex::dist::DefaultPartitionOp>,
-                   NDArrayOpRWP<::imex::dist::LocalTargetOfSliceOp>,
-                   NDArrayOpRWP<::imex::dist::LocalBoundingBoxOp>,
-                   NDArrayOpRWP<::imex::dist::LocalCoreOp>,
-                   NDArrayOpRWP<::imex::dist::RePartitionOp>,
-                   NDArrayOpRWP<::imex::dist::SubviewOp>,
-                   NDArrayOpRWP<::imex::dist::EWBinOp>,
-                   NDArrayOpRWP<::imex::dist::EWUnyOp>>(getContext(), patterns);
-    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
+                   NDArrayOpRWP<::imex::ndarray::ReshapeOp>>(getContext(),
+                                                             patterns);
+    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }
 };
 

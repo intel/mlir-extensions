@@ -6,16 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "imex/Dialect/NDArray/IR/NDArrayOps.h"
 #include "mlir/Dialect/Mesh/Interfaces/ShardingInterface.h"
 #include "mlir/Dialect/Mesh/Interfaces/ShardingInterfaceImpl.h"
-#include "imex/Dialect/NDArray/IR/NDArrayOps.h"
-#include "imex/Dialect/NDArray/IR/NDArrayOps.h"
-#include "imex/Dialect/Dist/IR/DistOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "llvm/Support/Debug.h"
-#include <vector>
-#include <string>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #define DEBUG_TYPE "ndarray-sharding-impl"
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE << "]: ")
@@ -23,8 +21,8 @@
 
 using namespace mlir;
 using namespace mlir::mesh;
-using imex::easyIdx;
 using imex::easyI64;
+using imex::easyIdx;
 
 namespace imex {
 namespace ndarray {
@@ -57,22 +55,29 @@ static SmallVector<Value> getMyMultiIndex(OpBuilder &b,
   return b.create<ProcessMultiIndexOp>(mesh.getLoc(), mesh).getResult();
 }
 
+template <typename T>
+static auto getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
+  return (shard * (extend / numShards)) +
+         (shard - (numShards - (extend % numShards))).max(zero);
+};
+
 // Sharding of tensor.empty
-template<typename T, typename OpType>
+template <typename T, typename OpType>
 struct OffsetSizeAndStrideShardingInterface
-    :  public ShardingInterface::ExternalModel<T, OpType> {
-  
-  SmallVector<mlir::utils::IteratorType> getLoopIteratorTypes(::mlir::Operation *op) const {
+    : public ShardingInterface::ExternalModel<T, OpType> {
+
+  SmallVector<mlir::utils::IteratorType>
+  getLoopIteratorTypes(::mlir::Operation *op) const {
     LLVM_DEBUG(DBGS() << "getLoopIteratorTypes\n");
     Value val = op->getOperand(0);
     auto type = dyn_cast<RankedTensorType>(val.getType());
     if (!type)
       return {};
     SmallVector<utils::IteratorType> types(type.getRank(),
-                                          utils::IteratorType::parallel);
+                                           utils::IteratorType::parallel);
     return types;
   }
-  
+
   SmallVector<AffineMap> getIndexingMaps(::mlir::Operation *op) const {
     LLVM_DEBUG(DBGS() << "getIndexingMaps\n");
     MLIRContext *ctx = op->getContext();
@@ -224,9 +229,8 @@ protected:
     auto targetOff = easyIdx(loc, builder, slcOffs[dim]) +
                      easyIdx(loc, builder, myOffAndSize.getResult(0)) *
                          easyIdx(loc, builder, slcStrides[dim]);
-    auto shardOff =
-        imex::dist::getBaseShardDimOff(myID, numShards, extend, zero) -
-        easyIdx(loc, builder, haloSizes[shardedDim * 2]);
+    auto shardOff = getBaseShardDimOff(myID, numShards, extend, zero) -
+                    easyIdx(loc, builder, haloSizes[shardedDim * 2]);
     return {(targetOff - shardOff).get(), myOffAndSize.getResult(1)};
   }
 
@@ -289,7 +293,9 @@ protected:
   }
 };
 
-struct SubviewShardingInterface : public OffsetSizeAndStrideShardingInterface<SubviewShardingInterface, imex::ndarray::SubviewOp> {
+struct SubviewShardingInterface
+    : public OffsetSizeAndStrideShardingInterface<SubviewShardingInterface,
+                                                  imex::ndarray::SubviewOp> {
   LogicalResult
   addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
                          const ShardingOption &shardingOption) const {
@@ -299,16 +305,23 @@ struct SubviewShardingInterface : public OffsetSizeAndStrideShardingInterface<Su
       LLVM_DEBUG(DBGS() << "no sharding on input, bailing out\n");
       return failure();
     }
-    maybeInsertSourceShardingAnnotation(srcShardOp.getSharding(), op->getOpOperand(0), b);
+    maybeInsertSourceShardingAnnotation(srcShardOp.getSharding(),
+                                        op->getOpOperand(0), b);
 
     auto sharding = getShardedDimsOffsetsSharding(svop.getSource(), svop);
-    if(failed(sharding)) return failure();
+    if (failed(sharding))
+      return failure();
     maybeInsertTargetShardingAnnotation(sharding.value(), op->getResult(0), b);
 
     return success();
   }
 
-  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands, ArrayRef<MeshSharding> operandShardings, ArrayRef<MeshSharding> resultShardings, IRMapping&spmdizationMap, SymbolTableCollection &symbolTableCollection, OpBuilder &builder) const {
+  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
+                        ArrayRef<MeshSharding> operandShardings,
+                        ArrayRef<MeshSharding> resultShardings,
+                        IRMapping &spmdizationMap,
+                        SymbolTableCollection &symbolTableCollection,
+                        OpBuilder &builder) const {
     if (resultShardings.size() != 1) {
       return failure();
     }
@@ -333,8 +346,12 @@ struct SubviewShardingInterface : public OffsetSizeAndStrideShardingInterface<Su
   }
 };
 
-struct InsertSliceShardingInterface : public OffsetSizeAndStrideShardingInterface<InsertSliceShardingInterface, imex::ndarray::InsertSliceOp> {
-  LogicalResult addShardingAnnotations(::mlir::Operation *op, OpBuilder &b, const ShardingOption &shardingOption) const {
+struct InsertSliceShardingInterface
+    : public OffsetSizeAndStrideShardingInterface<
+          InsertSliceShardingInterface, imex::ndarray::InsertSliceOp> {
+  LogicalResult
+  addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
+                         const ShardingOption &shardingOption) const {
     LLVM_DEBUG(DBGS() << "addShardingAnnotations\n");
     auto svop = cast<InsertSliceOp>(op);
 
@@ -355,7 +372,12 @@ struct InsertSliceShardingInterface : public OffsetSizeAndStrideShardingInterfac
     return success();
   }
 
-  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands, ArrayRef<MeshSharding> operandShardings, ArrayRef<MeshSharding> resultShardings, IRMapping&spmdizationMap, SymbolTableCollection &symbolTableCollection, OpBuilder &builder) const {
+  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
+                        ArrayRef<MeshSharding> operandShardings,
+                        ArrayRef<MeshSharding> resultShardings,
+                        IRMapping &spmdizationMap,
+                        SymbolTableCollection &symbolTableCollection,
+                        OpBuilder &builder) const {
     if (resultShardings.size() != 0) {
       return failure();
     }
@@ -394,7 +416,8 @@ struct InsertSliceShardingInterface : public OffsetSizeAndStrideShardingInterfac
 } // namespace
 
 void registerShardingInterfaceExternalModels(mlir::DialectRegistry &registry) {
-  registry.addExtension(+[](MLIRContext *ctx, imex::ndarray::NDArrayDialect *dialect) {
+  registry.addExtension(+[](MLIRContext *ctx,
+                            imex::ndarray::NDArrayDialect *dialect) {
     SubviewOp::template attachInterface<SubviewShardingInterface>(*ctx);
     InsertSliceOp::template attachInterface<InsertSliceShardingInterface>(*ctx);
   });

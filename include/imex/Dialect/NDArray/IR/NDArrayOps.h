@@ -71,6 +71,8 @@ public:
 #include <imex/Dialect/NDArray/IR/NDArrayOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/NDArray/IR/NDArrayOpsTypes.h.inc>
+#define GET_ATTRDEF_CLASSES
+#include <imex/Dialect/NDArray/IR/NDArrayOpsAttrs.h.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h.inc>
 
@@ -80,36 +82,37 @@ namespace imex {
 namespace ndarray {
 
 /// @return true if given NDArrayTYpe has this specific environment attribute
-template <typename T> bool hasEnv(const ::imex::ndarray::NDArrayType &t) {
-  for (auto a : t.getEnvironments()) {
-    if (::mlir::isa<T>(a)) {
-      return true;
+template <typename T> bool hasEnv(const ::mlir::RankedTensorType &t) {
+  auto encoding = t.getEncoding();
+  if (auto envs = ::mlir::dyn_cast<EnvironmentAttr>(encoding)) {
+    for (auto a : envs.getEnvs()) {
+      if (::mlir::isa<T>(a)) {
+        return true;
+      }
     }
   }
   return false;
 }
 
 inline bool hasGPUEnv(const ::mlir::Type &t) {
-  auto ptType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(t);
+  auto ptType = mlir::dyn_cast<::mlir::RankedTensorType>(t);
   return ptType ? ::imex::ndarray::hasEnv<::imex::region::GPUEnvAttr>(ptType)
                 : false;
 }
 
 inline ::imex::region::GPUEnvAttr getGPUEnv(const ::mlir::Type &t) {
-  auto ptType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(t);
-  if (ptType) {
-    for (auto a : ptType.getEnvironments()) {
-      if (auto g = ::mlir::dyn_cast<::imex::region::GPUEnvAttr>(a)) {
-        return g;
+  if (auto tt = ::mlir::dyn_cast<::mlir::RankedTensorType>(t)) {
+    auto encoding = tt.getEncoding();
+    if (auto envs = ::mlir::dyn_cast<EnvironmentAttr>(encoding)) {
+      for (auto a : envs.getEnvs()) {
+        if (auto g = ::mlir::dyn_cast<::imex::region::GPUEnvAttr>(a)) {
+          return g;
+        }
       }
     }
   }
   return {};
 }
-
-// Determine whether CastOp casts to a nore dynamic version of the source tensor
-bool canFoldIntoConsumerOp(CastOp castOp);
-bool canFoldIntoConsumerOp(::mlir::tensor::CastOp castOp);
 
 /// Performs folding of any operand of `op` if it comes from a ndarray::CastOp
 /// that can be folded.
@@ -117,6 +120,7 @@ mlir::LogicalResult foldArrayCast(mlir::Operation *op);
 
 /// @return true if shape is known to span exactly one element
 bool isUnitShape(const llvm::ArrayRef<int64_t> shp);
+bool hasZeroSize(const llvm::ArrayRef<int64_t> shp);
 
 } // namespace ndarray
 } // namespace imex
