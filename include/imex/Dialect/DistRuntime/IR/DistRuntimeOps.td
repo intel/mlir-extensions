@@ -120,9 +120,9 @@ def CopyReshapeOp : DistRuntime_Op<"copy_reshape",
     `ngShape`, `nlOffsets` are variadic arguments with same size `ro` where `ro` is the rank of the global output array (e.g., one number for each dimension of the global output array).
   }];
   let arguments = (ins AnyAttr:$team,
-                       AnyType:$lArray, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
+                       AnyRankedTensor:$lArray, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
                        Variadic<Index>:$ngShape, Variadic<Index>:$nlOffsets, Variadic<Index>:$nlShape);
-  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
     $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_g_shape` $ngShape `n_offs` $nlOffsets `n_shape` $nlShape attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];
@@ -160,13 +160,13 @@ def CopyPermuteOp : DistRuntime_Op<"copy_permute",
     `ngShape`, `nlOffsets` are variadic arguments with same size `ro` where `ro` is the rank of the global output array (e.g., one number for each dimension of the global output array).
   }];
   let arguments = (ins AnyAttr:$team,
-                       AnyType:$lArray,
+                       AnyRankedTensor:$lArray,
                        Variadic<Index>:$gShape,
                        Variadic<Index>:$lOffsets,
                        Variadic<Index>:$nlOffsets,
                        Variadic<Index>:$nlShape,
                        DenseI64ArrayAttr:$axes);
-  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
     $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_offs` $nlOffsets `n_shape` $nlShape `axes` $axes attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];

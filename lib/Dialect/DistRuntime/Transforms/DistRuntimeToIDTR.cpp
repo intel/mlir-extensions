@@ -121,6 +121,22 @@ struct RuntimePrototypes {
   }
 };
 
+/// Convert ::imex::distruntime::WaitOp into call to _idtr_wait
+struct WaitOpPattern
+    : public ::mlir::OpRewritePattern<::imex::distruntime::WaitOp> {
+  using ::mlir::OpRewritePattern<::imex::distruntime::WaitOp>::OpRewritePattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::distruntime::WaitOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
+    auto fsa = rewriter.getStringAttr("_idtr_wait");
+    rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
+        op, fsa, ::mlir::TypeRange(), ::mlir::ValueRange{op.getHandle()});
+
+    return ::mlir::success();
+  }
+};
+
 struct CopyReshapeOpPattern
     : public ::mlir::OpRewritePattern<::imex::distruntime::CopyReshapeOp> {
   using ::mlir::OpRewritePattern<
@@ -130,13 +146,7 @@ struct CopyReshapeOpPattern
   matchAndRewrite(::imex::distruntime::CopyReshapeOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto lArray = op.getLArray();
-    auto arType = mlir::dyn_cast<::mlir::RankedTensorType>(lArray.getType());
-    auto resType =
-        mlir::dyn_cast<::mlir::RankedTensorType>(op.getNlArray().getType());
-    if (!arType || !resType) {
-      return ::mlir::failure();
-    }
-
+    auto resType = op.getNlArray().getType();
     auto loc = op.getLoc();
     auto elType = resType.getElementType();
     auto team = op.getTeam();
@@ -182,16 +192,9 @@ struct CopyPermuteOpPattern
   matchAndRewrite(::imex::distruntime::CopyPermuteOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto lArray = op.getLArray();
-    auto arType = mlir::dyn_cast<::mlir::RankedTensorType>(lArray.getType());
-    auto resType =
-        mlir::dyn_cast<::mlir::RankedTensorType>(op.getNlArray().getType());
-    if (!arType || !resType) {
-      return ::mlir::failure();
-    }
-
+    auto resType = op.getNlArray().getType();
     auto loc = op.getLoc();
     auto elType = resType.getElementType();
-
     auto team = op.getTeam();
     auto gShape = op.getGShape();
     auto lOffs = op.getLOffsets();
@@ -243,8 +246,8 @@ struct DistRuntimeToIDTRPass
     RuntimePrototypes::add_prototypes(builder, this->getOperation());
 
     ::mlir::FrozenRewritePatternSet patterns;
-    insertPatterns<CopyReshapeOpPattern, CopyPermuteOpPattern>(getContext(),
-                                                               patterns);
+    insertPatterns<CopyReshapeOpPattern, CopyPermuteOpPattern, WaitOpPattern>(
+        getContext(), patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }; // runOnOperation()
 
@@ -258,8 +261,3 @@ std::unique_ptr<::mlir::Pass> createDistRuntimeToIDTRPass() {
   return std::make_unique<::imex::distruntime::DistRuntimeToIDTRPass>();
 }
 } // namespace imex
-
-extern "C" {
-int _idtr_nprocs(void *) __attribute__((weak));
-int _idtr_prank(void *) __attribute__((weak));
-}
