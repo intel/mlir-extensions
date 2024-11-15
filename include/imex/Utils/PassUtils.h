@@ -147,6 +147,11 @@ extern ::mlir::MemRefType getMemRefType(::mlir::MLIRContext *ctxt,
                                         ::mlir::Type elType,
                                         bool strided = true);
 
+inline ::mlir::MemRefType getMemRefType(::mlir::RankedTensorType ttype) {
+  return getMemRefType(ttype.getContext(), ttype.getShape(),
+                       ttype.getElementType());
+}
+
 /// Create a 1d MemRef alloc with given size and elType
 extern ::mlir::Value createAllocMR(::mlir::OpBuilder &builder,
                                    ::mlir::Location loc, ::mlir::Type elType,
@@ -329,7 +334,7 @@ inline std::string mkTypedFunc(const ::std::string &base, ::mlir::Type elType) {
 
 // helper for sorting operations
 struct opOrderCmp {
-  opOrderCmp(::mlir::DominanceInfo &dom) : _dom(dom){};
+  opOrderCmp(::mlir::DominanceInfo &dom) : _dom(dom) {};
   ::mlir::DominanceInfo &_dom;
   bool operator()(::mlir::Operation *i, ::mlir::Operation *j) const {
     if (_dom.dominates(i, j)) {

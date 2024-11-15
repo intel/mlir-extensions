@@ -102,14 +102,14 @@ inline ::mlir::Value createDType(::mlir::Location &loc,
 template <typename T = ::imex::ValVec>
 auto createShapeOf(::mlir::Location loc, ::mlir::OpBuilder &builder,
                    ::mlir::Value lPTnsr) {
-  auto arType = mlir::dyn_cast<::imex::ndarray::NDArrayType>(lPTnsr.getType());
+  auto arType = mlir::dyn_cast<::mlir::RankedTensorType>(lPTnsr.getType());
   assert(arType);
   auto rank = arType.getRank();
   T dims;
 
   for (int64_t i = 0; i < rank; ++i) {
     dims.emplace_back(
-        builder.createOrFold<::imex::ndarray::DimOp>(loc, lPTnsr, i));
+        builder.createOrFold<::mlir::tensor::DimOp>(loc, lPTnsr, i));
   }
 
   return dims;
@@ -118,10 +118,9 @@ auto createShapeOf(::mlir::Location loc, ::mlir::OpBuilder &builder,
 // convert an unranked memref from a NDArray
 inline ::mlir::Value mkURMemRef(::mlir::Location loc,
                                 ::mlir::OpBuilder &builder, ::mlir::Value src) {
-  auto srcArType = mlir::cast<::imex::ndarray::NDArrayType>(src.getType());
-  auto bMRTyp = srcArType.getMemRefType();
-  auto bTensor = builder.create<::imex::ndarray::ToTensorOp>(loc, src);
-  auto bMRef = createToMemRef(loc, builder, bTensor, bMRTyp);
+  auto srcArType = mlir::cast<::mlir::RankedTensorType>(src.getType());
+  auto bMRTyp = getMemRefType(srcArType);
+  auto bMRef = createToMemRef(loc, builder, src, bMRTyp);
   return createUnrankedMemRefCast(builder, loc, bMRef);
 }
 

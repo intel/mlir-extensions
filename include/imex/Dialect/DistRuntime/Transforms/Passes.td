@@ -31,19 +31,4 @@ def LowerDistRuntimeToIDTR: Pass<"lower-distruntime-to-idtr"> {
   let options = [];
 }
 
-def OverlapCommAndCompute : Pass<"overlap-comm-and-compute"> {
-  let summary = "Try to make asynchronous communication overlap some computation.";
-  let constructor = "imex::createOverlapCommAndComputePass()";
-  let dependentDialects = ["::imex::ndarray::NDArrayDialect",
-                           "::imex::distruntime::DistRuntimeDialect"];
-  let options = [];
-}
-
-def AddCommCacheKeys : Pass<"add-comm-cache-keys"> {
-  let summary = "Add unique keys to each distruntime.udpate_halo op.";
-  let constructor = "imex::createAddCommCacheKeysPass()";
-  let dependentDialects = [];
-  let options = [];
-}
-
 #endif // _DistRuntime_PASSES_TD_INCLUDED_
