@@ -285,9 +285,9 @@ void imex::configureMathToVCConversionLegality(
 namespace {
 struct MathToVCPass : public imex::impl::ConvertMathToVCBase<MathToVCPass> {
   using Base::Base;
-  MathToVCPass(bool emitDeallocs)
+  MathToVCPass(bool enableHPIC)
       : imex::impl::ConvertMathToVCBase<MathToVCPass>() {
-    this->enableHighPrecisionInterimCalculation.setValue(emitDeallocs);
+    this->enableHighPrecisionInterimCalculation.setValue(enableHPIC);
   }
   void runOnOperation() override {
     gpu::GPUModuleOp m = getOperation();

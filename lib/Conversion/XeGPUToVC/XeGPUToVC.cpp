@@ -32,6 +32,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 
+#include "imex/Conversion/ArithToVC/ArithToVC.h"
 #include "imex/Conversion/MathToVC/MathToVC.h"
 #include "imex/Utils/VCUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -788,75 +789,6 @@ public:
   }
 };
 
-static bool isGenericVectorTy(Type type) {
-  if (isa<spirv::ScalarType>(type))
-    return true;
-  auto vecSize = dyn_cast<VectorType>(type).getNumElements();
-  return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
-         vecSize == 16;
-}
-
-template <typename MOp> std::string getVCIntrinsicName() {
-  constexpr bool isFMaxOp = std::is_same_v<MOp, arith::MaximumFOp>;
-  constexpr bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
-  if (isFMaxOp)
-    return "llvm.genx.fmax.";
-  else if (isExpOp)
-    return "llvm.genx.exp.";
-  else
-    assert(0 && "Unsupported math Op. Add more support!");
-}
-
-template <typename MOp>
-struct ElementwiseToVCPattern : public OpConversionPattern<MOp> {
-  using OpConversionPattern<MOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(MOp op, typename MOp::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto vecTy = dyn_cast<VectorType>(op.getType());
-    if (!vecTy)
-      return failure();
-    if (vecTy.getRank() != 1)
-      return failure();
-    bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
-    if (!isExpOp) {
-      bool isGenericSize = isGenericVectorTy(op.getType());
-      bool isFastmath =
-          (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
-      if (isGenericSize && (!isFastmath))
-        return failure();
-    }
-    auto loc = op.getLoc();
-    // This lowering pattern is needed only for spirv ops with large vector
-    // lengths.
-    // for larger vector lengths, "llvm.genx.exp" returns the base 2
-    // exponentiation of the input. To get the base e exponentiation, we need to
-    // scale the input by log2(e)
-    auto operands = adaptor.getOperands();
-    SmallVector<Value> args{operands};
-    if (isExpOp) {
-      auto log2e = rewriter.create<arith::ConstantOp>(
-          loc,
-          rewriter.getFloatAttr(vecTy.getElementType(), 1.442695040888963));
-      auto log2eConstVec =
-          rewriter.create<vector::BroadcastOp>(loc, vecTy, log2e);
-      auto input = operands[0];
-      auto scaledInput =
-          rewriter.create<arith::MulFOp>(op.getLoc(), input, log2eConstVec);
-      args.clear();
-      args.push_back(scaledInput);
-    }
-
-    // for large vectors, generate the corresponding VC intrinsic.
-    auto funcName = getVCIntrinsicName<MOp>();
-    funcName += encodeVectorType(rewriter, vecTy).first;
-    auto callOp =
-        createFuncCall(rewriter, loc, funcName, {op.getType()}, args, false);
-    rewriter.replaceOp(op, callOp);
-    return success();
-  }
-};
-
 bool isLegalXeGPUSCFOp(Operation *op, TypeConverter typeConverter) {
   llvm::SmallVector<Value> args;
   if (llvm::isa<ForOp>(op))
@@ -882,6 +814,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     // Configure the legality of the conversion target for MathToVC patterns.
     configureMathToVCConversionLegality(target);
+    configureArithToVCConversionLegality(target);
 
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
                            memref::MemRefDialect, vector::VectorDialect>();
@@ -897,20 +830,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
           }
           return true;
         });
-
-    target.addDynamicallyLegalOp<arith::MaximumFOp>([&](arith::MaximumFOp op) {
-      if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-        if (vecTy.getRank() != 1)
-          return true;
-        bool isGenericSize = isGenericVectorTy(op.getType());
-        bool isFastmath =
-            (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
-        if (isGenericSize && (!isFastmath))
-          return true;
-        return false;
-      }
-      return true;
-    });
 
     target.addIllegalOp<ShapeCastOp>();
 
@@ -968,14 +887,15 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                  IndexCastPattern<arith::IndexCastUIOp>>(typeConverter,
                                                          patterns.getContext());
     // Ops to llvm.genx only Patterns
-    patterns.add<NbarrierWaitPattern, CompilerHintPattern,
-                 ElementwiseToVCPattern<arith::MaximumFOp>, DpasPattern,
+    patterns.add<NbarrierWaitPattern, CompilerHintPattern, DpasPattern,
                  NbarrierArrivePattern>(patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
 
     populateLoadStoreLSCPatterns(typeConverter, patterns);
+
+    populateArithToVCPatterns(typeConverter, patterns);
 
     populateMathToVCPatterns(typeConverter, patterns);
 
