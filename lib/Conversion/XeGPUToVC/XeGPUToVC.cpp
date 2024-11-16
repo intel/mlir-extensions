@@ -645,7 +645,6 @@ public:
   matchAndRewrite(ShapeCastOp shapeCastOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto *converter = getTypeConverter();
-
     Type dstType = converter->convertType(shapeCastOp.getType());
 
     if (!dstType)
@@ -657,6 +656,22 @@ public:
     }
     rewriter.replaceOpWithNewOp<vector::BitCastOp>(shapeCastOp, dstType,
                                                    adaptor.getSource());
+    return success();
+  }
+};
+
+template <typename OpTy>
+class IndexCastPattern : public OpConversionPattern<OpTy> {
+public:
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(OpTy indexCastOp, typename OpTy::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto *converter = OpConversionPattern<OpTy>::getTypeConverter();
+    Type dstType = converter->convertType(indexCastOp.getType());
+    if (!dstType)
+      return failure();
+    rewriter.replaceOpWithNewOp<OpTy>(indexCastOp, dstType, adaptor.getIn());
     return success();
   }
 };
@@ -875,6 +890,14 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addDynamicallyLegalDialect<scf::SCFDialect>(
         [&](Operation *op) { return isLegalXeGPUSCFOp(op, typeConverter); });
 
+    target.addDynamicallyLegalOp<arith::IndexCastOp, arith::IndexCastUIOp>(
+        [&](Operation *op) {
+          if (auto vecTy = dyn_cast<VectorType>(op->getResult(0).getType())) {
+            return typeConverter.isLegal(vecTy);
+          }
+          return true;
+        });
+
     target.addDynamicallyLegalOp<arith::MaximumFOp>([&](arith::MaximumFOp op) {
       if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
         if (vecTy.getRank() != 1)
@@ -921,16 +944,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       unsigned rank = type.getRank();
       auto elemType = type.getElementType();
 
-      if (llvm::isa<IndexType>(elemType))
-        elemType = IntegerType::get(&getContext(), 64);
-
-      auto scalarType = llvm::dyn_cast_or_null<spirv::ScalarType>(elemType);
-      if (!scalarType && !elemType.isBF16()) {
-        llvm::dbgs() << type
-                     << " illegal: cannot convert non-scalar element type\n";
-        return nullptr;
-      }
-
       if (rank < 1 || type.getNumElements() == 1)
         return elemType;
 
@@ -951,6 +964,9 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     patterns.add<VectorShapeCastPattern, SCFForPattern>(typeConverter,
                                                         patterns.getContext());
 
+    patterns.add<IndexCastPattern<arith::IndexCastOp>,
+                 IndexCastPattern<arith::IndexCastUIOp>>(typeConverter,
+                                                         patterns.getContext());
     // Ops to llvm.genx only Patterns
     patterns.add<NbarrierWaitPattern, CompilerHintPattern,
                  ElementwiseToVCPattern<arith::MaximumFOp>, DpasPattern,
