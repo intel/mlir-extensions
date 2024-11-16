@@ -457,4 +457,35 @@ def ConvertMathToVC : Pass<"convert-math-to-vc", "::mlir::gpu::GPUModuleOp"> {
   let constructor = "imex::createConvertMathToVCPass()";
 }
 
+
+//===----------------------------------------------------------------------===//
+// ArithToVC
+//===----------------------------------------------------------------------===//
+// high-precision-interim-calculation
+def ConvertArithToVC : Pass<"convert-arith-to-vc", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Generate vc-intrinsics functions for select arith dialect operations";
+  let description = [{
+    Convert select arith dialect operations into the Func dialect calls to vc-intrinsics
+    functions.
+    Some arith operations SPIR-V counterpart are not supported by the VC compiler
+    (IGC vector backend) or not performant enough
+    and need to be converted to vc-intrinsic calls.
+    This pass converts these arith operations to vc-intrinsics.
+    }];
+  let options = [
+    Option<"enableHighPrecisionInterimCalculation", "enable-high-precision-interim-calculation", "bool",
+           /*default=*/"false",
+           "Enables high precision (f32) interim  calculation for arith operations."
+           "For any interim instruction added as part of the conversion will be high precision(f32).">
+  ];
+
+  let dependentDialects = ["::mlir::arith::ArithDialect",
+                           "::mlir::vector::VectorDialect",
+                            "::mlir::LLVM::LLVMDialect",
+                            "::mlir::func::FuncDialect"
+                            ];
+  let constructor = "imex::createConvertArithToVCPass()";
+}
+
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
