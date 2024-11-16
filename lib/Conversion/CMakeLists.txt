@@ -1,3 +1,4 @@
+add_subdirectory(ArithToVC)
 add_subdirectory(DistToStandard)
 add_subdirectory(NDArrayToLinalg)
 add_subdirectory(DropRegions)
