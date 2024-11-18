@@ -28,24 +28,11 @@ namespace imex {
 
 namespace {
 
-// Base-class for RewriterPatterns which handle recursion
-// Rewriters will not rewrite (stop recursion)
-// if input NDArray operands have no device or are within a EnvRegion.
-template <typename T>
-struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
-  using ::mlir::OpRewritePattern<T>::OpRewritePattern;
-  /// Initialize the pattern.
-  void initialize() {
-    /// Signal that this pattern safely handles recursive application.
-    RecOpRewritePattern<T>::setHasBoundedRewriteRecursion();
-  }
-};
-
-/// If given NDArray operation operates on or returns a NDArray with an
+/// If given operation operates on or returns a tensor with an
 /// GPUEnvironment, create GPU region operation which yields the operation.
-static ::mlir::LogicalResult
-matchAndRewritePTOP(::mlir::Operation *op, ::mlir::PatternRewriter &rewriter,
-                    bool checkOprnds) {
+static ::mlir::LogicalResult matchAndRewritePTOP(::mlir::Operation *op,
+                                                 ::mlir::IRRewriter &rewriter,
+                                                 bool checkOprnds = true) {
   auto parent = op->getParentOp();
   if (!parent) {
     return ::mlir::failure();
@@ -77,29 +64,16 @@ matchAndRewritePTOP(::mlir::Operation *op, ::mlir::PatternRewriter &rewriter,
   }
 
   // create a region with given env and clone creator op within and yield it
-  auto rOp = rewriter.create<::imex::region::EnvironmentRegionOp>(
-      op->getLoc(), env, std::nullopt, op->getResultTypes(),
+  rewriter.replaceOpWithNewOp<::imex::region::EnvironmentRegionOp>(
+      op, env, std::nullopt, op->getResultTypes(),
       [op](::mlir::OpBuilder &builder, ::mlir::Location loc) {
         auto cOp = builder.clone(*op);
         (void)builder.create<::imex::region::EnvironmentRegionYieldOp>(
             loc, cOp->getResults());
       });
-  rewriter.replaceOp(op, rOp);
 
   return ::mlir::success();
 }
-
-// Shallow wrapper template to handle all NDArrayOps
-// The matchAndWrite method simply calls matchAndRewritePTOP
-template <typename PTOP, bool CHECK_OPERANDS = true>
-struct NDArrayOpRWP : public RecOpRewritePattern<PTOP> {
-  using RecOpRewritePattern<PTOP>::RecOpRewritePattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(PTOP op, ::mlir::PatternRewriter &rewriter) const override {
-    return matchAndRewritePTOP(op, rewriter, CHECK_OPERANDS);
-  }
-};
 
 struct AddGPURegionsPass
     : public ::imex::impl::AddGPURegionsBase<AddGPURegionsPass> {
@@ -107,28 +81,17 @@ struct AddGPURegionsPass
   AddGPURegionsPass() = default;
 
   void runOnOperation() override {
-    ::mlir::FrozenRewritePatternSet patterns;
-    // It would be nicer to have a single rewrite-pattern which covers all
-    // NDArrayOps
-    insertPatterns<NDArrayOpRWP<::imex::ndarray::DeleteOp>,
-                   NDArrayOpRWP<::imex::ndarray::SubviewOp>,
-                   NDArrayOpRWP<::imex::ndarray::ExtractSliceOp>,
-                   NDArrayOpRWP<::imex::ndarray::InsertSliceOp>,
-                   NDArrayOpRWP<::imex::ndarray::ImmutableInsertSliceOp>,
-                   NDArrayOpRWP<::mlir::tensor::CastOp>,
-                   NDArrayOpRWP<::imex::ndarray::CastElemTypeOp>,
-                   NDArrayOpRWP<::imex::ndarray::LinSpaceOp>,
-                   NDArrayOpRWP<::imex::ndarray::CreateOp>,
-                   NDArrayOpRWP<::imex::ndarray::ReshapeOp>>(getContext(),
-                                                             patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    ::mlir::IRRewriter rewriter(&getContext());
+    getOperation()->walk([&](::mlir::Operation *op) {
+      auto doCopy = !::mlir::isa<::imex::ndarray::CopyOp>(op);
+      rewriter.setInsertionPointAfter(op);
+      (void)matchAndRewritePTOP(op, rewriter, doCopy);
+    });
   }
 };
-
 } // namespace
 
 std::unique_ptr<::mlir::Pass> createAddGPURegionsPass() {
   return std::make_unique<::imex::AddGPURegionsPass>();
 }
-
 } // namespace imex
