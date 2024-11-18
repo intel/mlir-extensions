@@ -1,112 +1,70 @@
-// RUN: DNDA_NPROCS=3 DNDA_PRANK=1 %python_executable %imex_runner -i %s -f %p/distfusion.pp -n --filecheck
+// RUN: imex-opt --pass-pipeline="builtin.module(func.func(sharding-propagation),coalesce-shard-ops,canonicalize,func.func(mesh-spmdization),canonicalize,convert-mesh-to-mpi,canonicalize,convert-ndarray-to-linalg,linalg-generalize-named-ops,linalg-fuse-elementwise-ops,empty-tensor-to-alloc-tensor,canonicalize,one-shot-bufferize,canonicalize,imex-remove-temporaries)" %s -o - | FileCheck %s
 
-module {
-  func.func @test(%arg0: !ndarray.ndarray<0x0xf32>, %arg1: !ndarray.ndarray<171x512xf32>, %arg2: !ndarray.ndarray<0x0xf32>,
-                      %arg3: !ndarray.ndarray<0x0xf32>, %arg4: !ndarray.ndarray<2x5xf32>, %arg5: !ndarray.ndarray<0x0xf32>,
-                      %arg6: !ndarray.ndarray<0x0xf32>, %arg7: !ndarray.ndarray<171x512xf32>, %arg8: !ndarray.ndarray<0x0xf32>) {
-    %cst = arith.constant 1.000000e+00 : f32
-    %c508 = arith.constant 508 : index
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c2 = arith.constant 2 : index
-    %c170 = arith.constant 170 : index
-    %a0 = dist.init_dist_array l_offset %c170, %c0 parts %arg0, %arg1, %arg2 : index, index, !ndarray.ndarray<0x0xf32>, !ndarray.ndarray<171x512xf32>, !ndarray.ndarray<0x0xf32> to !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">>
-    %a1 = dist.init_dist_array l_offset %c1, %c0 parts %arg3, %arg4, %arg5 : index, index, !ndarray.ndarray<0x0xf32>, !ndarray.ndarray<2x5xf32>, !ndarray.ndarray<0x0xf32> to !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">>
-    %a2 = dist.init_dist_array l_offset %c170, %c0 parts %arg6, %arg7, %arg8 : index, index, !ndarray.ndarray<0x0xf32>, !ndarray.ndarray<171x512xf32>, !ndarray.ndarray<0x0xf32> to !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">>
-    %0 = ndarray.subview %a0[2, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %1 = ndarray.subview %a1[2, 2] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %2 = ndarray.subview %a2[2, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %3 = ndarray.ewbin %1, %2 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %4 = ndarray.subview %a1[2, 0] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %5 = ndarray.subview %a2[2, 0] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %6 = ndarray.ewbin %4, %5 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %7 = ndarray.ewbin %3, %6 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %8 = ndarray.subview %a1[2, 1] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %9 = ndarray.subview %a2[2, 1] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %10 = ndarray.ewbin %8, %9 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %11 = ndarray.ewbin %7, %10 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %12 = ndarray.subview %a1[2, 3] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %13 = ndarray.subview %a2[2, 3] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %14 = ndarray.ewbin %12, %13 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %15 = ndarray.ewbin %11, %14 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %16 = ndarray.subview %a1[2, 4] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %17 = ndarray.subview %a2[2, 4] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %18 = ndarray.ewbin %16, %17 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %19 = ndarray.ewbin %15, %18 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %20 = ndarray.subview %a1[0, 2] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %21 = ndarray.subview %a2[0, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %22 = ndarray.ewbin %20, %21 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %23 = ndarray.ewbin %19, %22 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %24 = ndarray.subview %a1[1, 2] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %25 = ndarray.subview %a2[1, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %26 = ndarray.ewbin %24, %25 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %27 = ndarray.ewbin %23, %26 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %28 = ndarray.subview %a1[3, 2] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %29 = ndarray.subview %a2[3, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %30 = ndarray.ewbin %28, %29 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %31 = ndarray.ewbin %27, %30 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %32 = ndarray.subview %a1[4, 2] [1, 1] [1, 1] : !ndarray.ndarray<5x5xf32, #dist.dist_env<team = 22 loffs = 1,0 lparts = 0x0,2x5,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %33 = ndarray.subview %a2[4, 2] [508, 508] [1, 1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> to !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %34 = ndarray.ewbin %32, %33 {op = 21 : i32} : (!ndarray.ndarray<1x1xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %35 = ndarray.ewbin %31, %34 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %36 = ndarray.ewbin %0, %35 {op = 0 : i32} : (!ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    ndarray.insert_slice %36 into %a0[%c2, %c2] [%c508, %c508] [%c1, %c1] : !ndarray.ndarray<508x508xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">> into !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">>
-    %37 = ndarray.create value %cst {team = 94136931182224 : i64, dtype = 1 : i8, device = "XeGPU"} : (f32) -> !ndarray.ndarray<f32, #dist.dist_env<team = 22>, #region.gpu_env<device = "XeGPU">>
-    %38 = ndarray.ewbin %a2, %37 {op = 0 : i32} : (!ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">>, !ndarray.ndarray<f32, #dist.dist_env<team = 22>, #region.gpu_env<device = "XeGPU">>) -> !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">>
-    %dim = ndarray.dim %a2 %c0 : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> -> index
-    %dim_0 = ndarray.dim %a2 %c1 : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">> -> index
-    ndarray.insert_slice %38 into %a2[%c0, %c0] [%dim, %dim_0] [%c1, %c1] : !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = ?,? lparts = ?x?,?x?,?x?>, #region.gpu_env<device = "XeGPU">> into !ndarray.ndarray<512x512xf32, #dist.dist_env<team = 22 loffs = 170,0 lparts = 0x0,171x512,0x0>, #region.gpu_env<device = "XeGPU">>
-    return
-  }
+builtin.module {
+    memref.global constant @static_mpi_rank : memref<index> = dense<10>
+    mesh.mesh @mesh4x4(shape = 4x4)
+    func.func @test_shard_propagate_insert_slice_2d(%arg0: tensor<1200x1200xi64>) {
+        %s = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
+        %0 = mesh.shard %arg0 to %s : tensor<1200x1200xi64>
+        %1 = ndarray.subview %0[0, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
+        %2 = ndarray.subview %0[0, 4][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
+        %3 = ndarray.subview %0[4, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
+        %o1 = tensor.empty() : tensor<1000x1000xi64>
+        %4 = linalg.add ins(%1, %2 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o1 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
+        %o2 = tensor.empty() : tensor<1000x1000xi64>
+        %5 = linalg.add ins(%3, %4 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o2 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
+        ndarray.insert_slice %5 into %0[2, 2][1000, 1000][1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
+        return
+    }
 }
-// CHECK-LABEL: func.func @test
-// CHECK: call @_idtr_update_halo_f32
-// CHECK: call @_idtr_wait
-// CHECK: call @_idtr_update_halo_f32
-// CHECK: call @_idtr_update_halo_f32
-// CHECK: call @_idtr_wait
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT-COUNT-9: arith.mulf
-// CHECK-COUNT-9: arith.addf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<167x508xf32>
-// CHECK: call @_idtr_wait
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT: arith.mulf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<1x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT: arith.mulf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<1x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT-COUNT-8: arith.mulf
-// CHECK-COUNT-9: arith.addf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<2x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT: arith.mulf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<1x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT: arith.mulf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<1x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT-COUNT-8: arith.mulf
-// CHECK-COUNT-9: arith.addf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<2x508xf32>
-// CHECK-LABEL: linalg.generic
-// CHECK-NEXT: ^bb0
-// CHECK-NEXT: arith.addf
-// CHECK-NEXT: linalg.yield
-// CHECK-NEXT: } -> tensor<171x512xf32>
-// CHECK: return
+// CHECK: mesh.mesh @mesh4x4(shape = 4x4)
+// CHECK-LABEL: func.func @test_shard_propagate_insert_slice_2d(
+// CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) {
+// CHECK-NEXT: [[vc91_i32:%.*]] = arith.constant 91 : i32
+// CHECK-NEXT: [[vc9_i32:%.*]] = arith.constant 9 : i32
+// CHECK-NEXT: [[vc11_i32:%.*]] = arith.constant 11 : i32
+// CHECK-NEXT: [[vc6_i32:%.*]] = arith.constant 6 : i32
+// CHECK-NEXT: [[vc14_i32:%.*]] = arith.constant 14 : i32
+// CHECK-NEXT: [[v0:%.*]] = bufferization.to_memref [[varg0]] : memref<300x300xi64, strided<[?, ?], offset: ?>>
+// CHECK-NEXT: [[valloc:%.*]] = memref.alloc() {alignment = 64 : i64} : memref<304x304xi64>
+// CHECK-NEXT: [[vsubview:%.*]] = memref.subview [[valloc]][2, 2] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
+// CHECK-NEXT: memref.copy [[v0]], [[vsubview]] : memref<300x300xi64, strided<[?, ?], offset: ?>> to memref<300x300xi64, strided<[304, 1], offset: 610>>
+// CHECK-NEXT: [[vsubview_0:%.*]] = memref.subview [[valloc]][2, 0] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 608>>
+// CHECK-NEXT: [[vsubview_1:%.*]] = memref.subview [[valloc]][2, 300] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 908>>
+// CHECK-NEXT: memref.copy [[vsubview_1]], [[vsubview_0]] : memref<300x2xi64, strided<[304, 1], offset: 908>> to memref<300x2xi64, strided<[304, 1], offset: 608>>
+// CHECK-NEXT: mpi.send([[vsubview_0]], [[vc91_i32]], [[vc9_i32]]) : memref<300x2xi64, strided<[304, 1], offset: 608>>, i32, i32
+// CHECK-NEXT: mpi.recv([[vsubview_0]], [[vc91_i32]], [[vc11_i32]]) : memref<300x2xi64, strided<[304, 1], offset: 608>>, i32, i32
+// CHECK-NEXT: [[valloc_2:%.*]] = memref.alloc() : memref<300x2xi64>
+// CHECK-NEXT: [[vsubview_3:%.*]] = memref.subview [[valloc]][2, 2] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 610>>
+// CHECK-NEXT: memref.copy [[vsubview_3]], [[valloc_2]] : memref<300x2xi64, strided<[304, 1], offset: 610>> to memref<300x2xi64>
+// CHECK-NEXT: mpi.send([[valloc_2]], [[vc91_i32]], [[vc11_i32]]) : memref<300x2xi64>, i32, i32
+// CHECK-NEXT: mpi.recv([[valloc_2]], [[vc91_i32]], [[vc9_i32]]) : memref<300x2xi64>, i32, i32
+// CHECK-NEXT: [[vsubview_4:%.*]] = memref.subview [[valloc]][2, 302] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 910>>
+// CHECK-NEXT: memref.copy [[valloc_2]], [[vsubview_4]] : memref<300x2xi64> to memref<300x2xi64, strided<[304, 1], offset: 910>>
+// CHECK-NEXT: memref.dealloc [[valloc_2]] : memref<300x2xi64>
+// CHECK-NEXT: [[vsubview_5:%.*]] = memref.subview [[valloc]][0, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1]>>
+// CHECK-NEXT: [[vsubview_6:%.*]] = memref.subview [[valloc]][300, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91200>>
+// CHECK-NEXT: memref.copy [[vsubview_6]], [[vsubview_5]] : memref<2x304xi64, strided<[304, 1], offset: 91200>> to memref<2x304xi64, strided<[304, 1]>>
+// CHECK-NEXT: mpi.send([[vsubview_5]], [[vc91_i32]], [[vc6_i32]]) : memref<2x304xi64, strided<[304, 1]>>, i32, i32
+// CHECK-NEXT: mpi.recv([[vsubview_5]], [[vc91_i32]], [[vc14_i32]]) : memref<2x304xi64, strided<[304, 1]>>, i32, i32
+// CHECK-NEXT: [[valloc_7:%.*]] = memref.alloc() : memref<2x304xi64>
+// CHECK-NEXT: [[vsubview_8:%.*]] = memref.subview [[valloc]][2, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 608>>
+// CHECK-NEXT: memref.copy [[vsubview_8]], [[valloc_7]] : memref<2x304xi64, strided<[304, 1], offset: 608>> to memref<2x304xi64>
+// CHECK-NEXT: mpi.send([[valloc_7]], [[vc91_i32]], [[vc14_i32]]) : memref<2x304xi64>, i32, i32
+// CHECK-NEXT: mpi.recv([[valloc_7]], [[vc91_i32]], [[vc6_i32]]) : memref<2x304xi64>, i32, i32
+// CHECK-NEXT: [[vsubview_9:%.*]] = memref.subview [[valloc]][302, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91808>>
+// CHECK-NEXT: memref.copy [[valloc_7]], [[vsubview_9]] : memref<2x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91808>>
+// CHECK-NEXT: memref.dealloc [[valloc_7]] : memref<2x304xi64>
+// CHECK-NEXT: [[vsubview_10:%.*]] = memref.subview [[valloc]][0, 0] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1]>>
+// CHECK-NEXT: [[vsubview_11:%.*]] = memref.subview [[valloc]][0, 4] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 4>>
+// CHECK-NEXT: [[vsubview_12:%.*]] = memref.subview [[valloc]][4, 0] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 1216>>
+// CHECK-NEXT: [[valloc_13:%.*]] = memref.alloc() {alignment = 64 : i64} : memref<300x300xi64>
+// CHECK-NEXT: linalg.generic {indexing_maps = [#map, #map, #map, #map], iterator_types = ["parallel", "parallel"]} ins([[vsubview_12]], [[vsubview_10]], [[vsubview_11]] : memref<300x300xi64, strided<[304, 1], offset: 1216>>, memref<300x300xi64, strided<[304, 1]>>, memref<300x300xi64, strided<[304, 1], offset: 4>>) outs([[valloc_13]] : memref<300x300xi64>) {
+// CHECK-NEXT: ^bb0([[vin:%.*]]: i64, [[vin_15:%.*]]: i64, [[vin_16:%.*]]: i64, [[vout:%.*]]: i64):
+  // CHECK-NEXT: [[v1:%.*]] = arith.addi [[vin_15]], [[vin_16]] : i64
+  // CHECK-NEXT: [[v2:%.*]] = arith.addi [[vin]], [[v1]] : i64
+  // CHECK-NEXT: linalg.yield [[v2]] : i64
+// CHECK-NEXT: }
+// CHECK-NEXT: [[vsubview_14:%.*]] = memref.subview [[valloc]][2, 2] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
+// CHECK-NEXT: memref.copy [[valloc_13]], [[vsubview_14]] : memref<300x300xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
+// CHECK-NEXT: return
