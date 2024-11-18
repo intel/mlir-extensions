@@ -1,18 +1,19 @@
 builtin.module(
-    add-gpu-regions
+    func.func(add-gpu-regions)
     canonicalize
-    ndarray-dist
-    func.func(dist-coalesce)
-    func.func(dist-infer-elementwise-cores)
-    convert-dist-to-standard
+    func.func(sharding-propagation)
+    coalesce-shard-ops
     canonicalize
-    overlap-comm-and-compute
-    add-comm-cache-keys
-    lower-distruntime-to-idtr
+    func.func(mesh-spmdization)
+    canonicalize
+    convert-mesh-to-mpi
+    canonicalize
     convert-ndarray-to-linalg
-    canonicalize
-    func.func(tosa-to-linalg)
-    func.func(tosa-to-tensor)
-    canonicalize
+    linalg-generalize-named-ops
     linalg-fuse-elementwise-ops
+    empty-tensor-to-alloc-tensor
+    canonicalize
+    one-shot-bufferize
+    canonicalize
+    imex-remove-temporaries
 )
