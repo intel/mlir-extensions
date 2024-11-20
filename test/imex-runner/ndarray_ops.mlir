@@ -4,7 +4,6 @@ module {
   func.func private @printMemrefI32(tensor<*xi32>)
   func.func private @printMemrefF32(tensor<*xf32>)
   func.func @main() {
-    call @test_create() : () -> ()
     call @test_linspace_i32() : () -> ()
     call @test_linspace_f32() : () -> ()
     call @test_subview() : () -> ()
@@ -18,21 +17,6 @@ module {
     call @test_immutable_insert_slice_2d() : () -> ()
     // call @test_reshape() : () -> ()
     return
-  }
-
-  func.func @test_create() {
-    %i2 = arith.constant 2 : index
-    %c5 = arith.constant 5 : i32
-    %0 = ndarray.create %i2, %i2, %i2   value %c5 {dtype = 4 : i8} : (index, index, index, i32) -> tensor<?x?x?xi32>
-    %cast = tensor.cast %0 : tensor<?x?x?xi32> to tensor<*xi32>
-    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
-    return
-    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 3 offset = 0 sizes = [2, 2, 2] strides = [4, 2, 1] data =
-    // CHECK-NEXT{LITERAL}: [[[5,    5],
-    // CHECK-NEXT{LITERAL}:   [5,    5]],
-    // CHECK-NEXT{LITERAL}:  [[5,    5],
-    // CHECK-NEXT{LITERAL}:   [5,    5]]]
   }
 
   func.func @test_linspace_i32() {
@@ -83,7 +67,8 @@ module {
     %i0 = arith.constant 0 : index
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
-    %0 = ndarray.create %i4, %i4   value %c1 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
+    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
+    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
     %1 = ndarray.subview %0[%i1, %i0] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> to tensor<?x?xi32>
     %cast = tensor.cast %1 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
@@ -116,7 +101,8 @@ module {
     %i0 = arith.constant 0 : index
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
-    %0 = ndarray.create %i4, %i4   value %c1 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
+    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
+    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
     %1 = ndarray.extract_slice %0[%i1, %i0] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> to tensor<?x?xi32>
     %cast = tensor.cast %1 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
@@ -151,8 +137,10 @@ module {
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
     %i4 = arith.constant 4 : index
-    %0 = ndarray.create %i4, %i4   value %c1 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
-    %1 = ndarray.create %i2, %i2   value %c5 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
+    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
+    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
+    %empty1 = tensor.empty(%i2, %i2) : tensor<?x?xi32>
+    %1 = linalg.fill ins(%c5 : i32) outs(%empty1: tensor<?x?xi32>) -> tensor<?x?xi32>
     ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> into tensor<?x?xi32>
     %cast = tensor.cast %0 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
@@ -171,8 +159,10 @@ module {
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
     %i4 = arith.constant 4 : index
-    %0 = ndarray.create %i4, %i4   value %c1 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
-    %1 = ndarray.create value %c5 {dtype = 4 : i8} : (i32) -> tensor<i32>
+    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
+    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
+    %empty1 = tensor.empty() : tensor<i32>
+    %1 = linalg.fill ins(%c5 : i32) outs(%empty1: tensor<i32>) -> tensor<i32>
     ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<i32> into tensor<?x?xi32>
     %cast = tensor.cast %0 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
@@ -209,8 +199,10 @@ module {
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
     %i4 = arith.constant 4 : index
-    %0 = ndarray.create %i4, %i4   value %c1 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
-    %1 = ndarray.create %i2, %i2   value %c5 {dtype = 4 : i8} : (index, index, i32) -> tensor<?x?xi32>
+    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
+    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
+    %empty1 = tensor.empty(%i2, %i2) : tensor<?x?xi32>
+    %1 = linalg.fill ins(%c5 : i32) outs(%empty1 : tensor<?x?xi32>) -> tensor<?x?xi32>
     %2 = ndarray.immutable_insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> into tensor<?x?xi32>
     %cast = tensor.cast %2 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
