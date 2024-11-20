@@ -626,32 +626,6 @@ def LinSpaceOp : NDArray_Op<"linspace", [Pure]> {
 }
 
 
-def CreateOp : NDArray_Op<"create", [Pure, AttrSizedOperandSegments]> {
-  let summary = "Returns a new tensor having a specified shape and type and optionally filled with a value.";
-
-  let arguments = (ins Variadic<Index>:$shape, Optional<AnyType>:$value);
-  // result is a ndarray
-  let results = (outs AnyRankedTensor);
-
-  let assemblyFormat = [{
-    $shape oilist(`value` $value) attr-dict `:` `(` type(operands) `)` `->` qualified(type(results))
-  }];
-
-  let builders = [
-      // auto-deduce return type
-      OpBuilder<(ins "::mlir::ValueRange":$shape, "::imex::ndarray::DType":$dtype, "::mlir::Value":$value,
-                      CArg<"::mlir::ArrayRef<::mlir::Attribute>", "{}">:$environments), [{
-          auto dt = toMLIR($_builder, dtype);
-          build($_builder, $_state,
-                ::mlir::RankedTensorType::get(getShapeFromValues(shape), dt),
-                shape, value);
-      }]>,
-  ];
-
-  let hasCanonicalizer = 1;
-}
-
-
 def ReshapeOp : NDArray_Op<"reshape", []> {
   let summary = "Reshapes an array without changing its data.";
   let description = [{
@@ -672,9 +646,9 @@ def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
     let summary = "Cast array from one element type to another";
 
     let arguments = (ins AnyRankedTensor:$input, OptionalAttr<I1Attr>:$copy);
-    let results = (outs AnyRankedTensor:$output);
+    let results = (outs AnyRankedTensor);
 
-    let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type($output))";
+    let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type(results))";
 
     let hasCanonicalizer = 1;
 }

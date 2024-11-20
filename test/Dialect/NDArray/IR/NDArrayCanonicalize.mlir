@@ -45,33 +45,31 @@ func.func @test_extract_immutable_insert_slice(%arg0: tensor<16x16xi64>) -> tens
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3 = arith.constant 3 : index
-    %0 = ndarray.create %c3, %c3 {dtype = 2 : i8} : (index, index) -> tensor<3x3xi64>
-    %1 = ndarray.create %c3, %c3 {dtype = 2 : i8} : (index, index) -> tensor<3x3xi64>
-    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0, %c0] [%c3, %c3] [%c1, %c1] : tensor<3x3xi64> into tensor<16x16xi64>
-    %3 = ndarray.immutable_insert_slice %1 into %2[%c0, %c3] [%c3, %c3] [%c1, %c1] : tensor<3x3xi64> into tensor<16x16xi64>
+    %0 = tensor.empty(%c3, %c3) : tensor<?x?xi64>
+    %1 = tensor.empty(%c3, %c3) : tensor<?x?xi64>
+    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0, %c0] [%c3, %c3] [%c1, %c1] : tensor<?x?xi64> into tensor<16x16xi64>
+    %3 = ndarray.immutable_insert_slice %1 into %2[%c0, %c3] [%c3, %c3] [%c1, %c1] : tensor<?x?xi64> into tensor<16x16xi64>
     %4 = ndarray.extract_slice %3[0, 0] [3, 3] [1, 1] : tensor<16x16xi64> to tensor<3x3xi64>
     return %4 : tensor<3x3xi64>
 }
 // CHECK-LABEL: func.func @test_extract_immutable_insert_slice
-// CHECK: arith.constant
-// CHECK-NEXT: [[V0:%.*]] = ndarray.create
+// CHECK-NEXT: [[V0:%.*]] = tensor.empty
 // CHECK-NEXT: return [[V0]] : tensor<3x3xi64>
 
 func.func @test_extract_immutable_insert_slice_overwrite(%arg0: tensor<16x16xi64>) -> tensor<3x3xi64> {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3 = arith.constant 3 : index
-    %0 = ndarray.create %c3, %c3 {dtype = 2 : i8} : (index, index) -> tensor<3x3xi64>
-    %1 = ndarray.create %c3, %c3 {dtype = 2 : i8} : (index, index) -> tensor<3x3xi64>
-    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0, %c0] [%c3, %c3] [%c1, %c1] : tensor<3x3xi64> into tensor<16x16xi64>
-    %3 = ndarray.immutable_insert_slice %1 into %2[%c0, %c1] [%c3, %c3] [%c1, %c1] : tensor<3x3xi64> into tensor<16x16xi64>
+    %0 = tensor.empty(%c3, %c3) : tensor<?x?xi64>
+    %1 = tensor.empty(%c3, %c3) : tensor<?x?xi64>
+    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0, %c0] [%c3, %c3] [%c1, %c1] : tensor<?x?xi64> into tensor<16x16xi64>
+    %3 = ndarray.immutable_insert_slice %1 into %2[%c0, %c1] [%c3, %c3] [%c1, %c1] : tensor<?x?xi64> into tensor<16x16xi64>
     %4 = ndarray.extract_slice %3[0, 0] [3, 3] [1, 1] : tensor<16x16xi64> to tensor<3x3xi64>
     return %4 : tensor<3x3xi64>
 }
 // CHECK-LABEL: func.func @test_extract_immutable_insert_slice_overwrite
-// CHECK-NEXT: arith.constant
-// CHECK-NEXT: ndarray.create
-// CHECK-NEXT: ndarray.create
+// CHECK-NEXT: tensor.empty
+// CHECK-NEXT: tensor.empty
 // CHECK-NEXT: ndarray.immutable_insert_slice
 // CHECK-NEXT: ndarray.immutable_insert_slice
 // CHECK-NEXT: [[V0:%.*]] = ndarray.extract_slice
@@ -81,14 +79,13 @@ func.func @test_extract_immutable_insert_slice_strided(%arg0: tensor<16xi64>) ->
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3 = arith.constant 3 : index
-    %0 = ndarray.create %c3 {dtype = 2 : i8} : (index) -> tensor<3xi64>
-    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0] [%c3] [%c3] : tensor<3xi64> into tensor<16xi64>
+    %0 = tensor.empty(%c3) : tensor<?xi64>
+    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0] [%c3] [%c3] : tensor<?xi64> into tensor<16xi64>
     %4 = ndarray.extract_slice %2[0] [3] [%c1] : tensor<16xi64> to tensor<3xi64>
     return %4 : tensor<3xi64>
 }
 // CHECK-LABEL: func.func @test_extract_immutable_insert_slice_strided
-// CHECK-NEXT: arith.constant
-// CHECK-NEXT: ndarray.create
+// CHECK-NEXT: tensor.empty
 // CHECK-NEXT: ndarray.immutable_insert_slice
 // CHECK-NEXT: [[V0:%.*]] = ndarray.extract_slice
 // CHECK-NEXT: return [[V0]] : tensor<3xi64>
@@ -97,14 +94,13 @@ func.func @test_extract_immutable_insert_slice_strided2(%arg0: tensor<16xi64>) -
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3 = arith.constant 3 : index
-    %0 = ndarray.create %c3 {dtype = 2 : i8} : (index) -> tensor<3xi64>
-    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0] [%c3] [%c3] : tensor<3xi64> into tensor<16xi64>
+    %0 = tensor.empty(%c3) : tensor<?xi64>
+    %2 = ndarray.immutable_insert_slice %0 into %arg0[%c0] [%c3] [%c3] : tensor<?xi64> into tensor<16xi64>
     %4 = ndarray.extract_slice %2[0] [3] [%c3] : tensor<16xi64> to tensor<3xi64>
     return %4 : tensor<3xi64>
 }
 // CHECK-LABEL: func.func @test_extract_immutable_insert_slice_strided2
-// CHECK-NEXT: arith.constant
-// CHECK-NEXT: [[V0:%.*]] = ndarray.create
+// CHECK-NEXT: [[V0:%.*]] = tensor.empty
 // CHECK-NEXT: return [[V0]] : tensor<3xi64>
 
 func.func @test_insert_slice(%arg0: tensor<?xi64>, %arg1: tensor<?xi64>) -> tensor<?xi64> {

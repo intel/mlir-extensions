@@ -2,7 +2,6 @@ add_imex_dialect_library(IMEXNDArrayDialect
   NDArrayOps.cpp
   SubviewOp.cpp
   InsertSliceOp.cpp
-  CreateOp.cpp
   LinSpaceOp.cpp
   DeleteOp.cpp
   CastElemTypeOp.cpp

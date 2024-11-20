@@ -32,6 +32,7 @@
 #include <imex/Utils/PassUtils.h>
 
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Utils/Utils.h>
@@ -365,40 +366,6 @@ struct LinSpaceLowering
   }
 };
 
-/// Convert NDArray's createOp and its return type to Linalg/tensor.
-/// Also needs some arith and affine (for linalg::genericop).
-struct CreateLowering
-    : public ::mlir::OpRewritePattern<::imex::ndarray::CreateOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(::imex::ndarray::CreateOp op,
-                  ::mlir::PatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-
-    // check output type and get operands
-    auto retArTyp = op.getType();
-    auto value = op.getValue();
-
-    // init tensor
-    auto elTyp = retArTyp.getElementType();
-    ::mlir::Value res = createEmptyTensor(rewriter, loc, elTyp, op.getShape());
-
-    if (!ndarray::hasZeroSize(retArTyp.getShape()) && value) {
-      res = createParFor(
-                loc, rewriter, retArTyp.getRank(), res, ::mlir::ValueRange(),
-                [&value](::mlir::OpBuilder &builder, ::mlir::Location loc,
-                         ::mlir::ValueRange args) {
-                  (void)builder.create<::mlir::linalg::YieldOp>(loc, value);
-                })
-                .getResult(0);
-    }
-    rewriter.replaceOp(op, res);
-
-    return ::mlir::success();
-  }
-};
-
 /// Convert ndarray.delete and its return type to memref.dealloc.
 struct DeleteLowering
     : public ::mlir::OpRewritePattern<::imex::ndarray::DeleteOp> {
@@ -457,14 +424,13 @@ struct CastElemTypeLowering
     }
 
     auto dst = createEmptyTensor(rewriter, loc, dstArType, src);
-    auto cast = rewriter.create<::mlir::linalg::GenericOp>(
-        loc, dstArType, src, dst, ::mlir::ArrayRef({map, map}), iterators,
+    (void) rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+        op, dstArType, src, dst, ::mlir::ArrayRef({map, map}), iterators,
         [dstElType](::mlir::OpBuilder &b, ::mlir::Location loc,
                     ::mlir::ValueRange args) {
           auto val = createCast(loc, b, args[0], dstElType);
           b.create<::mlir::linalg::YieldOp>(loc, val);
         });
-    rewriter.replaceOp(op, cast);
 
     return ::mlir::success();
   }
@@ -492,13 +458,14 @@ struct ConvertNDArrayToLinalgPass
     target.addLegalDialect<
         ::mlir::linalg::LinalgDialect, ::mlir::arith::ArithDialect,
         ::mlir::memref::MemRefDialect, ::mlir::tensor::TensorDialect,
-        ::mlir::bufferization::BufferizationDialect,
+        ::mlir::bufferization::BufferizationDialect, ::mlir::func::FuncDialect,
         ::imex::region::RegionDialect>();
+    target.addLegalOp<mlir::UnrealizedConversionCastOp>();
 
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns
         .insert<SubviewLowering, ExtractSliceLowering, InsertSliceLowering,
-                ImmutableInsertSliceLowering, LinSpaceLowering, CreateLowering,
+                ImmutableInsertSliceLowering, LinSpaceLowering, ReshapeLowering,
                 CopyLowering, DeleteLowering, CastElemTypeLowering>(&ctxt);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
