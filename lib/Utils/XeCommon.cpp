@@ -30,6 +30,14 @@ int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
   return -1;
 }
 
+int getResultIndex(mlir::Operation *op, mlir::Value value) {
+  for (auto [index, result] : llvm::enumerate(op->getResults())) {
+    if (result == value)
+      return index;
+  }
+  return -1;
+}
+
 mlir::BlockArgument getArgForOperand(mlir::scf::ForOp &op,
                                      mlir::Value operand) {
   auto idx = getOperandIndex(op, operand);

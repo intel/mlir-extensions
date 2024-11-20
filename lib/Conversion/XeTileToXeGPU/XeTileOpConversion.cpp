@@ -433,11 +433,6 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
                               ? getBlockArrayLength(op, elemTy, innerBlk[0],
                                                     innerBlk[1], shape[1])
                               : 1;
-      // If this tile is used in load -> transpose -> DPASB chain, optimize
-      // transpose optimization requires array_length to be 1.
-      if (isForLoadTransposeDPASB(op))
-        array_length = 1;
-
       auto width = array_length * innerBlk[1];
 
       llvm::SmallVector<int64_t, 2> blocks(
