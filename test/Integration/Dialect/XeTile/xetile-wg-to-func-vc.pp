@@ -8,7 +8,9 @@ builtin.module(
         canonicalize
         convert-xetile-to-xegpu
         cse
-        imex-xegpu-apply-vnni-transformation)
+        imex-xegpu-hoist-transpose
+        imex-xegpu-apply-vnni-transformation
+        imex-xegpu-optimize-transpose)
     cse
     imex-vector-linearize
     gpu.module(convert-xegpu-to-vc)

@@ -32,6 +32,7 @@ namespace imex {
 struct Range {
   int min;
   int max;
+  bool contains(int val) { return val >= min && val <= max; }
 };
 
 // DPAS m x n x k

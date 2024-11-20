@@ -155,7 +155,7 @@ module @gemm attributes {gpu.container_module} {
     %cast_5 = memref.cast %alloc_3 : memref<256x256xf32> to memref<*xf32>
     // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF32(%cast, %cast_5) : (memref<*xf32>, memref<*xf32>) -> ()
-    call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
+    // call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
     memref.dealloc %alloc : memref<256x256xf16>
     memref.dealloc %alloc_1 : memref<256x256xf16>
     memref.dealloc %alloc_2 : memref<256x256xf32>
