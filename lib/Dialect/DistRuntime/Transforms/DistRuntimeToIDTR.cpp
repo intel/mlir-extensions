@@ -157,9 +157,8 @@ struct CopyReshapeOpPattern
     auto nlShape = op.getNlShape();
 
     // create output array with target size
-    auto nlArray = rewriter.create<::imex::ndarray::CreateOp>(
-        loc, nlShape, ::imex::ndarray::fromMLIR(elType), nullptr,
-        resType.getEncoding());
+    auto nlArray = rewriter.create<::mlir::tensor::EmptyOp>(
+        loc, op.getNlArray().getType(), nlShape);
 
     auto idxType = rewriter.getIndexType();
     auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
@@ -209,9 +208,8 @@ struct CopyPermuteOpPattern
     }
 
     // create output array with target size
-    auto nlArray = rewriter.create<::imex::ndarray::CreateOp>(
-        loc, nlShape, ::imex::ndarray::fromMLIR(elType), nullptr,
-        resType.getEncoding());
+    auto nlArray = rewriter.create<::mlir::tensor::EmptyOp>(
+        loc, op.getNlArray().getType(), nlShape);
 
     auto idxType = rewriter.getIndexType();
     auto teamC = rewriter.create<::mlir::arith::ConstantOp>(

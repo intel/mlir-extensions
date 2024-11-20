@@ -113,30 +113,16 @@ func.func @test_linspace(%arg0: si64, %arg1: si64, %arg2: si64) -> tensor<?xi64>
 // CHECK-LABEL: @test_linspace
 // CHECK-NEXT: ndarray.linspace %arg0 %arg1 %arg2 false : (si64, si64, si64) -> tensor<?xi64>
 
-func.func @test_create(%arg0: index, %arg1: index, %arg2: index, %arg3: i64) -> tensor<?x?x?xf64> {
-    %0 = ndarray.create %arg0, %arg1, %arg2 {dtype = 0 : i8} : (index, index, index) -> tensor<?x?x?xf64>
-    return %0 : tensor<?x?x?xf64>
-}
-// CHECK-LABEL: @test_create
-// CHECK: %arg0, %arg1, %arg2 {dtype = 0 : i8} : (index, index, index) -> tensor<?x?x?xf64>
-
-func.func @test_create2(%arg0: index, %arg1: index, %arg2: index, %arg3: i64) -> tensor<?x?x?xi64> {
-    %0 = ndarray.create %arg0, %arg1, %arg2 value %arg3 {environment = 3 : i64, team = 3 : i64, dtype = 2 : i8} : (index, index, index, i64) -> tensor<?x?x?xi64>
-    return %0 : tensor<?x?x?xi64>
-}
-// CHECK-LABEL: @test_create2
-// CHECK: ndarray.create %arg0, %arg1, %arg2 value %arg3 {dtype = 2 : i8, environment = 3 : i64, team = 3 : i64} : (index, index, index, i64) -> tensor<?x?x?xi64>
-
 // -----
 func.func @test_reshape(%arg0: index) -> tensor<?x?xi64> {
-    %0 = ndarray.create %arg0 {dtype = 2 : i8} : (index) -> tensor<?xi64>
+    %0 = tensor.empty(%arg0) : tensor<?xi64>
     %c0 = arith.constant 0 : index
     %c3 = arith.constant 3 : index
     %1 = "ndarray.reshape"(%0, %c0, %c3) : (tensor<?xi64>, index, index) -> tensor<?x?xi64>
     return %1 : tensor<?x?xi64>
 }
 // CHECK-LABEL: @test_reshape
-// CHECK: ndarray.create
+// CHECK: tensor.empty
 // CHECK: ndarray.reshape
 // CHECK-SAME: -> tensor<?x?xi64>
 

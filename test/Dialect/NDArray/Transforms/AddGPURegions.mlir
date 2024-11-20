@@ -7,10 +7,9 @@ func.func @test_region(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
     %c3 = arith.constant 3 : index
     %c33 = arith.constant 33 : i64
     %c22 = arith.constant 22 : index
-    %v = arith.constant 55 : i64
     %s = arith.index_cast %arg0 : i64 to index
     %0 = ndarray.linspace %arg0 %arg1 %c33 false {device = "XeGPU", team = 1 : i64} : (i64, i64, i64) -> tensor<33xi64, #GPUENV>
-    %1 = ndarray.create %c22 value %v {dtype = 2 : i8, device = "XeGPU", team = 1 : i64} : (index, i64) -> tensor<?xi64, #GPUENV>
+    %1 = tensor.empty(%c22) : tensor<?xi64, #GPUENV>
     %10 = ndarray.subview %0[%c0][22][%c3] : tensor<33xi64, #GPUENV> to tensor<22xi64, #GPUENV>
     %o1 = tensor.empty() : tensor<22xi64, #GPUENV>
     %20 = linalg.add ins(%10, %1 : tensor<22xi64, #GPUENV>, tensor<?xi64, #GPUENV>) outs(%o1 : tensor<22xi64, #GPUENV>) -> tensor<22xi64, #GPUENV>
@@ -27,13 +26,12 @@ func.func @test_region(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
     // CHECK-NEXT: [[vc3:%.*]] = arith.constant 3 : index
     // CHECK-NEXT: [[vc33_i64:%.*]] = arith.constant 33 : i64
     // CHECK-NEXT: [[vc22:%.*]] = arith.constant 22 : index
-    // CHECK-NEXT: [[vc55_i64:%.*]] = arith.constant 55 : i64
     // CHECK-NEXT: [[v0:%.*]] = arith.index_cast [[varg0]] : i64 to index
     // CHECK-NEXT: [[v1:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<33xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
       // CHECK-NEXT: [[v9:%.*]] = ndarray.linspace [[varg0]] [[varg1]] [[vc33_i64]] false {device = "XeGPU", team = 1 : i64} : (i64, i64, i64) -> tensor<33xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
       // CHECK-NEXT: region.env_region_yield [[v9]] : tensor<33xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v2:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
-      // CHECK-NEXT: [[v9:%.*]] = ndarray.create [[vc22]] value [[vc55_i64]] {device = "XeGPU", dtype = 2 : i8, team = 1 : i64} : (index, i64) -> tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
+      // CHECK-NEXT: [[v9:%.*]] = tensor.empty([[vc22]]) : tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
       // CHECK-NEXT: region.env_region_yield [[v9]] : tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v3:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
       // CHECK-NEXT: [[v9:%.*]] = ndarray.subview [[v1]][[[vc0]]] [22] [[[vc3]]] : tensor<33xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> to tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
