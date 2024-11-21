@@ -284,3 +284,95 @@ func.func @test_vector_store_load_4x4(%buffer: memref<4x4xf32>) {
   vector.store %0, %buffer[%c0, %c0] : memref<4x4xf32>, vector<4x4xf32>
   return
 }
+
+// -----
+// CHECK-LABEL: @test_linearize_index
+//  CHECK-SAME: (%[[ARG0:.*]]: vector<2x2xindex>, %[[ARG1:.*]]: vector<2x2xi32>) -> vector<2x2xindex> {
+//       CHECK: %[[T0:.*]] = vector.shape_cast %[[ARG1]] : vector<2x2xi32> to vector<4xi32>
+//       CHECK: %[[T1:.*]] = vector.shape_cast %[[ARG0]] : vector<2x2xindex> to vector<4xindex>
+//       CHECK: %[[CST:.*]] = arith.constant dense<[0, 1, 2, 3]> : vector<4xindex>
+//       CHECK: %[[T2:.*]] = arith.addi %[[T1]], %[[CST]] : vector<4xindex>
+//       CHECK: %[[T3:.*]] = arith.index_cast %[[T2]] : vector<4xindex> to vector<4xi32>
+//       CHECK: %[[T4:.*]] = arith.muli %[[T3]], %[[T0]] : vector<4xi32>
+//       CHECK: %[[T5:.*]] = arith.index_cast %[[T4]] : vector<4xi32> to vector<4xindex>
+//       CHECK: %[[T6:.*]] = vector.shape_cast %[[T5]] : vector<4xindex> to vector<2x2xindex>
+//       CHECK: return %[[T6]] : vector<2x2xindex>
+func.func @test_linearize_index(%arg0: vector<2x2xindex>, %arg1: vector<2x2xi32>) -> vector<2x2xindex> {
+  %0 = arith.constant dense<[[0, 1], [2, 3]]> : vector<2x2xindex>
+// Arith and math ops are handled in generic way, check some of them
+  %1 = arith.addi %arg0, %0 :  vector<2x2xindex>
+  %2 = arith.index_cast %1 : vector<2x2xindex> to vector<2x2xi32>
+  %3 = arith.muli %2, %arg1 : vector<2x2xi32>
+  %4 = arith.index_cast %3 : vector<2x2xi32> to vector<2x2xindex>
+  return %4 : vector<2x2xindex>
+}
+
+// -----
+// CHECK-LABEL: @add_kernel_f32
+//       CHECK: %[[CST0:.*]] = arith.constant dense<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]> : vector<16xindex>
+//       CHECK: %[[CST1:.*]] = arith.constant dense<[16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]> : vector<16xindex>
+//       CHECK: %[[T0:.*]] = vector.splat %{{.*}} : vector<16xindex>
+//       CHECK: %[[T1:.*]] = arith.addi %[[T0]], %[[CST0]] : vector<16xindex>
+//       CHECK: %[[T2:.*]] = arith.addi %[[T0]], %[[CST1]] : vector<16xindex>
+//       CHECK: %[[T3:.*]] = arith.index_cast %[[T1]] : vector<16xindex> to vector<16xi32>
+//       CHECK: %[[T4:.*]] = arith.index_cast %[[T2]] : vector<16xindex> to vector<16xi32>
+//       CHECK: %[[T5:.*]] = vector.splat %{{.*}} : vector<16xi32>
+//       CHECK: %[[T6:.*]] = arith.addi %[[T5]], %[[T3]] : vector<16xi32>
+//       CHECK: %[[T7:.*]] = arith.addi %[[T5]], %[[T4]] : vector<16xi32>
+//       CHECK: %[[T8:.*]] = arith.index_cast %[[T6]] : vector<16xi32> to vector<16xindex>
+//       CHECK: %[[T9:.*]] = arith.index_cast %[[T7]] : vector<16xi32> to vector<16xindex>
+gpu.module @add_kernel_f32 attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Bfloat16ConversionINTEL, BFloat16TypeKHR, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, VectorAnyINTEL, VectorComputeINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_bfloat16, SPV_KHR_expect_assume, SPV_INTEL_bfloat16_conversion, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
+  gpu.func @add_kernel_f32(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>) kernel attributes {VectorComputeFunctionINTEL, known_block_size = array<i32: 1, 32, 1>, known_grid_size = array<i32: 1, 1, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+    %cst = arith.constant dense<true> : vector<16xi1>
+    %c32 = arith.constant 32 : index
+    %c1024_i32 = arith.constant 1024 : i32
+    %cst_0 = arith.constant dense<[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]> : vector<1x16xindex>
+    %cst_1 = arith.constant dense<[[16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]]> : vector<1x16xindex>
+    %thread_id_x = gpu.thread_id  x
+    %thread_id_y = gpu.thread_id  y
+    %block_dim_y = gpu.block_dim  y
+    %0 = arith.muli %thread_id_x, %block_dim_y : index
+    %1 = arith.addi %0, %thread_id_y : index
+    %cast = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+    %cast_2 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+    %cast_3 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
+    %2 = arith.remsi %1, %c32 : index
+    %3 = arith.muli %2, %c32 : index
+    %4 = vector.splat %3 : vector<1x16xindex>
+    %5 = arith.addi %4, %cst_0 : vector<1x16xindex>
+    %6 = arith.addi %4, %cst_1 : vector<1x16xindex>
+    %7 = arith.index_cast %5 : vector<1x16xindex> to vector<1x16xi32>
+    %8 = arith.index_cast %6 : vector<1x16xindex> to vector<1x16xi32>
+    %block_id_x = gpu.block_id  x
+    %9 = arith.index_cast %block_id_x : index to i32
+    %10 = arith.muli %9, %c1024_i32 : i32
+    %11 = vector.splat %10 : vector<1x16xi32>
+    %12 = arith.addi %11, %7 : vector<1x16xi32>
+    %13 = arith.addi %11, %8 : vector<1x16xi32>
+    %14 = arith.index_cast %12 : vector<1x16xi32> to vector<1x16xindex>
+    %15 = arith.index_cast %13 : vector<1x16xi32> to vector<1x16xindex>
+    %16 = vector.shape_cast %14 : vector<1x16xindex> to vector<16xindex>
+    %17 = xegpu.create_tdesc %cast, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %18 = vector.shape_cast %15 : vector<1x16xindex> to vector<16xindex>
+    %19 = xegpu.create_tdesc %cast, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %20 = xegpu.load %17, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %21 = vector.shape_cast %20 : vector<16xf32> to vector<1x16xf32>
+    %22 = xegpu.load %19, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %23 = vector.shape_cast %22 : vector<16xf32> to vector<1x16xf32>
+    %24 = xegpu.create_tdesc %cast_2, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %25 = xegpu.create_tdesc %cast_2, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %26 = xegpu.load %24, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %27 = vector.shape_cast %26 : vector<16xf32> to vector<1x16xf32>
+    %28 = xegpu.load %25, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %29 = vector.shape_cast %28 : vector<16xf32> to vector<1x16xf32>
+    %30 = arith.addf %21, %27 : vector<1x16xf32>
+    %31 = arith.addf %23, %29 : vector<1x16xf32>
+    %32 = xegpu.create_tdesc %cast_3, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %33 = xegpu.create_tdesc %cast_3, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
+    %34 = vector.shape_cast %30 : vector<1x16xf32> to vector<16xf32>
+    xegpu.store %34, %32, %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1>
+    %35 = vector.shape_cast %31 : vector<1x16xf32> to vector<16xf32>
+    xegpu.store %35, %33, %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1>
+    gpu.return
+  }
+}

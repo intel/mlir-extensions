@@ -661,22 +661,6 @@ public:
   }
 };
 
-template <typename OpTy>
-class IndexCastPattern : public OpConversionPattern<OpTy> {
-public:
-  using OpConversionPattern<OpTy>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(OpTy indexCastOp, typename OpTy::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *converter = OpConversionPattern<OpTy>::getTypeConverter();
-    Type dstType = converter->convertType(indexCastOp.getType());
-    if (!dstType)
-      return failure();
-    rewriter.replaceOpWithNewOp<OpTy>(indexCastOp, dstType, adaptor.getIn());
-    return success();
-  }
-};
-
 class SCFForPattern : public OpConversionPattern<ForOp> {
 public:
   using OpConversionPattern<ForOp>::OpConversionPattern;
@@ -823,14 +807,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addDynamicallyLegalDialect<scf::SCFDialect>(
         [&](Operation *op) { return isLegalXeGPUSCFOp(op, typeConverter); });
 
-    target.addDynamicallyLegalOp<arith::IndexCastOp, arith::IndexCastUIOp>(
-        [&](Operation *op) {
-          if (auto vecTy = dyn_cast<VectorType>(op->getResult(0).getType())) {
-            return typeConverter.isLegal(vecTy);
-          }
-          return true;
-        });
-
     target.addIllegalOp<ShapeCastOp>();
 
     // TODO: can we change it to addDynamicLegalOp?
@@ -883,9 +859,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     patterns.add<VectorShapeCastPattern, SCFForPattern>(typeConverter,
                                                         patterns.getContext());
 
-    patterns.add<IndexCastPattern<arith::IndexCastOp>,
-                 IndexCastPattern<arith::IndexCastUIOp>>(typeConverter,
-                                                         patterns.getContext());
     // Ops to llvm.genx only Patterns
     patterns.add<NbarrierWaitPattern, CompilerHintPattern, DpasPattern,
                  NbarrierArrivePattern>(patterns.getContext());
