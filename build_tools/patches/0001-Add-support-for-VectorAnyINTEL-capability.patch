@@ -1,7 +1,7 @@
-From 45b150c9a0c4e4bd60c153e5142da17fd6cde6da Mon Sep 17 00:00:00 2001
-From: izamyati <igor.zamyatin@intel.com>
-Date: Tue, 24 Sep 2024 17:42:02 -0500
-Subject: [PATCH] Add support for VectorAnyINTEL capability
+From 6377f33cad48947728d2049e94aca8a567357017 Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Mon, 18 Nov 2024 19:45:00 +0100
+Subject: [PATCH 1/1] Add support for VectorAnyINTEL capability
 
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |   9 +-
@@ -24,10 +24,10 @@ Subject: [PATCH] Add support for VectorAnyINTEL capability
  17 files changed, 316 insertions(+), 65 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index 3b7da9b44a08..ddaeb13ef253 100644
+index 27c82811aa00..18f481e52602 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4142,7 +4142,12 @@ def SPIRV_Int32 : TypeAlias<I32, "Int32">;
+@@ -4188,7 +4188,12 @@ def SPIRV_Int32 : TypeAlias<I32, "Int32">;
  def SPIRV_Float32 : TypeAlias<F32, "Float32">;
  def SPIRV_Float : FloatOfWidths<[16, 32, 64]>;
  def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
@@ -41,7 +41,7 @@ index 3b7da9b44a08..ddaeb13ef253 100644
                                         [SPIRV_Bool, SPIRV_Integer, SPIRV_Float]>;
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
-@@ -4185,7 +4190,7 @@ class SPIRV_CoopMatrixOfType<list<Type> allowedTypes> :
+@@ -4231,7 +4236,7 @@ class SPIRV_CoopMatrixOfType<list<Type> allowedTypes> :
      "Cooperative Matrix">;
 
  class SPIRV_VectorOf<Type type> :
@@ -51,10 +51,10 @@ index 3b7da9b44a08..ddaeb13ef253 100644
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index 211385245555..671ec270efe0 100644
+index 48e4c24f8386..677074986d2d 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
-@@ -637,6 +637,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
+@@ -639,6 +639,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
 
@@ -209,7 +209,7 @@ index 337df3a5a65f..542c6beba2e4 100644
            capabilities.push_back(ref);
          }
 diff --git a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
-index d833ec9309ba..36840582a114 100644
+index f5700059f68e..915d1b0124f9 100644
 --- a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 +++ b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 @@ -88,9 +88,13 @@ static std::optional<SmallVector<int64_t>> getTargetShape(VectorType vecType) {
@@ -539,7 +539,7 @@ index 3683e5b469b1..a95a6001fd20 100644
    return
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/intel-ext-ops.mlir b/mlir/test/Dialect/SPIRV/IR/intel-ext-ops.mlir
-index 53a1015de75b..6970b8ec0628 100644
+index 6dd0353d9374..76b7110f0731 100644
 --- a/mlir/test/Dialect/SPIRV/IR/intel-ext-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/intel-ext-ops.mlir
 @@ -21,7 +21,7 @@ spirv.func @f32_to_bf16_vec(%arg0 : vector<2xf32>) "None" {
@@ -574,7 +574,7 @@ index 5c24f0e6a7d3..3ca61ab48096 100644
    return
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir b/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
-index d8a26c71d12f..d22378817dbb 100644
+index 60ae1584d29f..bc366c0e3a09 100644
 --- a/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
 @@ -495,7 +495,7 @@ func.func @group_non_uniform_bitwise_and(%val: i32) -> i32 {
@@ -583,7 +583,7 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_bitwise_and(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
-   %0 = spirv.GroupNonUniformBitwiseAnd "Workgroup" "Reduce" %val : i1
+   %0 = spirv.GroupNonUniformBitwiseAnd <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
 @@ -516,7 +516,7 @@ func.func @group_non_uniform_bitwise_or(%val: i32) -> i32 {
@@ -592,7 +592,7 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_bitwise_or(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
-   %0 = spirv.GroupNonUniformBitwiseOr "Workgroup" "Reduce" %val : i1
+   %0 = spirv.GroupNonUniformBitwiseOr <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
 @@ -537,7 +537,7 @@ func.func @group_non_uniform_bitwise_xor(%val: i32) -> i32 {
@@ -601,7 +601,7 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_bitwise_xor(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
-   %0 = spirv.GroupNonUniformBitwiseXor "Workgroup" "Reduce" %val : i1
+   %0 = spirv.GroupNonUniformBitwiseXor <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
 @@ -558,7 +558,7 @@ func.func @group_non_uniform_logical_and(%val: i1) -> i1 {
@@ -610,7 +610,7 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_logical_and(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
-   %0 = spirv.GroupNonUniformLogicalAnd "Workgroup" "Reduce" %val : i32
+   %0 = spirv.GroupNonUniformLogicalAnd <Workgroup> <Reduce> %val : i32 -> i32
    return %0: i32
  }
 @@ -579,7 +579,7 @@ func.func @group_non_uniform_logical_or(%val: i1) -> i1 {
@@ -619,7 +619,7 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_logical_or(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
-   %0 = spirv.GroupNonUniformLogicalOr "Workgroup" "Reduce" %val : i32
+   %0 = spirv.GroupNonUniformLogicalOr <Workgroup> <Reduce> %val : i32 -> i32
    return %0: i32
  }
 @@ -600,7 +600,7 @@ func.func @group_non_uniform_logical_xor(%val: i1) -> i1 {
@@ -628,11 +628,11 @@ index d8a26c71d12f..d22378817dbb 100644
  func.func @group_non_uniform_logical_xor(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
-   %0 = spirv.GroupNonUniformLogicalXor "Workgroup" "Reduce" %val : i32
+   %0 = spirv.GroupNonUniformLogicalXor <Workgroup> <Reduce> %val : i32 -> i32
    return %0: i32
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
-index 81ba471d3f51..7a29abd44b34 100644
+index 8f021ed3d663..21558b9607f8 100644
 --- a/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 @@ -27,7 +27,7 @@ func.func @exp(%arg0 : i32) -> () {

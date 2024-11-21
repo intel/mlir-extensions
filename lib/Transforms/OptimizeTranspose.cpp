@@ -969,7 +969,7 @@ private:
     auto addNToOneCast = [](OpBuilder &builder, Type type, ValueRange inputs,
                             Location loc) {
       auto cast = builder.create<UnrealizedConversionCastOp>(loc, type, inputs);
-      return std::optional<Value>(cast.getResult(0));
+      return cast.getResult(0);
     };
     typeConverter.addSourceMaterialization(addNToOneCast);
     typeConverter.addArgumentMaterialization(addNToOneCast);

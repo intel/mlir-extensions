@@ -89,23 +89,21 @@ XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
   addConversion(
       [&](mlir::MemRefType type) -> std::optional<mlir::Type> { return type; });
 
-  addArgumentMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
-            .getResult(0);
-      });
+  addArgumentMaterialization([&](mlir::OpBuilder &builder,
+                                 mlir::Type resultType, mlir::ValueRange inputs,
+                                 mlir::Location loc) -> mlir::Value {
+    return builder
+        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+        .getResult(0);
+  });
 
-  addSourceMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
-            .getResult(0);
-      });
+  addSourceMaterialization([&](mlir::OpBuilder &builder, mlir::Type resultType,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+    return builder
+        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+        .getResult(0);
+  });
 }
 
 std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertTileType(

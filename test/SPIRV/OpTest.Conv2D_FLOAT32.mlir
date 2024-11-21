@@ -97,7 +97,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
           %cst1_i64 = spirv.Constant 1 : i64
           %17 = spirv.IMul %cst1_i64, %7 : i64
           %18 = spirv.IAdd %16, %17 : i64
-          %19 = spirv.AccessChain %arg0[%18] : !spirv.ptr<!spirv.array<451584 x f32>, CrossWorkgroup>, i64
+          %19 = spirv.AccessChain %arg0[%18] : !spirv.ptr<!spirv.array<451584 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           %20 = spirv.Load "CrossWorkgroup" %19 : f32
           %cst0_i64_1 = spirv.Constant 0 : i64
           %cst451584_i64_2 = spirv.Constant 451584 : i64
@@ -115,7 +115,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
           %cst1_i64_6 = spirv.Constant 1 : i64
           %29 = spirv.IMul %cst1_i64_6, %7 : i64
           %30 = spirv.IAdd %28, %29 : i64
-          %31 = spirv.AccessChain %arg2[%30] : !spirv.ptr<!spirv.array<451584 x f32>, CrossWorkgroup>, i64
+          %31 = spirv.AccessChain %arg2[%30] : !spirv.ptr<!spirv.array<451584 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           spirv.Store "CrossWorkgroup" %31, %20 : f32
           %32 = spirv.IAdd %7, %arg4 : i64
           spirv.Branch ^bb1(%32 : i64)
@@ -181,7 +181,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
           %cst1_i64 = spirv.Constant 1 : i64
           %17 = spirv.IMul %cst1_i64, %7 : i64
           %18 = spirv.IAdd %16, %17 : i64
-          %19 = spirv.AccessChain %arg1[%18] : !spirv.ptr<!spirv.array<471969 x f32>, CrossWorkgroup>, i64
+          %19 = spirv.AccessChain %arg1[%18] : !spirv.ptr<!spirv.array<471969 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           spirv.Store "CrossWorkgroup" %19, %arg0 : f32
           %20 = spirv.IAdd %7, %arg4 : i64
           spirv.Branch ^bb1(%20 : i64)
@@ -246,7 +246,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
           %cst1_i64 = spirv.Constant 1 : i64
           %17 = spirv.IMul %cst1_i64, %7 : i64
           %18 = spirv.IAdd %16, %17 : i64
-          %19 = spirv.AccessChain %arg1[%18] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64
+          %19 = spirv.AccessChain %arg1[%18] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           spirv.Store "CrossWorkgroup" %19, %arg0 : f32
           %20 = spirv.IAdd %7, %arg4 : i64
           spirv.Branch ^bb1(%20 : i64)
@@ -337,7 +337,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
                 %cst1_i64 = spirv.Constant 1 : i64
                 %32 = spirv.IMul %cst1_i64, %16 : i64
                 %33 = spirv.IAdd %31, %32 : i64
-                %34 = spirv.AccessChain %arg0[%33] : !spirv.ptr<!spirv.array<471969 x f32>, CrossWorkgroup>, i64
+                %34 = spirv.AccessChain %arg0[%33] : !spirv.ptr<!spirv.array<471969 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
                 %35 = spirv.Load "CrossWorkgroup" %34 : f32
                 %cst0_i64_2 = spirv.Constant 0 : i64
                 %cst864_i64 = spirv.Constant 864 : i64
@@ -355,7 +355,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
                 %cst1_i64_3 = spirv.Constant 1 : i64
                 %44 = spirv.IMul %cst1_i64_3, %7 : i64
                 %45 = spirv.IAdd %43, %44 : i64
-                %46 = spirv.AccessChain %arg2[%45] : !spirv.ptr<!spirv.array<2592 x f32>, CrossWorkgroup>, i64
+                %46 = spirv.AccessChain %arg2[%45] : !spirv.ptr<!spirv.array<2592 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
                 %47 = spirv.Load "CrossWorkgroup" %46 : f32
                 %cst0_i64_4 = spirv.Constant 0 : i64
                 %cst1204224_i64 = spirv.Constant 1204224 : i64
@@ -373,7 +373,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
                 %cst1_i64_7 = spirv.Constant 1 : i64
                 %56 = spirv.IMul %cst1_i64_7, %7 : i64
                 %57 = spirv.IAdd %55, %56 : i64
-                %58 = spirv.AccessChain %arg3[%57] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64
+                %58 = spirv.AccessChain %arg3[%57] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
                 %59 = spirv.Load "CrossWorkgroup" %58 : f32
                 %60 = spirv.FMul %35, %47 : f32
                 %61 = spirv.FAdd %59, %60 : f32
@@ -393,7 +393,7 @@ module @complex_conv_2d attributes {gpu.container_module} {
                 %cst1_i64_13 = spirv.Constant 1 : i64
                 %70 = spirv.IMul %cst1_i64_13, %7 : i64
                 %71 = spirv.IAdd %69, %70 : i64
-                %72 = spirv.AccessChain %arg3[%71] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64
+                %72 = spirv.AccessChain %arg3[%71] : !spirv.ptr<!spirv.array<1204224 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
                 spirv.Store "CrossWorkgroup" %72, %61 : f32
                 %73 = spirv.IAdd %16, %arg5 : i64
                 spirv.Branch ^bb1(%73 : i64)

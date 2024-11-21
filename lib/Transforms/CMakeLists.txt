@@ -20,6 +20,7 @@ add_mlir_library(IMEXTransforms
 
   LINK_LIBS PUBLIC
   MLIRFuncDialect
+  MLIRCopyOpInterface
   MLIRGPUDialect
   MLIRPass
   MLIRSCFDialect
