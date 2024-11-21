@@ -105,7 +105,8 @@ extern ::mlir::SmallVector<int64_t> mkConstant(::mlir::ValueRange vals);
 extern ::imex::ValVec getMixedAsValues(const ::mlir::Location &loc,
                                        ::mlir::OpBuilder &builder,
                                        const ::mlir::ValueRange &dyns,
-                                       ::llvm::ArrayRef<int64_t> statics);
+                                       ::llvm::ArrayRef<int64_t> statics,
+                                       bool asI64 = false);
 
 /// similar to mlir::decomposeMixedValues but converting const values tot
 /// statics
