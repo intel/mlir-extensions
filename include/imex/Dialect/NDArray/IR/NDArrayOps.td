@@ -610,18 +610,6 @@ def LinSpaceOp : NDArray_Op<"linspace", [Pure]> {
     $start $stop $num (`true` $endpoint^):(`false`)? attr-dict `:` `(` type(operands) `)` `->` qualified(type(results))
   }];
 
-  let builders = [
-      // auto-deduce return type
-      OpBuilder<(ins "::mlir::Value":$start, "::mlir::Value":$stop, "::mlir::Value":$num,
-                      CArg<"bool", "true">:$endpoint, CArg<"::imex::ndarray::DType", "imex::ndarray::F64">:$dtype,
-                      CArg<"::mlir::ArrayRef<::mlir::Attribute>", "{}">:$environments), [{
-          auto dt = toMLIR($_builder, dtype);
-          build($_builder, $_state,
-                ::mlir::RankedTensorType::get(getShapeFromValues(num), dt),
-                start, stop, num, endpoint);
-      }]>,
-  ];
-
   let hasCanonicalizer = 1;
 }
 
