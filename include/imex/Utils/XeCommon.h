@@ -415,10 +415,10 @@ template <typename OpType> unsigned encodeCacheHint(OpType op) {
   }
   return cacheHint;
 }
-class XeTypeConverter : public mlir::OneToNTypeConverter {
+class XeTypeConverter : public mlir::TypeConverter {
 public:
   // friend class XeConversionPattern;
-  using mlir::OneToNTypeConverter::convertType;
+  using mlir::TypeConverter::convertType;
 
   XeTypeConverter(mlir::MLIRContext &context) {
     addConversion([&](xetile::TileType tileTy,

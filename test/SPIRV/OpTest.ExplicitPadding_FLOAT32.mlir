@@ -58,7 +58,7 @@ module @explicit_padding attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %8, %arg0 : f32
       spirv.Return
     }
@@ -90,7 +90,7 @@ module @explicit_padding attributes {gpu.container_module} {
       %cst1_i64_1 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64_1, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<6 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<6 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %9 = spirv.Load "CrossWorkgroup" %8 : f32
       %10 = spirv.IAdd %1, %cst2_i64 : i64
       %11 = spirv.IAdd %3, %cst1_i64 : i64
@@ -101,7 +101,7 @@ module @explicit_padding attributes {gpu.container_module} {
       %cst1_i64_3 = spirv.Constant 1 : i64
       %14 = spirv.IMul %cst1_i64_3, %11 : i64
       %15 = spirv.IAdd %13, %14 : i64
-      %16 = spirv.AccessChain %arg1[%15] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64
+      %16 = spirv.AccessChain %arg1[%15] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %17 = spirv.Load "CrossWorkgroup" %16 : f32
       %18 = spirv.FAdd %9, %17 : f32
       %cst0_i64_4 = spirv.Constant 0 : i64
@@ -111,7 +111,7 @@ module @explicit_padding attributes {gpu.container_module} {
       %cst1_i64_6 = spirv.Constant 1 : i64
       %21 = spirv.IMul %cst1_i64_6, %11 : i64
       %22 = spirv.IAdd %20, %21 : i64
-      %23 = spirv.AccessChain %arg1[%22] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64
+      %23 = spirv.AccessChain %arg1[%22] : !spirv.ptr<!spirv.array<30 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %23, %18 : f32
       spirv.Return
     }

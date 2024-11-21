@@ -41,7 +41,7 @@ module @broadcast_non_numpy attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<12 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<12 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %8, %arg0 : f32
       spirv.Return
     }
@@ -68,7 +68,7 @@ module @broadcast_non_numpy attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %4 = spirv.IMul %cst1_i64, %1 : i64
       %5 = spirv.IAdd %cst0_i64, %4 : i64
-      %6 = spirv.AccessChain %arg0[%5] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64
+      %6 = spirv.AccessChain %arg0[%5] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %7 = spirv.Load "CrossWorkgroup" %6 : f32
       %cst0_i64_1 = spirv.Constant 0 : i64
       %cst4_i64 = spirv.Constant 4 : i64
@@ -77,7 +77,7 @@ module @broadcast_non_numpy attributes {gpu.container_module} {
       %cst1_i64_2 = spirv.Constant 1 : i64
       %10 = spirv.IMul %cst1_i64_2, %3 : i64
       %11 = spirv.IAdd %9, %10 : i64
-      %12 = spirv.AccessChain %arg1[%11] : !spirv.ptr<!spirv.array<12 x f32>, CrossWorkgroup>, i64
+      %12 = spirv.AccessChain %arg1[%11] : !spirv.ptr<!spirv.array<12 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %12, %7 : f32
       spirv.Return
     }

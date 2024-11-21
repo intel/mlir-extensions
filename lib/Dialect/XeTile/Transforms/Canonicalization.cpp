@@ -396,7 +396,7 @@ struct XeTileCanonicalizationPass final
                                   mlir::ValueRange inputs, mlir::Location loc) {
         auto cast =
             builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
-        return std::optional<mlir::Value>(cast.getResult(0));
+        return cast.getResult(0);
       };
       typeConverter.addConversion([](mlir::Type type) { return type; });
       typeConverter.addConversion([](imex::xetile::TileType tileTy) {

@@ -1284,7 +1284,7 @@ struct ConvertNDArrayToLinalgPass
     auto materializeCast =
         [](::mlir::OpBuilder &builder, ::mlir::Type type,
            ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> std::optional<::mlir::Value> {
+           ::mlir::Location loc) -> ::mlir::Value {
       if (inputs.size() == 1) {
         auto input = inputs[0];
         auto itype = input.getType();

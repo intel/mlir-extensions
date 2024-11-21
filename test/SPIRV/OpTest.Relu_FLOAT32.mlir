@@ -73,7 +73,7 @@ module @relu attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %9 = spirv.Load "CrossWorkgroup" %8 : f32
       %10 = spirv.FOrdLessThan %9, %arg1 : f32
       %cst0_i64_1 = spirv.Constant 0 : i64
@@ -83,7 +83,7 @@ module @relu attributes {gpu.container_module} {
       %cst1_i64_3 = spirv.Constant 1 : i64
       %13 = spirv.IMul %cst1_i64_3, %3 : i64
       %14 = spirv.IAdd %12, %13 : i64
-      %15 = spirv.AccessChain %arg2[%14] : !spirv.ptr<!spirv.array<20 x i8>, CrossWorkgroup>, i64
+      %15 = spirv.AccessChain %arg2[%14] : !spirv.ptr<!spirv.array<20 x i8>, CrossWorkgroup>, i64 -> !spirv.ptr<i8, CrossWorkgroup>
       %cst0_i8 = spirv.Constant 0 : i8
       %cst1_i8 = spirv.Constant 1 : i8
       %16 = spirv.Select %10, %cst1_i8, %cst0_i8 : i1, i8
@@ -118,7 +118,7 @@ module @relu attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<20 x i8>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<20 x i8>, CrossWorkgroup>, i64 -> !spirv.ptr<i8, CrossWorkgroup>
       %9 = spirv.Load "CrossWorkgroup" %8 : i8
       %cst1_i8 = spirv.Constant 1 : i8
       %10 = spirv.IEqual %9, %cst1_i8 : i8
@@ -129,7 +129,7 @@ module @relu attributes {gpu.container_module} {
       %cst1_i64_3 = spirv.Constant 1 : i64
       %13 = spirv.IMul %cst1_i64_3, %3 : i64
       %14 = spirv.IAdd %12, %13 : i64
-      %15 = spirv.AccessChain %arg1[%14] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64
+      %15 = spirv.AccessChain %arg1[%14] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %16 = spirv.Load "CrossWorkgroup" %15 : f32
       %17 = spirv.Select %10, %arg2, %16 : i1, f32
       %cst0_i64_4 = spirv.Constant 0 : i64
@@ -139,7 +139,7 @@ module @relu attributes {gpu.container_module} {
       %cst1_i64_6 = spirv.Constant 1 : i64
       %20 = spirv.IMul %cst1_i64_6, %3 : i64
       %21 = spirv.IAdd %19, %20 : i64
-      %22 = spirv.AccessChain %arg3[%21] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64
+      %22 = spirv.AccessChain %arg3[%21] : !spirv.ptr<!spirv.array<20 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %22, %17 : f32
       spirv.Return
     }

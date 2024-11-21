@@ -87,15 +87,15 @@ module @argmax attributes {gpu.container_module} {
             %cst1_i64 = spirv.Constant 1 : i64
             %14 = spirv.IMul %cst1_i64, %6 : i64
             %15 = spirv.IAdd %13, %14 : i64
-            %16 = spirv.AccessChain %arg0[%15] : !spirv.ptr<!spirv.array<48 x f32>, CrossWorkgroup>, i64
+            %16 = spirv.AccessChain %arg0[%15] : !spirv.ptr<!spirv.array<48 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
             %17 = spirv.Load "CrossWorkgroup" %16 : f32
             %cst0_i64_0 = spirv.Constant 0 : i64
-            %18 = spirv.AccessChain %arg2[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64
+            %18 = spirv.AccessChain %arg2[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
             %19 = spirv.Load "CrossWorkgroup" %18 : f32
             %20 = spirv.FOrdGreaterThan %19, %17 : f32
             %21 = spirv.Select %20, %19, %17 : i1, f32
             %cst0_i64_1 = spirv.Constant 0 : i64
-            %22 = spirv.AccessChain %arg2[%cst0_i64_1] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64
+            %22 = spirv.AccessChain %arg2[%cst0_i64_1] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
             spirv.Store "CrossWorkgroup" %22, %21 : f32
             %23 = spirv.IAdd %6, %arg4 : i64
             spirv.Branch ^bb1(%23 : i64)
@@ -160,7 +160,7 @@ module @argmax attributes {gpu.container_module} {
         %cst1_i64 = spirv.Constant 1 : i64
         %12 = spirv.IMul %cst1_i64, %4 : i64
         %13 = spirv.IAdd %11, %12 : i64
-        %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<48 x i32>, CrossWorkgroup>, i64
+        %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<48 x i32>, CrossWorkgroup>, i64 -> !spirv.ptr<i32, CrossWorkgroup>
         spirv.Store "CrossWorkgroup" %14, %arg0 : i32
         %15 = spirv.IAdd %4, %arg4 : i64
         spirv.Branch ^bb1(%15 : i64)
@@ -214,10 +214,10 @@ module @argmax attributes {gpu.container_module} {
             %cst1_i64 = spirv.Constant 1 : i64
             %14 = spirv.IMul %cst1_i64, %6 : i64
             %15 = spirv.IAdd %13, %14 : i64
-            %16 = spirv.AccessChain %arg0[%15] : !spirv.ptr<!spirv.array<48 x f32>, CrossWorkgroup>, i64
+            %16 = spirv.AccessChain %arg0[%15] : !spirv.ptr<!spirv.array<48 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
             %17 = spirv.Load "CrossWorkgroup" %16 : f32
             %cst0_i64_0 = spirv.Constant 0 : i64
-            %18 = spirv.AccessChain %arg2[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64
+            %18 = spirv.AccessChain %arg2[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
             %19 = spirv.Load "CrossWorkgroup" %18 : f32
             %cst0_i64_1 = spirv.Constant 0 : i64
             %cst48_i64_2 = spirv.Constant 48 : i64
@@ -232,17 +232,17 @@ module @argmax attributes {gpu.container_module} {
             %cst1_i64_5 = spirv.Constant 1 : i64
             %26 = spirv.IMul %cst1_i64_5, %6 : i64
             %27 = spirv.IAdd %25, %26 : i64
-            %28 = spirv.AccessChain %arg3[%27] : !spirv.ptr<!spirv.array<48 x i32>, CrossWorkgroup>, i64
+            %28 = spirv.AccessChain %arg3[%27] : !spirv.ptr<!spirv.array<48 x i32>, CrossWorkgroup>, i64 -> !spirv.ptr<i32, CrossWorkgroup>
             %29 = spirv.Load "CrossWorkgroup" %28 : i32
             %cst0_i64_6 = spirv.Constant 0 : i64
-            %30 = spirv.AccessChain %arg4[%cst0_i64_6] : !spirv.ptr<!spirv.array<1 x i32>, CrossWorkgroup>, i64
+            %30 = spirv.AccessChain %arg4[%cst0_i64_6] : !spirv.ptr<!spirv.array<1 x i32>, CrossWorkgroup>, i64 -> !spirv.ptr<i32, CrossWorkgroup>
             %31 = spirv.Load "CrossWorkgroup" %30 : i32
             %32 = spirv.FOrdEqual %17, %19 : f32
             %33 = spirv.Select %32, %29, %arg5 : i1, i32
             %34 = spirv.UGreaterThan %31, %33 : i32
             %35 = spirv.Select %34, %31, %33 : i1, i32
             %cst0_i64_7 = spirv.Constant 0 : i64
-            %36 = spirv.AccessChain %arg4[%cst0_i64_7] : !spirv.ptr<!spirv.array<1 x i32>, CrossWorkgroup>, i64
+            %36 = spirv.AccessChain %arg4[%cst0_i64_7] : !spirv.ptr<!spirv.array<1 x i32>, CrossWorkgroup>, i64 -> !spirv.ptr<i32, CrossWorkgroup>
             spirv.Store "CrossWorkgroup" %36, %35 : i32
             %37 = spirv.IAdd %6, %arg7 : i64
             spirv.Branch ^bb1(%37 : i64)

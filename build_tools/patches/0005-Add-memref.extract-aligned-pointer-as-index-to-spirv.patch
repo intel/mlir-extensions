@@ -1,20 +1,20 @@
-From 995779b01d0f50be5729eafc0198d777e9c82c8d Mon Sep 17 00:00:00 2001
-From: Chao Chen <chao.chen@intel.com>
-Date: Fri, 26 Apr 2024 20:59:53 +0000
-Subject: [PATCH 7/7] Add-memref.extract_aligned_pointer_as_index-to-spirv
+From 9b5db3d72169b878e1f607cd6dd530c72849028b Mon Sep 17 00:00:00 2001
+From: izamyati <igor.zamyatin@intel.com>
+Date: Fri, 25 Oct 2024 16:00:54 -0500
+Subject: [PATCH 1/1] Add memref.extract aligned pointer as index-to-spirv
 
 ---
  .../MemRefToSPIRV/MemRefToSPIRV.cpp           | 37 ++++++++++++++++---
  1 file changed, 32 insertions(+), 5 deletions(-)
 
 diff --git a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
-index 81b9f55cac80..0db46e6c2987 100644
+index 49a391938eaf..60b8f379dfc1 100644
 --- a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
 +++ b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
-@@ -308,6 +308,18 @@ public:
+@@ -307,6 +307,18 @@ public:
    }
  };
-
+ 
 +/// Converts memref.extract_aligned_pointer_as_index to spirv.ConvertPtrToU.
 +class ExtractAlignedPointerAsIndexOpPattern
 +    : public OpConversionPattern<memref::ExtractAlignedPointerAsIndexOp> {
@@ -28,12 +28,12 @@ index 81b9f55cac80..0db46e6c2987 100644
 +};
 +
  } // namespace
-
+ 
  //===----------------------------------------------------------------------===//
-@@ -922,6 +934,20 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
+@@ -921,6 +933,20 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
    return success();
  }
-
+ 
 +//===----------------------------------------------------------------------===//
 +// ExtractAlignedPointerAsIndexOp
 +//===----------------------------------------------------------------------===//
@@ -51,9 +51,9 @@ index 81b9f55cac80..0db46e6c2987 100644
  //===----------------------------------------------------------------------===//
  // Pattern population
  //===----------------------------------------------------------------------===//
-@@ -929,10 +955,11 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
+@@ -928,10 +954,11 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
  namespace mlir {
- void populateMemRefToSPIRVPatterns(SPIRVTypeConverter &typeConverter,
+ void populateMemRefToSPIRVPatterns(const SPIRVTypeConverter &typeConverter,
                                     RewritePatternSet &patterns) {
 -  patterns.add<AllocaOpPattern, AllocOpPattern, AtomicRMWOpPattern,
 -               DeallocOpPattern, IntLoadOpPattern, IntStoreOpPattern,
@@ -68,5 +68,6 @@ index 81b9f55cac80..0db46e6c2987 100644
 +          typeConverter, patterns.getContext());
  }
  } // namespace mlir
---
+-- 
 2.34.1
+

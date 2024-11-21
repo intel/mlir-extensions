@@ -90,11 +90,11 @@ func.func @main() attributes {llvm.emit_c_interface} {
       %3 = spirv.CompositeExtract %2[1 : i32] : vector<3xi64>
       %4 = spirv.IMul %1, %cst20_i64 : i64
       %5 = spirv.IAdd %4, %3 : i64
-      %6 = spirv.AccessChain %arg0[%5] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64
+      %6 = spirv.AccessChain %arg0[%5] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       %7 = spirv.Load "CrossWorkgroup" %6 : i16
       %8 = spirv.IMul %1, %cst20_i64 : i64
       %9 = spirv.IAdd %8, %3 : i64
-      %10 = spirv.AccessChain %arg1[%9] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64
+      %10 = spirv.AccessChain %arg1[%9] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       %11 = spirv.Load "CrossWorkgroup" %10 : i16
       // %12 = spirv.IAdd %7, %11 : i16
       // *************************************** //
@@ -109,7 +109,7 @@ func.func @main() attributes {llvm.emit_c_interface} {
 
       %13 = spirv.IMul %1, %cst20_i64 : i64
       %14 = spirv.IAdd %13, %3 : i64
-      %15 = spirv.AccessChain %arg2[%14] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64
+      %15 = spirv.AccessChain %arg2[%14] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %15, %12 : i16
       spirv.Return
     }

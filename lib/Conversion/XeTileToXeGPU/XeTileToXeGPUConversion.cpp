@@ -92,7 +92,7 @@ XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
   addArgumentMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::Location loc) -> mlir::Value {
         return builder
             .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
             .getResult(0);
@@ -101,7 +101,7 @@ XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
   addSourceMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
+          mlir::Location loc) -> mlir::Value {
         return builder
             .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
             .getResult(0);

@@ -114,7 +114,7 @@ spirv.module @__spv__init_kernel_0 Physical64 OpenCL requires #spirv.vce<v1.0, [
       %cst1_i64 = spirv.Constant 1 : i64
       %12 = spirv.IMul %cst1_i64, %4 : i64
       %13 = spirv.IAdd %11, %12 : i64
-      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<215296 x i16>, CrossWorkgroup>, i64
+      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<215296 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %14, %arg0 : i16
       %15 = spirv.IAdd %4, %arg4 : i64
       spirv.Branch ^bb1(%15 : i64)
@@ -154,7 +154,7 @@ spirv.module @__spv__init_kernel_1 Physical64 OpenCL requires #spirv.vce<v1.0, [
       %cst1_i64 = spirv.Constant 1 : i64
       %12 = spirv.IMul %cst1_i64, %4 : i64
       %13 = spirv.IAdd %11, %12 : i64
-      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64
+      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %14, %arg0 : i16
       %15 = spirv.IAdd %4, %arg4 : i64
       spirv.Branch ^bb1(%15 : i64)
@@ -194,7 +194,7 @@ spirv.module @__spv__copy_arg0_kernel Physical64 OpenCL requires #spirv.vce<v1.0
       %cst1_i64 = spirv.Constant 1 : i64
       %12 = spirv.IMul %cst1_i64, %4 : i64
       %13 = spirv.IAdd %11, %12 : i64
-      %14 = spirv.AccessChain %arg0[%13] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64
+      %14 = spirv.AccessChain %arg0[%13] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       %15 = spirv.Load "CrossWorkgroup" %14 : i16
       %cst0_i64_1 = spirv.Constant 0 : i64
       %cst200704_i64_2 = spirv.Constant 200704 : i64
@@ -209,7 +209,7 @@ spirv.module @__spv__copy_arg0_kernel Physical64 OpenCL requires #spirv.vce<v1.0
       %cst1_i64_5 = spirv.Constant 1 : i64
       %22 = spirv.IMul %cst1_i64_5, %4 : i64
       %23 = spirv.IAdd %21, %22 : i64
-      %24 = spirv.AccessChain %arg2[%23] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64
+      %24 = spirv.AccessChain %arg2[%23] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %24, %15 : i16
       %25 = spirv.IAdd %4, %arg4 : i64
       spirv.Branch ^bb1(%25 : i64)
@@ -269,7 +269,7 @@ spirv.module @__spv__conv_kernel Physical64 OpenCL requires #spirv.vce<v1.0, [In
             %cst1_i64 = spirv.Constant 1 : i64
             %23 = spirv.IMul %cst1_i64, %13 : i64
             %24 = spirv.IAdd %22, %23 : i64
-            %25 = spirv.AccessChain %arg0[%24] : !spirv.ptr<!spirv.array<215296 x i16>, CrossWorkgroup>, i64
+            %25 = spirv.AccessChain %arg0[%24] : !spirv.ptr<!spirv.array<215296 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
             %26 = spirv.Load "CrossWorkgroup" %25 : i16
             %cst0_i64_1 = spirv.Constant 0 : i64
             %cst12288_i64 = spirv.Constant 12288 : i64
@@ -284,7 +284,7 @@ spirv.module @__spv__conv_kernel Physical64 OpenCL requires #spirv.vce<v1.0, [In
             %cst1_i64_3 = spirv.Constant 1 : i64
             %33 = spirv.IMul %cst1_i64_3, %4 : i64
             %34 = spirv.IAdd %32, %33 : i64
-            %35 = spirv.AccessChain %arg2[%34] : !spirv.ptr<!spirv.array<36864 x i16>, CrossWorkgroup>, i64
+            %35 = spirv.AccessChain %arg2[%34] : !spirv.ptr<!spirv.array<36864 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
             %36 = spirv.Load "CrossWorkgroup" %35 : i16
             %cst0_i64_4 = spirv.Constant 0 : i64
             %cst200704_i64 = spirv.Constant 200704 : i64
@@ -299,7 +299,7 @@ spirv.module @__spv__conv_kernel Physical64 OpenCL requires #spirv.vce<v1.0, [In
             %cst1_i64_6 = spirv.Constant 1 : i64
             %43 = spirv.IMul %cst1_i64_6, %4 : i64
             %44 = spirv.IAdd %42, %43 : i64
-            %45 = spirv.AccessChain %arg3[%44] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64
+            %45 = spirv.AccessChain %arg3[%44] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
             %46 = spirv.Load "CrossWorkgroup" %45 : i16
 
             %f32_26 = spirv.INTEL.ConvertBF16ToF %26 : i16 to f32
@@ -328,7 +328,7 @@ spirv.module @__spv__conv_kernel Physical64 OpenCL requires #spirv.vce<v1.0, [In
             %cst1_i64_11 = spirv.Constant 1 : i64
             %55 = spirv.IMul %cst1_i64_11, %4 : i64
             %56 = spirv.IAdd %54, %55 : i64
-            %57 = spirv.AccessChain %arg3[%56] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64
+            %57 = spirv.AccessChain %arg3[%56] : !spirv.ptr<!spirv.array<200704 x i16>, CrossWorkgroup>, i64 -> !spirv.ptr<i16, CrossWorkgroup>
             spirv.Store "CrossWorkgroup" %57, %bf16_48 : i16
             %58 = spirv.IAdd %13, %arg5 : i64
             spirv.Branch ^bb1(%58 : i64)

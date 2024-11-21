@@ -34,14 +34,14 @@ module @quantize attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %2 = spirv.IMul %cst1_i64, %1 : i64
       %3 = spirv.IAdd %cst0_i64, %2 : i64
-      %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64
+      %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %5 = spirv.Load "CrossWorkgroup" %4 : f32
       %6 = spirv.FMul %5, %arg1 : f32
       %cst0_i64_0 = spirv.Constant 0 : i64
       %cst1_i64_1 = spirv.Constant 1 : i64
       %7 = spirv.IMul %cst1_i64_1, %1 : i64
       %8 = spirv.IAdd %cst0_i64_0, %7 : i64
-      %9 = spirv.AccessChain %arg2[%8] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64
+      %9 = spirv.AccessChain %arg2[%8] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %9, %6 : f32
       spirv.Return
     }
@@ -66,14 +66,14 @@ module @quantize attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %2 = spirv.IMul %cst1_i64, %1 : i64
       %3 = spirv.IAdd %cst0_i64, %2 : i64
-      %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64
+      %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %5 = spirv.Load "CrossWorkgroup" %4 : f32
       %6 = spirv.ConvertFToS %5 : f32 to i32
       %cst0_i64_0 = spirv.Constant 0 : i64
       %cst1_i64_1 = spirv.Constant 1 : i64
       %7 = spirv.IMul %cst1_i64_1, %1 : i64
       %8 = spirv.IAdd %cst0_i64_0, %7 : i64
-      %9 = spirv.AccessChain %arg1[%8] : !spirv.ptr<!spirv.array<3 x i32>, CrossWorkgroup>, i64
+      %9 = spirv.AccessChain %arg1[%8] : !spirv.ptr<!spirv.array<3 x i32>, CrossWorkgroup>, i64 -> !spirv.ptr<i32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %9, %6 : i32
       spirv.Return
     }

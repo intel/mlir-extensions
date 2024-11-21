@@ -48,7 +48,7 @@ module @max_pool_1d attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %0 = spirv.IMul %cst1_i64, %arg2 : i64
       %1 = spirv.IAdd %cst0_i64, %0 : i64
-      %2 = spirv.AccessChain %arg1[%1] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64
+      %2 = spirv.AccessChain %arg1[%1] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64 -> !spirv.ptr<i64, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %2, %arg0 : i64
       spirv.Return
     }
@@ -72,13 +72,13 @@ module @max_pool_1d attributes {gpu.container_module} {
         %cst1_i64 = spirv.Constant 1 : i64
         %2 = spirv.IMul %cst1_i64, %0 : i64
         %3 = spirv.IAdd %cst0_i64, %2 : i64
-        %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x i64>, CrossWorkgroup>, i64
+        %4 = spirv.AccessChain %arg0[%3] : !spirv.ptr<!spirv.array<3 x i64>, CrossWorkgroup>, i64 -> !spirv.ptr<i64, CrossWorkgroup>
         %5 = spirv.Load "CrossWorkgroup" %4 : i64
         %cst0_i64_0 = spirv.Constant 0 : i64
         %cst1_i64_1 = spirv.Constant 1 : i64
         %6 = spirv.IMul %cst1_i64_1, %arg2 : i64
         %7 = spirv.IAdd %cst0_i64_0, %6 : i64
-        %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64
+        %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64 -> !spirv.ptr<i64, CrossWorkgroup>
         %9 = spirv.Load "CrossWorkgroup" %8 : i64
         %10 = spirv.UGreaterThan %9, %5 : i64
         %11 = spirv.Select %10, %9, %5 : i1, i64
@@ -86,7 +86,7 @@ module @max_pool_1d attributes {gpu.container_module} {
         %cst1_i64_3 = spirv.Constant 1 : i64
         %12 = spirv.IMul %cst1_i64_3, %arg2 : i64
         %13 = spirv.IAdd %cst0_i64_2, %12 : i64
-        %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64
+        %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<1 x i64>, CrossWorkgroup>, i64 -> !spirv.ptr<i64, CrossWorkgroup>
         spirv.Store "CrossWorkgroup" %14, %11 : i64
         %15 = spirv.IAdd %0, %arg4 : i64
         spirv.Branch ^bb1(%15 : i64)
