@@ -14,7 +14,7 @@ index 49a391938eaf..60b8f379dfc1 100644
 @@ -307,6 +307,18 @@ public:
    }
  };
- 
+
 +/// Converts memref.extract_aligned_pointer_as_index to spirv.ConvertPtrToU.
 +class ExtractAlignedPointerAsIndexOpPattern
 +    : public OpConversionPattern<memref::ExtractAlignedPointerAsIndexOp> {
@@ -28,12 +28,12 @@ index 49a391938eaf..60b8f379dfc1 100644
 +};
 +
  } // namespace
- 
+
  //===----------------------------------------------------------------------===//
 @@ -921,6 +933,20 @@ LogicalResult ReinterpretCastPattern::matchAndRewrite(
    return success();
  }
- 
+
 +//===----------------------------------------------------------------------===//
 +// ExtractAlignedPointerAsIndexOp
 +//===----------------------------------------------------------------------===//
@@ -68,6 +68,5 @@ index 49a391938eaf..60b8f379dfc1 100644
 +          typeConverter, patterns.getContext());
  }
  } // namespace mlir
--- 
+--
 2.34.1
-

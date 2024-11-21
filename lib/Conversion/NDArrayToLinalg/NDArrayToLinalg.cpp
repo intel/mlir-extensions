@@ -1281,10 +1281,9 @@ struct ConvertNDArrayToLinalgPass
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convNDArray2RankedTensor);
 
-    auto materializeCast =
-        [](::mlir::OpBuilder &builder, ::mlir::Type type,
-           ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> ::mlir::Value {
+    auto materializeCast = [](::mlir::OpBuilder &builder, ::mlir::Type type,
+                              ::mlir::ValueRange inputs,
+                              ::mlir::Location loc) -> ::mlir::Value {
       if (inputs.size() == 1) {
         auto input = inputs[0];
         auto itype = input.getType();

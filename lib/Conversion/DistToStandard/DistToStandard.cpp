@@ -1709,8 +1709,7 @@ struct ConvertDistToStandardPass
 
     auto materializeArray =
         [&](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
-            ::mlir::ValueRange inputs,
-            ::mlir::Location loc) -> ::mlir::Value {
+            ::mlir::ValueRange inputs, ::mlir::Location loc) -> ::mlir::Value {
       assert(inputs.size() == 1);
       auto input = inputs[0];
       auto itype = input.getType();

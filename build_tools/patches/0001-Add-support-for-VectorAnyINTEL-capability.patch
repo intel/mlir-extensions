@@ -43,11 +43,11 @@ index 27c82811aa00..18f481e52602 100644
  // dialect-specific types so we use "Any" here.
 @@ -4231,7 +4236,7 @@ class SPIRV_CoopMatrixOfType<list<Type> allowedTypes> :
      "Cooperative Matrix">;
- 
+
  class SPIRV_VectorOf<Type type> :
 -    VectorOfLengthAndType<[2, 3, 4, 8,16], [type]>;
 +    VectorOfLengthRangeAndType<[2, 0x7FFFFFFFFFFFFFFF], [type]>;
- 
+
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
@@ -57,7 +57,7 @@ index 48e4c24f8386..677074986d2d 100644
 @@ -639,6 +639,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
- 
+
 +// Whether the number of elements of a vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsVectorOfLengthRangePred<list<int> allowedRanges> :
@@ -172,7 +172,7 @@ index 337df3a5a65f..542c6beba2e4 100644
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -100,9 +100,11 @@ bool CompositeType::classof(Type type) {
  }
- 
+
  bool CompositeType::isValid(VectorType type) {
 -  return type.getRank() == 1 &&
 -         llvm::is_contained({2, 3, 4, 8, 16}, type.getNumElements()) &&
@@ -183,7 +183,7 @@ index 337df3a5a65f..542c6beba2e4 100644
 +  return type.getRank() == 1 && mlir::isa<ScalarType>(type.getElementType()) &&
 +         type.getNumElements() >= 2;
  }
- 
+
  Type CompositeType::getElementType(unsigned index) const {
 @@ -164,7 +166,21 @@ void CompositeType::getCapabilities(
        .Case<VectorType>([&](VectorType type) {
@@ -226,7 +226,7 @@ index f5700059f68e..915d1b0124f9 100644
 +          return llvm::is_contained(ors, elidedExt);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -116,9 +120,13 @@ static LogicalResult checkExtensionRequirements(
  template <typename LabelT>
@@ -242,12 +242,12 @@ index f5700059f68e..915d1b0124f9 100644
 +          return llvm::is_contained(ors, elidedCap);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -135,6 +143,55 @@ static LogicalResult checkCapabilityRequirements(
    return success();
  }
- 
+
 +/// Check capabilities and extensions requirements,
 +/// this function also checks for capability infered extension requirements,
 +/// the check is based on capabilities that are passed to the targetEnv.
@@ -303,7 +303,7 @@ index f5700059f68e..915d1b0124f9 100644
 @@ -280,11 +337,16 @@ convertScalarType(const spirv::TargetEnv &targetEnv,
      return nullptr;
    }
- 
+
 +  //if (auto floatType = dyn_cast<FloatType>(type)) {
 +  // Convert to 32-bit float and remove floatType related capability
 +  // restriction
@@ -311,7 +311,7 @@ index f5700059f68e..915d1b0124f9 100644
      LLVM_DEBUG(llvm::dbgs() << type << " converted to 32-bit for SPIR-V\n");
      return Builder(targetEnv.getContext()).getF32Type();
    }
- 
+
 +  //auto intType = cast<IntegerType>(type);
 +  // Convert to 32-bit int and remove intType related capability restriction
    auto intType = cast<IntegerType>(type);
@@ -320,7 +320,7 @@ index f5700059f68e..915d1b0124f9 100644
 @@ -375,16 +437,40 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
    cast<spirv::CompositeType>(type).getExtensions(extensions, storageClass);
    cast<spirv::CompositeType>(type).getCapabilities(capabilities, storageClass);
- 
+
 -  // If all requirements are met, then we can accept this type as-is.
 -  if (succeeded(checkCapabilityRequirements(type, targetEnv, capabilities)) &&
 -      succeeded(checkExtensionRequirements(type, targetEnv, extensions)))
@@ -363,7 +363,7 @@ index f5700059f68e..915d1b0124f9 100644
 +    return nullptr;
 +  }
  }
- 
+
  static Type
 @@ -1553,16 +1639,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
    SmallVector<ArrayRef<spirv::Extension>, 4> typeExtensions;
@@ -391,7 +391,7 @@ index f5700059f68e..915d1b0124f9 100644
 +            op->getName(), this->targetEnv, typeCapabilities, typeExtensions)))
        return false;
    }
- 
+
 diff --git a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir
 index 24a0bab352c3..96b8ea6e7975 100644
 --- a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir
@@ -399,7 +399,7 @@ index 24a0bab352c3..96b8ea6e7975 100644
 @@ -28,9 +28,9 @@ module attributes {
      #spirv.vce<v1.0, [Int8, Int16, Int64, Float16, Float64, Shader], []>, #spirv.resource_limits<>>
  } {
- 
+
 -func.func @unsupported_5elem_vector(%arg0: vector<5xi32>) {
 +func.func @unsupported_5elem_vector(%arg0: vector<5xi32>, %arg1: vector<5xi32>) {
    // expected-error@+1 {{failed to legalize operation 'arith.subi'}}
@@ -407,7 +407,7 @@ index 24a0bab352c3..96b8ea6e7975 100644
 +  %1 = arith.subi %arg0, %arg1: vector<5xi32>
    return
  }
- 
+
 diff --git a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
 index 1abe0fd2ec46..e485296ad026 100644
 --- a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
@@ -452,7 +452,7 @@ index 1abe0fd2ec46..e485296ad026 100644
 +  %1 = arith.mulf %arg1, %arg1: vector<8xf64>
    return
  }
- 
+
 diff --git a/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir b/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir
 index 82d750755ffe..6f364c5b0875 100644
 --- a/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir
@@ -460,7 +460,7 @@ index 82d750755ffe..6f364c5b0875 100644
 @@ -351,8 +351,21 @@ module attributes {
    spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [], []>, #spirv.resource_limits<>>
  } {
- 
+
 -// CHECK-NOT: spirv.func @large_vector
 -func.func @large_vector(%arg0: vector<1024xi32>) { return }
 +// CHECK-NOT: spirv.func @large_vector_unsupported
@@ -478,16 +478,16 @@ index 82d750755ffe..6f364c5b0875 100644
 +
 +// CHECK: spirv.func @large_any_vector
 +func.func @large_any_vector(%arg0: vector<1024xi32>) { return }
- 
+
  } // end module
- 
+
 diff --git a/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir b/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
 index 2d0c86e08de5..61fc0b53ed26 100644
 --- a/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
 @@ -283,7 +283,7 @@ func.func @dot(%arg0: vector<4xf32>, %arg1: vector<4xf32>) -> f16 {
  // -----
- 
+
  func.func @dot(%arg0: vector<4xi32>, %arg1: vector<4xi32>) -> i32 {
 -  // expected-error @+1 {{'spirv.Dot' op operand #0 must be vector of 16/32/64-bit float values of length 2/3/4/8/16}}
 +  // expected-error @+1 {{op operand #0 must be vector of 16/32/64-bit float values of length 2-9223372036854775807, but got 'vector<4xi32>'}}
@@ -500,7 +500,7 @@ index f3f0ebf60f46..2994b00d582c 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/bit-ops.mlir
 @@ -137,7 +137,7 @@ func.func @bitwise_or_all_ones_vector(%arg: vector<3xi8>) -> vector<3xi8> {
  // -----
- 
+
  func.func @bitwise_or_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -509,7 +509,7 @@ index f3f0ebf60f46..2994b00d582c 100644
  }
 @@ -165,7 +165,7 @@ func.func @bitwise_xor_vector(%arg: vector<4xi32>) -> vector<4xi32> {
  // -----
- 
+
  func.func @bitwise_xor_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -518,7 +518,7 @@ index f3f0ebf60f46..2994b00d582c 100644
  }
 @@ -274,7 +274,7 @@ func.func @bitwise_and_zext_vector(%arg: vector<2xi8>) -> vector<2xi32> {
  // -----
- 
+
  func.func @bitwise_and_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -531,7 +531,7 @@ index 3683e5b469b1..a95a6001fd20 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir
 @@ -27,7 +27,7 @@ func.func @exp(%arg0 : i32) -> () {
  // -----
- 
+
  func.func @exp(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32-bit float or vector of 16/32-bit float values of length 2/3/4}}
 +  // CHECK: spirv.GL.Exp {{%.*}} : vector<5xf32
@@ -544,7 +544,7 @@ index 6dd0353d9374..76b7110f0731 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/intel-ext-ops.mlir
 @@ -21,7 +21,7 @@ spirv.func @f32_to_bf16_vec(%arg0 : vector<2xf32>) "None" {
  // -----
- 
+
  spirv.func @f32_to_bf16_unsupported(%arg0 : f64) "None" {
 -  // expected-error @+1 {{operand #0 must be Float32 or vector of Float32 values of length 2/3/4/8/16, but got}}
 +  // expected-error @+1 {{op operand #0 must be Float32 or vector of Float32 values of length 2-9223372036854775807, but got 'f64'}}
@@ -553,7 +553,7 @@ index 6dd0353d9374..76b7110f0731 100644
  }
 @@ -57,7 +57,7 @@ spirv.func @bf16_to_f32_vec(%arg0 : vector<2xi16>) "None" {
  // -----
- 
+
  spirv.func @bf16_to_f32_unsupported(%arg0 : i16) "None" {
 -  // expected-error @+1 {{result #0 must be Float32 or vector of Float32 values of length 2/3/4/8/16, but got}}
 +  // expected-error @+1 {{op result #0 must be Float32 or vector of Float32 values of length 2-9223372036854775807, but got 'f16'}}
@@ -565,7 +565,7 @@ index 5c24f0e6a7d3..3ca61ab48096 100644
 --- a/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 @@ -166,7 +166,7 @@ func.func @logicalUnary(%arg0 : i1)
- 
+
  func.func @logicalUnary(%arg0 : i32)
  {
 -  // expected-error @+1 {{'operand' must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
@@ -579,7 +579,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
 @@ -495,7 +495,7 @@ func.func @group_non_uniform_bitwise_and(%val: i32) -> i32 {
  // -----
- 
+
  func.func @group_non_uniform_bitwise_and(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
@@ -588,7 +588,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
  }
 @@ -516,7 +516,7 @@ func.func @group_non_uniform_bitwise_or(%val: i32) -> i32 {
  // -----
- 
+
  func.func @group_non_uniform_bitwise_or(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
@@ -597,7 +597,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
  }
 @@ -537,7 +537,7 @@ func.func @group_non_uniform_bitwise_xor(%val: i32) -> i32 {
  // -----
- 
+
  func.func @group_non_uniform_bitwise_xor(%val: i1) -> i1 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4/8/16, but got 'i1'}}
 +  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807, but got 'i1'}}
@@ -606,7 +606,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
  }
 @@ -558,7 +558,7 @@ func.func @group_non_uniform_logical_and(%val: i1) -> i1 {
  // -----
- 
+
  func.func @group_non_uniform_logical_and(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
@@ -615,7 +615,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
  }
 @@ -579,7 +579,7 @@ func.func @group_non_uniform_logical_or(%val: i1) -> i1 {
  // -----
- 
+
  func.func @group_non_uniform_logical_or(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
@@ -624,7 +624,7 @@ index 60ae1584d29f..bc366c0e3a09 100644
  }
 @@ -600,7 +600,7 @@ func.func @group_non_uniform_logical_xor(%val: i1) -> i1 {
  // -----
- 
+
  func.func @group_non_uniform_logical_xor(%val: i32) -> i32 {
 -  // expected-error @+1 {{operand #0 must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
 +  // expected-error @+1 {{op operand #0 must be bool or vector of bool values of length 2-9223372036854775807, but got 'i32'}}
@@ -637,7 +637,7 @@ index 8f021ed3d663..21558b9607f8 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 @@ -27,7 +27,7 @@ func.func @exp(%arg0 : i32) -> () {
  // -----
- 
+
  func.func @exp(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32/64-bit float or vector of 16/32/64-bit float values of length 2/3/4}}
 +  // CHECK: spirv.CL.exp {{%.*}} : vector<5xf32>
@@ -647,7 +647,7 @@ index 8f021ed3d663..21558b9607f8 100644
 @@ -66,6 +66,14 @@ func.func @fabsvec(%arg0 : vector<3xf16>) -> () {
    return
  }
- 
+
 +// -----
 +
 +func.func @fabs_any_vec(%arg0 : vector<5xf32>) -> () {
@@ -660,9 +660,9 @@ index 8f021ed3d663..21558b9607f8 100644
    // CHECK: spirv.CL.fabs {{%.*}} : f64
    %2 = spirv.CL.fabs %arg0 : f64
 @@ -82,14 +90,6 @@ func.func @fabs(%arg0 : i32) -> () {
- 
+
  // -----
- 
+
 -func.func @fabs(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32/64-bit float or vector of 16/32/64-bit float values of length 2/3/4}}
 -  %2 = spirv.CL.fabs %arg0 : vector<5xf32>
@@ -677,7 +677,7 @@ index 8f021ed3d663..21558b9607f8 100644
 @@ -122,6 +122,14 @@ func.func @sabsvec(%arg0 : vector<3xi16>) -> () {
    return
  }
- 
+
 +// -----
 +
 +func.func @sabs_any_vec(%arg0 : vector<5xi32>) -> () {
@@ -690,9 +690,9 @@ index 8f021ed3d663..21558b9607f8 100644
    // CHECK: spirv.CL.s_abs {{%.*}} : i64
    %2 = spirv.CL.s_abs %arg0 : i64
 @@ -144,14 +152,6 @@ func.func @sabs(%arg0 : f32) -> () {
- 
+
  // -----
- 
+
 -func.func @sabs(%arg0 : vector<5xi32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 -  %2 = spirv.CL.s_abs %arg0 : vector<5xi32>
@@ -728,7 +728,7 @@ index 9a2e4cf62e37..31a7f616d648 100644
 @@ -39,6 +39,12 @@ spirv.module Physical64 OpenCL requires #spirv.vce<v1.0, [Kernel, Addresses], []
      spirv.Return
    }
- 
+
 +  spirv.func @vector_anysize(%arg0 : vector<5000xf32>) "None" {
 +    // CHECK: {{%.*}} = spirv.CL.fabs {{%.*}} : vector<5000xf32>
 +    %0 = spirv.CL.fabs %arg0 : vector<5000xf32>
@@ -738,6 +738,5 @@ index 9a2e4cf62e37..31a7f616d648 100644
    spirv.func @fma(%arg0 : f32, %arg1 : f32, %arg2 : f32) "None" {
      // CHECK: spirv.CL.fma {{%[^,]*}}, {{%[^,]*}}, {{%[^,]*}} : f32
      %13 = spirv.CL.fma %arg0, %arg1, %arg2 : f32
--- 
+--
 2.34.1
-

@@ -25,7 +25,7 @@ index 239ce0aa8e00..812d2d167297 100644
 @@ -871,4 +872,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
    let extraClassDeclaration = extraBaseClassDeclaration;
  }
- 
+
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
 +  let summary = "prevents the compiler from scheduling.";
 +  let assemblyFormat = [{ attr-dict }];
@@ -59,12 +59,11 @@ index 5bd3c370e385..898e8564e3fe 100644
 @@ -237,7 +237,7 @@ LogicalResult LoadNdOp::verify() {
        emitWarning("Invalid transpose attr. It is ignored.");
    }
- 
+
 -  if (getPacked()) {
 +  if (getPacked() || getTransposeBitWidth() == 32) {
      if (tdescTy.getRank() == 2) {
        const int axis = 0;
        auto vnni_factor = valueShape.back();
--- 
+--
 2.34.1
-
