@@ -501,7 +501,8 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 };
 
 static mlir::xegpu::CachePolicy
-translateCachePolicy(imex::xetile::CachePolicyAttr val, mlir::xegpu::CachePolicy defaultVal) {
+translateCachePolicy(imex::xetile::CachePolicyAttr val,
+                     mlir::xegpu::CachePolicy defaultVal) {
   if (!val)
     return defaultVal;
 
@@ -522,13 +523,13 @@ translateCachePolicy(imex::xetile::CachePolicyAttr val, mlir::xegpu::CachePolicy
   llvm_unreachable("Invalid CachePolicy value");
 }
 
-template<typename OpTy>
-static auto
-getCachePolicy(OpTy op, mlir::xegpu::CachePolicy defaultVal = mlir::xegpu::CachePolicy::CACHED) {
+template <typename OpTy>
+static auto getCachePolicy(OpTy op, mlir::xegpu::CachePolicy defaultVal =
+                                        mlir::xegpu::CachePolicy::CACHED) {
 
   auto getCachePolicyAttr = [&](imex::xetile::CachePolicyAttr val) {
-    return mlir::xegpu::CachePolicyAttr::get(op.getContext(),
-                                              translateCachePolicy(val, defaultVal));
+    return mlir::xegpu::CachePolicyAttr::get(
+        op.getContext(), translateCachePolicy(val, defaultVal));
   };
 
   auto L1 = getCachePolicyAttr(op.getL1HintAttr());
@@ -689,7 +690,8 @@ struct SgStoreTileOpPattern : public XeOneToNConversion<xetile::StoreTileOp> {
              << "values: " << values.size() << "\n";
     }
 
-    auto [L1, L2, L3] = getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
+    auto [L1, L2, L3] =
+        getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
 
     for (size_t i = 0; i < tiles.size(); i++)
       rewriter.create<mlir::xegpu::StoreNdOp>(op.getLoc(), values[i], tiles[i],
@@ -721,12 +723,13 @@ struct SgStoreScatterOpPattern
     auto maskTy = mlir::VectorType::get(innerBlk[0] * innerBlk[1],
                                         rewriter.getIntegerType(1));
     auto transposeAttr = mlir::UnitAttr();
-    auto [L1, L2, L3] = getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
+    auto [L1, L2, L3] =
+        getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
     for (auto [v, t, m] : llvm::zip(values, tdescs, masks)) {
       m = rewriter.create<ShapeCastOp>(op.getLoc(), maskTy, m);
       v = rewriter.create<ShapeCastOp>(op.getLoc(), vecTy, v);
-      rewriter.create<mlir::xegpu::StoreScatterOp>(
-          op.getLoc(), v, t, m, transposeAttr, L1, L2, L3);
+      rewriter.create<mlir::xegpu::StoreScatterOp>(op.getLoc(), v, t, m,
+                                                   transposeAttr, L1, L2, L3);
     }
     rewriter.eraseOp(op);
     return mlir::success();
