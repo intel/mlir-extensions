@@ -242,7 +242,7 @@ class WGToSGLoadTileOpPattern : public XeOneToNConversion<xetile::LoadTileOp> {
           mlir::VectorType::get({tileTy.getShape()[0], tileTy.getShape()[1]},
                                 tileTy.getElementType());
       auto newLoadOp = rewriter.create<xetile::LoadTileOp>(
-          op.getLoc(), newResTy, src, op.getPaddingAttr());
+          op.getLoc(), newResTy, src, op.getPaddingAttr(), op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       newLoadOps.push_back(newLoadOp);
       newResultTypes.push_back(newLoadOp.getResult().getType());
     }
@@ -306,7 +306,7 @@ class WGToSGStoreTileOpPattern : public XeOneToNConversion<xetile::StoreTileOp> 
 
     for (size_t i = 0; i < newValues.size(); i++) {
       rewriter.create<xetile::StoreTileOp>(op.getLoc(), newValues[i],
-                                           newDstTiles[i]);
+                                           newDstTiles[i], op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
     }
 
     rewriter.eraseOp(op);
@@ -745,8 +745,9 @@ class WGToSGXeTileConvertLayout
                 loc, storeSgIdY, createIndexConstant(indexType, srcMapSgData[1]));
     auto storeInitTileOp = rewriter.create<xetile::InitTileOp>(
           loc, srcTileTy, slm, llvm::ArrayRef<mlir::OpFoldResult>({storeOffsetX, storeOffsetY}));
+    //TODO: Set up cache attributes
     rewriter.create<xetile::StoreTileOp>(loc, adaptor.getSource()[0],
-                                         storeInitTileOp);
+                                         storeInitTileOp, nullptr, nullptr, nullptr);
 
     // Add barrier
     rewriter.create<mlir::gpu::BarrierOp>(loc);
@@ -766,8 +767,9 @@ class WGToSGXeTileConvertLayout
                 loc, loadSgIdY, createIndexConstant(indexType, dstMapSgData[1]));
     auto loadInitTileOp = rewriter.create<xetile::InitTileOp>(
           loc, dstTileTy, slm, llvm::ArrayRef<mlir::OpFoldResult>({loadOffsetX, loadOffsetY}));
+    //TODO: Set up cache attributes
     auto loadTile = rewriter.create<xetile::LoadTileOp>(
-          loc, newResTy, loadInitTileOp, mlir::Attribute());
+          loc, newResTy, loadInitTileOp, mlir::Attribute(), nullptr, nullptr, nullptr);
 
     rewriter.replaceOp(op, loadTile);
     return mlir::success();

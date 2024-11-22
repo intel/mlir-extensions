@@ -133,6 +133,8 @@ def XeTile_AtomicRMWKindAttr : I64EnumAttr<
   let cppNamespace = "::imex::xetile";
 }
 
+//TODO: !!!This is target specific information, cache attributes have to be passed transparently
+// as custom arguments and handled properly on XeGPU side
 //===----------------------------------------------------------------------===//
 // XeTile Cache Enums.
 //===----------------------------------------------------------------------===//
