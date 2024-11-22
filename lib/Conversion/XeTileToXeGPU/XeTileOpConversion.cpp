@@ -501,9 +501,9 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
 };
 
 static mlir::xegpu::CachePolicy
-translateCachePolicy(imex::xetile::CachePolicyAttr val) {
+translateCachePolicy(imex::xetile::CachePolicyAttr val, mlir::xegpu::CachePolicy defaultVal) {
   if (!val)
-    return mlir::xegpu::CachePolicy::CACHED;
+    return defaultVal;
 
   switch (val.getValue()) {
   case imex::xetile::CachePolicy::CACHED:
@@ -520,6 +520,22 @@ translateCachePolicy(imex::xetile::CachePolicyAttr val) {
     return mlir::xegpu::CachePolicy::WRITE_THROUGH;
   }
   llvm_unreachable("Invalid CachePolicy value");
+}
+
+template<typename OpTy>
+static auto
+getCachePolicy(OpTy op, mlir::xegpu::CachePolicy defaultVal = mlir::xegpu::CachePolicy::CACHED) {
+
+  auto getCachePolicyAttr = [&](imex::xetile::CachePolicyAttr val) {
+    return mlir::xegpu::CachePolicyAttr::get(op.getContext(),
+                                              translateCachePolicy(val, defaultVal));
+  };
+
+  auto L1 = getCachePolicyAttr(op.getL1HintAttr());
+  auto L2 = getCachePolicyAttr(op.getL2HintAttr());
+  auto L3 = getCachePolicyAttr(op.getL3HintAttr());
+
+  return std::make_tuple(L1, L2, L3);
 }
 
 // It lowers a XeTile::prefetch_tile into one or more mlir::xegpu::prefetch_2d.
@@ -551,14 +567,7 @@ struct SgPrefetchTileOpPattern
       return mlir::failure();
     }
 
-    auto getCachePolicy = [&](imex::xetile::CachePolicyAttr val) {
-      return mlir::xegpu::CachePolicyAttr::get(op.getContext(),
-                                               translateCachePolicy(val));
-    };
-
-    auto L1 = getCachePolicy(op.getL1HintAttr());
-    auto L2 = getCachePolicy(op.getL2HintAttr());
-    auto L3 = getCachePolicy(op.getL3HintAttr());
+    auto [L1, L2, L3] = getCachePolicy(op);
 
     for (auto tile : tiles) {
       rewriter.create<mlir::xegpu::PrefetchNdOp>(op.getLoc(), tile, L1, L2, L3);
@@ -589,16 +598,7 @@ struct SgLoadTileOpPattern : public XeOneToNConversion<xetile::LoadTileOp> {
     auto elemTy = tileTy.getElementType();
     auto sources = adaptor.getSource();
 
-    auto ctx = op.getContext();
-
-    auto getDefaultCachePolicy = [&]() {
-      return mlir::xegpu::CachePolicyAttr::get(
-          ctx, mlir::xegpu::CachePolicy::CACHED);
-    };
-
-    auto L1 = getDefaultCachePolicy();
-    auto L2 = getDefaultCachePolicy();
-    auto L3 = getDefaultCachePolicy();
+    auto [L1, L2, L3] = getCachePolicy(op);
 
     // The tile is in col-major order, which should be canonicalized to
     // row-major in canonicalization pass.
@@ -657,13 +657,11 @@ struct SgLoadGatherOpPattern : public XeOneToNConversion<xetile::LoadGatherOp> {
                                         rewriter.getIntegerType(1));
     llvm::SmallVector<mlir::Value> xegpuOps;
     auto transposeAttr = mlir::UnitAttr();
-    auto cacheAttr = mlir::xegpu::CachePolicyAttr::get(
-        op.getContext(), mlir::xegpu::CachePolicy::CACHED);
+    auto [L1, L2, L3] = getCachePolicy(op);
     for (auto [t, m] : llvm::zip(tiles, masks)) {
       m = rewriter.create<ShapeCastOp>(op.getLoc(), maskTy, m);
       auto ldOp = rewriter.create<mlir::xegpu::LoadGatherOp>(
-          op.getLoc(), vecTy, t, m, transposeAttr, cacheAttr, cacheAttr,
-          cacheAttr);
+          op.getLoc(), vecTy, t, m, transposeAttr, L1, L2, L3);
       auto v = rewriter.create<ShapeCastOp>(op.getLoc(), resTy, ldOp);
       xegpuOps.push_back(v);
     }
@@ -691,11 +689,8 @@ struct SgStoreTileOpPattern : public XeOneToNConversion<xetile::StoreTileOp> {
              << "values: " << values.size() << "\n";
     }
 
-    auto context = op.getContext();
-    auto WRITE_BACK = mlir::xegpu::CachePolicy::WRITE_BACK;
-    auto L1 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
-    auto L2 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
-    auto L3 = mlir::xegpu::CachePolicyAttr::get(context, WRITE_BACK);
+    auto [L1, L2, L3] = getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
+
     for (size_t i = 0; i < tiles.size(); i++)
       rewriter.create<mlir::xegpu::StoreNdOp>(op.getLoc(), values[i], tiles[i],
                                               L1, L2, L3);
@@ -726,13 +721,12 @@ struct SgStoreScatterOpPattern
     auto maskTy = mlir::VectorType::get(innerBlk[0] * innerBlk[1],
                                         rewriter.getIntegerType(1));
     auto transposeAttr = mlir::UnitAttr();
-    auto cacheAttr = mlir::xegpu::CachePolicyAttr::get(
-        op.getContext(), mlir::xegpu::CachePolicy::WRITE_BACK);
+    auto [L1, L2, L3] = getCachePolicy(op, mlir::xegpu::CachePolicy::WRITE_BACK);
     for (auto [v, t, m] : llvm::zip(values, tdescs, masks)) {
       m = rewriter.create<ShapeCastOp>(op.getLoc(), maskTy, m);
       v = rewriter.create<ShapeCastOp>(op.getLoc(), vecTy, v);
       rewriter.create<mlir::xegpu::StoreScatterOp>(
-          op.getLoc(), v, t, m, transposeAttr, cacheAttr, cacheAttr, cacheAttr);
+          op.getLoc(), v, t, m, transposeAttr, L1, L2, L3);
     }
     rewriter.eraseOp(op);
     return mlir::success();

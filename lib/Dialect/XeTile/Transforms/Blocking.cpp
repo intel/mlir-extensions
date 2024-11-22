@@ -290,7 +290,7 @@ struct LoadTileOpPattern
                                          tileTy.getElementType());
     mlir::Value newOp = rewriter.create<xetile::LoadTileOp>(
         op.getLoc(), vecTy, adaptor.getSource(),
-        op.getPadding().value_or(mlir::Attribute()));
+        op.getPadding().value_or(mlir::Attribute()), op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
     newOp = addUnpackOp(newOp, rewriter);
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -324,7 +324,7 @@ struct LoadGatherOpPattern
     auto mask = addPackOp(adaptor.getMask(), blockSize.asArrayRef(), rewriter);
     mlir::Value newOp = rewriter.create<xetile::LoadGatherOp>(
         op.getLoc(), vecTy, source, mask,
-        op.getPadding().value_or(mlir::Attribute()));
+        op.getPadding().value_or(mlir::Attribute()), op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
     newOp = addUnpackOp(newOp, rewriter);
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -352,7 +352,7 @@ struct StoreTileOpPattern
     // its inputs has not been updated yet.
     if (blockSize && valTy.getRank() == 2) {
       value = addPackOp(value, blockSize.asArrayRef(), rewriter);
-      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value, tile);
+      rewriter.replaceOpWithNewOp<xetile::StoreTileOp>(op, value, tile, op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       return mlir::success();
     }
     return mlir::failure();
@@ -382,7 +382,7 @@ struct StoreScatterOpPattern
       auto mask =
           addPackOp(adaptor.getMask(), blockSize.asArrayRef(), rewriter);
       rewriter.replaceOpWithNewOp<xetile::StoreScatterOp>(op, value, tile,
-                                                          mask);
+                                                          mask, op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       return mlir::success();
     }
     return mlir::failure();

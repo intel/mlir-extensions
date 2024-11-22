@@ -317,10 +317,12 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
         ```
     }];
 
-    let arguments = (ins
-        XeTile: $source,
-        OptionalAttr<XeTile_PaddingValueAttr>: $padding
-    );
+    let arguments = (ins XeTile: $source,
+                         OptionalAttr<XeTile_PaddingValueAttr>: $padding,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
+
     let results = (outs XeTile_2DOr4DVector: $value);
 
     let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `->` type($value)";
@@ -365,8 +367,10 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
 
     let arguments = (ins
         XeTile_2DOr4DVector: $value,
-        XeTile: $tile
-    );
+        XeTile: $tile,
+        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
 
     let assemblyFormat = [{
         $value`,`` `$tile attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
@@ -655,7 +659,10 @@ def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value
 
    let arguments = (ins XeTile: $tile,
                         XeTile_MaskType: $mask,
-                        OptionalAttr<XeTile_PaddingValueAttr>: $padding);
+                        OptionalAttr<XeTile_PaddingValueAttr>: $padding,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
    let results = (outs XeTile_1DOr2DOr4DVector: $value);
    let assemblyFormat = [{
         $tile `` `,` $mask attr-dict `:` qualified(type($tile)) `` `,` type($mask) `->` type($value)
@@ -673,7 +680,10 @@ def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "t
    }];
    let arguments = (ins XeTile_1DOr2DOr4DVector: $value,
                         XeTile: $tile,
-                        XeTile_MaskType: $mask);
+                        XeTile_MaskType: $mask,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
    let assemblyFormat = [{
     $value `,` $tile `,` $mask attr-dict `:` type($value) `,` qualified(type($tile)) `,` type($mask)
    }];
