@@ -13,28 +13,26 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
-
+#include "imex/Conversion/XeGPUToVC/XeGPUToVC.h"
+#include "imex/Conversion/ArithToVC/ArithToVC.h"
+#include "imex/Conversion/MathToVC/MathToVC.h"
+#include "imex/Utils/VCUtils.h"
+#include "imex/Utils/XeCommon.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
-
-#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/Utils/StaticValueUtils.h"
-
-#include "imex/Conversion/ArithToVC/ArithToVC.h"
-#include "imex/Conversion/MathToVC/MathToVC.h"
-#include "imex/Utils/VCUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
@@ -71,23 +69,6 @@ static bool isOneOrUnknow(OpFoldResult ofr) {
   return !val || *val == 1;
 }
 
-// convert OpFoldResult to Value by replacing integer
-// attributes with arith::ConstantOps. It also performs
-// simple type conversions
-static Value getValueOrConstantOp(OpFoldResult ofr, Location loc,
-                                  ConversionPatternRewriter &rewriter,
-                                  Type type = nullptr) {
-  if (ofr.is<Value>())
-    return ofr.get<Value>();
-
-  auto intAttr = cast<IntegerAttr>(ofr.get<Attribute>());
-
-  if (type)
-    intAttr = IntegerAttr::get(type, intAttr.getInt());
-
-  return rewriter.create<arith::ConstantOp>(loc, intAttr);
-}
-
 static Value castValueTo(Value val, Type toType, Location loc,
                          ConversionPatternRewriter &rewriter) {
 
@@ -120,36 +101,6 @@ static Value castValueTo(Value val, Type toType, Location loc,
 #define addi(a, b) rewriter.createOrFold<arith::AddIOp>(loc, a, b)
 #define subi(a, b) rewriter.createOrFold<arith::SubIOp>(loc, a, b)
 
-// A universal get method for strides of CreateNdDescOp op
-
-// Get the effective strides of the CreateNdDescOp op
-// Stride information provided to CreateNdDescOp is multifaceted
-// In other words strides info provided to CreateNdDescOp in multiple ways:
-// 1. For static memrefs: the strides info are inherent in the memref data type
-// 2. For dynamic memrefs and i64/i32 source: the strides info is provided via
-// the operand `strides`, however the strides operand can also take two
-// different types:
-// 2.1 Constant type: constant attribute can be passed
-// 2.2 Value type: a value type can be passed
-// This function collects these info based on different scenarios and returns
-// them in Value types.
-
-// We use getMixedStrides() to collect the strides info instead of handling
-// aforementioned cases manually, since, it already uses
-// OffsetSizeAndStrideOpInterface, getMixedStrides() already takes care of
-// memref type.
-SmallVector<Value> getStridesInValueType(ConversionPatternRewriter &rewriter,
-                                         CreateNdDescOp op) {
-  SmallVector<Value> stridesVal;
-  auto mixedStrides = op.getMixedStrides();
-  for (size_t i = 0; i < mixedStrides.size(); i++) {
-    auto stride =
-        getValueOrConstantOp(mixedStrides[i], op.getLoc(), rewriter, indexTy);
-    stridesVal.push_back(stride);
-  }
-  return stridesVal;
-}
-
 // Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a
 // 2d memory region with respect to the two inner-most dimensions. Other
 // outer dimensions affect the base address of the 2d plane. For 2d, we
@@ -177,9 +128,11 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
   auto tileRank = op.getTensorDesc().getType().getRank();
   auto offsets = op.getMixedOffsets();
 
-  auto strides = getStridesInValueType(rewriter, op);
+  auto strides = getStridesOrOffsetsOrShapesInValueType(
+      rewriter, op.getMixedStrides(), loc);
 
-  // Calculate the effective rank of the source based on strides arrayref size
+  // Calculate the effective rank of the source based on strides arrayref
+  // size
   auto effectiveRank = strides.size();
   int64_t ranksToAdjust = effectiveRank;
   auto bytesPerElem =
