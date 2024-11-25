@@ -5,20 +5,22 @@
         %1 = arith.constant dense<2.3>: vector<64x4x1x16xf16>
         %2 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}: vector<4x4x16x16xf16> -> vector<64x64xf16>
         %3 = xetile.tile_pack %2 {inner_blocks = array<i64: 1, 16>}: vector<64x64xf16> -> vector<64x4x1x16xf16>
-        // CHECK-COUNT-256: arith.addf {{.*}}, {{.*}} : vector<1x16xf16>
+        // CHECK-COUNT-256: arith.addf {{.*}}, {{.*}} fastmath<contract> : vector<1x16xf16>
         // CHECK-COUNT-256: arith.sub
         // CHECK-COUNT-256: arith.mulf
         // CHECK-COUNT-256: arith.maximumf
         // CHECK-COUNT-256: arith.minimumf
         // CHECK-COUNT-256: arith.divf
         // CHECK-COUNT-256: arith.remf
-        %result = arith.addf %3, %1 : vector<64x4x1x16xf16>
+        // CHECK-COUNT-256: arith.cmpf
+        %result = arith.addf %3, %1 fastmath<contract> : vector<64x4x1x16xf16>
         %subf_result = arith.subf %result, %1 : vector<64x4x1x16xf16>
         %mulf_result = arith.mulf %subf_result, %1 : vector<64x4x1x16xf16>
         %maxf_result = arith.maximumf %mulf_result, %1 : vector<64x4x1x16xf16>
         %minf_result = arith.minimumf %maxf_result, %mulf_result : vector<64x4x1x16xf16>
         %divf_result = arith.divf %minf_result, %1 : vector<64x4x1x16xf16>
         %remf_result = arith.remf %minf_result, %divf_result : vector<64x4x1x16xf16>
+        %cmpf_result = arith.cmpf ult, %remf_result, %divf_result : vector<64x4x1x16xf16>
         gpu.return
     }
 
@@ -39,6 +41,7 @@
         // CHECK-COUNT-256: arith.remsi
         // CHECK-COUNT-256: arith.remui
         // CHECK-COUNT-256: arith.andi
+        // CHECK-COUNT-256: arith.addui_extended
         %result = arith.addi %3, %1 : vector<64x4x1x16xi16>
         %subi_result = arith.subi %3, %1 : vector<64x4x1x16xi16>
         %muli_result = arith.muli %subi_result, %1 : vector<64x4x1x16xi16>
@@ -51,6 +54,8 @@
         %remsi_result = arith.remsi %minsi_result, %divsi_result : vector<64x4x1x16xi16>
         %remui_result = arith.remui %minui_result, %divui_result : vector<64x4x1x16xi16>
         %and_result = arith.andi %remsi_result, %remui_result : vector<64x4x1x16xi16>
+        %addui_sum, %addui_overflow = arith.addui_extended %3, %1 : vector<64x4x1x16xi16>, vector<64x4x1x16xi1>
+        %addui_extented_result:2 = arith.addui_extended %3, %1 : vector<64x4x1x16xi16>, vector<64x4x1x16xi1>
         gpu.return
     }
 
