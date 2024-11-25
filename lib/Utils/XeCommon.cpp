@@ -230,4 +230,34 @@ bool isVectorAnyINTELType(mlir::Type type) {
           spirvSupportedSizes.end());
 }
 
+// convert OpFoldResult to Value by replacing integer
+// attributes with arith::ConstantOps. It also performs
+// simple type conversions
+mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
+                                 mlir::PatternRewriter &rewriter,
+                                 mlir::Type type) {
+  if (ofr.is<mlir::Value>())
+    return ofr.get<mlir::Value>();
+
+  auto intAttr = llvm::cast<mlir::IntegerAttr>(ofr.get<mlir::Attribute>());
+
+  if (type)
+    intAttr = mlir::IntegerAttr::get(type, intAttr.getInt());
+
+  return rewriter.create<mlir::arith::ConstantOp>(loc, intAttr);
+}
+
+llvm::SmallVector<mlir::Value> getStridesOrOffsetsOrShapesInValueType(
+    mlir::PatternRewriter &rewriter,
+    ::llvm::SmallVector<mlir::OpFoldResult> mixedOSS, mlir::Location loc) {
+  llvm::SmallVector<mlir::Value> valueVec;
+  // auto mixedStrides = op.getMixedStrides();
+  for (size_t i = 0; i < mixedOSS.size(); i++) {
+    auto oss = getValueOrConstantOp(mixedOSS[i], loc, rewriter,
+                                    rewriter.getIndexType());
+    valueVec.push_back(oss);
+  }
+  return valueVec;
+}
+
 } // namespace imex

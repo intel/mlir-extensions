@@ -560,6 +560,42 @@ llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape);
 /// capability).
 bool isVectorAnyINTELType(mlir::Type type);
 
+/// convert OpFoldResult to Value by replacing integer
+/// attributes with arith::ConstantOps. It also performs
+/// simple type conversions
+mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
+                                 mlir::PatternRewriter &rewriter,
+                                 mlir::Type type = nullptr);
+
+// A universal get method for offsets or shapes or strides (OSS) of
+// xetile::InitTileOp and xegpu::CreateNdDescOp op.
+// OSS (Offsets, Shapes, Strides) information provided
+// to InitTileOp & CreateNdDescOp is multifaceted. In other words oss info
+// provided to InitTileOp & CreateNdDescOp in multiple ways, especially the
+// shapes and strides:
+// 1. For static memrefs: the shapes and strides  info are inherent in the
+// memref data type
+
+// 2. For dynamic memrefs and i64/i32 source: the shapes and strides info is
+// provided via the operands `sizes` and `strides` repectively, however these
+// operands can also take two different types:
+
+// 2.1 Constant type: constant attribute can be passed
+// 2.2 Value type: a value type can be passed
+
+// This function collects these info based on different scenarios and returns
+// them in Value types.
+
+// One can pass the result of getMixedOffsets(), getMixedSizes(),
+// getMixedStrides() to the following utility to get them as Value types.
+// Since both xetile::InitTileOp and xegpu::CreateNdDescOp ops implement the
+// OffsetSizeAndStrideOpInterface, getMixedOffsets(), getMixedSizes(),
+// getMixedStrides() takes care of the different scenarios mentioned above.
+
+llvm::SmallVector<mlir::Value> getStridesOrOffsetsOrShapesInValueType(
+    mlir::PatternRewriter &rewriter,
+    ::llvm::SmallVector<mlir::OpFoldResult> mixedOSS, mlir::Location loc);
+
 } // namespace imex
 
 #endif
