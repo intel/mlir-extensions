@@ -15,10 +15,12 @@
 
 #include "XeTileOpConversion.h"
 #include "imex/Utils/XeArch.h"
+#include "imex/Utils/XeCommon.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
+#include "llvm/ADT/SmallVector.h"
 #include <algorithm>
 #include <cassert>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
@@ -28,7 +30,7 @@
 #include <mlir/IR/BuiltinTypeInterfaces.h>
 
 namespace imex {
-
+using namespace mlir;
 using mlir::vector::CreateMaskOp;
 using mlir::vector::ExtractOp;
 using mlir::vector::ExtractStridedSliceOp;
@@ -479,14 +481,32 @@ class SgInitTileOpPattern : public XeOneToNConversion<xetile::InitTileOp> {
           tDescOffsets.push_back(tDescOffsetX);
           tDescOffsets.push_back(tDescOffsetY);
 
-          // TODO: this needs improvement, it assumes the source is static
-          // memeref.
+          // Handle memref source.
           if (auto MemRefTypedSource =
-                  mlir::cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
-            auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
-                op.getLoc(), tDescTy /*resultTy*/, MemRefTypedSource /*source*/,
-                tDescOffsets /*offsets*/);
+                  mlir::dyn_cast<mlir::TypedValue<mlir::MemRefType>>(source)) {
+            // Hnadle the case where the shape is static.
+            if (MemRefTypedSource.getType().hasStaticShape()) {
+              auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+                  op.getLoc(), tDescTy /*resultTy*/,
+                  MemRefTypedSource
+                  /*source*/,
+                  tDescOffsets /*offsets*/);
 
+              xegpuOps[blocks[1] * i + j] = createNdOp;
+            } else {
+              // Handle the case where the shape is dynamic.
+              auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+                  loc, tDescTy, MemRefTypedSource, tDescOffsets,
+                  op.getMixedSizes(), op.getMixedStrides());
+              xegpuOps[blocks[1] * i + j] = createNdOp;
+            }
+          } else if (auto intSourceType =
+                         mlir::dyn_cast<mlir::TypedValue<mlir::IntegerType>>(
+                             source)) {
+            // Handle the case where the source is an integer.
+            auto createNdOp = rewriter.create<mlir::xegpu::CreateNdDescOp>(
+                loc, tDescTy, intSourceType, tDescOffsets, op.getMixedSizes(),
+                op.getMixedStrides());
             xegpuOps[blocks[1] * i + j] = createNdOp;
           } else {
             return mlir::failure();
