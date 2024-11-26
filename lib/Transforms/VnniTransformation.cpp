@@ -348,6 +348,9 @@ static void applyVnniTransformOnResults(mlir::OpBuilder &builder,
 // the op, and whether it is safe to apply vnni transform on operands too.
 static void updateUnknownOp(mlir::OpBuilder &builder, mlir::Operation &op,
                             LayoutAnalysis &analysis) {
+  // Ignore ops that has packed attribute, since they are inserted by the pass.
+  if (op.hasAttr("packed"))
+    return;
   applyVnniTransformOnResults(builder, &op, analysis);
 }
 
@@ -469,81 +472,83 @@ static void updateExtractStrideSliceOp(mlir::OpBuilder &builder,
   }
 }
 
-static void handleBranchOpInterface(mlir::OpBuilder &builder,
-                                    mlir::Block &block,
-                                    mlir::RegionBranchOpInterface branch,
-                                    mlir::TypeRange argsTypes) {
-  builder.setInsertionPointToStart(&block);
+// handle terminal ops, e.g., scf.Yield. Update
+// the types of its successor inputs if successor
+// operands needs vnni format.
+static void handleBranchTerminatorOpInterface(
+    mlir::OpBuilder &builder,
+    mlir::RegionBranchTerminatorOpInterface terminator,
+    LayoutAnalysis &analysis) {
 
+  if (!mlir::isa<mlir::RegionBranchOpInterface>(terminator->getParentOp()))
+    return;
+
+  llvm::SmallVector<mlir::RegionSuccessor> successors;
+  llvm::SmallVector<mlir::Attribute> operands(terminator->getNumOperands(),
+                                              nullptr);
+  terminator.getSuccessorRegions(operands, successors);
+
+  for (mlir::RegionSuccessor &successor : successors) {
+    if (!successor.isParent())
+      continue;
+
+    mlir::OperandRange operands = terminator.getSuccessorOperands(successor);
+    mlir::ValueRange inputs = successor.getSuccessorInputs();
+    for (auto [arg, inp] : llvm::zip(operands, inputs)) {
+      if (analysis.getLayout(arg)) {
+        auto vecTy = mlir::cast<mlir::VectorType>(arg.getType());
+        auto packedTy = getPackedType(vecTy);
+        inp.setType(packedTy);
+      }
+    }
+  }
+}
+
+// handle REgionBranchOps, e.g., scf.for. Update the
+// region argument types, if the argument needs to be
+// in vnni format, but the initArg is not, a vnni
+// transform is applied on the initArg.
+static void handleBranchOpInterface(mlir::OpBuilder &builder,
+                                    mlir::RegionBranchOpInterface branch,
+                                    LayoutAnalysis &analysis) {
   mlir::Operation *op = branch.getOperation();
   llvm::SmallVector<mlir::RegionSuccessor> successors;
   llvm::SmallVector<mlir::Attribute> operands(op->getNumOperands(), nullptr);
   branch.getEntrySuccessorRegions(operands, successors);
 
   for (mlir::RegionSuccessor &successor : successors) {
-    if (block.getParent() != successor.getSuccessor())
+    if (successor.isParent())
       continue;
 
     mlir::OperandRange operands = branch.getEntrySuccessorOperands(successor);
     mlir::ValueRange inputs = successor.getSuccessorInputs();
+
     for (auto [arg, input] : llvm::zip(operands, inputs)) {
-      auto idx = mlir::cast<mlir::BlockArgument>(input).getArgNumber();
-      mlir::Type dstType = argsTypes[idx];
-      if (dstType == arg.getType()) {
-        input.setType(dstType);
-        continue;
-      } else {
-        auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(arg);
-        auto &&[newArg, root] = applyVnniTransform(builder, cast);
-        arg.replaceAllUsesExcept(newArg, root);
+      if (analysis.getLayout(input)) {
+        auto vecTy = mlir::cast<mlir::VectorType>(input.getType());
+        auto packedTy = getPackedType(vecTy);
+        input.setType(packedTy);
+        if (!analysis.getLayout(arg)) {
+          builder.setInsertionPointAfterValue(arg);
+          auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(arg);
+          auto &&[newArg, root] = applyVnniTransform(builder, cast);
+          arg.replaceAllUsesExcept(newArg, root);
+        }
       }
-    }
-  }
-
-  auto terminator = mlir::cast<mlir::RegionBranchTerminatorOpInterface>(
-      block.getTerminator());
-  mlir::SmallVector<mlir::Attribute> operandAttributes(
-      terminator->getNumOperands(), nullptr);
-
-  successors.clear();
-  terminator.getSuccessorRegions(operandAttributes, successors);
-
-  for (const mlir::RegionSuccessor &successor : successors) {
-    if (!successor.isParent())
-      continue;
-
-    mlir::ValueRange inputs = successor.getSuccessorInputs();
-    mlir::OperandRange operands = terminator.getSuccessorOperands(successor);
-    for (auto [operand, input] : llvm::zip(operands, inputs)) {
-      input.setType(operand.getType());
     }
   }
 }
 
 static void updateBlockTypes(mlir::OpBuilder &builder, mlir::Block &block,
                              LayoutAnalysis &analysis) {
-  if (auto iface = mlir::dyn_cast_if_present<mlir::RegionBranchOpInterface>(
-          block.getParentOp())) {
-    llvm::SmallVector<mlir::Type> types;
-    for (auto arg : block.getArguments()) {
-      auto argTy = arg.getType();
-      if (!analysis.getLayout(arg)) {
-        types.push_back(argTy);
-      } else {
-        auto vecTy = mlir::cast<mlir::VectorType>(argTy);
-        auto packedTy = getPackedType(vecTy);
-        types.push_back(packedTy);
+  if (!mlir::isa<mlir::RegionBranchOpInterface>(block.getParentOp())) {
+    builder.setInsertionPointToStart(&block);
+    for (auto &&arg : block.getArguments()) {
+      if (analysis.getLayout(arg)) {
+        auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(arg);
+        auto &&[newArg, root] = applyVnniTransform(builder, cast);
+        arg.replaceAllUsesExcept(newArg, root);
       }
-    }
-    return handleBranchOpInterface(builder, block, iface, types);
-  }
-
-  builder.setInsertionPointToStart(&block);
-  for (auto &&arg : block.getArguments()) {
-    if (analysis.getLayout(arg)) {
-      auto cast = mlir::cast<mlir::TypedValue<mlir::VectorType>>(arg);
-      auto &&[newArg, root] = applyVnniTransform(builder, cast);
-      arg.replaceAllUsesExcept(newArg, root);
     }
   }
 }
@@ -561,14 +566,21 @@ struct VnniTransformationPass final
 
     mlir::OpBuilder builder(&getContext());
     llvm::SmallVector<mlir::Type> operands;
-    op->walk<mlir::WalkOrder::PreOrder>([&](mlir::Block *block) {
+    // process ops in post-order so that the layout info is
+    // used before being destroyed.
+    op->walk([&](mlir::Block *block) {
       // Iterate block ops in reverse so op is updated before it's operands.
       for (mlir::Operation &op : llvm::reverse(block->getOperations())) {
-        // Ignore shape casts as they are generated by the conversion itself.
-        // Ignore RegionBranchOpInterface as it handled in `updateBlockTypes`.
-        if (mlir::isa<mlir::vector::ShapeCastOp, mlir::RegionBranchOpInterface,
-                      mlir::RegionBranchTerminatorOpInterface>(op))
+        if (auto terminator =
+                mlir::dyn_cast<mlir::RegionBranchTerminatorOpInterface>(op)) {
+          handleBranchTerminatorOpInterface(builder, terminator, analysis);
           continue;
+        }
+
+        if (auto iface = mlir::dyn_cast<mlir::RegionBranchOpInterface>(op)) {
+          handleBranchOpInterface(builder, iface, analysis);
+          continue;
+        }
 
         if (auto dpas = mlir::dyn_cast<mlir::xegpu::DpasOp>(op)) {
           updateDpasOp(builder, dpas, analysis);
