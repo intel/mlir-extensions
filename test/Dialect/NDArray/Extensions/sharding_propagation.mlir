@@ -1,8 +1,54 @@
 // RUN: imex-opt %s --pass-pipeline="builtin.module(func.func(sharding-propagation))" | FileCheck %s
 
 builtin.module {
-    
 mesh.mesh @mesh4(shape = 4)
+
+// CHECK-LABEL: @test_copyop
+// CHECK-SAME: [[varg0:%.*]]: tensor<1024x1024xi64>) -> tensor<1024x1024xi64> {
+func.func @test_copyop(%arg0: tensor<1024x1024xi64>) -> tensor<1024x1024xi64> {
+    // CHECK-NEXT: [[vsharding:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    %s = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated:%.*]] = mesh.shard [[varg0]] to [[vsharding]] : tensor<1024x1024xi64>
+    %0 = mesh.shard %arg0 to %s : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[vsharding_0:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated_1:%.*]] = mesh.shard [[vsharding_annotated]] to [[vsharding_0]] annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[v0:%.*]] = ndarray.copy [[vsharding_annotated_1]] : tensor<1024x1024xi64> -> tensor<1024x1024xi64>
+    // CHECK-NEXT: [[vsharding_2:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated_3:%.*]] = mesh.shard [[v0]] to [[vsharding_2]] : tensor<1024x1024xi64>
+    %1 = ndarray.copy %0 : tensor<1024x1024xi64> -> tensor<1024x1024xi64>
+    return %1 : tensor<1024x1024xi64>
+}
+
+// CHECK-LABEL: @test_deleteop
+// CHECK-SAME: [[varg0:%.*]]: tensor<1024x1024xi64>) {
+func.func @test_deleteop(%arg0: tensor<1024x1024xi64>) {
+    // CHECK-NEXT: [[vsharding:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    %s = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated:%.*]] = mesh.shard [[varg0]] to [[vsharding]] : tensor<1024x1024xi64>
+    %0 = mesh.shard %arg0 to %s : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[vsharding_0:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated_1:%.*]] = mesh.shard [[vsharding_annotated]] to [[vsharding_0]] annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: ndarray.delete [[vsharding_annotated_1]] : tensor<1024x1024xi64>
+    ndarray.delete %0 : tensor<1024x1024xi64>
+    return
+}
+
+// CHECK-LABEL: @test_cast_elemtypeop
+// CHECK-SAME: [[varg0:%.*]]: tensor<1024x1024xi64>) -> tensor<1024x1024xf64> {
+func.func @test_cast_elemtypeop(%arg0: tensor<1024x1024xi64>) -> tensor<1024x1024xf64> {
+    // CHECK-NEXT: [[vsharding:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    %s = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated:%.*]] = mesh.shard [[varg0]] to [[vsharding]] : tensor<1024x1024xi64>
+    %0 = mesh.shard %arg0 to %s : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[vsharding_0:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated_1:%.*]] = mesh.shard [[vsharding_annotated]] to [[vsharding_0]] annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[v0:%.*]] = ndarray.cast_elemtype [[vsharding_annotated_1]] : tensor<1024x1024xi64> to tensor<1024x1024xf64>
+    // CHECK-NEXT: [[vsharding_2:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
+    // CHECK-NEXT: [[vsharding_annotated_3:%.*]] = mesh.shard [[v0]] to [[vsharding_2]] : tensor<1024x1024xf64>
+    %1 = ndarray.cast_elemtype %0 : tensor<1024x1024xi64> to tensor<1024x1024xf64>
+    return %1 : tensor<1024x1024xf64>
+}
+
 // CHECK-LABEL: @test_shard_propagate_subview_balanced
 func.func @test_shard_propagate_subview_balanced(%arg0: tensor<1024x1024xi64>) -> tensor<4x3xi64> {
     // CHECK: [[S:%.*]] = mesh.sharding @mesh4 split_axes = {{\[\[}}0]] : !mesh.sharding
