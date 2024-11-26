@@ -1,4 +1,4 @@
-//===- NDArrayOps.h - NDArray dialect  --------------------*- tablegen -*-===//
+//===- NDArrayOps.td - NDArray dialect  --------------------*- tablegen -*-===//
 //
 // Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
