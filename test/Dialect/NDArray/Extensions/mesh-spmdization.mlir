@@ -2,6 +2,49 @@
 
 mesh.mesh @mesh4(shape = 4)
 
+// CHECK-LABEL: @test_copyop
+// CHECK-SAME: [[varg0:%.*]]: tensor<256x1024xi64>) -> tensor<256x1024xi64> {
+func.func @test_copyop(%arg0: tensor<1024x1024xi64>) -> tensor<1024x1024xi64> {
+    %sharding = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1024x1024xi64>
+    %sharding_0 = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated_1 = mesh.shard %sharding_annotated to %sharding_0 annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[v0:%.*]] = ndarray.copy [[varg0]] : tensor<256x1024xi64> -> tensor<256x1024xi64>
+    %0 = ndarray.copy %sharding_annotated_1 : tensor<1024x1024xi64> -> tensor<1024x1024xi64>
+    %sharding_2 = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated_3 = mesh.shard %0 to %sharding_2 : tensor<1024x1024xi64>
+    // CHECK-NEXT: return [[v0]] : tensor<256x1024xi64>
+    return %sharding_annotated_3 : tensor<1024x1024xi64>
+}
+
+// CHECK-LABEL: @test_deleteop
+// CHECK-SAME: [[varg0:%.*]]: tensor<256x1024xi64>) {
+func.func @test_deleteop(%arg0: tensor<1024x1024xi64>) {
+    %sharding = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1024x1024xi64>
+    %sharding_0 = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated_1 = mesh.shard %sharding_annotated to %sharding_0 annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: ndarray.delete [[varg0]] : tensor<256x1024xi64>
+    ndarray.delete %sharding_annotated_1 : tensor<1024x1024xi64>
+    // CHECK-NEXT: return
+    return
+}
+
+// CHECK-LABEL: @test_cast_elemtypeop
+// CHECK-SAME: [[varg0:%.*]]: tensor<256x1024xi64>) -> tensor<256x1024xf64> {
+func.func @test_cast_elemtypeop(%arg0: tensor<1024x1024xi64>) -> tensor<1024x1024xf64> {
+    %sharding = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1024x1024xi64>
+    %sharding_0 = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated_1 = mesh.shard %sharding_annotated to %sharding_0 annotate_for_users : tensor<1024x1024xi64>
+    // CHECK-NEXT: [[v0:%.*]] = ndarray.cast_elemtype [[varg0]] : tensor<256x1024xi64> to tensor<256x1024xf64>
+    %0 = ndarray.cast_elemtype %sharding_annotated_1 : tensor<1024x1024xi64> to tensor<1024x1024xf64>
+    %sharding_2 = mesh.sharding @mesh4 split_axes = [[0]] : !mesh.sharding
+    %sharding_annotated_3 = mesh.shard %0 to %sharding_2 : tensor<1024x1024xf64>
+    // CHECK-NEXT: return [[v0]] : tensor<256x1024xf64>
+    return %sharding_annotated_3 : tensor<1024x1024xf64>
+}
+
 // CHECK-LABEL: @test_linspace
 func.func @test_linspace() -> tensor<?xi64> {
     %c0 = arith.constant 0 : i64
@@ -53,21 +96,21 @@ mesh.mesh @mesh4x4(shape = 4x4)
 // CHECK-LABEL: func.func @test_subview_insert_slice_2d(
 // CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) {
 func.func @test_subview_insert_slice_2d(%arg0: tensor<1200x1200xi64>) {
-  %sharding = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
-  %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1200x1200xi64>
-  %sharding_0 = mesh.sharding @mesh4x4 split_axes = [[0], [1]] halo_sizes = [0, 2, 0, 2] : !mesh.sharding
-  %sharding_annotated_1 = mesh.shard %sharding_annotated to %sharding_0 : tensor<1200x1200xi64>
-  %sharding_2 = mesh.sharding @mesh4x4 split_axes = [[0], [1]] sharded_dims_offsets = [0, 298, 598, 898, 1000, 0, 298, 598, 898, 1000] : !mesh.sharding
-  %sharding_annotated_3 = mesh.shard %sharding_annotated_1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
-  // CHECK: [[v0:%.*]] = tensor.empty() : tensor<302x302xi64>
-  // CHECK-NEXT: [[vinserted_slice:%.*]] = tensor.insert_slice [[varg0]] into [[v0]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
-  // CHECK-NEXT: [[v1:%.*]] = mesh.update_halo [[vinserted_slice]] on @mesh4x4 split_axes = {{\[\[}}0], [1]] halo_sizes = [0, 2, 0, 2] : tensor<302x302xi64>
-  // CHECK-NEXT: [[v2:%.*]] = ndarray.subview [[v1]][2, 2] [300, 300] [1, 1] : tensor<302x302xi64> to tensor<300x300xi64>
-  %0 = ndarray.subview %sharding_annotated_3[4, 4] [1000, 1000] [1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
-  %sharding_annotated_4 = mesh.shard %0 to %sharding_2 : tensor<1000x1000xi64>
-  %sharding_annotated_5 = mesh.shard %sharding_annotated_4 to %sharding_2 annotate_for_users : tensor<1000x1000xi64>
-  %sharding_annotated_6 = mesh.shard %sharding_annotated_1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
-  // CHECK-NEXT: ndarray.insert_slice [[v2]] into [[v1]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
-  ndarray.insert_slice %sharding_annotated_5 into %sharding_annotated_6[2, 2] [1000, 1000] [1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
-  return
+    %sharding = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
+    %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1200x1200xi64>
+    %sharding_0 = mesh.sharding @mesh4x4 split_axes = [[0], [1]] halo_sizes = [0, 2, 0, 2] : !mesh.sharding
+    %sharding_annotated_1 = mesh.shard %sharding_annotated to %sharding_0 : tensor<1200x1200xi64>
+    %sharding_2 = mesh.sharding @mesh4x4 split_axes = [[0], [1]] sharded_dims_offsets = [0, 298, 598, 898, 1000, 0, 298, 598, 898, 1000] : !mesh.sharding
+    %sharding_annotated_3 = mesh.shard %sharding_annotated_1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
+    // CHECK: [[v0:%.*]] = tensor.empty() : tensor<302x302xi64>
+    // CHECK-NEXT: [[vinserted_slice:%.*]] = tensor.insert_slice [[varg0]] into [[v0]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
+    // CHECK-NEXT: [[v1:%.*]] = mesh.update_halo [[vinserted_slice]] on @mesh4x4 split_axes = {{\[\[}}0], [1]] halo_sizes = [0, 2, 0, 2] : tensor<302x302xi64>
+    // CHECK-NEXT: [[v2:%.*]] = ndarray.subview [[v1]][2, 2] [300, 300] [1, 1] : tensor<302x302xi64> to tensor<300x300xi64>
+    %0 = ndarray.subview %sharding_annotated_3[4, 4] [1000, 1000] [1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
+    %sharding_annotated_4 = mesh.shard %0 to %sharding_2 : tensor<1000x1000xi64>
+    %sharding_annotated_5 = mesh.shard %sharding_annotated_4 to %sharding_2 annotate_for_users : tensor<1000x1000xi64>
+    %sharding_annotated_6 = mesh.shard %sharding_annotated_1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
+    // CHECK-NEXT: ndarray.insert_slice [[v2]] into [[v1]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
+    ndarray.insert_slice %sharding_annotated_5 into %sharding_annotated_6[2, 2] [1000, 1000] [1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
+    return
 }

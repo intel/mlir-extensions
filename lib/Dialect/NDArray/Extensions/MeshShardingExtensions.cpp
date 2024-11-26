@@ -609,13 +609,20 @@ struct LinspaceShardingInterface
 // Interface registration
 //===----------------------------------------------------------------------===//
 
+template <typename T1, typename... T> void registerTrivial(MLIRContext *ctx) {
+  T1::template attachInterface<ElementwiseShardingInterface<T1>>(*ctx);
+  if constexpr (sizeof...(T) > 0)
+    registerTrivial<T...>(ctx);
+}
+
 void registerShardingInterfaceExternalModels(mlir::DialectRegistry &registry) {
-  registry.addExtension(+[](MLIRContext *ctx,
-                            imex::ndarray::NDArrayDialect *dialect) {
-    SubviewOp::template attachInterface<SubviewShardingInterface>(*ctx);
-    InsertSliceOp::template attachInterface<InsertSliceShardingInterface>(*ctx);
-    LinSpaceOp::template attachInterface<LinspaceShardingInterface>(*ctx);
-  });
+  registry.addExtension(
+      +[](MLIRContext *ctx, imex::ndarray::NDArrayDialect *dialect) {
+        SubviewOp::attachInterface<SubviewShardingInterface>(*ctx);
+        InsertSliceOp::attachInterface<InsertSliceShardingInterface>(*ctx);
+        LinSpaceOp::attachInterface<LinspaceShardingInterface>(*ctx);
+        registerTrivial<CopyOp, DeleteOp, CastElemTypeOp>(ctx);
+      });
 }
 
 } // namespace ndarray
