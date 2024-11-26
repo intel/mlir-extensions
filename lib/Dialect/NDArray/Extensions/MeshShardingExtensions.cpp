@@ -42,7 +42,7 @@ static SmallVector<Value>
 getMyMultiIndex(OpBuilder &b, ::mlir::mesh::MeshOp mesh, bool asI64 = false) {
   if (auto envStr = getenv("DEBUG_MESH_INDEX")) {
     auto myIdx = convertStringToVector(envStr);
-    if (myIdx.size() != mesh.getShape().size()) {
+    if (myIdx.size() < mesh.getShape().size()) {
       mesh->emitError() << "DEBUG_MESH_INDEX has wrong size";
       return {};
     }
@@ -52,6 +52,8 @@ getMyMultiIndex(OpBuilder &b, ::mlir::mesh::MeshOp mesh, bool asI64 = false) {
         idxs.push_back(easyI64(mesh.getLoc(), b, i).get());
       else
         idxs.push_back(easyIdx(mesh.getLoc(), b, i).get());
+      if (idxs.size() == mesh.getShape().size())
+        break;
     }
     return idxs;
   }
