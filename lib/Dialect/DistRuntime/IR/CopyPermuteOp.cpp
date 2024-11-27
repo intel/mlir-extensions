@@ -71,7 +71,7 @@ public:
 };
 
 /// Pattern to rewrite a subview op with CastOp arguments.
-/// Ported from mlir::tensor::ExtractSliceOp
+/// Ported from mlir::tensor
 class CopyPermuteCastFolder final
     : public mlir::OpRewritePattern<::imex::distruntime::CopyPermuteOp> {
 public:
