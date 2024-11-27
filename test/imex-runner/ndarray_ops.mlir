@@ -8,13 +8,9 @@ module {
     call @test_linspace_f32() : () -> ()
     call @test_subview() : () -> ()
     call @test_subview_2d() : () -> ()
-    call @test_extract_slice() : () -> ()
-    call @test_extract_slice_2d() : () -> ()
     call @test_insert_slice() : () -> ()
     call @test_insert_slice_scalar() : () -> ()
     call @test_insert_slice_2d() : () -> ()
-    call @test_immutable_insert_slice() : () -> ()
-    call @test_immutable_insert_slice_2d() : () -> ()
     // call @test_reshape() : () -> ()
     return
   }
@@ -79,40 +75,6 @@ module {
     // CHECK-NEXT{LITERAL}:  [1,   1]]
   }
 
-  func.func @test_extract_slice() {
-    %i1 = arith.constant 1 : index
-    %i2 = arith.constant 2 : index
-    %c0 = arith.constant 0 : i32
-    %c5 = arith.constant 5 : i32
-    %c10 = arith.constant 10 : i32
-    %0 = ndarray.linspace %c0 %c10 %c5 false   : (i32, i32, i32) -> tensor<?xi32>
-    %1 = ndarray.extract_slice %0[%i1] [%i2] [%i2] : tensor<?xi32> to tensor<?xi32>
-    %cast = tensor.cast %1 : tensor<?xi32> to tensor<*xi32>
-    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
-    return
-    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 1 offset = 1 sizes = [2] strides = [2] data =
-    // CHECK-NEXT: [2, 6]
-  }
-
-  func.func @test_extract_slice_2d() {
-    %i4 = arith.constant 4 : index
-    %c1 = arith.constant 1 : i32
-    %i0 = arith.constant 0 : index
-    %i1 = arith.constant 1 : index
-    %i2 = arith.constant 2 : index
-    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
-    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
-    %1 = ndarray.extract_slice %0[%i1, %i0] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> to tensor<?x?xi32>
-    %cast = tensor.cast %1 : tensor<?x?xi32> to tensor<*xi32>
-    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
-    return
-    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 2 offset = 4 sizes = [2, 2] strides = [4, 1] data =
-    // CHECK-NEXT{LITERAL}: [[1,   1],
-    // CHECK-NEXT{LITERAL}:  [1,   1]]
-  }
-
   func.func @test_insert_slice() {
     %i1 = arith.constant 1 : index
     %i2 = arith.constant 2 : index
@@ -165,46 +127,6 @@ module {
     %1 = linalg.fill ins(%c5 : i32) outs(%empty1: tensor<i32>) -> tensor<i32>
     ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<i32> into tensor<?x?xi32>
     %cast = tensor.cast %0 : tensor<?x?xi32> to tensor<*xi32>
-    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
-    return
-    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 2 offset = 0 sizes = [4, 4] strides = [4, 1] data =
-    // CHECK-NEXT{LITERAL}: [[1,   1,   1,   1],
-    // CHECK-NEXT{LITERAL}:  [1,   1,   5,   5],
-    // CHECK-NEXT{LITERAL}:  [1,   1,   5,   5],
-    // CHECK-NEXT{LITERAL}:  [1,   1,   1,   1]]
-  }
-
-  func.func @test_immutable_insert_slice() {
-    %i1 = arith.constant 1 : index
-    %i2 = arith.constant 2 : index
-    %c0 = arith.constant 0 : i32
-    %c2 = arith.constant 2 : i32
-    %c5 = arith.constant 5 : i32
-    %c10 = arith.constant 10 : i32
-    %0 = ndarray.linspace %c0 %c10 %c5 false   : (i32, i32, i32) -> tensor<?xi32>
-    %1 = ndarray.linspace %c0 %c2 %c2 false   : (i32, i32, i32) -> tensor<?xi32>
-    %2 = ndarray.immutable_insert_slice %1 into %0[%i1] [%i2] [%i2] : tensor<?xi32> into tensor<?xi32>
-    %cast = tensor.cast %2 : tensor<?xi32> to tensor<*xi32>
-    call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
-    return
-    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
-    // CHECK-NEXT: [0,  0,  4,  1,  8]
-  }
-
-  func.func @test_immutable_insert_slice_2d() {
-    %c1 = arith.constant 1 : i32
-    %c5 = arith.constant 5 : i32
-    %i1 = arith.constant 1 : index
-    %i2 = arith.constant 2 : index
-    %i4 = arith.constant 4 : index
-    %empty = tensor.empty(%i4, %i4) : tensor<?x?xi32>
-    %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
-    %empty1 = tensor.empty(%i2, %i2) : tensor<?x?xi32>
-    %1 = linalg.fill ins(%c5 : i32) outs(%empty1 : tensor<?x?xi32>) -> tensor<?x?xi32>
-    %2 = ndarray.immutable_insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> into tensor<?x?xi32>
-    %cast = tensor.cast %2 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
     return
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}

@@ -189,33 +189,6 @@ struct SubviewLowering
   }
 };
 
-/// Convert NDArray's extract_slice to tensor.extract_slice.
-struct ExtractSliceLowering
-    : public ::mlir::OpRewritePattern<::imex::ndarray::ExtractSliceOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(::imex::ndarray::ExtractSliceOp op,
-                  ::mlir::PatternRewriter &rewriter) const override {
-
-    auto srcTnsr = op.getSource();
-    auto loc = op->getLoc();
-
-    auto offsets = ::mlir::getMixedValues(op.getStaticOffsets(),
-                                          op.getOffsets(), rewriter);
-    auto sizes =
-        ::mlir::getMixedValues(op.getStaticSizes(), op.getSizes(), rewriter);
-    auto strides = ::mlir::getMixedValues(op.getStaticStrides(),
-                                          op.getStrides(), rewriter);
-
-    auto res = rewriter.create<::mlir::tensor::ExtractSliceOp>(
-        loc, srcTnsr, offsets, sizes, strides);
-    rewriter.replaceOp(op, res.getResult());
-
-    return ::mlir::success();
-  }
-};
-
 /// Convert NDArray's insert_slice to memref
 struct InsertSliceLowering
     : public ::mlir::OpRewritePattern<::imex::ndarray::InsertSliceOp> {
@@ -271,35 +244,6 @@ struct InsertSliceLowering
     }
 
     rewriter.replaceOpWithNewOp<::mlir::memref::CopyOp>(op, srcMR, view);
-    return ::mlir::success();
-  }
-};
-
-/// Convert immutable_insert_slice to tensor
-struct ImmutableInsertSliceLowering
-    : public ::mlir::OpRewritePattern<::imex::ndarray::ImmutableInsertSliceOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(::imex::ndarray::ImmutableInsertSliceOp op,
-                  ::mlir::PatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-
-    // get operators
-    auto src = op.getSource();
-    auto dst = op.getDestination();
-
-    auto offsets = ::mlir::getMixedValues(op.getStaticOffsets(),
-                                          op.getOffsets(), rewriter);
-    auto sizes =
-        ::mlir::getMixedValues(op.getStaticSizes(), op.getSizes(), rewriter);
-    auto strides = ::mlir::getMixedValues(op.getStaticStrides(),
-                                          op.getStrides(), rewriter);
-
-    auto slice = rewriter.create<::mlir::tensor::InsertSliceOp>(
-        loc, src, dst, offsets, sizes, strides);
-    rewriter.replaceOp(op, slice.getResult());
-
     return ::mlir::success();
   }
 };
@@ -424,7 +368,7 @@ struct CastElemTypeLowering
     }
 
     auto dst = createEmptyTensor(rewriter, loc, dstArType, src);
-    (void) rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+    (void)rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
         op, dstArType, src, dst, ::mlir::ArrayRef({map, map}), iterators,
         [dstElType](::mlir::OpBuilder &b, ::mlir::Location loc,
                     ::mlir::ValueRange args) {
@@ -463,10 +407,9 @@ struct ConvertNDArrayToLinalgPass
     target.addLegalOp<mlir::UnrealizedConversionCastOp>();
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-    patterns
-        .insert<SubviewLowering, ExtractSliceLowering, InsertSliceLowering,
-                ImmutableInsertSliceLowering, LinSpaceLowering, ReshapeLowering,
-                CopyLowering, DeleteLowering, CastElemTypeLowering>(&ctxt);
+    patterns.insert<SubviewLowering, InsertSliceLowering, LinSpaceLowering,
+                    ReshapeLowering, CopyLowering, DeleteLowering,
+                    CastElemTypeLowering>(&ctxt);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {
