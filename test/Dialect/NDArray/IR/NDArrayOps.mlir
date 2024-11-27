@@ -27,27 +27,6 @@ func.func @test_subview_const(%arg0: tensor<?xi64>) -> tensor<3xi64> {
 // CHECK-NEXT: [[V0:%.*]] = ndarray.subview %arg0[0] [3] [3] : tensor<?xi64> to tensor<3xi64>
 // CHECK-NEXT: return [[V0:%.*]] : tensor<3xi64>
 
-// -----
-func.func @test_extract_slice(%arg0: tensor<?xi64>) -> tensor<?xi64> {
-    %c0 = arith.constant 0 : index
-    %c3 = arith.constant 3 : index
-    %0 = ndarray.extract_slice %arg0[%c0][%c3][%c3] : tensor<?xi64> to tensor<?xi64>
-    return %0 : tensor<?xi64>
-}
-// CHECK-LABEL: @test_extract_slice
-// CHECK-NEXT: [[C0:%.*]] = arith.constant
-// CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = ndarray.extract_slice %arg0[[[C0]]] [[[C1]]] [[[C1]]] : tensor<?xi64> to tensor<?xi64>
-// CHECK-NEXT: return [[V0:%.*]] : tensor<?xi64>
-
-// -----
-func.func @test_extract_slice_const(%arg0: tensor<?xi64>) -> tensor<3xi64> {
-    %0 = ndarray.extract_slice %arg0[0][3][3] : tensor<?xi64> to tensor<3xi64>
-    return %0 : tensor<3xi64>
-}
-// CHECK-LABEL: @test_extract_slice_const
-// CHECK-NEXT: [[V0:%.*]] = ndarray.extract_slice %arg0[0] [3] [3] : tensor<?xi64> to tensor<3xi64>
-// CHECK-NEXT: return [[V0:%.*]] : tensor<3xi64>
 
 // -----
 func.func @test_insert_slice(%arg0: tensor<?xi64>, %arg1: tensor<?xi64>) -> tensor<?xi64> {
@@ -82,28 +61,6 @@ func.func @test_insert_slice_scalar(%arg0: tensor<?xi64>, %arg1: tensor<i64>) ->
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
 // CHECK-NEXT: [[C3:%.*]] = arith.constant
 // CHECK-NEXT: ndarray.insert_slice %arg1 into %arg0[[[C0]]] [[[C1]]] [[[C3]]] : tensor<i64> into tensor<?xi64>
-
-// -----
-func.func @test_immutable_insert_slice(%arg0: tensor<?xi64>, %arg1: tensor<?xi64>) -> tensor<?xi64> {
-    %c0 = arith.constant 0 : index
-    %c3 = arith.constant 3 : index
-    %0 = ndarray.immutable_insert_slice %arg1 into %arg0[%c0] [%c3] [%c3] : tensor<?xi64> into tensor<?xi64>
-    return %arg0 : tensor<?xi64>
-}
-// CHECK-LABEL: @test_immutable_insert_slice
-// CHECK-NEXT: [[C0:%.*]] = arith.constant
-// CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = ndarray.immutable_insert_slice %arg1 into %arg0 [[[C0]]] [[[C1]]] [[[C1]]] : tensor<?xi64> into tensor<?xi64>
-// CHECK-NEXT: return [[V0:%.*]] : tensor<?xi64>
-
-// -----
-func.func @test_immutable_insert_slice_const(%arg0: tensor<?xi64>, %arg1: tensor<3xi64>) -> tensor<?xi64> {
-    %0 = ndarray.immutable_insert_slice %arg1 into %arg0[0] [3] [3] : tensor<3xi64> into tensor<?xi64>
-    return %0 : tensor<?xi64>
-}
-// CHECK-LABEL: @test_immutable_insert_slice_const
-// CHECK-NEXT: [[V0:%.*]] = ndarray.immutable_insert_slice %arg1 into %arg0 [0] [3] [3] : tensor<3xi64> into tensor<?xi64>
-// CHECK-NEXT: return [[V0:%.*]] : tensor<?xi64>
 
 // -----
 func.func @test_linspace(%arg0: si64, %arg1: si64, %arg2: si64) -> tensor<?xi64> {
