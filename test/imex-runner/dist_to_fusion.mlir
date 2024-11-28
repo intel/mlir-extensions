@@ -25,7 +25,7 @@ builtin.module {
 // CHECK-NEXT: [[vc11_i32:%.*]] = arith.constant 11 : i32
 // CHECK-NEXT: [[vc6_i32:%.*]] = arith.constant 6 : i32
 // CHECK-NEXT: [[vc14_i32:%.*]] = arith.constant 14 : i32
-// CHECK-NEXT: [[v0:%.*]] = bufferization.to_memref [[varg0]] : memref<300x300xi64, strided<[?, ?], offset: ?>>
+// CHECK-NEXT: [[v0:%.*]] = bufferization.to_memref [[varg0]] : tensor<300x300xi64> to memref<300x300xi64, strided<[?, ?], offset: ?>>
 // CHECK-NEXT: [[valloc:%.*]] = memref.alloc() {alignment = 64 : i64} : memref<304x304xi64>
 // CHECK-NEXT: [[vsubview:%.*]] = memref.subview [[valloc]][2, 2] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
 // CHECK-NEXT: memref.copy [[v0]], [[vsubview]] : memref<300x300xi64, strided<[?, ?], offset: ?>> to memref<300x300xi64, strided<[304, 1], offset: 610>>

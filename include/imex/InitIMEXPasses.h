@@ -19,7 +19,6 @@
 // #include <imex/Transforms/IMEXPasses.h>
 #include <imex/Dialect/DistRuntime/Transforms/Passes.h>
 #include <imex/Dialect/NDArray/Transforms/Passes.h>
-#include <imex/Dialect/Region/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
 #include "imex/Transforms/Passes.h"
 #include <imex/Dialect/XeTile/Transforms/Passes.h>
@@ -45,7 +44,6 @@ inline void registerAllPasses() {
   // Dialect passes
   registerNDArrayPasses();
   registerDistRuntimePasses();
-  registerRegionPasses();
   registerXeTilePasses();
   // register*Passes();
 

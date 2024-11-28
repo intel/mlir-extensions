@@ -11,7 +11,7 @@ func.func @test_subview(%arg0: tensor<?xi64>) -> tensor<?xi64> {
 // CHECK-SAME: ([[V:%.*]]: tensor<?xi64>) -> tensor<?xi64> {
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[S0:%.*]] = memref.subview [[V0]][[[C0]]] [[[C1]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] restrict writable : memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: return [[V1]] : tensor<?xi64>
