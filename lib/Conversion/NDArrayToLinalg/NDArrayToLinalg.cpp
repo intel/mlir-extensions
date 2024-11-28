@@ -27,7 +27,6 @@
 #include <imex/Conversion/NDArrayToLinalg/NDArrayToLinalg.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
-#include <imex/Dialect/Region/Transforms/RegionConversions.h>
 #include <imex/Utils/ArithUtils.h>
 #include <imex/Utils/PassUtils.h>
 
