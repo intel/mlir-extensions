@@ -1,4 +1,5 @@
 add_imex_dialect_library(IMEXRegionTransforms
+  BufferizableOpInterfaceImpl.cpp
   RegionConversions.cpp
   RegionBufferize.cpp
 
