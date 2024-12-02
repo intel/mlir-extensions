@@ -19,7 +19,6 @@ builtin.module(
     memref-expand,
     func.func(empty-tensor-to-alloc-tensor),
     one-shot-bufferize{unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries}
-    region-bufferize,
     canonicalize,
     imex-remove-temporaries,
     func.func(convert-linalg-to-parallel-loops),
