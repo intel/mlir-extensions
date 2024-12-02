@@ -28,7 +28,6 @@
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
-#include <imex/Dialect/Region/Transforms/RegionConversions.h>
 #include <imex/Utils/ArithUtils.h>
 #include <imex/Utils/PassUtils.h>
 
@@ -1365,7 +1364,6 @@ struct ConvertNDArrayToLinalgPass
                     CopyLowering, DeleteLowering, CastElemTypeLowering,
                     FromMemRefLowering, PermuteDimsOpLowering>(typeConverter,
                                                                &ctxt);
-    ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 
     // populate function boundaries using our special type converter
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<

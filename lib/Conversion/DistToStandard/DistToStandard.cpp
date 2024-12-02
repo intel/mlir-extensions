@@ -20,7 +20,6 @@
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/NDArray/Transforms/Utils.h>
 #include <imex/Dialect/NDArray/Utils/Utils.h>
-#include <imex/Dialect/Region/Transforms/RegionConversions.h>
 #include <imex/Utils/ArithUtils.h>
 #include <imex/Utils/PassUtils.h>
 #include <imex/Utils/PassWrapper.h>
@@ -1781,7 +1780,6 @@ struct ConvertDistToStandardPass
         CastElemTypeOpConverter, PermuteDimsOpConverter>(typeConverter, &ctxt);
     mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
         typeConverter, patterns, target);
-    ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 
     // Let's go!
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
