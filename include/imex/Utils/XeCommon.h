@@ -81,6 +81,8 @@ public:
             Usage[op] |= (uint)UsageType::PREFETCH;
           } else if (llvm::isa<imex::xetile::StoreTileOp>(user)) {
             Usage[op] |= (uint)UsageType::STORE;
+          } else if (llvm::isa<imex::xetile::AtomicRMWOp>(user)) {
+            Usage[op] |= (uint)UsageType::ATOMICRMW;
           } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
             Usage[op] |= (uint)UsageType::OTHER;
           } else if (auto forOp =
@@ -162,6 +164,17 @@ public:
     return false;
   }
 
+  bool isForAtomicRMW(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
+      return !load && !store && !prefetch && atomic_rmw;
+    }
+    return false;
+  }
+
   //
   bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) {
     if (Usage.count(op)) {
@@ -193,6 +206,28 @@ public:
     return false;
   }
 
+  bool isForLoadAndAtomicRMW(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
+      return load && !store && !prefetch && atomic_rmw;
+    }
+    return false;
+  }
+
+  bool isForAtomicRMWAndStore(imex::xetile::InitTileOp op) {
+    if (Usage.count(op)) {
+      bool load = Usage[op] & UsageType::LOAD;
+      bool store = Usage[op] & UsageType::STORE;
+      bool prefetch = Usage[op] & UsageType::PREFETCH;
+      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
+      return !load && store && !prefetch && atomic_rmw;
+    }
+    return false;
+  }
+
 private:
   enum UsageType {
     None = 0,
@@ -202,7 +237,8 @@ private:
     DPAS_A = 8,
     DPAS_B = 16,
     DPAS_C = 32,
-    OTHER = 64
+    ATOMICRMW = 64,
+    OTHER = 128
   };
 
   llvm::DenseMap<mlir::Operation *, uint> Usage;
@@ -528,6 +564,12 @@ protected:
 
   template <typename = typename std::enable_if<
                 std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForAtomicRMW(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForAtomicRMW(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
   bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) const {
     return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndPrefetch(op);
   }
@@ -536,6 +578,18 @@ protected:
                 std::is_same_v<AnalysisT, TileUsageAnalysis>>>
   bool isForLoadAndStore(imex::xetile::InitTileOp op) const {
     return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndStore(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForLoadAndAtomicRMW(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForLoadAndAtomicRMW(op);
+  }
+
+  template <typename = typename std::enable_if<
+                std::is_same_v<AnalysisT, TileUsageAnalysis>>>
+  bool isForAtomicRMWAndStore(imex::xetile::InitTileOp op) const {
+    return llvm::cast<TileUsageAnalysis>(analysis).isForAtomicRMWAndStore(op);
   }
 };
 
