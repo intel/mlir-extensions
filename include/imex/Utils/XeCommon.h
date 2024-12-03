@@ -81,7 +81,7 @@ public:
             Usage[op] |= (uint)UsageType::PREFETCH;
           } else if (llvm::isa<imex::xetile::StoreTileOp>(user)) {
             Usage[op] |= (uint)UsageType::STORE;
-          } if (llvm::isa<imex::xetile::AtomicRMWOp>(user)) {
+          } else if (llvm::isa<imex::xetile::AtomicRMWOp>(user)) {
             Usage[op] |= (uint)UsageType::ATOMICRMW;
           } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
             Usage[op] |= (uint)UsageType::OTHER;
@@ -238,7 +238,7 @@ private:
     DPAS_B = 16,
     DPAS_C = 32,
     ATOMICRMW = 64,
-    OTHER = 128  
+    OTHER = 128
   };
 
   llvm::DenseMap<mlir::Operation *, uint> Usage;
