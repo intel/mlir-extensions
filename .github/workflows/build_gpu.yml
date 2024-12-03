@@ -24,19 +24,49 @@ jobs:
         run: |
           sh scripts/sysinfo.sh
 
-      - name: Checkout MLIR
+      - name: Set Cache Vars
         run: |
-          git clone https://github.com/llvm/llvm-project
-          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          echo LLVM_SHA=$(cat build_tools/llvm_version.txt) | tee -a $GITHUB_ENV
+
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v4
+        env:
+          LLVM_CACHE_NUMBER: 2  # Increase to reset cache
+        with:
+          path: |
+            ${{ github.workspace }}/mlir
+          key: clang-${{ github.ref }}-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+
+      - name: Build LLVM-MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
           git checkout $LLVM_SHA
           git apply ../build_tools/patches/*.patch
+
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          cmake -G Ninja -B build -S llvm                                  \
+            -DCMAKE_C_COMPILER=/usr/bin/clang                              \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++                          \
+            -DCMAKE_BUILD_TYPE=MinSizeRel                                  \
+            -DLLVM_ENABLE_PROJECTS=mlir                                    \
+            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+            -DLLVM_USE_LINKER=gold                                         \
+            -DLLVM_INSTALL_UTILS=ON                                        \
+            -DLLVM_TARGETS_TO_BUILD=X86                                    \
+            -DLLVM_ENABLE_BINDINGS=OFF                                     \
+            -DLLVM_ENABLE_ZSTD=OFF                                         \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
+          cmake --build build --target install
 
       - name: Setup IMEX and run tests
         run: |
           source /opt/intel/oneapi/setvars.sh
           pip install psutil
-          ./scripts/compile.sh -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800"
+          ./scripts/compile.sh -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir
+
           cmake --build build --target check-imex | tee build/tests.txt
 
       - name: Run SG-level XeTile generated cases
