@@ -28,6 +28,7 @@ using imex::easyIdx;
 namespace imex {
 namespace ndarray {
 
+// Converts a comma-separated string of integers into a std::vector<int>.
 static std::vector<int> convertStringToVector(const std::string &str) {
   std::vector<int> result;
   std::stringstream ss(str);
@@ -38,6 +39,10 @@ static std::vector<int> convertStringToVector(const std::string &str) {
   return result;
 }
 
+// Retrieves the multi-index for the current process in a mesh.
+// If the environment variable "DEBUG_MESH_INDEX" is set, it uses the value
+// from the environment variable. Otherwise, it creates a ProcessMultiIndexOp
+// to get the index.
 static SmallVector<Value>
 getMyMultiIndex(OpBuilder &b, ::mlir::mesh::MeshOp mesh, bool asI64 = false) {
   if (auto envStr = getenv("DEBUG_MESH_INDEX")) {
@@ -87,7 +92,7 @@ static auto getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
 // shard sizes. The shard sizes reflect the sizes resulting from the
 // non-copying subview operation. Requires sharding of input tensor.
 static FailureOr<MeshSharding>
-getShardedDimsOffsetsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
+getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
   SymbolTableCollection symbolTable;
   auto aryType = cast<RankedTensorType>(ary.getType());
   // currently no support for dynamic input shapes
@@ -183,6 +188,7 @@ getOffsetAndSize(const EasyI64 &myID, const EasyI64 &zero, const EasyI64 &one,
   return {myOff.get(), (nextOff - myOff).get()};
 }
 
+// ***************************************************************************
 static std::array<Value, 2> getShardSliceOffAndSz(
     ValueRange myIdx, int64_t dim, ArrayRef<int64_t> meshShape,
     ArrayRef<MeshAxesAttr> splitAxes, Value targetOffs,
@@ -203,61 +209,79 @@ static std::array<Value, 2> getShardSliceOffAndSz(
   auto meshAxis = splitAxes[dim][0];
   auto numShards = easyI64(loc, builder, meshShape[meshAxis]);
   auto myID = easyI64(loc, builder, myIdx[meshAxis]);
-  auto myOffAndSize =
-      getOffsetAndSize(myID, zero, one, targetOffs, currPos, builder, loc);
+  Value myOff, mySize;
+  if (targetOffs) {
+    std::tie(myOff, mySize) =
+        getOffsetAndSize(myID, zero, one, targetOffs, currPos, builder, loc);
+  } else {
+    myOff = getBaseShardDimOff(myID, numShards, extend, zero).get();
+    mySize = getBaseShardDimSize(myID, numShards, extend, one, zero).get();
+  }
 
   // the global offset of the local shard is slice offset plus the computed
   // offset in the target tensor the latter is in number of elements after
   // slicing, which means we need to multiply it by stride
-  auto targetOff = easyI64(loc, builder, slcOffs[dim]) +
-                   easyI64(loc, builder, myOffAndSize.first) *
-                       easyI64(loc, builder, slcStrides[dim]);
+  auto targetOff =
+      easyI64(loc, builder, slcOffs[dim]) +
+      easyI64(loc, builder, myOff) * easyI64(loc, builder, slcStrides[dim]);
   auto shardOff = getBaseShardDimOff(myID, numShards, extend, zero) -
                   easyI64(loc, builder, haloSizes[shardedDim * 2]);
+
   return {createIndexCast(loc, builder, (targetOff - shardOff).get()),
-          createIndexCast(loc, builder, myOffAndSize.second)};
+          createIndexCast(loc, builder, mySize)};
 }
 
+// ***************************************************************************
 template <typename OP>
 FailureOr<std::tuple<SmallVector<OpFoldResult>, SmallVector<OpFoldResult>,
                      SmallVector<OpFoldResult>>>
 getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
-                             const MeshSharding &operandSharding,
-                             const MeshSharding &resultSharding,
+                             const MeshSharding &haloSharding,
+                             const MeshSharding &offsSharding,
+                             const MeshSharding &splitSharding,
                              SymbolTableCollection &symbolTableCollection,
                              OpBuilder &builder) {
-  if (!operandSharding.getStaticShardedDimsOffsets().empty() ||
-      operandSharding.getStaticHaloSizes().empty() ||
-      mlir::ShapedType::isDynamicShape(operandSharding.getStaticHaloSizes()) ||
-      resultSharding.getStaticShardedDimsOffsets().empty() ||
-      mlir::ShapedType::isDynamicShape(
-          resultSharding.getStaticShardedDimsOffsets())) {
+
+  if (!haloSharding.getStaticShardedDimsOffsets().empty() ||
+      (!haloSharding.getStaticHaloSizes().empty() &&
+       ShapedType::isDynamicShape(haloSharding.getStaticHaloSizes())) ||
+      (!offsSharding.getStaticShardedDimsOffsets().empty() &&
+       ShapedType::isDynamicShape(
+           offsSharding.getStaticShardedDimsOffsets()))) {
     return failure();
   }
 
-  auto loc = op->getLoc();
-  auto splitAxes = operandSharding.getSplitAxes();
-  auto mesh = getMesh(op, operandSharding.getMeshAttr(), symbolTableCollection);
-  auto myIdx = getMyMultiIndex(builder, mesh);
-  auto haloSizes =
-      mlir::getMixedValues(operandSharding.getStaticHaloSizes(),
-                           operandSharding.getDynamicHaloSizes(), builder);
-  auto shardedDimsOffsets = imex::getMixedAsValues(
-      loc, builder, resultSharding.getDynamicShardedDimsOffsets(),
-      resultSharding.getStaticShardedDimsOffsets());
   auto slcOffs =
       mlir::getMixedValues(op.getStaticOffsets(), op.getOffsets(), builder);
   auto slcSizes =
       mlir::getMixedValues(op.getStaticSizes(), op.getSizes(), builder);
   auto slcStrides =
       mlir::getMixedValues(op.getStaticStrides(), op.getStrides(), builder);
-  auto rank = slcOffs.size();
+
+  auto loc = op->getLoc();
   auto zero = easyI64(loc, builder, 0);
   auto one = easyI64(loc, builder, 1);
-  ::SmallVector<OpFoldResult> lShardOffs, lShardSizes;
-  auto targetOffs =
-      builder.create<tensor::FromElementsOp>(loc, shardedDimsOffsets);
+  auto rank = slcOffs.size();
+  auto splitAxes = splitSharding.getSplitAxes();
+  auto mesh = getMesh(op, offsSharding.getMeshAttr(), symbolTableCollection);
+  auto myIdx = getMyMultiIndex(builder, mesh);
 
+  auto haloSizes =
+      haloSharding.getStaticHaloSizes().empty()
+          ? SmallVector<OpFoldResult>(rank * 2, zero.get())
+          : mlir::getMixedValues(haloSharding.getStaticHaloSizes(),
+                                 haloSharding.getDynamicHaloSizes(), builder);
+
+  Value targetOffs;
+  if (!offsSharding.getStaticShardedDimsOffsets().empty()) {
+    auto shardedDimsOffsets = imex::getMixedAsValues(
+        loc, builder, offsSharding.getDynamicShardedDimsOffsets(),
+        offsSharding.getStaticShardedDimsOffsets());
+    targetOffs =
+        builder.create<tensor::FromElementsOp>(loc, shardedDimsOffsets);
+  }
+
+  SmallVector<OpFoldResult> lShardOffs, lShardSizes;
   for (auto dim = 0ul; dim < (uint64_t)rank; ++dim) {
     assert(!ShapedType::isDynamic(srcShape[dim]));
     if (dim >= splitAxes.size() || splitAxes[dim].empty()) {
@@ -290,15 +314,15 @@ struct BaseShardingInterface
     int64_t rank = -1;
     for (auto o : op->getOperands()) {
       if (auto type = dyn_cast<RankedTensorType>(o.getType())) {
-        assert(rank < 0 || type.getRank() == rank);
-        rank = type.getRank();
+        assert(rank < 0 || type.getRank() == 0 || type.getRank() == rank);
+        rank = std::max(rank, type.getRank());
         numTensors++;
       }
     }
     for (auto o : op->getResults()) {
       if (auto type = dyn_cast<RankedTensorType>(o.getType())) {
-        assert(rank < 0 || type.getRank() == rank);
-        rank = type.getRank();
+        assert(rank < 0 || type.getRank() == 0 || type.getRank() == rank);
+        rank = std::max(rank, type.getRank());
         numTensors++;
       }
     }
@@ -352,7 +376,7 @@ struct SubviewShardingInterface
     maybeInsertSourceShardingAnnotation(srcShardOp.getSharding(),
                                         op->getOpOperand(0), b);
 
-    auto sharding = getShardedDimsOffsetsSharding(svop.getSource(), svop);
+    auto sharding = getShardedDimsOffsSharding(svop.getSource(), svop);
     if (failed(sharding))
       return failure();
     maybeInsertTargetShardingAnnotation(sharding.value(), op->getResult(0), b);
@@ -373,15 +397,11 @@ struct SubviewShardingInterface
     auto shp = cast<RankedTensorType>(typedOp.getSource().getType()).getShape();
     auto offSzStr = getLocalOffSzAndStrFromSlice(
         typedOp, shp, operandShardings[0], resultShardings[0],
-        symbolTableCollection, builder);
+        operandShardings[0], symbolTableCollection, builder);
     if (failed(offSzStr)) {
       return failure();
     }
     auto &[lShardOffs, lShardSizes, lShardStrides] = offSzStr.value();
-    // auto opResultType = cast<RankedTensorType>(op->getResult(0).getType());
-    // auto resultType =
-    // cast<RankedTensorType>(opResultType.cloneWith(resultShape,
-    // opResultType.getElementType()));
     auto newSubview = builder.create<imex::ndarray::SubviewOp>(
         op->getLoc(), spmdizedOperands[0], lShardOffs, lShardSizes,
         lShardStrides);
@@ -402,13 +422,16 @@ struct InsertSliceShardingInterface
                          const ShardingOption &shardingOption) const {
     LLVM_DEBUG(DBGS() << "addShardingAnnotations\n");
     auto svop = cast<InsertSliceOp>(op);
+    MeshSharding srcSharding(shardingOption.mesh);
+    auto srcRank = svop.getSource().getType().getRank();
 
-    auto srcSharding =
-        getShardedDimsOffsetsSharding(svop.getDestination(), svop);
-    if (failed(srcSharding))
-      return failure();
-    maybeInsertSourceShardingAnnotation(srcSharding.value(),
-                                        op->getOpOperand(1), b);
+    if (srcRank > 0) {
+      auto sharding = getShardedDimsOffsSharding(svop.getDestination(), svop);
+      if (failed(sharding))
+        return failure();
+      srcSharding = sharding.value();
+    }
+    maybeInsertSourceShardingAnnotation(srcSharding, op->getOpOperand(1), b);
 
     SmallVector<MeshAxesAttr> res;
     for (const auto &v : shardingOption.shardingArray) {
@@ -431,33 +454,61 @@ struct InsertSliceShardingInterface
     }
 
     auto typedOp = cast<imex::ndarray::InsertSliceOp>(op);
-    auto shp =
-        cast<RankedTensorType>(typedOp.getDestination().getType()).getShape();
-    auto offSzStr = getLocalOffSzAndStrFromSlice(
-        typedOp, shp, operandShardings[0], operandShardings[1],
-        symbolTableCollection, builder);
-    if (failed(offSzStr)) {
-      return failure();
-    }
-    auto &[lShardOffs, lShardSizes, lShardStrides] = offSzStr.value();
-    // auto opResultType = cast<RankedTensorType>(op->getResult(0).getType());
-    // auto resultType =
-    // cast<RankedTensorType>(opResultType.cloneWith(resultShape,
-    // opResultType.getElementType()));
+    auto dstSharding = operandShardings[0];
+    auto srcSharding = operandShardings[1];
+    SmallVector<OpFoldResult> lShardOffs, lShardSizes, lShardStrides;
 
-    Operation *newOp = builder.create<imex::ndarray::InsertSliceOp>(
-        op->getLoc(), spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
-        lShardSizes, lShardStrides);
-    spmdizationMap.map(op, newOp);
+    if (isFullReplication(dstSharding)) {
+      lShardOffs = mlir::getMixedValues(typedOp.getStaticOffsets(),
+                                        typedOp.getOffsets(), builder);
+      lShardSizes = mlir::getMixedValues(typedOp.getStaticSizes(),
+                                         typedOp.getSizes(), builder);
+      lShardStrides = mlir::getMixedValues(typedOp.getStaticStrides(),
+                                           typedOp.getStrides(), builder);
+    } else {
+      if (typedOp.getSource().getType().getRank() == 0) {
+        auto sharding =
+            getShardedDimsOffsSharding(typedOp.getDestination(), typedOp);
+        if (failed(sharding)) {
+          return failure();
+        }
+        srcSharding = sharding.value();
+      }
+      auto shp =
+          cast<RankedTensorType>(typedOp.getDestination().getType()).getShape();
+      auto offSzStr = getLocalOffSzAndStrFromSlice(
+          typedOp, shp, dstSharding, srcSharding, dstSharding,
+          symbolTableCollection, builder);
+      if (failed(offSzStr)) {
+        return failure();
+      }
+      std::tie(lShardOffs, lShardSizes, lShardStrides) = offSzStr.value();
+    }
+
+    auto loc = op->getLoc();
+    auto zero = easyI64(loc, builder, 0);
+    auto hasSize = zero.eq(zero);
+    for (auto &v : lShardSizes) {
+      hasSize = hasSize.land(easyI64(loc, builder, v).sgt(zero));
+    }
+
+    scf::IfOp ifOp = builder.create<scf::IfOp>(
+        loc, hasSize.get(), [&](OpBuilder &b, Location loc) {
+          (void)b.create<imex::ndarray::InsertSliceOp>(
+              loc, spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
+              lShardSizes, lShardStrides);
+          b.create<scf::YieldOp>(loc);
+        });
+    spmdizationMap.map(op, ifOp.getOperation());
 
     builder.create<mlir::mesh::UpdateHaloOp>(
-        op->getLoc(), spmdizedOperands[0].getType(), spmdizedOperands[0],
-        operandShardings[0].getMeshAttr(),
+        loc, spmdizedOperands[0].getType(), spmdizedOperands[0],
+        dstSharding.getMeshAttr(),
         mlir::mesh::MeshAxesArrayAttr::get(op->getContext(),
-                                           operandShardings[0].getSplitAxes()),
-        operandShardings[0].getDynamicHaloSizes(),
+                                           dstSharding.getSplitAxes()),
+        dstSharding.getDynamicHaloSizes(),
         DenseI64ArrayAttr::get(op->getContext(),
-                               operandShardings[0].getStaticHaloSizes()));
+                               dstSharding.getStaticHaloSizes()));
     return success();
   }
 };
