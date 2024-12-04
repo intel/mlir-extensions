@@ -905,16 +905,19 @@ struct SgTileReductionOpPattern
         sources, shape, op.getKind(), loc, elemTy, rewriter);
     llvm::SmallVector<mlir::Value> newOps;
     {
-      // intermediate is a vector of values with type of vector<shape[3]xf16>,
-      // each value represents a portion of the reduced value. For example,
+      // intermediate is a vector of values with type of vector<nxf16>
+      // (where n is max of min(shape[0]/2,16) and 1),
+      // each element is the reduced value for a row. For example,
       // for vector<32x4x1x16> with reduction on dim 1 and dim 3. the
-      // intermediate values will be two vectors of vector<16xf16>. The values
+      // intermediate values will be two values of vector<16xf16>. The values
       // in the first vector represents the reduction result of the first 16
       // rows. Here we will extract each value and splat it to a vector<1x1xf16>
       // as results to their consumers.
       for (auto v : intermediates) {
         auto targetTy = mlir::VectorType::get({1, 1}, elemTy);
-        for (auto i = 0; i < shape[3]; i++) {
+        auto vecTy = mlir::dyn_cast<mlir::VectorType>(v.getType());
+        assert(vecTy && "expect vector type");
+        for (auto i = 0; i < vecTy.getShape()[0]; i++) {
           auto pos = rewriter.create<mlir::arith::ConstantOp>(
               op.getLoc(), rewriter.getI32IntegerAttr(i));
           auto extractOp =
