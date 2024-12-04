@@ -535,7 +535,7 @@ struct ScfForOpPattern : public OpConversionPattern<scf::ForOp> {
       // If initArg is a UnrealizedConversionCastOp, new iter args need to be
       // updated. And we keep track of the old -> new iter arg indice mapping.
       if (auto unrealizedConversionCast =
-              llvm::dyn_cast<UnrealizedConversionCastOp>(
+              llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
                   initArg.getDefiningOp())) {
         auto sources = unrealizedConversionCast.getOperands();
         forOpOutputTypeMapping[index] =
