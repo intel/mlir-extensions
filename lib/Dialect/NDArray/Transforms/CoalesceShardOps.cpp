@@ -58,7 +58,7 @@ namespace imex {
 namespace {
 
 bool isCreator(::mlir::Operation *op) {
-  return ::mlir::isa<::mlir::tensor::EmptyOp>(op);
+  return ::mlir::isa<::mlir::tensor::EmptyOp, ::mlir::tensor::SplatOp>(op);
 }
 
 bool isElementwise(::mlir::Operation *op) {
@@ -93,8 +93,12 @@ struct CoalesceShardOpsPass
     auto defOp = val.getDefiningOp();
     assert(defOp || !"Cannot get base array for a null value");
 
-    if (isElementwise(defOp) || isCreator(defOp)) {
+    if (isCreator(defOp)) {
       return defOp;
+    } else if (auto op = ::mlir::dyn_cast<::mlir::DestinationStyleOpInterface>(
+                   defOp)) {
+      return op.getNumDpsInputs() == 1 ? op.getDpsInits()[0].getDefiningOp()
+                                       : defOp;
     } else if (auto op = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(defOp)) {
       return getBaseArray(op.getSource());
     } else if (auto op =
@@ -110,9 +114,7 @@ struct CoalesceShardOpsPass
       }
       return defOp;
     } else {
-      std::cerr << "oops. Unexpected op found: ";
-      const_cast<::mlir::Value &>(val).dump();
-      assert(false);
+      return defOp;
     }
 
     return nullptr;
