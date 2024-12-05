@@ -792,7 +792,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       unsigned rank = type.getRank();
       auto elemType = type.getElementType();
 
-      if (rank < 1 || type.getNumElements() == 1)
+      if (rank < 1)
         return elemType;
 
       unsigned sum = 1;
