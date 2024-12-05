@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-canonicalization --xetile-blocking \
 // RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 module {
   gpu.module @test_kernel {
@@ -63,54 +63,6 @@ module {
       //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30] : vector<32xf16>, vector<32xf16>
       //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31] : vector<32xf16>, vector<32xf16>
       //CHECK: {{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<16xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
       //CHECK: {{.*}} = arith.constant {{.*}} : i32
       //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<16xf16>
       //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf16>
@@ -250,36 +202,49 @@ module {
       //CHECK: {{.*}} = arith.constant {{.*}} : i32
       //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
       //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
-      //CHECK: {{.*}} = arith.constant {{.*}} : i32
-      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<8xf32>
-      //CHECK: {{.*}} = vector.splat %{{.*}} : vector<1x1xf32>
       //CHECK-COUNT-4: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x1xf32>, vector<1x1xf32>
       //CHECK-COUNT-2: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x1xf32>, vector<2x1xf32>
       //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x1xf32>, vector<4x1xf32>
       %3 = xetile.reduction <maximumf>, %a_loaded[1] : vector<8x32xf32> -> vector<8x1xf32> // fastmath<nnan> is implicit here
       //CHECK: xegpu.store_nd {{.*}} : vector<8x1xf32>, !xegpu.tensor_desc<8x1xf32, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>
       xetile.store_tile %3, %b_tile : vector<8x1xf32>, !xetile.tile<8x1xf32>
+      gpu.return
+    }
+
+    gpu.func @inner_reduction_small_size_1(%arg0: memref<*xf32>, %arg1: memref<*xf32>) kernel attributes {VectorComputeFunctionINTEL, known_block_size = array<i32: 1, 32, 1>, known_grid_size = array<i32: 1, 1, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %cst = arith.constant dense<0.000000e+00> : vector<1xf32>
+      %cst_0 = arith.constant dense<true> : vector<1x16xi1>
+      %cst_1 = arith.constant dense<true> : vector<1x1xi1>
+      %cst_2 = arith.constant dense<0> : vector<1x1xindex>
+      %cst_3 = arith.constant dense<0> : vector<1x16xindex>
+      %cast = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+      %cast_4 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+      %0 = xetile.init_tile %cast, %cst_3 : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+      %1 = xetile.load %0, %cst_0 : !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+      //CHECK: {{.*}} = vector.shape_cast %{{.*}} : vector<16xf32> to vector<1x16xf32>
+      //CHECK: {{.*}} = vector.shape_cast %{{.*}}  : vector<1x16xf32> to vector<16xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<16xf32>, vector<16xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15] : vector<16xf32>, vector<16xf32>
+      //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}}  : vector<8xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<8xf32>, vector<8xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [4, 5, 6, 7] : vector<8xf32>, vector<8xf32>
+      //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}}  : vector<4xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<4xf32>, vector<4xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [2, 3] : vector<4xf32>, vector<4xf32>
+      //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}}  : vector<2xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0] : vector<2xf32>, vector<2xf32>
+      //CHECK: {{.*}} = vector.shuffle %{{.*}}, %{{.*}} [1] : vector<2xf32>, vector<2xf32>
+      //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}}  : vector<1xf32>
+      //CHECK: {{.*}} = arith.constant {{.*}} : i32
+      //CHECK: {{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<1xf32>
+      //CHECK: {{.*}} = vector.splat {{.*}} : vector<1x1xf32>
+      //CHECK: {{.*}} = vector.shape_cast {{.*}} : vector<1x1xf32> to vector<1xf32>
+      //CHECK: {{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<1xf32>
+
+      %2 = vector.multi_reduction <add>, %1, %cst [1] : vector<1x16xf32> to vector<1xf32>
+      %3 = vector.shape_cast %2 : vector<1xf32> to vector<1x1xf32>
+      %4 = xetile.init_tile %cast_4, %cst_2 : memref<?xf32>, vector<1x1xindex> -> !xetile.tile<1x1xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+      xetile.store %3, %4, %cst_1 : vector<1x1xf32>, !xetile.tile<1x1xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x1xi1>
       gpu.return
     }
 
