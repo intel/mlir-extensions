@@ -201,15 +201,14 @@ struct CoalesceShardOpsPass
     if (auto typedOp = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op)) {
       return typedOp;
     }
-    if (op->hasOneUse()) {
+    if (!op->hasOneUse()) {
+      return {};
+    }
+    op = *op->user_begin();
+    if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
+      assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
+      assert(op->hasOneUse());
       op = *op->user_begin();
-      if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
-        assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
-        assert(op->hasOneUse());
-        op = *op->user_begin();
-      }
-    } else {
-      assert(op->use_empty());
     }
     return ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op);
   }
@@ -357,7 +356,7 @@ struct CoalesceShardOpsPass
         opsGroups;
     std::unordered_map<::mlir::Operation *, ::mlir::Operation *> baseIPts;
 
-    root->walk([&](::mlir::Operation *op) {
+    auto wRes = root->walk([&](::mlir::Operation *op) -> mlir::WalkResult {
       ::mlir::Value val;
       if (auto typedOp = ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(op)) {
         val = typedOp.getDestination();
@@ -367,7 +366,11 @@ struct CoalesceShardOpsPass
       }
       if (val) {
         auto base = getBaseArray(val);
-        baseIPts.emplace(base, getShardOp(base));
+        auto shardOp = getShardOp(base);
+        if (!shardOp) {
+          return mlir::WalkResult::interrupt();
+        }
+        baseIPts.emplace(base, shardOp);
         opsGroups[base].emplace_back(op);
 
         // for InsertSliceOps compute and propagate target parts
@@ -381,7 +384,13 @@ struct CoalesceShardOpsPass
           backPropagateShardSizes(builder, srcop);
         }
       }
+      return mlir::WalkResult::advance();
     });
+    if (wRes.wasInterrupted()) {
+      std::cerr << "Non-existing or incomplete sharding. Skipping coalescing "
+                   "shard ops.\n";
+      return;
+    }
 
     ::mlir::SymbolTableCollection symbolTable;
     // outer loop iterates base over base pointers
