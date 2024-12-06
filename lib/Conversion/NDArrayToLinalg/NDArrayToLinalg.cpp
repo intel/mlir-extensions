@@ -197,18 +197,24 @@ struct InsertSliceLowering
   matchAndRewrite(::imex::ndarray::InsertSliceOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-
     // get operators
     auto src = op.getSource();
     auto dst = op.getDestination();
     auto srcTyp = src.getType();
     auto dstTyp = dst.getType();
+
     auto srcMRTyp = getMemRefType(op.getContext(), srcTyp.getShape(),
                                   srcTyp.getElementType());
+    mlir::Value srcMR = createToMemRef(loc, rewriter, src, srcMRTyp);
+
     auto dstMRTyp = getMemRefType(op.getContext(), dstTyp.getShape(),
                                   dstTyp.getElementType());
-    mlir::Value srcMR = createToMemRef(loc, rewriter, src, srcMRTyp);
-    auto dstMR = createToMemRef(loc, rewriter, dst, dstMRTyp);
+    auto dstDefOp = dst.getDefiningOp();
+    bool dstIsConst = mlir::isa<mlir::memref::GetGlobalOp>(dstDefOp) ||
+                      dstDefOp->hasTrait<mlir::OpTrait::ConstantLike>();
+    assert(!dstIsConst &&
+           "InsertSliceOp does not support constant destination");
+    auto dstMR = createToMemRef(loc, rewriter, dst, dstMRTyp, dstIsConst);
 
     auto slcOffs = ::mlir::getMixedValues(op.getStaticOffsets(),
                                           op.getOffsets(), rewriter);
@@ -284,7 +290,12 @@ struct LinSpaceLowering
         createStepLinSpace(rewriter, loc, start, stop, count, endpoint, cType);
 
     // init tensor
-    auto tensor = createEmptyTensor(rewriter, loc, elTyp, {count});
+    auto tensor = retArTyp.hasStaticShape()
+                      ? rewriter
+                            .create<::mlir::tensor::EmptyOp>(
+                                loc, retArTyp.getShape(), elTyp)
+                            .getResult()
+                      : createEmptyTensor(rewriter, loc, retArTyp, {count});
 
     // The loop body fills with values
     // accepting no input, the lambda simply captures start and step
@@ -393,7 +404,30 @@ struct ConvertNDArrayToLinalgPass
   ConvertNDArrayToLinalgPass() = default;
 
   void runOnOperation() override {
+    auto root = this->getOperation();
     auto &ctxt = getContext();
+    ::mlir::IRRewriter rewriter(&getContext());
+
+    root->walk([&](::mlir::Operation *op) {
+      mlir::Value base;
+      if (auto iOp = mlir::dyn_cast<imex::ndarray::InsertSliceOp>(op)) {
+        base = iOp.getDestination();
+      } else if (auto svOp = mlir::dyn_cast<imex::ndarray::SubviewOp>(op)) {
+        base = svOp.getSource();
+      }
+      if (base) {
+        auto defOp = base.getDefiningOp();
+        if (defOp && (defOp->hasTrait<mlir::OpTrait::ConstantLike>() ||
+                      mlir::isa<mlir::memref::GetGlobalOp>(defOp))) {
+          mlir::OpBuilder::InsertionGuard g(rewriter);
+          rewriter.setInsertionPointAfter(defOp);
+          auto copyOp = rewriter.create<imex::ndarray::CopyOp>(
+              op->getLoc(), base.getType(), base);
+          rewriter.replaceAllUsesExcept(base, copyOp.getResult(), copyOp);
+        }
+      }
+    });
+
     ::mlir::ConversionTarget target(ctxt);
     // We convert all NDArray stuff...
     target.addIllegalDialect<::imex::ndarray::NDArrayDialect>();
