@@ -91,9 +91,13 @@ struct CoalesceShardOpsPass
   /// @return defining op
   ::mlir::Operation *getBaseArray(const ::mlir::Value &val) {
     auto defOp = val.getDefiningOp();
-    assert(defOp || !"Cannot get base array for a null value");
 
-    if (isCreator(defOp)) {
+    if (!defOp) {
+      return nullptr;
+    } else if (auto op = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(defOp)) {
+      // this is the only place where we expect block args
+      return op.getSrc().getDefiningOp() ? getBaseArray(op.getSrc()) : op;
+    } else if (isCreator(defOp)) {
       return defOp;
     } else if (auto op = ::mlir::dyn_cast<::mlir::DestinationStyleOpInterface>(
                    defOp)) {
@@ -104,20 +108,13 @@ struct CoalesceShardOpsPass
     } else if (auto op =
                    ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(defOp)) {
       return getBaseArray(op.getDestination());
-    } else if (auto op = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(defOp)) {
-      // this is the only place where we expect block args
-      return op.getSrc().getDefiningOp() ? getBaseArray(op.getSrc()) : op;
     } else if (auto op = ::mlir::dyn_cast<::mlir::UnrealizedConversionCastOp>(
                    defOp)) {
       if (op.getInputs().size() == 1) {
         return getBaseArray(op.getInputs().front());
       }
-      return defOp;
-    } else {
-      return defOp;
     }
-
-    return nullptr;
+    return defOp;
   }
 
   /// The actual back propagation of target parts
@@ -366,6 +363,9 @@ struct CoalesceShardOpsPass
       }
       if (val) {
         auto base = getBaseArray(val);
+        if (!base) {
+          return mlir::WalkResult::interrupt();
+        }
         auto shardOp = getShardOp(base);
         if (!shardOp) {
           return mlir::WalkResult::interrupt();
