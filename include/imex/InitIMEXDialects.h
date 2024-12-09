@@ -23,6 +23,7 @@
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
+#include <imex/Dialect/Region/Transforms/BufferizableOpInterfaceImpl.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 
 namespace imex {
@@ -37,6 +38,9 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
                     ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect>();
   // clang-format on
+
+  // Register all external models.
+  region::registerBufferizableOpInterfaceExternalModels(registry);
 }
 
 /// Append all the IMEX dialects to the registry contained in the given context.
