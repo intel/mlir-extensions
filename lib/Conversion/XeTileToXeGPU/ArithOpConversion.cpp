@@ -17,21 +17,6 @@
 
 namespace imex {
 
-using VectorTypedValue = mlir::TypedValue<mlir::VectorType>;
-using funcTy = VectorTypedValue(mlir::Value, mlir::Value, mlir::Location,
-                                mlir::PatternRewriter &);
-
-// see its description in XeTileOpConversion.cpp
-extern VectorTypedValue concat(mlir::Value v1, mlir::Value v2,
-                               mlir::Location loc,
-                               mlir::PatternRewriter &rewriter);
-
-// see its description in XeTileOpConversion.cpp
-extern mlir::Value mergeVectorsWrapper(mlir::ValueRange ins,
-                                       std::function<funcTy> transFunc,
-                                       mlir::Location loc,
-                                       XeOneToNPatternRewriter &rewriter);
-
 static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
                                mlir::Value lhs, mlir::Value rhs,
                                mlir::Type elemTy, mlir::Location &loc,
@@ -318,8 +303,7 @@ class SgVectorMultiDimReductionOpPattern
         // TODO: need a better way to represent the result (align with
         // unpack/pack logic). currently we just shuffle them and cast it to the
         // type/shape in xetile program.
-        auto reducedVal =
-            mergeVectorsWrapper(intermediates, concat, loc, rewriter);
+        auto reducedVal = packVectorsWith(intermediates, concat, loc, rewriter);
         auto targetTy = mlir::VectorType::get({shape[1], shape[3]}, elemTy);
         auto newOp = rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy,
                                                                 reducedVal);
@@ -338,7 +322,7 @@ class SgVectorMultiDimReductionOpPattern
         // currently we just shuffle them and cast it to the type/shape in
         // xetile program.
         auto reductionVal =
-            mergeVectorsWrapper(intermediates, concat, loc, rewriter);
+            packVectorsWith(intermediates, concat, loc, rewriter);
         auto targetTy = mlir::VectorType::get({shape[0], shape[2]}, elemTy);
         auto newOp = rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy,
                                                                 reductionVal);
