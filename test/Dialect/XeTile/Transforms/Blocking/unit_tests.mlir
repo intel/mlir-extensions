@@ -28,6 +28,11 @@ gpu.module @test_kernel {
   //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<4x2x8x16xf32>
   //CHECK: %[[R0:.*]] = xetile.init_tile %[[arg0]][0, 0] : memref<32x32xf32> -> !xetile.tile<32x32xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
   //CHECK: xetile.store_tile %[[cst]],  %[[R0]] : vector<4x2x8x16xf32>, !xetile.tile<32x32xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
+
+  //CHECK-2D: gpu.func @sg_store_tile(%[[arg0:.*]]: memref<32x32xf32>)
+  //CHECK-2D: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
+  //CHECK-2D-COUNT-8: %0 = xetile.init_tile %arg0[%{{.*}}, %{{.*}}] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+  //CHECK-2D-COUNT-8: xetile.store_tile %[[cst]],  %{{.*}} : vector<8x16xf32>, !xetile.tile<8x16xf32>
 	gpu.func @sg_store_tile(%a: memref<32x32xf32>) {
 		%result = arith.constant dense<0.0>: vector<32x32xf32>
 		%1 = xetile.init_tile %a[0, 0] : memref<32x32xf32> -> !xetile.tile<32x32xf32>
