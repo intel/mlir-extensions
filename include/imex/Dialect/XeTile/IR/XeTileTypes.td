@@ -89,6 +89,10 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return llvm::cast<TileType>(cloneWith(getShape(), elementType));
     }
 
+    TileType clone(llvm::ArrayRef<int64_t> shape) {
+      return llvm::cast<TileType>(cloneWith(shape, getElementType()));
+    }
+
     xetile::SubGroupMapAttr getSgMap() {
       auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
       if (encoding)
