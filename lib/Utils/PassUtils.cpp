@@ -28,7 +28,6 @@ namespace imex {
 /// @return new index ::mlir::Value with given Value
 ::mlir::Value createIndex(const ::mlir::Location &loc,
                           ::mlir::OpBuilder &builder, int64_t val) {
-  assert(val != ::mlir::ShapedType::kDynamic);
   auto attr = builder.getIndexAttr(val);
   return builder.create<::mlir::arith::ConstantOp>(loc, attr);
 }

@@ -210,8 +210,9 @@ struct InsertSliceLowering
     auto dstMRTyp = getMemRefType(op.getContext(), dstTyp.getShape(),
                                   dstTyp.getElementType());
     auto dstDefOp = dst.getDefiningOp();
-    bool dstIsConst = mlir::isa<mlir::memref::GetGlobalOp>(dstDefOp) ||
-                      dstDefOp->hasTrait<mlir::OpTrait::ConstantLike>();
+    bool dstIsConst =
+        dstDefOp && (mlir::isa<mlir::memref::GetGlobalOp>(dstDefOp) ||
+                     dstDefOp->hasTrait<mlir::OpTrait::ConstantLike>());
     assert(!dstIsConst &&
            "InsertSliceOp does not support constant destination");
     auto dstMR = createToMemRef(loc, rewriter, dst, dstMRTyp, dstIsConst);
