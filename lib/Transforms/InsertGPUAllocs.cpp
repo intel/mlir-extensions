@@ -74,6 +74,32 @@ public:
     return mlir::success();
   }
 
+  // Go through all users of 'memory' recursively and replace
+  // all memref.copy with gpu.memcpy
+  static void replaceMemrefCopyWithGpuMemcpy(mlir::OpBuilder &builder,
+                                             mlir::Value memory) {
+    mlir::SmallVector<mlir::memref::CopyOp> toErase;
+
+    for (auto u : memory.getUsers()) {
+      if (auto copyOp = mlir::dyn_cast<mlir::memref::CopyOp>(u)) {
+        builder.setInsertionPoint(copyOp);
+        builder.create<mlir::gpu::MemcpyOp>(
+            copyOp.getLoc(), /*resultTypes=*/mlir::TypeRange(),
+            /*asyncDeps=*/mlir::ValueRange(), /*dst=*/copyOp.getTarget(),
+            /*src=*/copyOp.getSource());
+        toErase.push_back(copyOp);
+      } else if (u->getNumResults() == 0)
+        continue;
+      else {
+        for (auto result : u->getResults())
+          replaceMemrefCopyWithGpuMemcpy(builder, result);
+      }
+    }
+
+    for (auto copyOp : toErase)
+      copyOp.erase();
+  }
+
   void runOnOperation() override {
     auto func = getOperation();
     auto &funcBody = func.getBody();
@@ -382,12 +408,14 @@ public:
           }
 
           if (auto copy = mlir::dyn_cast<mlir::memref::CopyOp>(user)) {
-            if (copy.getSource() == mem)
-              ret.hostRead = true;
-
-            if (copy.getTarget() == mem)
-              ret.hostWrite = true;
-
+            // All memref.copy ops should be replaced with gpu.memcpy by
+            // 'add_gpu_alloc' function, so we shouldn't count them as "host
+            // usage". We may need to uncomment this code and do some analysis
+            // here instead if a case where it doesn't work would be found. if
+            // (copy.getSource() == mem)
+            //   ret.hostRead = true;
+            // if (copy.getTarget() == mem)
+            //   ret.hostWrite = true;
             continue;
           }
 
@@ -433,23 +461,29 @@ public:
             /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
             alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
+
+        auto memory = alloc->getResult(0);
+        replaceMemrefCopyWithGpuMemcpy(builder, memory);
+
         builder.setInsertionPoint(term);
         for (mlir::OpOperand &use : alloc.getResult().getUses()) {
           if (use.getOwner() == term) {
             auto newAlloc = builder.create<mlir::memref::AllocOp>(
                 loc, alloc.getType(), alloc.getDynamicSizes(),
                 alloc.getSymbolOperands());
-            builder.create<mlir::memref::CopyOp>(loc, allocResult,
-                                                 newAlloc.getResult());
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*resultTypes=*/mlir::TypeRange(),
+                /*asyncDeps=*/mlir::ValueRange(), /*dst=*/newAlloc.getResult(),
+                /*src=*/allocResult);
             use.set(newAlloc.getResult());
           }
         }
 
         // remove 'memref.dealloc' (it's later replaced with gpu.dealloc)
-        auto memory = alloc->getResult(0);
         for (auto u : memory.getUsers()) {
           if (auto dealloc = mlir::dyn_cast<mlir::memref::DeallocOp>(u)) {
             dealloc.erase();
+            break;
           }
         }
 
@@ -468,6 +502,8 @@ public:
       auto rank = static_cast<unsigned>(memrefType.getRank());
       filter.clear();
       dims.clear();
+
+      replaceMemrefCopyWithGpuMemcpy(builder, op);
 
       // This code handles dynamic dims with known rank.
       for (auto i : llvm::seq(0u, rank)) {
@@ -489,8 +525,9 @@ public:
             /*symbolOperands*/ std::nullopt, hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         if (access.hostWrite && access.deviceRead) {
-          auto copy =
-              builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
+          auto copy = builder.create<mlir::gpu::MemcpyOp>(
+              loc, /*resultTypes=*/mlir::TypeRange(),
+              /*asyncDeps=*/mlir::ValueRange(), allocResult, op);
           filter.insert(copy);
         }
 
@@ -501,7 +538,10 @@ public:
           op.replaceAllUsesExcept(castedAllocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
-            builder.create<mlir::memref::CopyOp>(loc, castedAllocResult, op);
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*resultTypes=*/mlir::TypeRange(),
+                /*asyncDeps=*/mlir::ValueRange(), /*dst=*/op,
+                /*src=*/castedAllocResult);
           }
           builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt,
                                                castedAllocResult);
@@ -509,7 +549,10 @@ public:
           op.replaceAllUsesExcept(allocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
-            builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*resultTypes=*/mlir::TypeRange(),
+                /*asyncDeps=*/mlir::ValueRange(), /*dst=*/op,
+                /*src=*/allocResult);
           }
           builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         }
@@ -518,8 +561,10 @@ public:
             builder.create<mlir::memref::AllocOp>(loc, allocType, dims);
         auto allocResult = gpuAlloc.getResult();
         if (access.hostWrite && access.deviceRead) {
-          auto copy =
-              builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
+          auto copy = builder.create<mlir::gpu::MemcpyOp>(
+              loc, /*resultTypes=*/mlir::TypeRange(),
+              /*asyncDeps=*/mlir::ValueRange(), /*dst=*/allocResult,
+              /*src=*/op);
           filter.insert(copy);
         }
 
@@ -530,13 +575,19 @@ public:
           op.replaceAllUsesExcept(castedAllocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
-            builder.create<mlir::memref::CopyOp>(loc, castedAllocResult, op);
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*resultTypes=*/mlir::TypeRange(),
+                /*asyncDeps=*/mlir::ValueRange(), /*dst=*/op,
+                /*src=*/castedAllocResult);
           }
         } else {
           op.replaceAllUsesExcept(allocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
-            builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+            builder.create<mlir::gpu::MemcpyOp>(
+                loc, /*resultTypes=*/mlir::TypeRange(),
+                /*asyncDeps=*/mlir::ValueRange(), /*dst=*/op,
+                /*src=*/allocResult);
           }
         }
       }

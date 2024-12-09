@@ -16,18 +16,18 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
   %2 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
 
   // OPENCL: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
-  // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy [[VAR0]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: %[[MEMREF0:.*]] = gpu.alloc () : memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF0]], [[VAR0]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: [[VAR1:%.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
-  // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy [[VAR1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: %[[MEMREF1:.*]] = gpu.alloc () : memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF1]], [[VAR1]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // VULKAN: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
-  // VULKAN: memref.copy [[VAR0]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
+  // VULKAN: gpu.memcpy %[[MEMREF0]], [[VAR0]] : memref<2x5xf32>, memref<2x5xf32>
   // VULKAN: [[VAR1:%.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
-  // VULKAN: memref.copy [[VAR1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // VULKAN: gpu.memcpy %[[MEMREF1]], [[VAR1]] : memref<2x5xf32>, memref<2x5xf32>
 
   %c1_0 = arith.constant 1 : index
   %3 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c2)[%c0, %c1]
