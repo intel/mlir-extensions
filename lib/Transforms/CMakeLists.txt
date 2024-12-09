@@ -4,6 +4,7 @@ add_mlir_library(IMEXTransforms
   CastIndex.cpp
   EmulateNonNativeBF16.cpp
   InsertGPUAllocs.cpp
+  InsertGPUCopy.cpp
   LowerMemRefCopy.cpp
   RemoveSingleElemVector.cpp
   RemoveTemporaries.cpp
@@ -14,6 +15,7 @@ add_mlir_library(IMEXTransforms
   VnniTransformation.cpp
   OptimizeTranspose.cpp
   HoistTranspose.cpp
+  TileLoops.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms

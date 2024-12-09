@@ -109,6 +109,19 @@ def DropRegions: Pass<"drop-regions"> {
   let options = [];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertRegionParallelLoopToGpu
+//===----------------------------------------------------------------------===//
+
+def ConvertRegionParallelLoopToGpu : Pass<"convert-region-parallel-loops-to-gpu"> {
+  let summary = "Convert mapped scf.parallel ops within GPU regions to gpu launch operations";
+  let description = [{
+    Convert scf.parallel ops within GPU regions to gpu launch operations.
+  }];
+  let constructor = "::imex::createConvertRegionParallelLoopToGpuPass()";
+  let dependentDialects = [];
+  let options = [];
+}
 
 //===----------------------------------------------------------------------===//
 // GPUToSPIRV
