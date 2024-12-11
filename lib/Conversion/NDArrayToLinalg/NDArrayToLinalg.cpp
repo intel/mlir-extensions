@@ -430,20 +430,24 @@ struct ConvertNDArrayToLinalgPass
     });
 
     ::mlir::ConversionTarget target(ctxt);
-    // We convert all NDArray stuff...
-    target.addIllegalDialect<::imex::ndarray::NDArrayDialect>();
     // ...into Linalg, Affine, Tensor, Arith
     target.addLegalDialect<
         ::mlir::linalg::LinalgDialect, ::mlir::arith::ArithDialect,
         ::mlir::memref::MemRefDialect, ::mlir::tensor::TensorDialect,
         ::mlir::bufferization::BufferizationDialect, ::mlir::func::FuncDialect,
         ::imex::region::RegionDialect>();
-    target.addLegalOp<mlir::UnrealizedConversionCastOp>();
+    target.addLegalOp<imex::ndarray::SubviewOp, imex::ndarray::InsertSliceOp,
+                      mlir::UnrealizedConversionCastOp>();
 
+    // We convert almost all NDArray stuff...
+    target.addDynamicallyLegalDialect<::imex::ndarray::NDArrayDialect>(
+        [&](mlir::Operation *op) {
+          return mlir::isa<imex::ndarray::SubviewOp,
+                           imex::ndarray::InsertSliceOp>(op);
+        });
     ::mlir::RewritePatternSet patterns(&ctxt);
-    patterns.insert<SubviewLowering, InsertSliceLowering, LinSpaceLowering,
-                    ReshapeLowering, CopyLowering, DeleteLowering,
-                    CastElemTypeLowering>(&ctxt);
+    patterns.insert<LinSpaceLowering, ReshapeLowering, CopyLowering,
+                    DeleteLowering, CastElemTypeLowering>(&ctxt);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {

@@ -654,6 +654,21 @@ struct LinspaceShardingInterface
   }
 };
 
+//===----------------------------------------------------------------------===//
+// ReshapeShardingInterface
+//===----------------------------------------------------------------------===//
+
+struct ReshapeShardingInterface
+    : public BaseShardingInterface<ReshapeShardingInterface, ReshapeOp> {
+
+  SmallVector<mlir::utils::IteratorType>
+  getLoopIteratorTypes(::mlir::Operation *op) const {
+    auto rsop = cast<ReshapeOp>(op);
+    size_t rank = std::max(rsop.getSource().getType().getRank(),
+                           rsop.getResult().getType().getRank());
+    return {rank, utils::IteratorType::parallel};
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -672,6 +687,7 @@ void registerShardingInterfaceExternalModels(mlir::DialectRegistry &registry) {
         SubviewOp::attachInterface<SubviewShardingInterface>(*ctx);
         InsertSliceOp::attachInterface<InsertSliceShardingInterface>(*ctx);
         LinSpaceOp::attachInterface<LinspaceShardingInterface>(*ctx);
+        ReshapeOp::attachInterface<ReshapeShardingInterface>(*ctx);
         registerTrivial<CopyOp, DeleteOp, CastElemTypeOp>(ctx);
       });
 }
