@@ -22,6 +22,12 @@
 #include "llvm/Support/FormatVariadic.h"
 
 namespace imex {
+llvm::SmallVector<int> getSupportedChunkSizes(int simdlanes) {
+  if (simdlanes == 1)
+    return {64, 32, 16, 8, 4, 3, 2, 1};
+  return {8, 4, 3, 2, 1};
+}
+
 int getOperandIndex(mlir::Operation *op, mlir::Value operand) {
   for (auto [i, value] : llvm::enumerate(op->getOperands())) {
     if (operand == value)

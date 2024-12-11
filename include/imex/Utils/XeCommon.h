@@ -31,6 +31,10 @@ using namespace mlir::xegpu;
 
 namespace imex {
 
+// valid chunk sizes are 1, 2, 3, 4, 8 if simdLanes > 1.
+// 16, 32, and 64 are only available if simdLanes == 1.
+llvm::SmallVector<int> getSupportedChunkSizes(int simdlanes);
+
 using PackFuncTy = std::function<mlir::TypedValue<mlir::VectorType>(
     mlir::Value, mlir::Value, mlir::Location, mlir::OpBuilder &)>;
 
