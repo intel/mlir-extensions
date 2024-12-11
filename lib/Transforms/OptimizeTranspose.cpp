@@ -793,10 +793,10 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto numElems = bytes / 4;
       // number of elements each simd lane to write
       int chunkSize = numElems / simdLanes;
-      llvm::SmallVector<int> validChunkSizes = {64, 32, 16, 8, 4, 3, 2, 1};
 
       // the numElems has to be evenly divided by simdLanes, and the chunkSize
       // has to be in the validChunkSizes.
+      auto validChunkSizes = imex::getSupportedChunkSizes(simdLanes);
       if (numElems % simdLanes != 0 ||
           !llvm::is_contained(validChunkSizes, chunkSize))
         return failure();
