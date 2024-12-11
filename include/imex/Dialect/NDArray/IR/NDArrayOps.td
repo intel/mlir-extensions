@@ -23,6 +23,7 @@ include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
+include "mlir/Interfaces/DestinationStyleOpInterface.td"
 // include "mlir/Interfaces/ShapedOpInterfaces.td"
 // include "mlir/Interfaces/DestinationStyleOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -293,6 +294,10 @@ def SubviewOp : NDArray_OpWithOffsetSizesAndStrides<"subview", [
 def InsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"insert_slice", [
     AttrSizedOperandSegments,
     OffsetSizeAndStrideOpInterface,
+    DestinationStyleOpInterface,
+    Pure,
+    TypesMatchWith<"expected result type to match dest type",
+                   "destination", "result", "$_self">
   ]> {
   let summary = "Copy values from a array into a slice of another.";
   let description = [{
@@ -312,6 +317,7 @@ def InsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"insert_slice", [
     DenseI64ArrayAttr:$static_sizes,
     DenseI64ArrayAttr:$static_strides
   );
+  let results = (outs AnyRankedTensor:$result);
 
   let assemblyFormat = [{
     $source `into` $destination ``
@@ -377,6 +383,7 @@ def InsertSliceOp : NDArray_OpWithOffsetSizesAndStrides<"insert_slice", [
     /// and `strides` operands.
     static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 2; }
 
+    mlir::MutableOperandRange getDpsInitsMutable() { return getDestinationMutable(); }
   }];
 
   let hasCanonicalizer = 1;
@@ -408,8 +415,8 @@ def ReshapeOp : NDArray_Op<"reshape", []> {
       See Array API.
   }];
 
-  let arguments = (ins AnyType:$source, Variadic<Index>:$shape, OptionalAttr<I1Attr>:$copy);
-  let results = (outs AnyType);
+  let arguments = (ins AnyRankedTensor:$source, Variadic<Index>:$shape, OptionalAttr<I1Attr>:$copy);
+  let results = (outs AnyRankedTensor);
 
   let assemblyFormat = [{
     $source $shape attr-dict `:` qualified(type($source)) `->` qualified(type(results))
