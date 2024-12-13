@@ -132,7 +132,8 @@ public:
       return mlir::failure();
 
     auto sourceType = insertSliceOp.getSourceType();
-    auto dstTnsrType = insertSliceOp.getDestinationType(); //.getTensorType();
+    auto dstTnsrType = insertSliceOp.getDestinationType();
+
     // Create the new op in canonical form.
     auto sourceTnsrType =
         mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
@@ -140,14 +141,22 @@ public:
             mixedSizes, mixedStrides);
     auto newSourceType = sourceType.cloneWith(sourceTnsrType.getShape(),
                                               sourceTnsrType.getElementType());
+
     mlir::Value toInsert = insertSliceOp.getSource();
     if (newSourceType != sourceType) {
-      if (newSourceType.getRank() != sourceType.getRank())
+      if (sourceType.getRank() == 0) {
+        if (newSourceType.getRank() > 1) {
+          return mlir::failure();
+        }
+      } else if (newSourceType.getRank() != sourceType.getRank()) {
         return mlir::failure();
-      mlir::OpBuilder::InsertionGuard g(rewriter);
-      toInsert = rewriter.create<mlir::tensor::CastOp>(insertSliceOp.getLoc(),
-                                                       newSourceType, toInsert);
+      } else {
+        mlir::OpBuilder::InsertionGuard g(rewriter);
+        toInsert = rewriter.create<mlir::tensor::CastOp>(
+            insertSliceOp.getLoc(), newSourceType, toInsert);
+      }
     }
+
     rewriter.replaceOpWithNewOp<InsertOpTy>(
         insertSliceOp, insertSliceOp.getDestination(), toInsert, mixedOffsets,
         mixedSizes, mixedStrides);

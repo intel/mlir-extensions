@@ -101,8 +101,8 @@ struct CoalesceShardOpsPass
       return defOp;
     } else if (auto op = ::mlir::dyn_cast<::mlir::DestinationStyleOpInterface>(
                    defOp)) {
-      return op.getNumDpsInputs() == 1 ? op.getDpsInits()[0].getDefiningOp()
-                                       : defOp;
+      return op.getNumDpsInits() == 1 ? getBaseArray(op.getDpsInits()[0])
+                                      : defOp;
     } else if (auto op = ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(defOp)) {
       return getBaseArray(op.getSource());
     } else if (auto op =
@@ -479,7 +479,10 @@ struct CoalesceShardOpsPass
 
       // update shardOps of dependent Subview/InsertSliceOps
       for (auto svShardOp : shardOps) {
-        svShardOp.getSrcMutable().assign(newShardOp.getResult());
+        assert(svShardOp->hasOneUse());
+        if (mlir::isa<::imex::ndarray::SubviewOp>(*svShardOp->user_begin())) {
+          svShardOp.getSrcMutable().assign(newShardOp.getResult());
+        }
         svShardOp.getShardingMutable().assign(newSharding);
       }
       // barriers/halo-updates get inserted when InsertSliceOps (or other write
