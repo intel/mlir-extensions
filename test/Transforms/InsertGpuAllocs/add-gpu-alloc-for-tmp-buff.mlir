@@ -12,15 +12,15 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %out_buff: memre
   %c5 = arith.constant 5 : index
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy %[[arg1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF1]], %[[arg1]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy %[[arg0]], %[[MEMREF2]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF2]], %[[arg0]] : memref<2x5xf32>, memref<2x5xf32>
 
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
-  // VULKAN: memref.copy %[[arg1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // VULKAN: gpu.memcpy %[[MEMREF1]], %[[arg1]] : memref<2x5xf32>, memref<2x5xf32>
   // VULKAN: %[[MEMREF2:.*]] = memref.alloc() : memref<2x5xf32>
-  // VULKAN: memref.copy %[[arg0]], %[[MEMREF2]] : memref<2x5xf32> to memref<2x5xf32>
+  // VULKAN: gpu.memcpy %[[MEMREF2]], %[[arg0]] : memref<2x5xf32>, memref<2x5xf32>
 
   %tmp_buff = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
   // OPENCL-NOT:  %[[MEMREF3:.*]] = memref.alloc().*
@@ -49,7 +49,7 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %out_buff: memre
   // OPENCL: gpu.dealloc %[[MEMREF3]] : memref<2x5xf32>
   // OPENCL: gpu.dealloc %[[MEMREF2]] : memref<2x5xf32>
   // OPENCL: gpu.dealloc %[[MEMREF1]] : memref<2x5xf32>
-  // OPENCL: memref.copy %[[MEMREF0]], %[[out_buff]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[out_buff]], %[[MEMREF0]] : memref<2x5xf32>, memref<2x5xf32>
   // OPENCL: gpu.dealloc %[[MEMREF0]] : memref<2x5xf32>
   // VULKAN: memref.dealloc %[[MEMREF3]] : memref<2x5xf32>
   memref.dealloc %tmp_buff : memref<2x5xf32>

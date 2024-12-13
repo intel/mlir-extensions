@@ -9,10 +9,10 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
   %c1 = arith.constant 1 : index
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // OPENCL: memref.copy %[[arg0]], %[[MEMREF1:.*]]
+  // OPENCL: gpu.memcpy %[[MEMREF1:.*]], %[[arg0]]
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
-  // VULKAN: memref.copy %[[arg0]], %[[MEMREF1:.*]]
+  // VULKAN: gpu.memcpy %[[MEMREF1:.*]], %[[arg0]]
 
   gpu.launch blocks(%arg2, %arg3, %arg4) in (%arg8 = %c1, %arg9 = %c1, %arg10 = %c1) threads(%arg5, %arg6, %arg7) in (%arg11 = %c1, %arg12 = %c1, %arg13 = %c1) {
     %c0 = arith.constant 0 : index
@@ -23,8 +23,8 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
     gpu.terminator
   } {SCFToGPU_visited}
 
-  // OPENCL: memref.copy %[[MEMREF0]], %[[arg1]] : memref<2x5xf32> to memref<2x5xf32>
-  // VULKAN: memref.copy %[[MEMREF0]], %[[arg1]] : memref<2x5xf32> to memref<2x5xf32>
+  // OPENCL: gpu.memcpy %[[arg1]], %[[MEMREF0]] : memref<2x5xf32>, memref<2x5xf32>
+  // VULKAN: gpu.memcpy %[[arg1]], %[[MEMREF0]] : memref<2x5xf32>, memref<2x5xf32>
 
   return %arg1 : memref<2x5xf32>
 }
