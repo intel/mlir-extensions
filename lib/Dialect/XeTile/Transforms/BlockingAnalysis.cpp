@@ -406,14 +406,21 @@ void BlockingAnalysisImpl::visitLoadTileOp(
 
   // adjust according to user's requirements if it is available
   if (lattice.isInitialized()) {
-    // Always align the width dimension.
-    // NOTE: For transpose usecase, we still align the width dimension. This is
-    // because loads with transpose cannot have array_length > 1, plus it has HW
-    // limitations on supported width. If we align the height dimension (for
-    // reducing reg data movement), it will lead to multiple smaller loads.
-    for (auto rq : lattice.getRequests())
+    bool hasTransposeUser = op.getValue().hasOneUse() &&
+                            mlir::isa<xetile::TransposeOp>(*(op->user_begin()));
+
+    // To minimize the in-reg data movement, we need to align dim1 for regular
+    // case and dim0 for transpose case. For transpose case, we also need to
+    // make sure dim1 such that the following pass can fold the transpose with
+    // the load.
+    for (auto rq : lattice.getRequests()) {
       if (rq[1] && ((rq[1] * bitWidth) % 32 == 0)) // has to be 32-bit aligned
         block[1] = std::min(block[1], rq[1]);
+
+      // also aligns the height dimension if user is a transpose op.
+      if (hasTransposeUser)
+        block[0] = std::min(block[0], rq[0]);
+    }
   }
 
   if (!block)
