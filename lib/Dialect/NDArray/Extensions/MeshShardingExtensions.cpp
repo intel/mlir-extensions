@@ -193,6 +193,7 @@ static std::array<Value, 2> getShardSliceOffAndSz(
     ValueRange myIdx, int64_t dim, ArrayRef<int64_t> meshShape,
     ArrayRef<MeshAxesAttr> splitAxes, Value targetOffs,
     ArrayRef<int64_t> srcShape, const SmallVector<OpFoldResult> &slcOffs,
+    const SmallVector<OpFoldResult> &slcSizes,
     const SmallVector<OpFoldResult> &slcStrides,
     const SmallVector<OpFoldResult> &haloSizes, const EasyI64 &zero,
     const EasyI64 &one, OpBuilder &builder, Location loc) {
@@ -214,8 +215,12 @@ static std::array<Value, 2> getShardSliceOffAndSz(
     std::tie(myOff, mySize) =
         getOffsetAndSize(myID, zero, one, targetOffs, currPos, builder, loc);
   } else {
-    myOff = getBaseShardDimOff(myID, numShards, extend, zero).get();
-    mySize = getBaseShardDimSize(myID, numShards, extend, one, zero).get();
+    auto myOff_ = getBaseShardDimOff(myID, numShards, extend, zero);
+    auto mySize_ = getBaseShardDimSize(myID, numShards, extend, one, zero);
+    auto slcSz = easyI64(loc, builder, slcSizes[dim]);
+    mySize_ = zero.max(slcSz - myOff_).min(mySize_);
+    myOff = myOff_.get();
+    mySize = mySize_.get();
   }
 
   // the global offset of the local shard is slice offset plus the computed
@@ -290,7 +295,7 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
     } else {
       auto offAndSz = getShardSliceOffAndSz(
           myIdx, dim, mesh.getShape(), splitAxes, targetOffs, srcShape, slcOffs,
-          slcStrides, haloSizes, zero, one, builder, loc);
+          slcSizes, slcStrides, haloSizes, zero, one, builder, loc);
       lShardOffs.emplace_back(offAndSz[0]);
       lShardSizes.emplace_back(offAndSz[1]);
     }
@@ -439,6 +444,7 @@ struct InsertSliceShardingInterface
     }
     auto dstSharding = mlir::mesh::MeshSharding::get(shardingOption.mesh, res);
     maybeInsertSourceShardingAnnotation(dstSharding, op->getOpOperand(0), b);
+    maybeInsertTargetShardingAnnotation(dstSharding, op->getResult(0), b);
 
     return success();
   }
@@ -449,7 +455,8 @@ struct InsertSliceShardingInterface
                         IRMapping &spmdizationMap,
                         SymbolTableCollection &symbolTableCollection,
                         OpBuilder &builder) const {
-    if (resultShardings.size() != 0) {
+    if (resultShardings.size() != 1 || operandShardings.size() < 2 ||
+        resultShardings[0] != operandShardings[0]) {
       return failure();
     }
 
@@ -493,22 +500,29 @@ struct InsertSliceShardingInterface
     }
 
     scf::IfOp ifOp = builder.create<scf::IfOp>(
-        loc, hasSize.get(), [&](OpBuilder &b, Location loc) {
-          (void)b.create<imex::ndarray::InsertSliceOp>(
+        loc, hasSize.get(),
+        [&](OpBuilder &b, Location loc) {
+          auto res = b.create<imex::ndarray::InsertSliceOp>(
               loc, spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
               lShardSizes, lShardStrides);
-          b.create<scf::YieldOp>(loc);
+          b.create<scf::YieldOp>(loc, res.getResult());
+        },
+        [&](OpBuilder &b, Location loc) {
+          b.create<scf::YieldOp>(loc, spmdizedOperands[0]);
         });
-    spmdizationMap.map(op, ifOp.getOperation());
 
-    builder.create<mlir::mesh::UpdateHaloOp>(
-        loc, spmdizedOperands[0].getType(), spmdizedOperands[0],
+    auto res = builder.create<mlir::mesh::UpdateHaloOp>(
+        loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
         dstSharding.getMeshAttr(),
         mlir::mesh::MeshAxesArrayAttr::get(op->getContext(),
                                            dstSharding.getSplitAxes()),
         dstSharding.getDynamicHaloSizes(),
         DenseI64ArrayAttr::get(op->getContext(),
                                dstSharding.getStaticHaloSizes()));
+
+    spmdizationMap.map(op->getResult(0), res->getResult(0));
+    spmdizationMap.map(op, res.getOperation());
+
     return success();
   }
 };
