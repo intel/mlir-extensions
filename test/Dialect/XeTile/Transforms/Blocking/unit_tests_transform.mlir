@@ -111,6 +111,29 @@ gpu.module @test_kernel {
   	gpu.return
   }
 
+  //CHECK: gpu.func @sg_tile_mma_b_transpose(%[[arg0:.*]]: memref<64x32xf16>, %[[arg1:.*]]: memref<64x32xf16>, %[[arg2:.*]]: memref<64x64xf32>)
+  gpu.func @sg_tile_mma_b_transpose(%a: memref<64x32xf16>, %b: memref<64x32xf16>, %c: memref<64x64xf32>) {
+    //CHECK-COUNT-4: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}] : memref<64x32xf16> -> !xetile.tile<32x16xf16>
+    %0 = xetile.init_tile %a[0, 0] : memref<64x32xf16> -> !xetile.tile<64x32xf16>
+    //CHECK-COUNT-4: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+    //CHECK-COUNT-16: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    %1 = xetile.load_tile %0 : !xetile.tile<64x32xf16> -> vector<64x32xf16>
+
+    //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg1]][{{.*}}] : memref<64x32xf16> -> !xetile.tile<16x16xf16>
+    %2 = xetile.init_tile %b[0, 0] : memref<64x32xf16> -> !xetile.tile<64x32xf16>
+    //CHECK-COUNT-8: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<16x16xf16> -> vector<16x16xf16>
+    %3 = xetile.load_tile %2 : !xetile.tile<64x32xf16> -> vector<64x32xf16>
+    //CHECK-COUNT-8: %{{.*}} = xetile.transpose %{{.*}}, [1, 0] : vector<16x16xf16> -> vector<16x16xf16>
+    %4 = xetile.transpose %3, [1, 0] : vector<64x32xf16> -> vector<32x64xf16>
+    //CHECK-COUNT-64: %{{.*}} = xetile.tile_mma {{.*}} : vector<8x16xf16>, vector<16x16xf16>{{.*}}-> vector<8x16xf32>
+    %5 = xetile.tile_mma %1, %4: vector<64x32xf16>, vector<32x64xf16> -> vector<64x64xf32>
+    //CHECK-COUNT-32: xetile.init_tile %[[arg2]][{{.*}}] : memref<64x64xf32> -> !xetile.tile<8x16xf32>
+    %6 = xetile.init_tile %c[0, 0] : memref<64x64xf32> -> !xetile.tile<64x64xf32>
+    //CHECK-COUNT-32: xetile.store_tile %{{.*}},  %{{.*}} : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    xetile.store_tile %5, %6: vector<64x64xf32>, !xetile.tile<64x64xf32>
+    gpu.return
+  }
+
   // CHECK-LABEL: gpu.func @inner_reduction
   // CHECK-SAME: (%[[arg0:.*]]: memref<128x256xf16>, %[[arg1:.*]]: memref<128x256xf16>)
   gpu.func @inner_reduction(%a: memref<128x256xf16>, %b: memref<128x256xf16>) {
@@ -1547,8 +1570,8 @@ gpu.module @test_kernel {
     %15 = xetile.init_tile %arg2[%11, %14] : memref<16384x1536xf32> -> !xetile.tile<32x64xf32>
     %16 = index.remu %8, %c1
     %17 = index.mul %16, %c32
-    //CHECK: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<32x16xf16>
-    //CHECK: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<16384x12288xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<16384x12288xf16> -> !xetile.tile<32x16xf16>
     %18 = xetile.init_tile %arg0[%11, %17] : memref<16384x12288xf16> -> !xetile.tile<32x32xf16>
     %19 = index.floordivs %6, %c8
     %20 = index.remu %6, %c8
@@ -1557,26 +1580,30 @@ gpu.module @test_kernel {
     %23 = index.add %2, %22
     %24 = index.remu %20, %c1
     %25 = index.mul %24, %c32
-    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<16x16xf16>
+    //CHECK: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<16x16xf16>
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<16x16xf16>
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<16x16xf16>
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<1536x12288xf16> -> !xetile.tile<16x16xf16>
     %26 = xetile.init_tile %arg1[%23, %25] : memref<1536x12288xf16> -> !xetile.tile<64x32xf16>
     %27:2 = scf.for %arg15 = %c0 to %c2 step %c1 iter_args(%arg16 = %15, %arg17 = %18) -> (!xetile.tile<32x64xf32>, !xetile.tile<32x32xf16>) {
       //CHECK-COUNT-2: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<32x16xf16>
-      //CHECK-COUNT-16: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<8x16xf32>
       %28 = xetile.update_tile_offset %arg17, [%c1024,  %c0] :  !xetile.tile<32x32xf16>
+      //CHECK-COUNT-16: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<8x16xf32>
       %29 = xetile.update_tile_offset %arg16, [%c1024,  %c0] : !xetile.tile<32x64xf32>
-      //CHECK: %{{.*}}:22 = scf.for %[[arg22:.*]] = %{{.*}} to %{{.*}} step %{{.*}} iter_args({{.*}}) -> (vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>) {
+      //CHECK: %{{.*}}:26 = scf.for %[[arg22:.*]] = %{{.*}} to %{{.*}} step %{{.*}} iter_args({{.*}}) -> (vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>, !xetile.tile<16x16xf16>) {
       %30:3 = scf.for %arg18 = %c0 to %c12288 step %c32 iter_args(%arg19 = %cst, %arg20 = %arg17, %arg21 = %26) -> (vector<32x64xf32>, !xetile.tile<32x32xf16>, !xetile.tile<64x32xf16>) {
-        //CHECK-COUNT-6: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<32x16xf16>
+        //CHECK-COUNT-8: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<16x16xf16>
         %32 = xetile.update_tile_offset %arg21, [%c0,  %c32] : !xetile.tile<64x32xf16>
+        //CHECK-COUNT-2: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}, %{{.*}}] : !xetile.tile<32x16xf16>
         %33 = xetile.update_tile_offset %arg20, [%c0,  %c32] :  !xetile.tile<32x32xf16>
         //CHECK-COUNT-2: %{{.*}} = xetile.load_tile %{{.*}} {padding = 0.000000e+00 : f32} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
         //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
         %34 = xetile.load_tile %arg20 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         //CHECK-COUNT-8: %{{.*}} = math.exp %{{.*}} : vector<8x16xf16>
         %35 = math.exp %34 : vector<32x32xf16>
-        //CHECK-COUNT-4: %{{.*}} = xetile.load_tile %{{.*}} {padding = 0.000000e+00 : f32} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+        //CHECK-COUNT-8: %{{.*}} = xetile.load_tile %{{.*}} {padding = 0.000000e+00 : f32} : !xetile.tile<16x16xf16> -> vector<16x16xf16>
         %36 = xetile.load_tile %arg21 {padding = 0.000000e+00 : f32}  : !xetile.tile<64x32xf16> -> vector<64x32xf16>
-        //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
         //CHECK-COUNT-8: %{{.*}} = xetile.transpose %{{.*}}, [1, 0] : vector<16x16xf16> -> vector<16x16xf16>
         %37 = xetile.transpose %36, [1, 0] : vector<64x32xf16> -> vector<32x64xf16>
         //CHECK-COUNT-8: %{{.*}} = math.exp %{{.*}} : vector<16x16xf16>
@@ -1603,12 +1630,12 @@ gpu.module @test_kernel {
   //CHECK-LABEL: gpu.func @sglevel_transpose_broadcast_dim_0
   //CHECK-SAME(%[[arg0:.*]]: memref<384x1xf32>, %[[arg1:.*]]: memref<256x384xf32>)
   gpu.func @sglevel_transpose_broadcast_dim_0(%arg0: memref<384x1xf32>, %arg1: memref<256x384xf32>) {
-    //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][0, 0] : memref<384x1xf32> -> !xetile.tile<32x1xf32>
+    //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][{{.*}}] : memref<384x1xf32> -> !xetile.tile<16x1xf32>
+    //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][{{.*}}] : memref<384x1xf32> -> !xetile.tile<16x1xf32>
     %1 = xetile.init_tile %arg0[0, 0] : memref<384x1xf32> -> !xetile.tile<32x1xf32>
-    //CHECK: %[[r1:.*]] = xetile.load_tile %[[r0]] {padding = 0.000000e+00 : f32} : !xetile.tile<32x1xf32> -> vector<32x1xf32>
+    //CHECK: %[[r2:.*]] = xetile.load_tile %[[r0]] {padding = 0.000000e+00 : f32} : !xetile.tile<16x1xf32> -> vector<16x1xf32>
+    //CHECK: %[[r3:.*]] = xetile.load_tile %[[r1]] {padding = 0.000000e+00 : f32} : !xetile.tile<16x1xf32> -> vector<16x1xf32>
     %2 = xetile.load_tile %1 {padding = 0.000000e+00 : f32} : !xetile.tile<32x1xf32> -> vector<32x1xf32>
-    //CHECK: %[[r2:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 0], sizes = [16, 1], strides = [1, 1]} : vector<32x1xf32> to vector<16x1xf32>
-    //CHECK: %[[r3:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [16, 0], sizes = [16, 1], strides = [1, 1]} : vector<32x1xf32> to vector<16x1xf32>
     //CHECK: %[[r4:.*]] = xetile.transpose %[[r2]], [1, 0] : vector<16x1xf32> -> vector<1x16xf32>
     //CHECK: %[[r5:.*]] = xetile.transpose %[[r3]], [1, 0] : vector<16x1xf32> -> vector<1x16xf32>
     //CHECK: %[[r6:.*]] = vector.shape_cast %[[r4]] : vector<1x16xf32> to vector<16xf32>
