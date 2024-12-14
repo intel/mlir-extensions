@@ -130,27 +130,26 @@ private:
     return true;
   };
 
-  // Helper to visit CreateNdDescOp and find all LoadNdOps that use it.
-  void visitCreateNdDescOp(xegpu::CreateNdDescOp createNdDescOp,
-                           llvm::SmallVector<Operation *> &loadNdOpsFound) {
+  // Helper to visit CreateNdDescOp and UpdateNdOffsetOp
+  // and find all LoadNdOps that use it.
+  void visitCreateNdDescOrUpdateNdOffsetOp(
+      mlir::Operation *op, llvm::SmallVector<Operation *> &loadNdOpsFound) {
     llvm::SmallSet<Operation *, 8> worklist;
-    worklist.insert(createNdDescOp);
+    worklist.insert(op);
     while (!worklist.empty()) {
       auto currOp = *worklist.begin();
       worklist.erase(currOp);
       // We found a LoadNdOp.
       if (auto loadNdOp = llvm::dyn_cast_if_present<xegpu::LoadNdOp>(currOp)) {
         loadNdOpsFound.push_back(loadNdOp);
-      }
-      // Process all users of the current op.
-      else {
+      } else { // Process all users of the current op.
         for (auto user : currOp->getUsers()) {
           // If current user is a forOp, we need to get the block argument.
           if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
             auto blockArg = imex::getArgForOperand(forOp, currOp->getResult(0));
             for (auto user : blockArg.getUsers())
               worklist.insert(user);
-          } else {
+          } else if (!llvm::isa<xegpu::UpdateNdOffsetOp>(user)) {
             worklist.insert(user);
           }
         }
@@ -242,10 +241,14 @@ private:
 
 public:
   LoadTransposeAnalysis(Operation *op) {
-    op->walk([&](xegpu::CreateNdDescOp createNdDescOp) -> WalkResult {
+    op->walk([&](mlir::Operation *targetOp) -> WalkResult {
+      if (!llvm::isa<xegpu::CreateNdDescOp>(targetOp) &&
+          !llvm::isa<xegpu::UpdateNdOffsetOp>(targetOp))
+        return WalkResult::skip();
+
       llvm::SmallVector<Operation *> loadNdOpsFound;
       // Find all LoadNdOps that use this CreateNdDescOp.
-      visitCreateNdDescOp(createNdDescOp, loadNdOpsFound);
+      visitCreateNdDescOrUpdateNdOffsetOp(targetOp, loadNdOpsFound);
       // If no LoadNdOps or more than one LoadNdOps are found, we skip.
       if (loadNdOpsFound.size() != 1)
         return WalkResult::skip();
@@ -283,7 +286,9 @@ public:
       fusionCandidates.insert(loadNdOp);
       // Source CreateNdDescOp is considered for array length adjustment if
       // array_length > 1.
-      if (createNdDescOp.getTensorDesc().getType().getArrayLength() > 1)
+      auto createNdDescOp = llvm::dyn_cast<xegpu::CreateNdDescOp>(targetOp);
+      if (createNdDescOp &&
+          createNdDescOp.getTensorDesc().getType().getArrayLength() > 1)
         arrayLenAdjustmentCandidates.insert(createNdDescOp);
       return WalkResult::advance();
     });
