@@ -394,10 +394,7 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
   let options = [
     Option<"device", "device", "std::string",
             /*default=*/"\"pvc\"",
-            "gpu platform architecture where these ops are running">,
-    Option<"EnableTransform", "enable-2d-transform", "bool",
-            /*default=*/"false",
-            "Using 2D transform or 4D Conversion.">
+            "gpu platform architecture where these ops are running">
  ];
 }
 

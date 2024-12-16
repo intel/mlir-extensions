@@ -611,7 +611,6 @@ public:
       return mlir::failure();
 
     llvm::SmallVector<mlir::Value> newOps;
-
     // handle scattered tiles.
     if (tileTy.getScatterAttr() == mlir::BoolAttr::get(ctx, true)) {
       auto indices = op.getIndices();
@@ -636,7 +635,7 @@ public:
       auto width = blockSize[1];
       llvm::SmallVector<int64_t, 2> grids(
           {shape[0] / blockSize[0], shape[1] / width});
-      llvm::SmallVector<mlir::OpFoldResult> offsets = op.getMixedOffsets();
+      auto mixedOffsets = op.getMixedOffsets();
 
       auto addi = [&](mlir::OpFoldResult a, int64_t b) -> mlir::Value {
         if (mlir::isa<mlir::Attribute>(a)) {
@@ -652,16 +651,22 @@ public:
         }
       };
 
+      // For n-D memrefs where n > 2, we need to handle the last two
+      // dimensions, and keep the first n-2 dimensions as is.
+      int64_t x = mixedOffsets.size() - 2;
+      int64_t y = mixedOffsets.size() - 1;
+      mlir::OpFoldResult oldX = mixedOffsets[x];
+      mlir::OpFoldResult oldY = mixedOffsets[y];
+
       for (int64_t i = 0; i < grids[0]; i++) {
         for (int64_t j = 0; j < grids[1]; j++) {
           auto subOffX = blockSize[0] * i;
           auto subOffY = width * j;
-          auto X = addi(offsets[0], subOffX);
-          auto Y = addi(offsets[1], subOffY);
-          llvm::SmallVector<mlir::OpFoldResult> ofrs({X, Y});
+          mixedOffsets[x] = addi(oldX, subOffX);
+          mixedOffsets[y] = addi(oldY, subOffY);
           llvm::SmallVector<mlir::Value> offsets;
           llvm::SmallVector<int64_t> constOffsets;
-          mlir::dispatchIndexOpFoldResults(ofrs, offsets, constOffsets);
+          mlir::dispatchIndexOpFoldResults(mixedOffsets, offsets, constOffsets);
           auto constOffsetsAttr = rewriter.getDenseI64ArrayAttr(constOffsets);
           auto newOp = rewriter.create<xetile::InitTileOp>(
               loc, newTileTy, op.getSource(), offsets, op.getSizes(),
@@ -1197,8 +1202,10 @@ public:
     } else {
       return mlir::failure();
     }
-
-    return mlir::failure();
+    auto castOp = unpackWithUnrealizedCastOp(
+        newOps, resTy, resBlkSize.asArrayRef(), loc, rewriter);
+    rewriter.replaceOp(op, castOp);
+    return mlir::success();
   }
 };
 
@@ -1349,21 +1356,11 @@ public:
     auto results = op.getResults();
     llvm::SmallVector<Block> blockSZs;
 
-    // verify the block size of region args and results. They should be the
-    // same if the result is used outside of the loop. Also, if the type is
-    // TileType, the init value should have the same block size as the region
-    // arg, since there is no unpack/pack op for TileType.
-    for (auto [init, arg, res] :
-         llvm::zip_equal(initArgs, regionArgs, results)) {
-      auto initBlock = analysis.getDefBlockSize(init);
+    // We use region args as anchor. PackOps will be inserted if ncessary
+    // for each init args, and UnpackOps will be inserted for each argument
+    // and result.
+    for (auto arg : regionArgs) {
       auto argBlock = analysis.getDefBlockSize(arg);
-      auto resBlock = analysis.getDefBlockSize(res);
-
-      if (mlir::isa<xetile::TileType>(arg.getType()) && initBlock != argBlock)
-        return rewriter.notifyMatchFailure(op, "Incompatiable blocking size.");
-
-      if (res.isUsedOutsideOfBlock(op.getBody()) && argBlock != resBlock)
-        return rewriter.notifyMatchFailure(op, "Incompatiable blocking size.");
       blockSZs.push_back(argBlock);
     }
 

@@ -1,4 +1,4 @@
-//===- TypeConverter.h - XeTileToXeGPU conversion  -------*- C++ -*-===//
+//===- XeTileOneToNConversion.h --- XeTileOneToNConversion  -----*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -9,7 +9,7 @@
 ///
 /// \file
 /// This file defines the XeOneToNConversion, the base class for
-/// XeTileToXeGPU conversion, XeOneToNTypeConverter, converting types used in
+/// doing OneToN conversion, XeOneToNTypeConverter, converting types used in
 /// XeTile dialect to types used in XeGPU dialect, XeOneToNPatternRewriter a
 /// wrapper around ConversionPatterRewriter providng interface for supporting
 /// OneToN replace.

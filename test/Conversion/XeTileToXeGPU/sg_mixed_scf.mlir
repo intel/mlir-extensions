@@ -1,5 +1,5 @@
 
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
 // RUN: --cse --convert-xetile-to-xegpu --cse --canonicalize %s -verify-diagnostics -o -| FileCheck %s
 // RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
 // RUN: --cse --convert-xetile-to-xegpu="enable-2d-transform=true" --cse --canonicalize %s -verify-diagnostics -o -| FileCheck %s
