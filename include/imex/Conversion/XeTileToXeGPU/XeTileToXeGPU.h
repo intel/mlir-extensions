@@ -21,8 +21,6 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "XeTileToXeGPUConversion.h"
-
 namespace mlir {
 class MLIRContext;
 class ModuleOp;
@@ -37,12 +35,9 @@ namespace imex {
 #define GEN_PASS_DECL_CONVERTXETILETOXEGPU
 #include "imex/Conversion/Passes.h.inc"
 
-class XeOneToNTypeConverter;
-
 /// Populate the given list with patterns rewrite XeTile Ops
-void populateXeTileToXeGPUConversionPatterns(XeOneToNTypeConverter &converter,
-                                             mlir::RewritePatternSet &patterns,
-                                             imex::TileUsageAnalysis &analysis);
+void populateXeTileToXeGPUConversionPatterns(mlir::TypeConverter &converter,
+                                             mlir::RewritePatternSet &patterns);
 
 /// Create a pass to convert the XeTile dialect to the XeGPU dialect.
 std::unique_ptr<mlir::OperationPass<mlir::gpu::GPUModuleOp>>

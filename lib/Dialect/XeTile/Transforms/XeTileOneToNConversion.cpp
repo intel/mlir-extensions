@@ -1,5 +1,4 @@
-//===- XeTileToXeGPUConversion.cpp - XeTileToXeGPU conversion  -------*- C++
-//-*-===//
+//===- XeTileOneToNConversion.cpp -- XeTileOneToNConversion  ----*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -16,18 +15,19 @@
 /// OneToN replace.
 ///
 //===----------------------------------------------------------------------===//
-#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
+#include <imex/Dialect/XeTile/Transforms/XeTileOneToNConversion.h>
 #include <imex/Utils/DebugUtils.h>
 #include <imex/Utils/PassWrapper.h>
+#include <imex/Utils/XeCommon.h>
 
 #include <llvm/Support/Debug.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
-#include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
+#include <mlir/Transforms/OneToNTypeConversion.h>
 
 #include <optional>
 
@@ -130,17 +130,6 @@ std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertVectorType(
   }
   return std::nullopt;
 }
-
-// mlir::LogicalResult XeOneToNTypeConverter::computeTypeMapping(
-//                             mlir::ValueRange originalVals,
-//                             llvm::ArrayRef<mlir::ValueRange> convertedVals,
-//                             mlir::OneToNTypeMapping &resultMap) {
-//   for (auto [i, val] : llvm::enumerate(convertedVals)) {
-//     llvm::SmallVector<mlir::Type> convertedTypes(val.getTypes());
-//     resultMap.addInputs(i, convertedTypes);
-//   }
-//   return mlir::success();
-// }
 
 // It computes the mapping between types orginal values and
 // converted values. The standard type conversion method doesn't

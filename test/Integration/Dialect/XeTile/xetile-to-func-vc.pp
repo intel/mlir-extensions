@@ -2,7 +2,7 @@ builtin.module(
     cse
     gpu.module(xetile-init-duplicate
         xetile-canonicalization
-        xetile-blocking
+        xetile-blocking{enable-2d-transform=true}
 	cse
         convert-xetile-to-xegpu
 	cse

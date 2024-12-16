@@ -1,7 +1,5 @@
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
-// RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 // RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
-// RUN: --cse --convert-xetile-to-xegpu="enable-2d-transform=true" --cse %s -verify-diagnostics -o -| FileCheck %s
+// RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 
 gpu.module @test_kernel {
   //CHECK: gpu.func @sg_init_tile(%[[arg0:.*]]: memref<1024x1024xf32>, %[[arg1:.*]]: memref<?x?xf32>) {
