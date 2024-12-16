@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" --canonicalize \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking --canonicalize \
 // RUN: --cse --convert-xetile-to-xegpu --cse %s -o -| FileCheck %s
 // CHECK-LABEL: gpu.module @test_kernel {
 gpu.module @test_kernel {

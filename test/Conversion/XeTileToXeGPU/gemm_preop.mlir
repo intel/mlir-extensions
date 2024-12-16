@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" --cse \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking --cse \
 // RUN: --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 #map = affine_map<() -> (0)>
 #map1 = affine_map<() -> (64)>
