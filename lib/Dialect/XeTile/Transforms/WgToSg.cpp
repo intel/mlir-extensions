@@ -38,9 +38,8 @@
 
 #include <cassert>
 
-#include "imex/Dialect/XeTile/Transforms/Passes.h"
-#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
-#include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPUConversion.h>
+#include <imex/Dialect/XeTile/Transforms/Passes.h>
+#include <imex/Dialect/XeTile/Transforms/XeTileOneToNConversion.h>
 
 using namespace mlir;
 using namespace imex;

@@ -587,11 +587,11 @@ void BlockingAnalysisImpl::visitBroadcastOp(
   if (!lattice.isInitialized())
     return;
 
+  auto req = lattice.getRequests()[0];
   auto dim = dims[0];
   Block blockSize;
 
   if (dim == 0) {
-    auto req = lattice.getRequests()[0];
     blockSize = Block(1, req[1]);
   } else if (dim == 1) {
     blockSize = Block(1, 1);
@@ -600,6 +600,10 @@ void BlockingAnalysisImpl::visitBroadcastOp(
   }
   auto blockingRequest = BlockingRequests(blockSize, op->getOpOperand(0));
   propagateIfChanged(operands[0], operands[0]->join(blockingRequest));
+
+  // update the def block size for the result value
+  BlockingRequests &def = getLatticeElement(op.getResult())->getValue();
+  def.updateDefBlock(Block(1, req[1]));
 }
 
 void BlockingAnalysisImpl::visitTransposeOp(
@@ -689,14 +693,13 @@ void BlockingAnalysisImpl::visitVectorizableOp(
   // well supported by IGC yet. Using default size (same as CreateMask)
   // could help to avoid this. Remove it when lowering of create_mask
   // and IGC get matured.
-  if (mlir::isa<mlir::arith::SelectOp>(op) && !Enable2DBlockingTransform) {
+  if (mlir::isa<mlir::arith::SelectOp>(op)) {
     block = Block(1, block[1]);
   }
 
   // elementwise operations are not sensitive to the block size.
   // It will use the block size requested by its users, except SelectOp
-  if (lattice.isInitialized() &&
-      (Enable2DBlockingTransform || !mlir::isa<mlir::arith::SelectOp>(op))) {
+  if (lattice.isInitialized() && !mlir::isa<mlir::arith::SelectOp>(op)) {
     block[0] = 0;
     for (auto &req : lattice.getRequests()) {
       block[0] = std::max(block[0], req[0]);
@@ -746,12 +749,15 @@ void BlockingAnalysisImpl::visitCreateMaskOp(
   // [1, subgroupSize] for CreateMaskOp if 2D transform is not enabled.
   // If 2D transform is enabled, it will aligned with its users.
   Block block = getInnerBlockSize(op, elemTy, shape);
-  if (Enable2DBlockingTransform) {
-    for (auto &req : lattice.getRequests()) {
-      block[0] = std::max(block[0], req[0]);
-      block[1] = std::min(block[1], req[1]);
-    }
-  }
+
+  // TODO: need to enable the following code after 2D lowering in
+  // GPUToSPIRV is enabled.
+  // if (Enable2DBlockingTransform) {
+  //   for (auto &req : lattice.getRequests()) {
+  //     block[0] = std::max(block[0], req[0]);
+  //     block[1] = std::min(block[1], req[1]);
+  //   }
+  // }
   def.updateDefBlock(block);
 }
 

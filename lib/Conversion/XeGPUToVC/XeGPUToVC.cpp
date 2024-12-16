@@ -603,6 +603,7 @@ public:
 
     if (!dstType)
       return failure();
+
     if (dstType == adaptor.getSource().getType() ||
         shapeCastOp.getResultVectorType().getNumElements() == 1) {
       rewriter.replaceOp(shapeCastOp, adaptor.getSource());
@@ -760,7 +761,10 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addDynamicallyLegalDialect<scf::SCFDialect>(
         [&](Operation *op) { return isLegalXeGPUSCFOp(op, typeConverter); });
 
-    target.addIllegalOp<ShapeCastOp>();
+    target.addDynamicallyLegalOp<ShapeCastOp>([&](ShapeCastOp op) {
+      return typeConverter.isLegal(op.getType()) &&
+             typeConverter.isLegal(op.getSource().getType());
+    });
 
     // TODO: can we change it to addDynamicLegalOp?
     target.addLegalOp<mlir::UnrealizedConversionCastOp>();
@@ -786,14 +790,20 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     });
 
     typeConverter.addConversion([&](VectorType type) -> Type {
-      // TODO: it looks like needs some improvement for matching upstream
-      // passes
+      // TODO: I don't think we need to convert 2D VectorType to
+      // 1D VectorType. It needs to removed after we move vector
+      // linearization after this pass
 
       unsigned rank = type.getRank();
       auto elemType = type.getElementType();
 
       if (rank < 1)
         return elemType;
+
+      // TODO: a temporary fix to avoid do type conversion
+      // for create_mask result
+      if (elemType.isInteger(1))
+        return type;
 
       unsigned sum = 1;
       for (unsigned i = 0; i < rank; i++) {

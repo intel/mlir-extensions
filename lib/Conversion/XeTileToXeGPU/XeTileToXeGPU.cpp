@@ -23,9 +23,6 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "ArithOpConversion.h"
-#include "SCFOpConversion.h"
-#include "XeTileOpConversion.h"
 #include "imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h"
 #include "imex/Utils/XeArch.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -37,9 +34,6 @@ namespace imex {
 
 #include <memory>
 namespace imex {
-
-// TODO: clean up this after consolidation
-static bool Enable2DTransform = false;
 
 // Converts an Attribute representing memory space to xegpu::MemorySpaceAttr.
 // It currently only supports memory space represented as integer attribute.
@@ -508,82 +502,6 @@ public:
       }
       return true;
     });
-
-    if (!Enable2DTransform) {
-      addLegalOp<mlir::UnrealizedConversionCastOp>();
-      addLegalOp<mlir::vector::ExtractOp>();
-      addLegalOp<mlir::vector::ExtractElementOp>();
-      addLegalOp<mlir::vector::ExtractStridedSliceOp>();
-      addLegalOp<mlir::vector::ReductionOp>();
-      addLegalOp<mlir::vector::ShuffleOp>();
-      addLegalOp<mlir::memref::ReinterpretCastOp>();
-
-      addDynamicallyLegalDialect<mlir::arith::ArithDialect>(
-          [&](mlir::Operation *op) { return isLegalArithOp(op); });
-
-      addDynamicallyLegalDialect<mlir::scf::SCFDialect>(
-          [&](mlir::Operation *op) { return isLegalSCFOp(op); });
-
-      // Arith ops, since we support all the arith ops, we can dynamically make
-      // the whole dialect legal.
-      addDynamicallyLegalDialect<mlir::arith::ArithDialect>(
-          [&](mlir::Operation *op) -> std::optional<bool> {
-            return isLegalElementWiseOp(op);
-          });
-
-      // Math Ops
-      addDynamicallyLegalOp<mlir::math::ExpOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::PowFOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::SqrtOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::LogOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::ErfOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::SinOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::CosOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::RsqrtOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-      addDynamicallyLegalOp<mlir::math::TanhOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-
-      addDynamicallyLegalOp<mlir::vector::CreateMaskOp>(
-          [&](mlir::Operation *op) -> bool {
-            return isLegalElementWiseOp(op);
-          });
-
-      addDynamicallyLegalOp<mlir::vector::TransposeOp>(
-          [](mlir::vector::TransposeOp op) {
-            return op.getResult().getType().getRank() == 2;
-          });
-
-      addDynamicallyLegalOp<mlir::vector::SplatOp>(
-          [&](mlir::vector::SplatOp op) {
-            return op.getAggregate().getType().getRank() != 4;
-          });
-    }
   }
 
 private:
@@ -615,8 +533,6 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       uArchInterface = std::make_shared<imex::XePVCuArch>();
     else
       return errorHandler(llvm::Twine("Invalid device: ") + device);
-    // TODO: cleanup
-    Enable2DTransform = EnableTransform;
     return mlir::success();
   }
 
@@ -639,94 +555,79 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
     XeTileConversionTarget target(context, uArchInterface);
     mlir::RewritePatternSet patterns(&context);
 
-    if (!Enable2DTransform) {
-      auto &analysis = getAnalysis<TileUsageAnalysis>();
-      XeOneToNTypeConverter typeConverter(context);
-      populateXeTileToXeGPUConversionPatterns(typeConverter, patterns,
-                                              analysis);
-      if (mlir::failed(
-              mlir::applyPartialConversion(mod, target, std::move(patterns))))
-        return signalPassFailure();
-    } else {
-      mlir::TypeConverter typeConverter;
+    mlir::TypeConverter typeConverter;
 
-      typeConverter.addConversion(
-          [&](mlir::Type type) -> mlir::Type { return type; });
+    typeConverter.addConversion(
+        [&](mlir::Type type) -> mlir::Type { return type; });
 
-      typeConverter.addConversion(
-          [&](xetile::TileType type) -> mlir::xegpu::TensorDescType {
-            auto context = type.getContext();
-            auto elemTy = type.getElementType();
-            auto scatterAttr = type.getScatterAttr();
-            bool isScattered = scatterAttr ? scatterAttr.getValue() : false;
+    typeConverter.addConversion(
+        [&](xetile::TileType type) -> mlir::xegpu::TensorDescType {
+          auto context = type.getContext();
+          auto elemTy = type.getElementType();
+          auto scatterAttr = type.getScatterAttr();
+          bool isScattered = scatterAttr ? scatterAttr.getValue() : false;
 
-            mlir::xegpu::SGMapAttr sgMap = nullptr;
-            if (auto attr = type.getSgMap()) {
-              auto layout =
-                  llvm::to_vector_of<uint32_t>(attr.getWiLayout().asArrayRef());
-              auto data =
-                  llvm::to_vector_of<uint32_t>(attr.getWiData().asArrayRef());
-              sgMap = mlir::xegpu::SGMapAttr::get(context, layout, data);
-            }
+          mlir::xegpu::SGMapAttr sgMap = nullptr;
+          if (auto attr = type.getSgMap()) {
+            auto layout =
+                llvm::to_vector_of<uint32_t>(attr.getWiLayout().asArrayRef());
+            auto data =
+                llvm::to_vector_of<uint32_t>(attr.getWiData().asArrayRef());
+            sgMap = mlir::xegpu::SGMapAttr::get(context, layout, data);
+          }
 
-            auto memSpaceAttr = convertMemorySpace(type.getMemorySpace());
-            auto memSpace = memSpaceAttr ? memSpaceAttr.getValue()
-                                         : mlir::xegpu::MemorySpace::Global;
+          auto memSpaceAttr = convertMemorySpace(type.getMemorySpace());
+          auto memSpace = memSpaceAttr ? memSpaceAttr.getValue()
+                                       : mlir::xegpu::MemorySpace::Global;
 
-            mlir::Attribute encoding;
-            llvm::SmallVector<int64_t> shape;
-            if (isScattered) {
-              // Scattered tile is lowered to scattered tensor_desc with chunk
-              // size 1. It supports both global memory and shared memory. while
-              // scattered tile can support 2D shape, scattered tensor_desc only
-              // support 1D shape.
-              auto chunkSizeAttr = mlir::IntegerAttr::get(
-                  mlir::IntegerType::get(context, 64), 1);
-              encoding = mlir::xegpu::ScatterTensorDescAttr::get(
-                  context, memSpaceAttr, chunkSizeAttr);
-              shape.push_back(type.getNumElements());
-            } else if (memSpace == mlir::xegpu::MemorySpace::Global) {
-              // Blocked tile on global memory is lowered to blocked tensor_desc
-              // with the same shape.
-              // TODO: update TileType with array_length and use it here.
-              auto arrayLenAttr = mlir::IntegerAttr::get(
-                  mlir::IntegerType::get(context, 64), 1);
-              auto boundaryCheckAttr = mlir::BoolAttr::get(context, true);
-              encoding = mlir::xegpu::BlockTensorDescAttr::get(
-                  context, memSpaceAttr, arrayLenAttr, boundaryCheckAttr);
-              shape = llvm::to_vector(type.getShape());
-            } else {
-              // TODO: Lowering strategy for blocked tiles on SLM is not
-              // finalized yet.
-              assert(0 && "SLM space for blocked tile is not supported yet.");
-            }
-            return mlir::xegpu::TensorDescType::get(context, shape, elemTy,
-                                                    encoding, sgMap);
-          });
+          mlir::Attribute encoding;
+          llvm::SmallVector<int64_t> shape;
+          if (isScattered) {
+            // Scattered tile is lowered to scattered tensor_desc with chunk
+            // size 1. It supports both global memory and shared memory. while
+            // scattered tile can support 2D shape, scattered tensor_desc only
+            // support 1D shape.
+            auto chunkSizeAttr =
+                mlir::IntegerAttr::get(mlir::IntegerType::get(context, 64), 1);
+            encoding = mlir::xegpu::ScatterTensorDescAttr::get(
+                context, memSpaceAttr, chunkSizeAttr);
+            shape.push_back(type.getNumElements());
+          } else if (memSpace == mlir::xegpu::MemorySpace::Global) {
+            // Blocked tile on global memory is lowered to blocked tensor_desc
+            // with the same shape.
+            // TODO: update TileType with array_length and use it here.
+            auto arrayLenAttr =
+                mlir::IntegerAttr::get(mlir::IntegerType::get(context, 64), 1);
+            auto boundaryCheckAttr = mlir::BoolAttr::get(context, true);
+            encoding = mlir::xegpu::BlockTensorDescAttr::get(
+                context, memSpaceAttr, arrayLenAttr, boundaryCheckAttr);
+            shape = llvm::to_vector(type.getShape());
+          } else {
+            // TODO: Lowering strategy for blocked tiles on SLM is not
+            // finalized yet.
+            assert(0 && "SLM space for blocked tile is not supported yet.");
+          }
+          return mlir::xegpu::TensorDescType::get(context, shape, elemTy,
+                                                  encoding, sgMap);
+        });
 
-      auto materializeWithCast = [&](mlir::OpBuilder &builder, mlir::Type type,
-                                     mlir::ValueRange inputs,
-                                     mlir::Location loc) -> mlir::Value {
-        assert(inputs.size() == 1 && "Expecting single input");
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs)
-            .getResult(0);
-      };
+    auto materializeWithCast = [&](mlir::OpBuilder &builder, mlir::Type type,
+                                   mlir::ValueRange inputs,
+                                   mlir::Location loc) -> mlir::Value {
+      assert(inputs.size() == 1 && "Expecting single input");
+      return builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs)
+          .getResult(0);
+    };
 
-      typeConverter.addArgumentMaterialization(materializeWithCast);
-      typeConverter.addTargetMaterialization(materializeWithCast);
-      typeConverter.addSourceMaterialization(materializeWithCast);
+    typeConverter.addArgumentMaterialization(materializeWithCast);
+    typeConverter.addTargetMaterialization(materializeWithCast);
+    typeConverter.addSourceMaterialization(materializeWithCast);
 
-      patterns
-          .add<InitOpPattern, UpdateOpPattern, PrefetchOpPattern, LoadOpPattern,
-               StoreOpPattern, GatherOpPattern, ScatterOpPattern, MMAOpPattern,
-               BroadcastOpPattern, ReduceOpPattern, TransposeOpPattern,
-               SCFForOpPattern, SCFYieldOpPattern>(typeConverter,
-                                                   patterns.getContext());
-      if (mlir::failed(
-              mlir::applyPartialConversion(mod, target, std::move(patterns))))
-        return signalPassFailure();
-    }
+    populateXeTileToXeGPUConversionPatterns(typeConverter, patterns);
+
+    if (mlir::failed(
+            mlir::applyPartialConversion(mod, target, std::move(patterns))))
+      return signalPassFailure();
   }
 
 private:
@@ -735,11 +636,12 @@ private:
 
 /// Populate the given list with patterns that convert XeTile to XeGPU
 void populateXeTileToXeGPUConversionPatterns(
-    imex::XeOneToNTypeConverter &converter, mlir::RewritePatternSet &patterns,
-    TileUsageAnalysis &analysis) {
-  populateSCFOpConversionPatterns(converter, patterns, analysis);
-  populateArithOpConversionPatterns(converter, patterns, analysis);
-  populateXeTileOpConversionPatterns(converter, patterns, analysis);
+    mlir::TypeConverter &converter, mlir::RewritePatternSet &patterns) {
+  patterns.add<InitOpPattern, UpdateOpPattern, PrefetchOpPattern, LoadOpPattern,
+               StoreOpPattern, GatherOpPattern, ScatterOpPattern, MMAOpPattern,
+               BroadcastOpPattern, ReduceOpPattern, TransposeOpPattern,
+               SCFForOpPattern, SCFYieldOpPattern>(converter,
+                                                   patterns.getContext());
 }
 
 /// Create a pass that convert XeTile to XeGPU
