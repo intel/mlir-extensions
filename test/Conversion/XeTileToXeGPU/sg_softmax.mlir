@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
 // RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 gpu.module @test_kernel {
     //CHECK-LABEL: @sglevel_softmax_dim_0
