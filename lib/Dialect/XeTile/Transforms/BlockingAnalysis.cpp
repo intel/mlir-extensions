@@ -4,8 +4,6 @@
 
 #include "imex/Dialect/XeTile/Transforms/BlockingAnalysis.h"
 
-extern bool Enable2DBlockingTransform;
-
 namespace llvm {
 using imex::Block;
 // Implementation of llvm::DenseMapInfo for Block, required for
@@ -741,7 +739,7 @@ void BlockingAnalysisImpl::visitCreateMaskOp(
 
   auto lattice = results[0]->getValue();
 
-  if (Enable2DBlockingTransform && !op->use_empty() && !lattice.isInitialized())
+  if (!op->use_empty() && !lattice.isInitialized())
     return;
 
   BlockingRequests &def = getLatticeElement(op->getResult(0))->getValue();
@@ -752,11 +750,9 @@ void BlockingAnalysisImpl::visitCreateMaskOp(
 
   // TODO: need to enable the following code after 2D lowering in
   // GPUToSPIRV is enabled.
-  // if (Enable2DBlockingTransform) {
-  //   for (auto &req : lattice.getRequests()) {
-  //     block[0] = std::max(block[0], req[0]);
-  //     block[1] = std::min(block[1], req[1]);
-  //   }
+  // for (auto &req : lattice.getRequests()) {
+  //   block[0] = std::max(block[0], req[0]);
+  //   block[1] = std::min(block[1], req[1]);
   // }
   def.updateDefBlock(block);
 }

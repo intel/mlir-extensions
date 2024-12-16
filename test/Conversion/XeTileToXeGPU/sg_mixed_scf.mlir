@@ -1,8 +1,6 @@
 
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
+// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
 // RUN: --cse --convert-xetile-to-xegpu --cse --canonicalize %s -verify-diagnostics -o -| FileCheck %s
-// RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking="enable-2d-transform=true" \
-// RUN: --cse --convert-xetile-to-xegpu="enable-2d-transform=true" --cse --canonicalize %s -verify-diagnostics -o -| FileCheck %s
 
 //CHECK-LABEL: gpu.module @postop_reduce_m
 gpu.module @postop_reduce_m attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Bfloat16ConversionINTEL, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, VectorAnyINTEL], [SPV_INTEL_bfloat16_conversion, SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {

@@ -4,7 +4,7 @@ builtin.module(
         cse
         xetile-init-duplicate
         xetile-canonicalization
-        xetile-blocking{enable-2d-transform=true}
+        xetile-blocking
         canonicalize
         convert-xetile-to-xegpu
         cse

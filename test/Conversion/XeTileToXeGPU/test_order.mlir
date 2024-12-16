@@ -1,4 +1,4 @@
-// RUN: imex-opt --split-input-file --xetile-canonicalization --xetile-blocking="enable-2d-transform=true" \
+// RUN: imex-opt --split-input-file --xetile-canonicalization --xetile-blocking \
 // RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
 
 // CHECK-LABEL: @test_func
