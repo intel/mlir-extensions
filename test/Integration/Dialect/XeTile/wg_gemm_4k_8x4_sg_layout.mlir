@@ -71,7 +71,7 @@ module @gemm attributes {gpu.container_module} {
           -> !xetile.tile<32x256xbf16, #tile_attr_b>
         xetile.prefetch_tile %prefetch_a_init_tile_1 : !xetile.tile<256x32xbf16, #tile_attr_a>
         xetile.prefetch_tile %prefetch_b_init_tile_1 : !xetile.tile<32x256xbf16, #tile_attr_b>
-        
+
         // prefetch second 32 slice
         %prefetch_a_init_tile_2 = xetile.init_tile %A[%m, %c32] : memref<4096x4096xbf16>
           -> !xetile.tile<256x32xbf16, #tile_attr_a>
@@ -86,7 +86,6 @@ module @gemm attributes {gpu.container_module} {
           -> !xetile.tile<256x32xbf16, #tile_attr_a>
         %prefetch_b_init_tile_3 = xetile.init_tile %B[%c64, %n] : memref<4096x4096xbf16>
           -> !xetile.tile<32x256xbf16, #tile_attr_b>
-          
 
         xegpu.alloc_nbarrier 1
         %nbarrier_id = arith.constant 0 : i8
@@ -123,7 +122,7 @@ module @gemm attributes {gpu.container_module} {
             -> vector<32x256xbf16>
 
           xegpu.compile_hint
-          
+
           // prefetch next A and B tiles
           xetile.prefetch_tile %prefetch_a_tile : !xetile.tile<256x32xbf16, #tile_attr_a>
           xetile.prefetch_tile %prefetch_b_tile : !xetile.tile<32x256xbf16, #tile_attr_b>
