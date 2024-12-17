@@ -63,27 +63,12 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
     OptionalParameter<"xetile::SubGroupMapAttr">:$sg_map,
     OptionalParameter<"xetile::WorkGroupMapAttr">:$wg_map,
     DefaultValuedParameter<"mlir::DenseI32ArrayAttr", "mlir::DenseI32ArrayAttr::get($_ctxt, {1, 0})">:$order,
-    OptionalParameter<"mlir::DenseI64ArrayAttr">:$inner_blocks,
     OptionalParameter<"mlir::Attribute">:$memory_space,
     OptionalParameter<"mlir::BoolAttr">:$scattered
   );
   let assemblyFormat = "`<` struct(params) `>`";
   let genVerifyDecl = true;
   let builders = [
-    AttrBuilder<(ins  CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
-                      CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
-                      CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
-                      CArg<"llvm::ArrayRef<int64_t>", "{}">:$inner_blocks,
-                      CArg<"int", "0">:$memory_space,
-                      CArg<"bool", "false">:$scattered),
-    [{
-        mlir::Type intType = mlir::IntegerType::get($_ctxt, 32);
-        mlir::BoolAttr scatteredAttr = mlir::BoolAttr::get($_ctxt, scattered);
-        mlir::DenseI64ArrayAttr blkAttr = inner_blocks.empty()? mlir::DenseI64ArrayAttr():
-                          mlir::DenseI64ArrayAttr::get($_ctxt, inner_blocks);
-        return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
-                      blkAttr, mlir::IntegerAttr::get(intType, memory_space), scatteredAttr);
-    }]>,
     AttrBuilder<(ins CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
                      CArg<"int", "0">:$memory_space, CArg<"bool", "false">:$scattered),
     [{
@@ -91,7 +76,6 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
         mlir::BoolAttr scatteredAttr = mlir::BoolAttr::get($_ctxt, scattered);
         return $_get($_ctxt, xetile::SubGroupMapAttr(), xetile::WorkGroupMapAttr(),
                       mlir::DenseI32ArrayAttr::get($_ctxt, order),
-                      mlir::DenseI64ArrayAttr(),
                       mlir::IntegerAttr::get(intType, memory_space), scatteredAttr);
     }]>,
     AttrBuilder<(ins CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
@@ -102,7 +86,6 @@ def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
         mlir::Type intType = mlir::IntegerType::get($_ctxt, 32);
         mlir::BoolAttr scatteredAttr = mlir::BoolAttr::get($_ctxt, scattered);
         return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
-                      mlir::DenseI64ArrayAttr(),
                       mlir::IntegerAttr::get(intType, memory_space), scatteredAttr);
     }]>
   ];

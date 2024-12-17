@@ -36,17 +36,11 @@
 
 namespace imex {
 
-class XeOneToNTypeConverter : public imex::XeTypeConverter {
+class XeOneToNTypeConverter : public mlir::TypeConverter {
 public:
+  using mlir::TypeConverter::convertType;
+
   XeOneToNTypeConverter(mlir::MLIRContext &context);
-
-  std::optional<mlir::LogicalResult>
-  convertTileType(xetile::TileType tileTy,
-                  llvm::SmallVectorImpl<mlir::Type> &resultTypes) override;
-
-  std::optional<mlir::LogicalResult>
-  convertVectorType(mlir::VectorType vectorTy,
-                    llvm::SmallVectorImpl<mlir::Type> &resultTypes) override;
 
   mlir::LogicalResult computeTypeMapping(mlir::ValueRange original,
                                          mlir::ValueRange converted,
@@ -116,14 +110,13 @@ private:
 };
 
 template <typename SourceOp>
-class XeOneToNConversion : public XeConversionPattern<TileUsageAnalysis> {
+class XeOneToNConversion : public XeConversionPattern {
 public:
   XeOneToNConversion(mlir::MLIRContext *context,
                      XeOneToNTypeConverter &typeConverter,
-                     TileUsageAnalysis &analysis,
                      mlir::PatternBenefit benefit = 1)
-      : XeConversionPattern(typeConverter, analysis,
-                            SourceOp::getOperationName(), benefit, context) {}
+      : XeConversionPattern(typeConverter, SourceOp::getOperationName(),
+                            benefit, context) {}
 
   using RangeT = llvm::ArrayRef<mlir::ValueRange>;
   using OpAdaptor = typename SourceOp::template GenericAdaptor<RangeT>;

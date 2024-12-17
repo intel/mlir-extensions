@@ -733,8 +733,7 @@ class WGToSGXeTileConvertLayout
     auto order = mlir::DenseI32ArrayAttr::get(op.getContext(), {1, 0});
     auto attr = imex::xetile::XeTileAttr::get(
         op.getContext(), nullptr /*sgMap*/, nullptr /*wgMap*/,
-        order /*order*/, nullptr /*innerblocks*/, memoryScopeAttr /*memoryscope*/,
-        nullptr /*scatterAttr*/);
+        order /*order*/, memoryScopeAttr /*memoryscope*/, nullptr /*scatterAttr*/);
     xetile::TileType srcTileTy =
       imex::xetile::TileType::get({srcMapSgData[0], srcMapSgData[1]}, elemTy, attr);
 
@@ -912,18 +911,16 @@ void analyzeInitTileOps(mlir::Operation *op) {
 }
 
 void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
-                                  mlir::RewritePatternSet &patterns,
-                                  TileUsageAnalysis &analysis) {
+                                  mlir::RewritePatternSet &patterns) {
   patterns.insert<WGToSGInitTileOpPattern, WGToSGLoadTileOpPattern,
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
                   WGToSGSCFYieldOpPattern, WGToSGVectorTranspose, WGToSGVectorBroadcast,
                   WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern, WGToSGArithExtFOpPattern,
-                  WGToSGArithTruncFOpPattern>(patterns.getContext(), converter, analysis);
+                  WGToSGArithTruncFOpPattern>(patterns.getContext(), converter);
   patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
-                  WGToSGArithConstantOpPattern>(patterns.getContext(),
-                                                converter, analysis);
+                  WGToSGArithConstantOpPattern>(patterns.getContext(), converter);
 }
 
 // Transforms WG XeTile IR to SG XeTile
@@ -944,7 +941,6 @@ public:
       return signalPassFailure();
     }
 
-    auto &analysis = getAnalysis<TileUsageAnalysis>();
     mlir::Operation *op = getOperation();
     // Run the analysis to find the candidates for the transformation
     analyzeInitTileOps(op);
@@ -1049,7 +1045,7 @@ public:
 
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
-    populateXeTileWgToSgPatterns(typeConverter, patterns, analysis);
+    populateXeTileWgToSgPatterns(typeConverter, patterns);
     if (mlir::failed(
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
       return signalPassFailure();

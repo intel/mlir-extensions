@@ -8,8 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements XeTypeConverter and some other
-/// routines used by Xe related dialects.
+/// This file implements some routines used by Xe related dialects.
 ///
 //===----------------------------------------------------------------------===//
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -116,20 +115,6 @@ encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
   return {resStr, resVecType};
 }
 
-/// @brief
-/// We have to use i32 for intrinsic calls like llvm_genx_raw_send2_*, if we
-/// want to get the original element type (e.g., f16) as the result of a load,
-/// we have to encode the resulting i32 vector back to it.
-mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
-                                    mlir::Type toElemType) {
-  auto elemType = currentVecType.getElementType();
-  auto currentbitWidth = elemType.getIntOrFloatBitWidth();
-  auto newBitwidth = toElemType.getIntOrFloatBitWidth();
-  const int size =
-      currentVecType.getNumElements() * currentbitWidth / newBitwidth;
-  return mlir::VectorType::get(size, toElemType);
-}
-
 unsigned encodeDataum(mlir::Type type) {
   switch (type.getIntOrFloatBitWidth()) {
   case 8:
@@ -191,20 +176,6 @@ unsigned encodeOpcode(mlir::arith::AtomicRMWKind kind) {
     break;
   }
   return encode;
-}
-
-/// Creates the default strides for the given `shape`. Example:
-///   input shape = 2x3x4x5
-///   output strides = 60x20x5x1
-llvm::SmallVector<int64_t> defaultStrides(llvm::ArrayRef<int64_t> shape) {
-  int64_t stride = 1;
-  llvm::SmallVector<int64_t> strides;
-  for (int64_t size : llvm::reverse(shape)) {
-    strides.push_back(stride);
-    stride *= size;
-  }
-  std::reverse(strides.begin(), strides.end());
-  return strides;
 }
 
 mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
