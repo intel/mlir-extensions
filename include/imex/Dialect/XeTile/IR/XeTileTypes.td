@@ -164,9 +164,6 @@ def XeTile_BaseAddrType : AnyTypeOf<[MemRefOf<[XeTile_ScalarType]>, UI64, UI32, 
 // define the value type for XeTile load_tile and store_tile op
 def XeTile_2DVector : VectorOfRankAndType<[2], [XeTile_ScalarType]>;
 
-// input and output types needed for pack and unpack ops
-def XeTile_4DVector : VectorOfRankAndType<[4], [XeTile_ScalarType]>;
-
 // define the value type for XeTile load_gather and store_scatter op
 def XeTile_1DOr2DVector: VectorOfRankAndType<[1, 2], [XeTile_ScalarType]>;
 
