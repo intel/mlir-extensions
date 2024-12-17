@@ -56,6 +56,14 @@ diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/
 index 5bd3c370e385..898e8564e3fe 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
+@@ -70,6 +70,7 @@ static bool isWriteHintOrNone(const CachePolicyAttr &attr) {
+     return true;
+   auto kind = attr.getValue();
+   return kind == CachePolicy::CACHED || kind == CachePolicy::UNCACHED ||
++         kind == CachePolicy::STREAMING ||
+          kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
+ }
+
 @@ -237,7 +237,7 @@ LogicalResult LoadNdOp::verify() {
        emitWarning("Invalid transpose attr. It is ignored.");
    }
