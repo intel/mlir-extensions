@@ -374,12 +374,18 @@ struct SubviewShardingInterface
                          const ShardingOption &shardingOption) const {
     auto svop = cast<SubviewOp>(op);
     auto srcShardOp = svop.getSource().getDefiningOp<mesh::ShardOp>();
-    if (!srcShardOp) {
-      LLVM_DEBUG(DBGS() << "no sharding on input, bailing out\n");
-      return failure();
+    mlir::mesh::MeshSharding srcSharding;
+    if (srcShardOp) {
+      srcSharding = srcShardOp.getSharding();
+    } else {
+      LLVM_DEBUG(DBGS() << "no sharding on input, using default\n");
+      SmallVector<MeshAxesAttr> res;
+      for (const auto &v : shardingOption.shardingArray) {
+        res.emplace_back(MeshAxesAttr::get(op->getContext(), v));
+      }
+      srcSharding = mlir::mesh::MeshSharding::get(shardingOption.mesh, res);
     }
-    maybeInsertSourceShardingAnnotation(srcShardOp.getSharding(),
-                                        op->getOpOperand(0), b);
+    maybeInsertSourceShardingAnnotation(srcSharding, op->getOpOperand(0), b);
 
     auto sharding = getShardedDimsOffsSharding(svop.getSource(), svop);
     if (failed(sharding))
