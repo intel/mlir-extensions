@@ -79,8 +79,7 @@ buildUnrealizedBackwardsCasts(mlir::ValueRange convertedValues,
   return recastValues;
 }
 
-XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
-    : XeTypeConverter(context) {
+XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context) {
   targetOp = nullptr;
 
   addConversion(
@@ -104,31 +103,6 @@ XeOneToNTypeConverter::XeOneToNTypeConverter(mlir::MLIRContext &context)
         .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
         .getResult(0);
   });
-}
-
-std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertTileType(
-    xetile::TileType tileTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
-  llvm::dbgs()
-      << "convertTileType is disabled, since there is no unique "
-      << "way to convert an XeTile::TileType into mlir::xegpu::TensorDescType "
-      << "becasue of array_length selection.\n";
-  return std::nullopt;
-}
-
-std::optional<mlir::LogicalResult> XeOneToNTypeConverter::convertVectorType(
-    mlir::VectorType vectorTy, llvm::SmallVectorImpl<mlir::Type> &resultTypes) {
-  if (vectorTy.getRank() == 4) {
-    auto shape = vectorTy.getShape();
-    auto vecTy =
-        mlir::VectorType::get({shape[2], shape[3]}, vectorTy.getElementType());
-    auto numElements = shape[0] * shape[1];
-    resultTypes.assign(numElements, vecTy);
-    return mlir::success();
-  } else if (vectorTy.getRank() == 2) {
-    resultTypes.push_back(vectorTy);
-    return mlir::success();
-  }
-  return std::nullopt;
 }
 
 // It computes the mapping between types orginal values and

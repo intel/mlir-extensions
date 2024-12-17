@@ -12,13 +12,13 @@ gpu.module @test_broadcast {
       %c32 = arith.constant 32 : index
       %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [64, 64]>} dense<0.000000e+00> : vector<256x512xf32>
       %c0 = arith.constant 0 : index
-      %0 = xetile.init_tile %arg0[%c0, %c0] : memref<256x384xf16> -> !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, inner_blocks = []>>
-      %1 = xetile.init_tile %arg1[%c0, %c0] : memref<1x384xf16> -> !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>, inner_blocks = []>>
-      %2:3 = scf.for %arg15 = %c0 to %c384 step %c32 iter_args(%arg16 = %cst, %arg17 = %0, %arg18 = %1) -> (vector<256x512xf32>, !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, inner_blocks = []>>, !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>, inner_blocks = []>>) {
-        %4 = xetile.update_tile_offset %arg18, [%c0,  %c32] : !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>, inner_blocks = []>>
-        %5 = xetile.update_tile_offset %arg17, [%c0,  %c32] : !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, inner_blocks = []>>
-        %6 = xetile.load_tile %arg17 { padding = 0.000000e+00 : f32 }  : !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, inner_blocks = []>> -> vector<256x32xf16>
-        %7 = xetile.load_tile %arg18 { padding = 0.000000e+00 : f32 }  : !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>, inner_blocks = []>> -> vector<1x32xf16>
+      %0 = xetile.init_tile %arg0[%c0, %c0] : memref<256x384xf16> -> !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>>>
+      %1 = xetile.init_tile %arg1[%c0, %c0] : memref<1x384xf16> -> !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>>>
+      %2:3 = scf.for %arg15 = %c0 to %c384 step %c32 iter_args(%arg16 = %cst, %arg17 = %0, %arg18 = %1) -> (vector<256x512xf32>, !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>>>, !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>>>) {
+        %4 = xetile.update_tile_offset %arg18, [%c0,  %c32] : !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>>>
+        %5 = xetile.update_tile_offset %arg17, [%c0,  %c32] : !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>>>
+        %6 = xetile.load_tile %arg17 { padding = 0.000000e+00 : f32 }  : !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>>> -> vector<256x32xf16>
+        %7 = xetile.load_tile %arg18 { padding = 0.000000e+00 : f32 }  : !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>>> -> vector<1x32xf16>
         //CHECK: %[[TRANSPOSE:.*]] = vector.transpose {{%.*}}, [1, 0] : vector<1x32xf16> to vector<32x1xf16>
         %8 = vector.transpose %7, [1, 0] {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 1]>} : vector<1x32xf16> to vector<32x1xf16>
         //CHECK: %[[BROADCAST:.*]] = vector.broadcast %[[TRANSPOSE]] : vector<32x1xf16> to vector<32x64xf16>
@@ -27,10 +27,10 @@ gpu.module @test_broadcast {
         %10 = xetile.tile_mma %6, %9, %cst {wg_map_a =#xetile.wg_map<sg_layout = [4, 8], sg_data = [64, 32]>, wg_map_b =#xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>, wg_map_c =#xetile.wg_map<sg_layout = [4, 8], sg_data = [64, 64]>} : vector<256x32xf16>, vector<32x512xf16>, vector<256x512xf32> -> vector<256x512xf32>
         xegpu.compile_hint
         %11 = arith.addf %arg16, %10 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [64, 64]>} : vector<256x512xf32>
-        scf.yield %11, %5, %4 : vector<256x512xf32>, !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, inner_blocks = []>>, !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>, inner_blocks = []>>
+        scf.yield %11, %5, %4 : vector<256x512xf32>, !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>>>, !xetile.tile<1x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [1, 32]>>>
       }
-      %3 = xetile.init_tile %arg2[%c0, %c0] : memref<256x512xf32> -> !xetile.tile<256x512xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 64]>, inner_blocks = []>>
-      xetile.store_tile %2#0,  %3 : vector<256x512xf32>, !xetile.tile<256x512xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 64]>, inner_blocks = []>>
+      %3 = xetile.init_tile %arg2[%c0, %c0] : memref<256x512xf32> -> !xetile.tile<256x512xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 64]>>>
+      xetile.store_tile %2#0,  %3 : vector<256x512xf32>, !xetile.tile<256x512xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 64]>>>
       gpu.terminator
     }
     gpu.return

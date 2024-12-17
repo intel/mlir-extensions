@@ -110,13 +110,6 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return xetile::WorkGroupMapAttr();
     }
 
-    mlir::DenseI64ArrayAttr getInnerBlocks() {
-      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
-      if (encoding)
-        return encoding.getInnerBlocks();
-      return mlir::DenseI64ArrayAttr();
-    }
-
     mlir::DenseI32ArrayAttr getOrder() {
       auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
       if (encoding)
@@ -168,18 +161,16 @@ def XeTile_ScalarType : AnyTypeOf<[XeTile_IntType, XeTile_FloatType, Index]>;
 // define the source type for XeTile init_tile
 def XeTile_BaseAddrType : AnyTypeOf<[MemRefOf<[XeTile_ScalarType]>, UI64, UI32, I64, I32]>;
 
-// input and output types needed for pack and unpack ops
-// def XeTile_1DVector : VectorOfRankAndType<[1], [XeTile_ScalarType]>;
+// define the value type for XeTile load_tile and store_tile op
 def XeTile_2DVector : VectorOfRankAndType<[2], [XeTile_ScalarType]>;
+
+// input and output types needed for pack and unpack ops
 def XeTile_4DVector : VectorOfRankAndType<[4], [XeTile_ScalarType]>;
 
 // define the value type for XeTile load_gather and store_scatter op
-def XeTile_1DOr2DOr4DVector: VectorOfRankAndType<[1, 2, 4], [XeTile_ScalarType]>;
+def XeTile_1DOr2DVector: VectorOfRankAndType<[1, 2], [XeTile_ScalarType]>;
 
-// define the value type for XeTile load_tile and store_tile op
-def XeTile_2DOr4DVector: VectorOfRankAndType<[2, 4], [XeTile_ScalarType]>;
-
-def XeTile_MaskType: VectorOfRankAndType<[1, 2, 4], [I1]>;
+def XeTile_MaskType: VectorOfRankAndType<[1, 2], [I1]>;
 
 // define the attribute type allowed for padding values for load op
 def XeTile_PaddingValueAttr : AnyAttrOf<[I32Attr, F32Attr]>;

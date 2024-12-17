@@ -40,22 +40,22 @@ module attributes {gpu.container_module} {
         %13 = arith.remsi %8, %c2 : index
         //CHECK: %[[INITTILE:.*]] = xetile.init_tile {{%.*}}[{{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}] : memref<4x3x2x128x96xf16> -> !xetile.tile<32x32xf16>
         //CHECK: %[[INITTILE:.*]] = xetile.init_tile {{%.*}}[{{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}] : memref<4x3x2x64x96xf16> -> !xetile.tile<32x32xf16>
-        %14 = xetile.init_tile %arg0[%10, %12, %13, %6, %c0] : memref<4x3x2x128x96xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
-        %15 = xetile.init_tile %arg1[%10, %12, %13, %7, %c0] : memref<4x3x2x64x96xf16> -> !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
-        %16:3 = scf.for %arg4 = %c0 to %c96 step %c32 iter_args(%arg5 = %cst, %arg6 = %14, %arg7 = %15) -> (vector<64x32xf32>, !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>, !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>) {
-          %18 = xetile.update_tile_offset %arg7, [%c0, %c32] : !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
-          %19 = xetile.update_tile_offset %arg6, [%c0, %c32] : !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
-          %20 = xetile.load_tile %arg6 : !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>> -> vector<64x32xf16>
-          %21 = xetile.load_tile %arg7 : !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>> -> vector<32x32xf16>
+        %14 = xetile.init_tile %arg0[%10, %12, %13, %6, %c0] : memref<4x3x2x128x96xf16> -> !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        %15 = xetile.init_tile %arg1[%10, %12, %13, %7, %c0] : memref<4x3x2x64x96xf16> -> !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        %16:3 = scf.for %arg4 = %c0 to %c96 step %c32 iter_args(%arg5 = %cst, %arg6 = %14, %arg7 = %15) -> (vector<64x32xf32>, !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>, !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>) {
+          %18 = xetile.update_tile_offset %arg7, [%c0, %c32] : !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+          %19 = xetile.update_tile_offset %arg6, [%c0, %c32] : !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+          %20 = xetile.load_tile %arg6 : !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<64x32xf16>
+          %21 = xetile.load_tile %arg7 : !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<32x32xf16>
           %22 = vector.transpose %21, [1, 0] {map = #xetile.wg_map<sg_layout = [2, 1], sg_data = [32, 32]>} : vector<32x32xf16> to vector<32x32xf16>
           xegpu.compile_hint
           %23 = xetile.tile_mma %20, %22, %cst {wg_map_a = #xetile.wg_map<sg_layout = [2, 1], sg_data = [32, 32]>, wg_map_b = #xetile.wg_map<sg_layout = [2, 1], sg_data = [32, 32]>, wg_map_c = #xetile.wg_map<sg_layout = [2, 1], sg_data = [32, 32]>} : vector<64x32xf16>, vector<32x32xf16>, vector<64x32xf32> -> vector<64x32xf32>
           xegpu.compile_hint
           %24 = arith.addf %arg5, %23 {map = #xetile.wg_map<sg_layout = [2, 1], sg_data = [32, 32]>} : vector<64x32xf32>
-          scf.yield %24, %19, %18 : vector<64x32xf32>, !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>, !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
+          scf.yield %24, %19, %18 : vector<64x32xf32>, !xetile.tile<64x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>, !xetile.tile<32x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [1, 2], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
         }
-        %17 = xetile.init_tile %arg2[%10, %12, %13, %6, %7] : memref<4x3x2x128x64xf32> -> !xetile.tile<64x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
-        xetile.store_tile %16#0,  %17 : vector<64x32xf32>, !xetile.tile<64x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, inner_blocks = [], memory_space = 0 : i32, scattered = false>>
+        %17 = xetile.init_tile %arg2[%10, %12, %13, %6, %7] : memref<4x3x2x128x64xf32> -> !xetile.tile<64x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        xetile.store_tile %16#0,  %17 : vector<64x32xf32>, !xetile.tile<64x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [2, 1], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
       }
       gpu.return
     }
