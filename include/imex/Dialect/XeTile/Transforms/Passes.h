@@ -30,8 +30,6 @@ class RewritePatternSet;
 
 namespace imex {
 
-class XeTypeConverter;
-
 //===----------------------------------------------------------------------===//
 /// XeTile passes.
 //===----------------------------------------------------------------------===//
@@ -42,10 +40,6 @@ std::unique_ptr<mlir::Pass>
 createXeTileBlockingPass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
 std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
-
-///
-void populateXeTileInitDuplicatePatterns(imex::XeTypeConverter &converter,
-                                         mlir::RewritePatternSet &patterns);
 
 #define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DECL_XETILECANONICALIZATION

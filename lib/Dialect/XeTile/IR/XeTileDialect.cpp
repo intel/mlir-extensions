@@ -110,18 +110,14 @@ mlir::LogicalResult WorkGroupMapAttr::verify(
   return mlir::success();
 }
 
-mlir::LogicalResult XeTileAttr::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    ::imex::xetile::SubGroupMapAttr sg_map, xetile::WorkGroupMapAttr wg_map,
-    mlir::DenseI32ArrayAttr order, mlir::DenseI64ArrayAttr inner_blocks,
-    mlir::Attribute MemorySpace, mlir::BoolAttr scattered) {
-
+mlir::LogicalResult
+XeTileAttr::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+                   ::imex::xetile::SubGroupMapAttr sg_map,
+                   xetile::WorkGroupMapAttr wg_map,
+                   mlir::DenseI32ArrayAttr order, mlir::Attribute MemorySpace,
+                   mlir::BoolAttr scattered) {
   if (order != mlir::DenseI32ArrayAttr() && order.size() != 2)
     emitError() << "expect integer array of size 2 for order";
-  if (inner_blocks != mlir::DenseI64ArrayAttr() &&
-      (inner_blocks.size() > 0 && inner_blocks.size() != 2))
-    emitError() << "expect integer array of size 2 for non empty inner_blocks "
-                   "attribute";
   return mlir::success();
 }
 
