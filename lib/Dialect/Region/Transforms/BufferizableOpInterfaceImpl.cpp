@@ -15,16 +15,6 @@ namespace imex {
 namespace region {
 namespace {
 
-/// Return true if none of the values is TensorType.
-bool noTensorsIn(::mlir::ValueRange values) {
-  auto isTensor = [](::mlir::Value v) {
-    return ::llvm::isa<::mlir::TensorType>(v.getType());
-  };
-  if (::llvm::any_of(values, isTensor))
-    return false;
-  return true;
-}
-
 /// Convert values to buffers. If a value is a tensor, get a buffer for it.
 ::mlir::LogicalResult
 convertToBuffers(::mlir::ValueRange values,
@@ -81,10 +71,6 @@ struct EnvironmentRegionOpInterface
   bufferize(::mlir::Operation *op, ::mlir::RewriterBase &rewriter,
             const ::mlir::bufferization::BufferizationOptions &options) const {
     auto envOp = ::mlir::cast<region::EnvironmentRegionOp>(op);
-    if (noTensorsIn(envOp.getArgs()) && noTensorsIn(envOp.getResults())) {
-      // Nothing to do.
-      return ::mlir::success();
-    }
     // Convert op arguments to memrefs.
     ::mlir::SmallVector<::mlir::Value> newArguments;
     if (failed(convertToBuffers(envOp.getArgs(), newArguments, rewriter,
