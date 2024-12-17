@@ -120,8 +120,8 @@ struct CoalesceShardOpsPass
   /// The actual back propagation of target parts
   /// if meeting a supported op, recursively gets defining ops and back
   /// propagates as it follows only supported ops, all other ops act as
-  /// propagation barriers (e.g. InsertSliceOps) on the way it updates target
-  /// info on SubviewOps and marks shardOps for elimination
+  /// propagation barriers (e.g. InsertSliceOps) on the way it
+  /// updates target info on SubviewOps
   bool backPropagateShardSizes(::mlir::IRRewriter &builder,
                                ::mlir::Operation *op,
                                const ::mlir::mesh::MeshSharding &sharding,
@@ -173,8 +173,9 @@ struct CoalesceShardOpsPass
       }
     } else if (auto typedOp =
                    ::mlir::dyn_cast<::imex::ndarray::SubviewOp>(op)) {
-      modified = backPropagateShardSizes(
-          builder, typedOp.getSource().getDefiningOp(), sharding, nOp);
+      modified = true;
+      // backPropagateShardSizes(
+      //     builder, typedOp.getSource().getDefiningOp(), sharding, nOp);
     }
 
     assert(nOp == nullptr);
@@ -221,6 +222,36 @@ struct CoalesceShardOpsPass
     }
     assert(op->hasOneUse());
     return ::mlir::dyn_cast<::mlir::mesh::ShardOp>(op);
+  }
+
+  void backPropagateBaseSharding(const ::mlir::Value &val,
+                                 mlir::Value baseSharding) {
+    auto defOp = val.getDefiningOp();
+
+    if (mlir::isa<ndarray::InsertSliceOp, ndarray::SubviewOp>(defOp)) {
+      return;
+    } else if (auto op = ::mlir::dyn_cast<::mlir::mesh::ShardOp>(defOp)) {
+      // this is the only place where we expect block args
+      if (op.getSrc().getDefiningOp()) {
+        if (op.getAnnotateForUsers()) {
+          op.getShardingMutable().assign(baseSharding);
+        }
+        backPropagateBaseSharding(op.getSrc(), baseSharding);
+      }
+    } else if (auto op = ::mlir::dyn_cast<::mlir::DestinationStyleOpInterface>(
+                   defOp)) {
+      if (op.getNumDpsInits() == 1) {
+        getShardOp(defOp).getShardingMutable().assign(baseSharding);
+        backPropagateBaseSharding(op.getDpsInits()[0], baseSharding);
+      }
+    }
+    //  else if (auto op = ::mlir::dyn_cast<::mlir::UnrealizedConversionCastOp>(
+    //                defOp)) {
+    //   if (op.getInputs().size() == 1) {
+    //     backPropagateBaseSharding(op.getInputs().front(), baseSharding);
+    //   }
+    // }
+    return;
   }
 
   template <typename T>
@@ -351,7 +382,6 @@ struct CoalesceShardOpsPass
     std::unordered_map<::mlir::Operation *,
                        ::mlir::SmallVector<::mlir::Operation *>>
         opsGroups;
-    std::unordered_map<::mlir::Operation *, ::mlir::Operation *> baseIPts;
 
     auto wRes = root->walk([&](::mlir::Operation *op) -> mlir::WalkResult {
       ::mlir::Value val;
@@ -366,22 +396,21 @@ struct CoalesceShardOpsPass
         if (!base) {
           return mlir::WalkResult::interrupt();
         }
-        auto shardOp = getShardOp(base);
-        if (!shardOp) {
+        auto baseShardOp = getShardOp(base);
+        if (!baseShardOp) {
           return mlir::WalkResult::interrupt();
         }
-        baseIPts.emplace(base, shardOp);
         opsGroups[base].emplace_back(op);
 
         // for InsertSliceOps compute and propagate target parts
         if (auto typedOp =
                 ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(op)) {
-          builder.setInsertionPointAfter(baseIPts[base]);
-          auto srcop =
+          builder.setInsertionPointAfter(baseShardOp);
+          auto srcShardOp =
               typedOp.getSource().getDefiningOp<::mlir::mesh::ShardOp>();
-          assert(srcop && "InsertSliceOp must have a ShardOp as source");
-          assert(srcop.getAnnotateForUsers());
-          backPropagateShardSizes(builder, srcop);
+          assert(srcShardOp && "InsertSliceOp must have a ShardOp as source");
+          assert(srcShardOp.getAnnotateForUsers());
+          backPropagateShardSizes(builder, srcShardOp);
         }
       }
       return mlir::WalkResult::advance();
@@ -461,7 +490,13 @@ struct CoalesceShardOpsPass
       }
       auto orgSharding =
           shardOp.getSharding().getDefiningOp<::mlir::mesh::ShardingOp>();
-      builder.setInsertionPointAfter(shardOp);
+      bool mutateBaseSharding = shardOp.getSrc().getDefiningOp();
+      if (mutateBaseSharding) {
+        builder.setInsertionPoint(shardOp);
+      } else {
+        builder.setInsertionPointAfter(shardOp);
+      }
+      builder.setInsertionPoint(shardOp);
       auto newSharding = builder.create<::mlir::mesh::ShardingOp>(
           shardOp->getLoc(),
           ::mlir::mesh::ShardingType::get(shardOp->getContext()),
@@ -474,16 +509,26 @@ struct CoalesceShardOpsPass
               ::mlir::SmallVector<int64_t>(haloVals.size(),
                                            ::mlir::ShapedType::kDynamic)),
           haloVals);
-      auto newShardOp = builder.create<::mlir::mesh::ShardOp>(
-          shardOp->getLoc(), shardOp, newSharding.getResult());
+
+      auto newShardOp = shardOp;
+      if (mutateBaseSharding) {
+        // FIXME: what about a second visit of the same base with different
+        // sharding
+        newShardOp.getShardingMutable().assign(newSharding.getResult());
+      } else { // block arg
+        newShardOp = builder.create<::mlir::mesh::ShardOp>(
+            shardOp->getLoc(), shardOp, newSharding.getResult());
+      }
 
       // update shardOps of dependent Subview/InsertSliceOps
       for (auto svShardOp : shardOps) {
-        assert(svShardOp->hasOneUse());
-        if (mlir::isa<::imex::ndarray::SubviewOp>(*svShardOp->user_begin())) {
-          svShardOp.getSrcMutable().assign(newShardOp.getResult());
-        }
-        svShardOp.getShardingMutable().assign(newSharding);
+        backPropagateBaseSharding(svShardOp, newSharding.getResult());
+        // svShardOp.getShardingMutable().assign(newSharding);
+        // assert(svShardOp->hasOneUse());
+        // if (mlir::isa<::imex::ndarray::SubviewOp>(*svShardOp->user_begin()))
+        // {
+        //   svShardOp.getSrcMutable().assign(newShardOp.getResult());
+        // }
       }
       // barriers/halo-updates get inserted when InsertSliceOps (or other write
       // ops) get spmdized

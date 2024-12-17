@@ -122,29 +122,59 @@ struct InsertSliceOpInterface
     Location loc = insertSliceOp.getLoc();
 
     // Get destination buffer.
-    FailureOr<Value> dstMemref =
+    auto dstMemref =
         getBuffer(rewriter, insertSliceOp.getDestination(), options);
     if (failed(dstMemref))
       return failure();
-
-    // Take a subview of the destination buffer.
-    auto dstMemrefType = cast<MemRefType>(dstMemref->getType());
-    auto subviewMemRefType =
-        cast<MemRefType>(memref::SubViewOp::inferRankReducedResultType(
-            insertSliceOp.getSourceType().getShape(), dstMemrefType,
-            mixedOffsets, mixedSizes, mixedStrides));
-    Value subView = rewriter.create<memref::SubViewOp>(
-        loc, subviewMemRefType, *dstMemref, mixedOffsets, mixedSizes,
-        mixedStrides);
-
-    // Copy tensor. If this tensor.insert_slice has a matching
-    // tensor.extract_slice, the copy operation will eventually fold away.
-    FailureOr<Value> srcMemref =
-        getBuffer(rewriter, insertSliceOp.getSource(), options);
+    auto srcMemref = getBuffer(rewriter, insertSliceOp.getSource(), options);
     if (failed(srcMemref))
       return failure();
-    if (failed(options.createMemCpy(rewriter, loc, *srcMemref, subView)))
-      return failure();
+    auto srcRank = mlir::cast<mlir::ShapedType>(srcMemref->getType()).getRank();
+
+    if (srcRank == 0) {
+      //  || llvm::all_of(insertSliceOp.getSourceType().getShape(), [](auto dim)
+      //  {
+      //     return dim == 1;
+      //   })) {
+      // If the source tensor is basically a scalar, we need to copy the scalar
+      // value using a linalg.generic into the view of the destination buffer.
+      auto subView = rewriter.create<memref::SubViewOp>(
+          loc, *dstMemref, mixedOffsets, mixedSizes, mixedStrides);
+      // emit a loop that broadcasts a scalar to dst shape
+      // construct broadcasting affine map; srcRank==0 case is simple
+      auto dstRank =
+          mlir::cast<mlir::ShapedType>(dstMemref->getType()).getRank();
+      auto srcMap =
+          ::mlir::AffineMap::get(dstRank, srcRank, {}, rewriter.getContext());
+      auto dstMap = rewriter.getMultiDimIdentityMap(dstRank);
+      // Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      // auto scalar = rewriter.create<mlir::memref::LoadOp>(loc, srcMemref,
+      // mlir::SmallVector<Value>(srcRank, zero));
+      ::mlir::SmallVector<mlir::utils::IteratorType> iterators(
+          dstRank, ::mlir::utils::IteratorType::parallel);
+      (void)rewriter.create<::mlir::linalg::GenericOp>(
+          loc, srcMemref.value(), subView.getResult(),
+          ::mlir::ArrayRef({srcMap, dstMap}), iterators,
+          [](::mlir::OpBuilder &b, ::mlir::Location loc,
+             ::mlir::ValueRange args) {
+            b.create<::mlir::linalg::YieldOp>(loc, args.front());
+          });
+    } else {
+      // Take a subview of the destination buffer.
+      auto dstMemrefType = cast<MemRefType>(dstMemref->getType());
+      auto subviewMemRefType =
+          cast<MemRefType>(memref::SubViewOp::inferRankReducedResultType(
+              insertSliceOp.getSourceType().getShape(), dstMemrefType,
+              mixedOffsets, mixedSizes, mixedStrides));
+      Value subView = rewriter.create<memref::SubViewOp>(
+          loc, subviewMemRefType, *dstMemref, mixedOffsets, mixedSizes,
+          mixedStrides);
+
+      // Copy tensor. If this tensor.insert_slice has a matching
+      // tensor.extract_slice, the copy operation will eventually fold away.
+      if (failed(options.createMemCpy(rewriter, loc, *srcMemref, subView)))
+        return failure();
+    }
 
     replaceOpWithBufferizedValues(rewriter, op, *dstMemref);
     return success();
