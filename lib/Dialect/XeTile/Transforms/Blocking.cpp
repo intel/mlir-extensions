@@ -702,8 +702,9 @@ public:
     auto convertedTiles = addPackOp(tile, convertedTileTypes,
                                     blockSize.asArrayRef(), loc, rewriter);
 
-    for (auto [t, ty] : llvm::zip_equal(convertedTiles, convertedTileTypes)) {
-      rewriter.create<xetile::PrefetchTileOp>(loc, ty, t, op->getAttrs());
+    for (auto t : convertedTiles) {
+      rewriter.create<xetile::PrefetchTileOp>(loc, mlir::TypeRange(), t,
+                                              op->getAttrs());
     }
 
     rewriter.eraseOp(op);
