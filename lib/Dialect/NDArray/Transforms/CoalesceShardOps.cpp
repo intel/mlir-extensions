@@ -245,12 +245,6 @@ struct CoalesceShardOpsPass
         backPropagateBaseSharding(op.getDpsInits()[0], baseSharding);
       }
     }
-    //  else if (auto op = ::mlir::dyn_cast<::mlir::UnrealizedConversionCastOp>(
-    //                defOp)) {
-    //   if (op.getInputs().size() == 1) {
-    //     backPropagateBaseSharding(op.getInputs().front(), baseSharding);
-    //   }
-    // }
     return;
   }
 
@@ -317,32 +311,35 @@ struct CoalesceShardOpsPass
       auto stride = easyI64(loc, rewriter, staticStrides[tensorDim]);
       auto sz = staticTargetOffsets[++curr]; // ++curr to skip the first offset
       auto targetEnd =
-          targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+          targetOff + zero.max(stride * easyI64(loc, rewriter, sz - 1) + one);
 
       // FIXME what about staticSizes?
       for (auto i = 0; i < num; ++i, ++curr) {
+        auto targetSz = easyI64(loc, rewriter, sz);
         if (sz != 0) {
-          auto targetSz = easyI64(loc, rewriter, sz);
           haloSizes[dim * 2] = targetSz.sgt(zero).select(
               haloSizes[dim * 2].max(zero.max(baseOff - targetOff)),
               haloSizes[dim * 2]);
           haloSizes[dim * 2 + 1] = targetSz.sgt(zero).select(
               haloSizes[dim * 2 + 1].max(zero.max(targetEnd - baseEnd)),
               haloSizes[dim * 2 + 1]);
-          if (i + 1 < num) {
-            sz = staticTargetOffsets[curr + 1] - staticTargetOffsets[curr];
-            targetOff = targetOff + stride * targetSz;
-            targetEnd =
-                targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
-          }
         }
-        if (i + 1 < num) {
-          baseOff = baseEnd;
-          baseEnd =
-              baseOff +
-              easyI64(loc, rewriter,
-                      getBaseShardDimSize(i + 1, num, baseShape[tensorDim]));
+        if (i + 1 >= num) {
+          break;
         }
+        if (sz != 0) {
+          targetOff = targetOff + stride * targetSz;
+        }
+        sz = staticTargetOffsets[curr + 1] - staticTargetOffsets[curr];
+        if (sz != 0) {
+          targetEnd = targetOff + stride * easyI64(loc, rewriter, sz - 1) + one;
+        } else {
+          targetEnd = targetOff;
+        }
+        baseOff = baseEnd;
+        baseEnd = baseOff + easyI64(loc, rewriter,
+                                    getBaseShardDimSize(i + 1, num,
+                                                        baseShape[tensorDim]));
       }
     }
 
@@ -496,7 +493,7 @@ struct CoalesceShardOpsPass
       } else {
         builder.setInsertionPointAfter(shardOp);
       }
-      builder.setInsertionPoint(shardOp);
+
       auto newSharding = builder.create<::mlir::mesh::ShardingOp>(
           shardOp->getLoc(),
           ::mlir::mesh::ShardingType::get(shardOp->getContext()),
@@ -525,10 +522,10 @@ struct CoalesceShardOpsPass
         backPropagateBaseSharding(svShardOp, newSharding.getResult());
         // svShardOp.getShardingMutable().assign(newSharding);
         // assert(svShardOp->hasOneUse());
-        // if (mlir::isa<::imex::ndarray::SubviewOp>(*svShardOp->user_begin()))
-        // {
-        //   svShardOp.getSrcMutable().assign(newShardOp.getResult());
-        // }
+        if (auto typedOp = mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(
+                *svShardOp->user_begin())) {
+          getShardOp(typedOp).getShardingMutable().assign(newSharding);
+        }
       }
       // barriers/halo-updates get inserted when InsertSliceOps (or other write
       // ops) get spmdized

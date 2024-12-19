@@ -198,11 +198,11 @@ static std::array<Value, 2> getShardSliceOffAndSz(
     const SmallVector<OpFoldResult> &haloSizes, const EasyI64 &zero,
     const EasyI64 &one, OpBuilder &builder, Location loc) {
   assert(splitAxes[dim].size() == 1);
-  int64_t currPos = 0, shardedDim = 0;
+  int64_t currPos = 0, haloDim = 0;
   for (auto i = 0; i < dim; ++i) {
     if (!splitAxes[i].empty()) {
       currPos += meshShape[splitAxes[i][0]] + 1;
-      ++shardedDim;
+      ++haloDim;
     }
   }
 
@@ -210,17 +210,18 @@ static std::array<Value, 2> getShardSliceOffAndSz(
   auto meshAxis = splitAxes[dim][0];
   auto numShards = easyI64(loc, builder, meshShape[meshAxis]);
   auto myID = easyI64(loc, builder, myIdx[meshAxis]);
-  Value myOff, mySize;
+  auto myOff_ = getBaseShardDimOff(myID, numShards, extend, zero);
+
+  Value resOff, resSize;
   if (targetOffs) {
-    std::tie(myOff, mySize) =
+    std::tie(resOff, resSize) =
         getOffsetAndSize(myID, zero, one, targetOffs, currPos, builder, loc);
   } else {
-    auto myOff_ = getBaseShardDimOff(myID, numShards, extend, zero);
-    auto mySize_ = getBaseShardDimSize(myID, numShards, extend, one, zero);
     auto slcSz = easyI64(loc, builder, slcSizes[dim]);
-    mySize_ = zero.max(slcSz - myOff_).min(mySize_);
-    myOff = myOff_.get();
-    mySize = mySize_.get();
+    resSize = getBaseShardDimSize(myID, numShards, slcSz, one, zero).get();
+    resOff = getBaseShardDimOff(myID, numShards, slcSz, zero).get();
+    // resSize = zero.max(slcSz - myOff_).min(mySize_).get();
+    // resOff = myOff_.get();
   }
 
   // the global offset of the local shard is slice offset plus the computed
@@ -228,12 +229,11 @@ static std::array<Value, 2> getShardSliceOffAndSz(
   // slicing, which means we need to multiply it by stride
   auto targetOff =
       easyI64(loc, builder, slcOffs[dim]) +
-      easyI64(loc, builder, myOff) * easyI64(loc, builder, slcStrides[dim]);
-  auto shardOff = getBaseShardDimOff(myID, numShards, extend, zero) -
-                  easyI64(loc, builder, haloSizes[shardedDim * 2]);
+      easyI64(loc, builder, resOff) * easyI64(loc, builder, slcStrides[dim]);
+  auto myShardOff = myOff_ - easyI64(loc, builder, haloSizes[haloDim * 2]);
 
-  return {createIndexCast(loc, builder, (targetOff - shardOff).get()),
-          createIndexCast(loc, builder, mySize)};
+  return {createIndexCast(loc, builder, (targetOff - myShardOff).get()),
+          createIndexCast(loc, builder, resSize)};
 }
 
 // ***************************************************************************
