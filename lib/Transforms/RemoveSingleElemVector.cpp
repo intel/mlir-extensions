@@ -253,7 +253,9 @@ struct RemoveSingleElemVectorPass final
         });
 
     mlir::RewritePatternSet patterns(context);
-    patterns.add<VectorExtractStridedSliceConversion, VectorizableOpPattern,
+    // Disable ectorExtractStridedSliceConversion for now as it interferes with
+    // xetile-blockop-fallback pass
+    patterns.add</*VectorExtractStridedSliceConversion,*/ VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
                  VectorSplatOpConversion, VectorExtractElementOpConversion>(
         typeConverter, context);
