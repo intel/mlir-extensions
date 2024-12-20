@@ -40,6 +40,7 @@ std::unique_ptr<mlir::Pass>
 createXeTileBlockingPass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
 std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
+std::unique_ptr<mlir::Pass> createXeTileBlockOpFallbackPass();
 
 #define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DECL_XETILECANONICALIZATION

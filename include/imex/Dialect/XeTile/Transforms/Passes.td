@@ -96,4 +96,21 @@ def XeTileBlocking : Pass<"xetile-blocking", "::mlir::gpu::GPUModuleOp">{
 }
 
 
+def XeTileBlockOpFallback : Pass<"xetile-blockop-fallback", "::mlir::gpu::GPUModuleOp">{
+  let summary = "Transform unsuitable block ops to fallback scattered ops";
+
+  let description = [{
+    This transform pass transforms XeTile block ops that are not suitable due to HW restrictions,
+    to scattered XeTile ops.
+  }];
+
+  let constructor = "imex::createXeTileBlockOpFallbackPass()";
+  let dependentDialects = ["imex::xetile::XeTileDialect",
+                           "mlir::arith::ArithDialect",
+                           "mlir::gpu::GPUDialect",
+                           "mlir::index::IndexDialect",
+                           "mlir::memref::MemRefDialect",
+                           "mlir::vector::VectorDialect"];
+}
+
 #endif // _XeTile_PASSES_TD_INCLUDED_
