@@ -61,7 +61,9 @@ module {
       %34 = arith.remsi %11, %c4 : index
       %35 = scf.for %arg3 = %c0 to %c3 step %c1 iter_args(%arg4 = %cst) -> (vector<8x1xf32>) {
         %39 = vector.shape_cast %arg4 : vector<8x1xf32> to vector<8xf32>
-        //CHECK-COUNT-8: vector.extractelement {{.*}} : vector<8xf32>
+        // Disabling remove single elem vector.extra_stride_slice for now.
+        // DISABLE-CHECK-COUNT-8: vector.extractelement {{.*}} : vector<8xf32>
+        // CHECK-COUNT-8: vector.extract_strided_slice
         %40 = vector.extract_strided_slice %39 {offsets = [0], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
         %41 = vector.extract_strided_slice %39 {offsets = [1], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
         %42 = vector.extract_strided_slice %39 {offsets = [2], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
