@@ -15,6 +15,7 @@
 #ifndef VC_UTILS_H
 #define VC_UTILS_H
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -64,6 +65,11 @@ using namespace mlir;
 #define dense_vector_val(attr, vecTy)                                          \
   rewriter.create<arith::ConstantOp>(loc, DenseElementsAttr::get(vecTy, attr))
 
+#define divi(a, b) rewriter.createOrFold<arith::DivSIOp>(loc, a, b)
+#define muli(a, b) rewriter.createOrFold<arith::MulIOp>(loc, a, b)
+#define addi(a, b) rewriter.createOrFold<arith::AddIOp>(loc, a, b)
+#define subi(a, b) rewriter.createOrFold<arith::SubIOp>(loc, a, b)
+
 /// This function adds necessary Func Declaration for Imported VC-intrinsics
 /// functions and sets linkage attributes to those declaration
 /// to support SPIRV compilation
@@ -78,4 +84,10 @@ func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
                             StringRef funcName, TypeRange resultType,
                             ValueRange operands, bool emitCInterface);
 
+Value getOffsetInUnitOfBytes(PatternRewriter &rewriter, Location loc,
+                             Type addrTy, Value offset, unsigned eTyBitWidth);
+
+Value getVecOffsetInUnitOfBytes(PatternRewriter &rewriter, Location loc,
+                                unsigned vecSize, Type addrTy, Value offset,
+                                unsigned eTyBitWidth);
 #endif // XEGPU_VC_UTILS_H

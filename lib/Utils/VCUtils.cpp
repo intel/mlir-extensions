@@ -77,3 +77,30 @@ func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
       true /*isVectorComputeFunctionINTEL=true*/, emitCInterface);
   return rewriter.create<func::CallOp>(loc, fn, resultType, operands);
 }
+
+Value getOffsetInUnitOfBytes(PatternRewriter &rewriter, Location loc,
+                             Type addrTy, Value offset, unsigned eTyBitWidth) {
+  if (eTyBitWidth >= 8) {
+    unsigned eTyBytes = eTyBitWidth / 8;
+    Value factor = integer_val(eTyBytes, addrTy);
+    return muli(offset, factor);
+  } else {
+    Value eight = integer_val(8, addrTy);
+    Value bw = integer_val(eTyBitWidth, addrTy);
+    return divi(muli(offset, bw), eight);
+  }
+}
+
+Value getVecOffsetInUnitOfBytes(PatternRewriter &rewriter, Location loc,
+                                unsigned vecSize, Type addrTy, Value offset,
+                                unsigned eTyBitWidth) {
+  if (eTyBitWidth >= 8) {
+    unsigned eTyBytes = eTyBitWidth / 8;
+    Value factor = dense_vector_int_val(eTyBytes, addrTy, vecSize);
+    return muli(offset, factor);
+  } else {
+    Value eight = dense_vector_int_val(8, addrTy, vecSize);
+    Value bw = dense_vector_int_val(eTyBitWidth, addrTy, vecSize);
+    return divi(muli(offset, bw), eight);
+  }
+}

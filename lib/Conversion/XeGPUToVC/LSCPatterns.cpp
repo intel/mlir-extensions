@@ -727,9 +727,8 @@ auto getElemBitWidth = [](TensorDescType tdescTy) -> unsigned {
 };
 
 auto isLowPrecision = [](TensorDescType tdescTy) -> bool {
-  // Note: Handling for sub 8bit types is unclear so report as false
   auto width = getElemBitWidth(tdescTy);
-  return width < 32 && width >= 8;
+  return width < 32 && width >= 4;
 };
 
 auto getScaled1DTdesc =

@@ -97,10 +97,6 @@ static Value castValueTo(Value val, Type toType, Location loc,
   return val;
 }
 
-#define muli(a, b) rewriter.createOrFold<arith::MulIOp>(loc, a, b)
-#define addi(a, b) rewriter.createOrFold<arith::AddIOp>(loc, a, b)
-#define subi(a, b) rewriter.createOrFold<arith::SubIOp>(loc, a, b)
-
 // Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a
 // 2d memory region with respect to the two inner-most dimensions. Other
 // outer dimensions affect the base address of the 2d plane. For 2d, we
@@ -135,8 +131,10 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
   // size
   auto effectiveRank = strides.size();
   int64_t ranksToAdjust = effectiveRank;
-  auto bytesPerElem =
-      op.getTensorDesc().getType().getElementType().getIntOrFloatBitWidth() / 8;
+  auto eTyBitWidth =
+      op.getTensorDesc().getType().getElementType().getIntOrFloatBitWidth();
+  auto bytesPerElem = eTyBitWidth / 8;
+  Value eTyBitWidthVal = index_val(eTyBitWidth);
   Value bytesPerElemVal = index_val(bytesPerElem);
 
   // We only need combine ranks that are larger than tileRank (e.g., if we the
@@ -147,8 +145,12 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
 
   auto computeBase = [&](Value base) {
     for (auto i = 0; i < ranksToAdjust; i++) {
-      auto factor = muli(strides[i], bytesPerElemVal);
+      Value factor;
       Value offsetVal;
+      if (eTyBitWidth < 8)
+        factor = muli(strides[i], eTyBitWidthVal);
+      else
+        factor = muli(strides[i], bytesPerElemVal);
       if (offsets[i].is<Value>()) {
         offsetVal = offsets[i].get<Value>();
       } else {
@@ -156,6 +158,8 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
             llvm::cast<IntegerAttr>(offsets[i].get<Attribute>()).getInt());
       }
       auto linearOffset = muli(offsetVal, factor);
+      if (eTyBitWidth < 8)
+        linearOffset = divi(linearOffset, index_val(8));
       base = addi(base, linearOffset);
     }
 
@@ -176,7 +180,7 @@ public:
     auto tdescTy = op.getType();
     auto scope = tdescTy.getMemorySpace();
     auto rank = tdescTy.getRank();
-    auto elemBytes = tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
+    auto eTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
     // SLM has to use 32-bit address, while ugm needs to use 64-bit address.
     auto addrTy =
@@ -209,12 +213,13 @@ public:
       auto payloadTy = VectorType::get(simd_lanes, addrTy);
 
       // adjust base address to get absolute offset in unit of bytes.
-      // the computation is simply: base + linearOffset * elemBytes
+      // the computation is simply: base + linearOffset (in bytes)
       Value offset =
           getValueOrConstantOp(op.getMixedOffsets().back(), loc, rewriter);
       offset = castValueTo(offset, addrTy, loc, rewriter);
-      Value factor = integer_val(elemBytes, addrTy);
-      auto payload = addi(base, muli(offset, factor));
+      Value numOffsetBytes =
+          getOffsetInUnitOfBytes(rewriter, loc, addrTy, offset, eTyBitWidth);
+      auto payload = addi(base, numOffsetBytes);
 
       // convert the payload into vector type
       payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, payload);
@@ -251,12 +256,15 @@ public:
         if (v) {
           auto value = ofr.get<Value>();
           value = rewriter.create<arith::IndexCastUIOp>(loc, i32Ty, value);
-          if (mul > 1)
-            value = rewriter.create<arith::MulIOp>(loc, value, i32_val(mul));
+          if (mul > 8)
+            value =
+                rewriter.create<arith::MulIOp>(loc, value, i32_val(mul / 8));
+          else if (mul >= 4)
+            value = getOffsetInUnitOfBytes(rewriter, loc, i32Ty, value, mul);
           return (!minus) ? value : subi(value, i32_val(minus));
         } else {
           int value = cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
-          return i32_val(value * mul - minus);
+          return i32_val(((value * mul) / 8) - minus);
         }
       };
 
@@ -267,8 +275,9 @@ public:
       // is in rows.
       auto matrixShape = op.getMixedSizes();
       auto size = matrixShape.size();
-      auto surfaceW = encodeShapeAndOffset(matrixShape[size - 1], elemBytes, 1);
-      auto surfaceH = encodeShapeAndOffset(matrixShape[size - 2], 1, 1);
+      auto surfaceW =
+          encodeShapeAndOffset(matrixShape[size - 1], eTyBitWidth, 1);
+      auto surfaceH = encodeShapeAndOffset(matrixShape[size - 2], 8, 1);
 
       // encode the pitch, which is in bytes minus 1
       auto matrixStrides = op.getMixedStrides();
@@ -279,7 +288,7 @@ public:
       assert(isOneOrUnknow(matrixStrides[size - 1]) &&
              "Fast Changing Dimension can only have stride of 1.");
       auto surfaceP =
-          encodeShapeAndOffset(matrixStrides[size - 2], elemBytes, 1);
+          encodeShapeAndOffset(matrixStrides[size - 2], eTyBitWidth, 1);
 
       payload = rewriter.create<vector::InsertOp>(loc, surfaceW, payload, 2);
       payload = rewriter.create<vector::InsertOp>(loc, surfaceH, payload, 3);
@@ -287,8 +296,8 @@ public:
 
       // encode the offset, they are in elements
       auto offsets = op.getMixedOffsets();
-      auto offsetX = encodeShapeAndOffset(offsets[size - 1], 1, 0);
-      auto offsetY = encodeShapeAndOffset(offsets[size - 2], 1, 0);
+      auto offsetX = encodeShapeAndOffset(offsets[size - 1], 8, 0);
+      auto offsetY = encodeShapeAndOffset(offsets[size - 2], 8, 0);
       payload = rewriter.create<vector::InsertOp>(loc, offsetX, payload, 5);
       payload = rewriter.create<vector::InsertOp>(loc, offsetY, payload, 6);
 
@@ -337,11 +346,11 @@ public:
       }
 
       // update offset from unit of elements to unit of bytes
-      auto elemBytes = tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
-      auto factor = integer_val(elemBytes, addrTy);
       auto offset = getValueOrConstantOp(offsets.back(), loc, rewriter);
       offset = castValueTo(offset, addrTy, loc, rewriter);
-      offset = muli(offset, factor);
+      auto eTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
+      offset =
+          getOffsetInUnitOfBytes(rewriter, loc, addrTy, offset, eTyBitWidth);
 
       // convert offset to vector type and update the payload
       const int simd_lanes = 1;
@@ -409,10 +418,10 @@ public:
     auto payloadTy = vecTy(simd_lanes, addrTy);
 
     // offset is represented in number of elements, need to scale it to bytes
-    auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
-    auto factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
+    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
     Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = muli(factor, offsets);
+    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
+                                        offsets, eTyBitWidth);
 
     // create a payload with the base address broadcasted to all simd lanes
     Value payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, base);
@@ -444,10 +453,10 @@ public:
     auto simd_lanes = tdescTy.getShape()[0];
     auto payloadTy = VectorType::get(simd_lanes, addrTy);
 
-    auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
-    Value factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
+    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
     Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = muli(factor, offsets);
+    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
+                                        offsets, eTyBitWidth);
 
     auto payload = addi(adaptor.getTensorDesc(), offsets);
     rewriter.replaceOp(op, payload);
