@@ -4,8 +4,9 @@ builtin.module(
         cse
         xetile-init-duplicate
         xetile-canonicalization
+        xetile-blockop-fallback
         xetile-blocking
-        canonicalize
+        cse
         convert-xetile-to-xegpu
         cse
         imex-xegpu-hoist-transpose
@@ -13,6 +14,9 @@ builtin.module(
         imex-xegpu-optimize-transpose)
     cse
     imex-vector-linearize
+    cse
+    imex-remove-single-elem-vector
+    cse
     gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
     bf16-to-gpu

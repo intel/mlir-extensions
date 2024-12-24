@@ -30,7 +30,7 @@ gpu.module @test_wg_to_sg_4k {
         //CHECK: %[[R4:.*]] = gpu.subgroup_id : index
         //CHECK: %[[c4:.*]] = arith.constant 4 : index
         //CHECK: %[[c64:.*]] = arith.constant 64 : index
-        //CHECK: %[[R5:.*]] = index.floordivs %[[R4]], %[[c4]]
+        //CHECK: %[[R5:.*]] = index.divu %[[R4]], %[[c4]]
         //CHECK: %[[R6:.*]] = index.remu %[[R4]], %[[c4]]
         //CHECK: %[[R7:.*]] = index.add %[[R5]], %[[c0]]
         //CHECK: %[[R8:.*]] = index.remu %[[R7]], %[[c4]]
