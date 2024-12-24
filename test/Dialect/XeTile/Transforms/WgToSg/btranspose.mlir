@@ -57,7 +57,7 @@ gpu.module @test_gemm_btranspose{
       %10 = arith.addi %8, %9 : index
       %11 = xetile.init_tile %arg0[%10, %c0] : memref<16384x12288xf16> -> !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [32, 32]>, memory_space = 0 : i32>>
 
-      //CHECK: %[[R7:.*]] = index.floordivs %[[R6]], %[[c8]]
+      //CHECK: %[[R7:.*]] = index.divu %[[R6]], %[[c8]]
       //CHECK: %[[R8:.*]] = index.remu %[[R6]], %[[c8]]
       //CHECK: %[[R9:.*]] = index.add %[[R8]], %[[c0]]
       //CHECK: %[[R10:.*]] = index.remu %[[R9]], %[[c4]]
