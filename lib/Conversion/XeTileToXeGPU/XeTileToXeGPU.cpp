@@ -456,6 +456,42 @@ public:
   }
 };
 
+// TODO: this is a temporary solution to support memref::ViewOp.
+// Since the upstream doesn't have lowering pattern for converting
+// memref::ViewOp to SPIRV, so here we convert it with alloc instead.
+// But it requires every alloc just has one view. It should be removed
+// after enable the support in MemrefToSPIRV.
+class MemRefViewOpPattern final
+    : public mlir::OpConversionPattern<mlir::memref::ViewOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::ViewOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ViewOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefTy = op.getType();
+    auto memSpace =
+        mlir::dyn_cast_if_present<mlir::IntegerAttr>(memrefTy.getMemorySpace());
+
+    if (!memrefTy.hasStaticShape() || !memSpace || memSpace.getValue() != 3)
+      return mlir::failure();
+
+    // for simplicity, make sure source is an alloc op, and only has one use,
+    // otherwise skip it, since it is hard to guarantee the correctness.
+    auto src = op.getSource();
+    if (!mlir::isa<mlir::memref::AllocOp>(src.getDefiningOp()) ||
+        !src.hasOneUse())
+      return mlir::failure();
+
+    auto alignmentAttr = rewriter.getI64IntegerAttr(32);
+
+    auto allocOp = rewriter.create<mlir::memref::AllocOp>(op.getLoc(), memrefTy,
+                                                          alignmentAttr);
+
+    rewriter.replaceOp(op, allocOp);
+    return mlir::success();
+  }
+};
+
 class XeTileConversionTarget : public mlir::ConversionTarget {
 public:
   explicit XeTileConversionTarget(mlir::MLIRContext &context,
@@ -486,6 +522,21 @@ public:
         [&](mlir::Operation *op) -> bool {
           return (uArchInterface &&
                   mlir::succeeded(uArchInterface->isLegalPrefetch2dOp(op)));
+        });
+
+    addDynamicallyLegalOp<mlir::memref::ViewOp>(
+        [&](mlir::Operation *op) -> bool {
+          auto viewOp = mlir::dyn_cast<mlir::memref::ViewOp>(op);
+          auto memrefTy = viewOp.getType();
+          auto byteShift = viewOp.getByteShift();
+          auto sizes = viewOp.getSizes();
+          if (sizes.size() > 0 || !mlir::isConstantIntValue(byteShift, 0))
+            return true;
+          auto memSpace = mlir::dyn_cast_if_present<mlir::IntegerAttr>(
+              memrefTy.getMemorySpace());
+          if (!memSpace || memSpace.getValue() != 3)
+            return true;
+          return memrefTy.getRank() != 2;
         });
 
     addIllegalDialect<imex::xetile::XeTileDialect>();
@@ -640,8 +691,8 @@ void populateXeTileToXeGPUConversionPatterns(
   patterns.add<InitOpPattern, UpdateOpPattern, PrefetchOpPattern, LoadOpPattern,
                StoreOpPattern, GatherOpPattern, ScatterOpPattern, MMAOpPattern,
                BroadcastOpPattern, ReduceOpPattern, TransposeOpPattern,
-               SCFForOpPattern, SCFYieldOpPattern>(converter,
-                                                   patterns.getContext());
+               SCFForOpPattern, SCFYieldOpPattern, MemRefViewOpPattern>(
+      converter, patterns.getContext());
 }
 
 /// Create a pass that convert XeTile to XeGPU
