@@ -142,7 +142,7 @@ xetile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
 ```mlir
    %vector_a = xetile.transpose [1, 0] %vector_b: vector<64x32xfloat> into vector<32x64xfloat>
 ```
-`reduction` performs a reduction operation over a 2D vector. The result is a 2D vector with the reduction dimension reduced to 1. It has the same semantics as the vector.multi_dimesnion, but restricts the vector dimension to 2D. The reduce operation are the same as vector.multi_dimension:add/mul/minsi/minui/maxsi/maxui /and/or/xor for integers, and add/mul/minnumf/maxnumf/minimumf /maximumf for floats.
+`reduction` performs a reduction operation over a 2D vector. The result is a 2D vector with the reduction dimension reduced to 1. It has the same semantics as the vector.multi_dimesnion, but restricts the vector dimension to 2D. The reduce operation are the same as what is defined in vector dialects's multi_reduction: add/mul/minsi/minui/maxsi/maxui /and/or/xor for integers, and add/mul/minnumf/maxnumf/minimumf /maximumf for floats.
 ```mlir
    %vector_a = xetile.reduction <add> %vector_b [1]: vector<64x32xfloat> into vector<64x1xfloat>
 ```
