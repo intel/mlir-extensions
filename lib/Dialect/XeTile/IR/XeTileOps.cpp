@@ -17,14 +17,12 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstdint>
@@ -79,8 +77,10 @@ mlir::LogicalResult InitTileOp::verify() {
     if (!tileTy.getScatterAttr())
       return emitOpError("Expecting a scattered TileType.");
 
-    if (tileTy.getShape() != indices.getType().getShape())
-      return emitOpError("Shape mismatch between indices and result tile.");
+    // TODO: temoprary disable it in favor of 4D representation of
+    // blocking pass
+    // if (tileTy.getShape() != indices.getType().getShape())
+    //   return emitOpError("Shape mismatch between indices and result tile.");
 
     return mlir::success();
   }
@@ -248,89 +248,6 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
         {} /* static strides */, indices);
 }
 
-bool verifyInnerBlocksWithVecShape(mlir::DenseI64ArrayAttr &innerBlocks,
-                                   llvm::ArrayRef<int64_t> &vecShape,
-                                   llvm::ArrayRef<int64_t> &tileShape) {
-  if (!(vecShape[2] == innerBlocks[0] && vecShape[3] == innerBlocks[1] &&
-        ((tileShape[0] / innerBlocks[0]) == vecShape[0]) &&
-        ((tileShape[1] / innerBlocks[1]) == vecShape[1])))
-    return false;
-
-  return true;
-}
-
-mlir::LogicalResult LoadTileOp::verify() {
-  auto encoding = getSource().getType().getEncoding();
-  auto tileShape = getSource().getType().getShape();
-  auto vecShape = getResult().getType().getShape();
-
-  // inner_blocks may or maynot be present in this op.
-  auto innerBlocks = mlir::DenseI64ArrayAttr();
-  if (encoding)
-    innerBlocks = mlir::dyn_cast<xetile::XeTileAttr>(encoding).getInnerBlocks();
-
-  // if inner_blocks is not present in the tile_attr, the output of the load
-  // must be 2D and tile shape and vector output shape must match
-  if (innerBlocks == mlir::DenseI64ArrayAttr())
-    if (!vecShape.equals(tileShape))
-      return emitOpError("Output shape must match the tile shape.");
-
-  if (innerBlocks != mlir::DenseI64ArrayAttr() && innerBlocks.size() > 0) {
-    // if inner_blocks is present in the tile_attr, the output of the load
-    // must be 4D
-    if (vecShape.size() != 4)
-      return emitOpError(
-          "output must be a 4D vector if inner_blocks is used in tile_attr.");
-    // and, tile shape, output vector shape must be consistent with inner_blocks
-    if (!verifyInnerBlocksWithVecShape(innerBlocks, vecShape, tileShape))
-      return emitOpError(
-          "shapes of the source tile, output value and inner_blocks must "
-          "satisfy : "
-          "valueShape[0] == tileShape[0]/innerBlocks[0] && valueShape[1] == "
-          "tileShape[1]/innerBlocks[1] && "
-          "valueShape[2] == innerBlocks[0] && valueShape[3] == "
-          "innerBlocks[1].");
-  }
-  return mlir::success();
-}
-
-mlir::LogicalResult StoreTileOp::verify() {
-  auto encoding = getTile().getType().getEncoding();
-  if (!encoding)
-    return mlir::success();
-
-  auto tileAttr = mlir::dyn_cast<xetile::XeTileAttr>(encoding);
-  auto innerBlocks = tileAttr.getInnerBlocks();
-  auto tileShape = getTile().getType().getShape();
-
-  // if inner_blocks is not present in the tile_attr, the stored value
-  // must be 2D
-  if (innerBlocks == mlir::DenseI32ArrayAttr() &&
-      getValue().getType().getShape().size() != 2)
-    return emitOpError(
-        "value must be a 2D vector if inner_blocks is not used in tile_attr.");
-
-  if (innerBlocks != mlir::DenseI32ArrayAttr() && innerBlocks.size() > 0) {
-    auto vecShape = getValue().getType().getShape();
-    // if inner_blocks is present in the tile_attr, the stored value
-    // must be 4D
-    if (vecShape.size() != 4)
-      return emitOpError(
-          "value must be a 4D vector if inner_blocks is used in tile_attr.");
-    // and, tile shape, input vector shape must be consistent with inner_blocks
-    if (!verifyInnerBlocksWithVecShape(innerBlocks, vecShape, tileShape))
-      return emitOpError(
-          "shapes of the destination tile, value and inner_blocks must "
-          "satisfy : "
-          "valueShape[0] == tileShape[0]/innerBlocks[0] && valueShape[1] == "
-          "tileShape[1]/innerBlocks[1] && "
-          "valueShape[2] == innerBlocks[0] && valueShape[3] == "
-          "innerBlocks[1].");
-  }
-
-  return mlir::success();
-}
-
 mlir::LogicalResult TileMMAOp::verify() {
   int64_t aRank = getAType().getRank();
   int64_t bRank = getBType().getRank();
@@ -356,27 +273,14 @@ mlir::LogicalResult TileMMAOp::verify() {
        outElemType))
     return emitOpError("C and output vector must have the same type.");
 
-  auto check4DMmaShapes = [](llvm::ArrayRef<int64_t> &A,
-                             llvm::ArrayRef<int64_t> &B,
-                             llvm::ArrayRef<int64_t> &Out) -> bool {
-    return A[1] == B[0] && A[3] == B[2] && Out[0] == A[0] && Out[1] == B[1] &&
-           Out[2] == A[2] && Out[3] == B[3];
-  };
-
-  auto check2DMmaShapes = [](llvm::ArrayRef<int64_t> &A,
-                             llvm::ArrayRef<int64_t> &B,
-                             llvm::ArrayRef<int64_t> &Out) -> bool {
+  auto checkMmaShapes = [](llvm::ArrayRef<int64_t> &A,
+                           llvm::ArrayRef<int64_t> &B,
+                           llvm::ArrayRef<int64_t> &Out) -> bool {
     return A[1] == B[0] && Out[0] == A[0] && Out[1] == B[1];
   };
 
-  // check mma shapes for 4D case
-  if (aRank == 4 && !check4DMmaShapes(aShape, bShape, outShape))
-    return emitOpError("incompatible A, B and output sizes for 4D tile mma op. "
-                       "4D tile mma should have the shape (m x k x Bm x Bk) x "
-                       "(k x n x Bk x Bn) = (m x n x Bm x Bn).");
-
-  // check mma shape for 2D case
-  if (aRank == 2 && !check2DMmaShapes(aShape, bShape, outShape))
+  // check mma shape
+  if (aRank == 2 && !checkMmaShapes(aShape, bShape, outShape))
     return emitOpError(
         "incompatible A, B and output sizes for 2D tile mma op. "
         "2D tile mma should have the shape (m x k) x (k x n) = (m x n).");
@@ -387,96 +291,6 @@ mlir::LogicalResult TileMMAOp::verify() {
     return emitOpError("input C must have the same shape as output.");
 
   return mlir::success();
-}
-
-mlir::LogicalResult TilePackOp::verify() {
-  auto inVecShape = getInVec().getType().getShape();
-  auto outVecShape = getOutVec().getType().getShape();
-  auto innerBlocks = getInnerBlocks();
-  auto inElemTy = getInVec().getType().getElementType();
-  auto outElemTy = getOutVec().getType().getElementType();
-
-  // input and output vector element types must match
-  if (inElemTy != outElemTy)
-    return emitOpError("input and output vector element type mismatch.");
-
-  // innermost 2 dimensions of the output vector must satisfy:
-  //    outVecShape[2] == innerBlocks[0]
-  //    outVecShape[3] == innerBlocks[1]
-  if (!(outVecShape[2] == innerBlocks[0] && outVecShape[3] == innerBlocks[1]))
-    return emitOpError(
-        "innermost 2 dimensions of output vector must satisfy : "
-        "outVecShape[2] == innerBlocks[0] && outVecShape[3] == innerBlocks[1]");
-
-  // outermost 2 dimensions of the output vector must satisfy:
-  //    outVecShape[0] == inVecShape[0]/innerBlocks[0]
-  //    outVecShape[1] == inVecShape[1]/innerBlocks[1]
-  if (!(outVecShape[0] == inVecShape[0] / innerBlocks[0] &&
-        outVecShape[1] == inVecShape[1] / innerBlocks[1]))
-    return emitOpError(
-        "outermost 2 dimensions of the output vector must satisfy : "
-        "outVecShape[0] == inVecShape[0]/innerBlocks[0] && "
-        "outVecShape[1] == inVecShape[1]/innerBlocks[1]");
-
-  return mlir::success();
-}
-
-mlir::OpFoldResult TilePackOp::fold(FoldAdaptor /*adaptor*/) {
-  mlir::Value in = this->getInVec();
-  if (auto unpack = in.getDefiningOp<TileUnpackOp>()) {
-    mlir::Value src = unpack.getInVec();
-    if (src.getType() != this->getType() ||
-        unpack.getInnerBlocks() != this->getInnerBlocks())
-      return nullptr;
-
-    return src;
-  }
-  return nullptr;
-}
-
-mlir::LogicalResult TileUnpackOp::verify() {
-  auto inVecShape = getInVec().getType().getShape();
-  auto outVecShape = getOutVec().getType().getShape();
-  auto innerBlocks = getInnerBlocks();
-  auto inElemTy = getInVec().getType().getElementType();
-  auto outElemTy = getOutVec().getType().getElementType();
-
-  // input and output vector element types must match
-  if (inElemTy != outElemTy)
-    return emitOpError("input and output vector element type mismatch.");
-
-  // innermost 2 dimensions of the input vector must satisfy
-  //    outVecShape[2] == innerBlocks[0]
-  //    outVecShape[3] == innerBlocks[1]
-  if (!(inVecShape[2] == innerBlocks[0] && inVecShape[3] == innerBlocks[1]))
-    return emitOpError(
-        "innermost 2 dimensions of the input vector must satisfy : "
-        "inVecShape[2] == innerBlocks[0] && "
-        "inVecShape[3] == innerBlocks[1]");
-
-  // output vector must satisfy :
-  //     outVecShape[0] == inVecShape[0] * innerBlocks[0]
-  //     outVecShape[1] == inVecShape[1] * innerBlocks[1] &&
-  if (!(outVecShape[0] == inVecShape[0] * innerBlocks[0] &&
-        outVecShape[1] == inVecShape[1] * innerBlocks[1]))
-    return emitOpError("output vector must satisfy : "
-                       "outVecShape[0] == inVecShape[0] * innerBlocks[0] && "
-                       "outVecShape[1] == inVecShape[1] * innerBlocks[1]");
-
-  return mlir::success();
-}
-
-mlir::OpFoldResult TileUnpackOp::fold(FoldAdaptor /*adaptor*/) {
-  mlir::Value in = this->getInVec();
-  if (auto pack = in.getDefiningOp<TilePackOp>()) {
-    mlir::Value src = pack.getInVec();
-    if (src.getType() != this->getType() ||
-        pack.getInnerBlocks() != this->getInnerBlocks())
-      return nullptr;
-
-    return src;
-  }
-  return nullptr;
 }
 
 mlir::LogicalResult TransposeOp::verify() {

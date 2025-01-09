@@ -15,13 +15,11 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include "imex/Transforms/Passes.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -35,6 +33,94 @@ namespace imex {
 } // namespace imex
 
 namespace {
+
+// Cloned from upstream with isLessThanTargetBitWidth check removed.
+struct ConstantOpConversion final
+    : public mlir::OpConversionPattern<mlir::arith::ConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::ConstantOp constOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto resType =
+        getTypeConverter()->convertType<mlir::VectorType>(constOp.getType());
+
+    if (resType.isScalable() &&
+        !mlir::isa<mlir::SplatElementsAttr>(constOp.getValue()))
+      return rewriter.notifyMatchFailure(
+          constOp,
+          "Cannot linearize a constant scalable vector that's not a splat");
+
+    if (!resType)
+      return rewriter.notifyMatchFailure(constOp, "can't convert return type");
+    auto dstElementsAttr =
+        mlir::dyn_cast<mlir::DenseElementsAttr>(constOp.getValue());
+    if (!dstElementsAttr)
+      return rewriter.notifyMatchFailure(constOp, "unsupported attr type");
+
+    dstElementsAttr = dstElementsAttr.reshape(resType);
+    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(constOp, resType,
+                                                         dstElementsAttr);
+    return mlir::success();
+  }
+};
+
+// Cloned from upstream with isLessThanTargetBitWidth check removed.
+struct VectorizableOpConversion final
+    : public mlir::OpTraitConversionPattern<mlir::OpTrait::Vectorizable> {
+  using OpTraitConversionPattern::OpTraitConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::Operation *op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::FailureOr<mlir::Operation *> newOp =
+        convertOpResultTypes(op, operands, *getTypeConverter(), rewriter);
+    if (failed(newOp))
+      return mlir::failure();
+
+    rewriter.replaceOp(op, (*newOp)->getResults());
+    return mlir::success();
+  }
+};
+
+// Cloned from upstream with isLessThanTargetBitWidth check removed.
+static void populateVectorLinearizeTypeConversionsAndLegality(
+    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
+
+  typeConverter.addConversion(
+      [](mlir::VectorType type) -> std::optional<mlir::Type> {
+        if (!mlir::vector::isLinearizableVector(type))
+          return type;
+
+        return mlir::VectorType::get(type.getNumElements(),
+                                     type.getElementType(), type.isScalable());
+      });
+
+  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                            mlir::ValueRange inputs,
+                            mlir::Location loc) -> mlir::Value {
+    if (inputs.size() != 1 ||
+        !mlir::isa<mlir::VectorType>(inputs.front().getType()) ||
+        !mlir::isa<mlir::VectorType>(type))
+      return nullptr;
+
+    return builder.create<mlir::vector::ShapeCastOp>(loc, type, inputs.front());
+  };
+  typeConverter.addArgumentMaterialization(materializeCast);
+  typeConverter.addSourceMaterialization(materializeCast);
+  typeConverter.addTargetMaterialization(materializeCast);
+  target.markUnknownOpDynamicallyLegal(
+      [=](mlir::Operation *op) -> std::optional<bool> {
+        if ((mlir::isa<mlir::arith::ConstantOp>(op) ||
+             op->hasTrait<mlir::OpTrait::Vectorizable>())) {
+          return typeConverter.isLegal(op);
+        }
+        return std::nullopt;
+      });
+
+  patterns.add<ConstantOpConversion, VectorizableOpConversion>(
+      typeConverter, patterns.getContext());
+}
+
 struct VectorLoadOpConversion final
     : public mlir::OpConversionPattern<mlir::vector::LoadOp> {
   using mlir::OpConversionPattern<mlir::vector::LoadOp>::OpConversionPattern;
@@ -498,9 +584,8 @@ struct VectorLinearizePass final
         patterns,
         mlir::vector::VectorTransformsOptions().setVectorTransposeLowering(
             mlir::vector::VectorTransposeLowering::Shuffle16x16));
-    unsigned targetVectBitWidth = std::numeric_limits<unsigned>::max();
-    mlir::vector::populateVectorLinearizeTypeConversionsAndLegality(
-        typeConverter, patterns, target, targetVectBitWidth);
+    populateVectorLinearizeTypeConversionsAndLegality(typeConverter, patterns,
+                                                      target);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       return signalPassFailure();

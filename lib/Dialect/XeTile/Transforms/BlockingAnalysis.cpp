@@ -62,28 +62,26 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, Block blk) {
 
 // ===------------------ BlockRequests Implementation --------------------===//
 // A class holding all blocking requests for a given mlir::Value.
-// For convience, it also tracks the UsePoint of the value.
+// For convience, it also tracks the use point (OpOperand) of the value.
 class BlockingRequests {
 public:
   BlockingRequests() = default;
-  BlockingRequests(int64_t h, int64_t w, mlir::Operation *user, int64_t pos)
-      : BlockingRequests(h, w, UsePoint(user, pos)) {}
 
-  BlockingRequests(int64_t h, int64_t w, UsePoint point)
+  BlockingRequests(int64_t h, int64_t w, mlir::OpOperand &point)
       : BlockingRequests(Block(h, w), point) {}
 
-  BlockingRequests(llvm::ArrayRef<int64_t> shape, UsePoint point)
+  BlockingRequests(llvm::ArrayRef<int64_t> shape, mlir::OpOperand &point)
       : BlockingRequests(shape[0], shape[1], point) {
     assert(shape.size() == 2 && "Invalid block size.");
   }
 
-  BlockingRequests(Block block, UsePoint point);
+  BlockingRequests(Block block, mlir::OpOperand &point);
 
   bool operator==(const BlockingRequests &other) const;
   bool operator!=(const BlockingRequests &other) const;
 
   Block getDefBlock() const;
-  Block getUseBlock(UsePoint point) const;
+  Block getUseBlock(mlir::OpOperand &point) const;
 
   void print(llvm::raw_ostream &os) const;
 
@@ -110,12 +108,12 @@ public:
 
 private:
   Block def;
-  llvm::DenseMap<UsePoint, Block> requests;
+  llvm::DenseMap<mlir::OpOperand *, Block> requests;
 };
 
-BlockingRequests::BlockingRequests(Block block, UsePoint point) {
+BlockingRequests::BlockingRequests(Block block, mlir::OpOperand &point) {
   assert(block && "Invalid block.");
-  requests.try_emplace(point, block);
+  requests.try_emplace(&point, block);
 }
 
 Block BlockingRequests::getDefBlock() const {
@@ -127,8 +125,8 @@ Block BlockingRequests::getDefBlock() const {
   return Block();
 }
 
-Block BlockingRequests::getUseBlock(UsePoint point) const {
-  return requests.lookup(point);
+Block BlockingRequests::getUseBlock(mlir::OpOperand &point) const {
+  return requests.lookup(&point);
 }
 
 void BlockingRequests::print(llvm::raw_ostream &os) const {
@@ -140,8 +138,7 @@ void BlockingRequests::print(llvm::raw_ostream &os) const {
     for (auto [i, iter] : llvm::enumerate(requests)) {
       auto point = iter.first;
       auto block = iter.second;
-      os << "{Point(" << *point.first << ", " << point.second << "), blk("
-         << block << ")}";
+      os << "{User(" << *(point->getOwner()) << "), blk(" << block << ")}";
       if (i != requests.size() - 1)
         os << ", ";
       else
@@ -226,6 +223,10 @@ public:
   void setToExitState(BlockingLattice *lattice) override {}
 
 private:
+  void visitInitTileOp(xetile::InitTileOp op,
+                       mlir::ArrayRef<BlockingLattice *> operands,
+                       mlir::ArrayRef<const BlockingLattice *> results);
+
   void visitPrefetchTileOp(xetile::PrefetchTileOp op,
                            mlir::ArrayRef<BlockingLattice *> operands,
                            mlir::ArrayRef<const BlockingLattice *> results);
@@ -237,6 +238,14 @@ private:
   void visitStoreTileOp(xetile::StoreTileOp op,
                         mlir::ArrayRef<BlockingLattice *> operands,
                         mlir::ArrayRef<const BlockingLattice *> results);
+
+  void visitLoadGatherOp(xetile::LoadGatherOp op,
+                         mlir::ArrayRef<BlockingLattice *> operands,
+                         mlir::ArrayRef<const BlockingLattice *> results);
+
+  void visitStoreScatterOp(xetile::StoreScatterOp op,
+                           mlir::ArrayRef<BlockingLattice *> operands,
+                           mlir::ArrayRef<const BlockingLattice *> results);
 
   void visitUpdateTileOp(xetile::UpdateTileOffsetOp op,
                          mlir::ArrayRef<BlockingLattice *> operands,
@@ -289,6 +298,9 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
     mlir::Operation *op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
 
+  if (auto initTileOp = mlir::dyn_cast<xetile::InitTileOp>(op))
+    visitInitTileOp(initTileOp, operands, results);
+
   if (auto updateTileOp = mlir::dyn_cast<xetile::UpdateTileOffsetOp>(op))
     visitUpdateTileOp(updateTileOp, operands, results);
 
@@ -298,8 +310,14 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
   if (auto loadOp = mlir::dyn_cast<xetile::LoadTileOp>(op))
     visitLoadTileOp(loadOp, operands, results);
 
+  if (auto gatherOp = mlir::dyn_cast<xetile::LoadGatherOp>(op))
+    visitLoadGatherOp(gatherOp, operands, results);
+
   if (auto storeOp = mlir::dyn_cast<xetile::StoreTileOp>(op))
     visitStoreTileOp(storeOp, operands, results);
+
+  if (auto scatterOp = mlir::dyn_cast<xetile::StoreScatterOp>(op))
+    visitStoreScatterOp(scatterOp, operands, results);
 
   if (auto tileMMAOp = mlir::dyn_cast<xetile::TileMMAOp>(op))
     visitTileMMAOp(tileMMAOp, operands, results);
@@ -325,6 +343,29 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
   return mlir::success();
 }
 
+void BlockingAnalysisImpl::visitInitTileOp(
+    xetile::InitTileOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto lattice = results[0]->getValue();
+
+  if (!lattice.isInitialized())
+    return;
+
+  assert(lattice.getNumUniqRequests() == 1 &&
+         "InitTileOp should have only one request.");
+
+  auto block = lattice.getRequests()[0];
+
+  BlockingRequests &def = getLatticeElement(op.getTile())->getValue();
+  def.updateDefBlock(block);
+
+  // only work on scattered init_tile, which has indices
+  if (op.getIndices()) {
+    auto req = BlockingRequests(block, op->getOpOperand(1));
+    propagateIfChanged(operands[1], operands[1]->join(req));
+  }
+}
+
 void BlockingAnalysisImpl::visitPrefetchTileOp(
     xetile::PrefetchTileOp op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
@@ -336,7 +377,7 @@ void BlockingAnalysisImpl::visitPrefetchTileOp(
   auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
   if (!size)
     return; // do nothing if didnot get a valid block size
-  auto BlockingRequest = BlockingRequests(size, UsePoint(op, 0));
+  auto BlockingRequest = BlockingRequests(size, op->getOpOperand(0));
   propagateIfChanged(operands[0], operands[0]->join(BlockingRequest));
 }
 
@@ -363,26 +404,56 @@ void BlockingAnalysisImpl::visitLoadTileOp(
 
   // adjust according to user's requirements if it is available
   if (lattice.isInitialized()) {
-    // Always align the width dimension.
-    // NOTE: For transpose usecase, we still align the width dimension. This is
-    // because loads with transpose cannot have array_length > 1, plus it has HW
-    // limitations on supported width. If we align the height dimension (for
-    // reducing reg data movement), it will lead to multiple smaller loads.
-    for (auto rq : lattice.getRequests())
+    bool hasTransposeUser = op.getValue().hasOneUse() &&
+                            mlir::isa<xetile::TransposeOp>(*(op->user_begin()));
+
+    // To minimize the in-reg data movement, we need to align dim1 for regular
+    // case and dim0 for transpose case. For transpose case, we also need to
+    // make sure dim1 such that the following pass can fold the transpose with
+    // the load.
+    for (auto rq : lattice.getRequests()) {
       if (rq[1] && ((rq[1] * bitWidth) % 32 == 0)) // has to be 32-bit aligned
         block[1] = std::min(block[1], rq[1]);
+
+      // also aligns the height dimension if user is a transpose op.
+      if (hasTransposeUser)
+        block[0] = std::min(block[0], rq[0]);
+    }
   }
 
   if (!block)
     return; // do nothing if didnot get a valid block size
 
-  auto BlockingRequest = BlockingRequests(block, UsePoint({op, 0}));
+  auto BlockingRequest = BlockingRequests(block, op->getOpOperand(0));
   // propagate the blocking size to its def op
   propagateIfChanged(operands[0], operands[0]->join(BlockingRequest));
 
   // update the def block size for the result value
   BlockingRequests &def = getLatticeElement(op.getValue())->getValue();
   def.updateDefBlock(block);
+}
+
+void BlockingAnalysisImpl::visitLoadGatherOp(
+    xetile::LoadGatherOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+
+  auto tileTy = op.getTile().getType();
+  auto elemTy = tileTy.getElementType();
+  auto shape = tileTy.getShape();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
+
+  // TODO: currently 1D gather is not considered.
+  if (shape.size() == 1)
+    return;
+
+  auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
+  if (!size)
+    return;
+
+  for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
+    auto blockingRequest = BlockingRequests(size, op->getOpOperand(i));
+    propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
+  }
 }
 
 void BlockingAnalysisImpl::visitStoreTileOp(
@@ -398,7 +469,29 @@ void BlockingAnalysisImpl::visitStoreTileOp(
     return; // do nothing if didnot get a valid block size
 
   for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
-    auto blockingRequest = BlockingRequests(size, UsePoint(op, i));
+    auto blockingRequest = BlockingRequests(size, op->getOpOperand(i));
+    propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
+  }
+}
+
+void BlockingAnalysisImpl::visitStoreScatterOp(
+    xetile::StoreScatterOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto tileTy = op.getTile().getType();
+  auto elemTy = tileTy.getElementType();
+  auto shape = tileTy.getShape();
+  auto memSpace = tileTy.getMemorySpaceAsInt();
+
+  // TODO: currently 1D scatter is not considered.
+  if (shape.size() == 1)
+    return;
+
+  auto size = getInnerBlockSize(op, elemTy, shape, memSpace);
+  if (!size)
+    return;
+
+  for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
+    auto blockingRequest = BlockingRequests(size, op->getOpOperand(i));
     propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
   }
 }
@@ -409,8 +502,12 @@ void BlockingAnalysisImpl::visitUpdateTileOp(
   auto lattice = results[0]->getValue();
   if (lattice.isInitialized()) {
     auto block = lattice.getRequests()[0];
-    auto request = BlockingRequests(block, UsePoint(op, 0));
+    auto request = BlockingRequests(block, op->getOpOperand(0));
     propagateIfChanged(operands[0], operands[0]->join(request));
+    if (op.getIndices()) {
+      auto request = BlockingRequests(block, op->getOpOperand(1));
+      propagateIfChanged(operands[1], operands[1]->join(request));
+    }
   }
 }
 
@@ -432,15 +529,15 @@ void BlockingAnalysisImpl::visitTileMMAOp(
                             cPrecision, dPrecision);
 
   auto blockSizeForA =
-      BlockingRequests(mmaSize[0], mmaSize[1], UsePoint({op, 0}));
+      BlockingRequests(mmaSize[0], mmaSize[1], op->getOpOperand(0));
   auto blockSizeForB =
-      BlockingRequests(mmaSize[1], mmaSize[2], UsePoint({op, 1}));
+      BlockingRequests(mmaSize[1], mmaSize[2], op->getOpOperand(1));
 
   propagateIfChanged(operands[0], operands[0]->join(blockSizeForA));
   propagateIfChanged(operands[1], operands[1]->join(blockSizeForB));
   if (C) {
     auto blockSizeForC =
-        BlockingRequests(mmaSize[0], mmaSize[2], UsePoint(op, 2));
+        BlockingRequests(mmaSize[0], mmaSize[2], op->getOpOperand(2));
     propagateIfChanged(operands[2], operands[2]->join(blockSizeForC));
   }
 
@@ -466,7 +563,7 @@ void BlockingAnalysisImpl::visitReductionOp(
   if (!size)
     return; // do nothing if didnot get a valid block size
 
-  auto blockingRequest = BlockingRequests(size, UsePoint(op, 0));
+  auto blockingRequest = BlockingRequests(size, op->getOpOperand(0));
   propagateIfChanged(operands[0], operands[0]->join(blockingRequest));
 }
 
@@ -488,19 +585,23 @@ void BlockingAnalysisImpl::visitBroadcastOp(
   if (!lattice.isInitialized())
     return;
 
+  auto req = lattice.getRequests()[0];
   auto dim = dims[0];
   Block blockSize;
 
   if (dim == 0) {
-    auto req = lattice.getRequests()[0];
     blockSize = Block(1, req[1]);
   } else if (dim == 1) {
     blockSize = Block(1, 1);
   } else {
     return;
   }
-  auto blockingRequest = BlockingRequests(blockSize, UsePoint(op, 0));
+  auto blockingRequest = BlockingRequests(blockSize, op->getOpOperand(0));
   propagateIfChanged(operands[0], operands[0]->join(blockingRequest));
+
+  // update the def block size for the result value
+  BlockingRequests &def = getLatticeElement(op.getResult())->getValue();
+  def.updateDefBlock(Block(1, req[1]));
 }
 
 void BlockingAnalysisImpl::visitTransposeOp(
@@ -547,7 +648,7 @@ void BlockingAnalysisImpl::visitTransposeOp(
   if (!block)
     return; // do nothing if didnot get a valid block size
 
-  auto request = BlockingRequests(block, UsePoint(op, 0));
+  auto request = BlockingRequests(block, op->getOpOperand(0));
   propagateIfChanged(operands[0], operands[0]->join(request));
 
   // update the def block size for the result value
@@ -563,7 +664,7 @@ void BlockingAnalysisImpl::visitVectorizableOp(
     return;
 
   auto type = mlir::dyn_cast<mlir::VectorType>(op->getResult(0).getType());
-  if (!type)
+  if (!type || type.getRank() != 2)
     return;
 
   auto lattice = results[0]->getValue();
@@ -572,10 +673,15 @@ void BlockingAnalysisImpl::visitVectorizableOp(
   auto shape = type.getShape();
   Block block = getInnerBlockSize(op, elemTy, shape);
 
+  // TODO: only consider 2D shape for now
+  if (shape.size() != 2)
+    return;
+
   // Wait for requests from users, unless all of its users are terminators.
   if (!op->use_empty() && !lattice.isInitialized()) {
     for (auto user : op->getUsers()) {
-      if (!user->hasTrait<mlir::OpTrait::ReturnLike>())
+      if (!user->hasTrait<mlir::OpTrait::ReturnLike>() ||
+          !mlir::isa<mlir::FunctionOpInterface>(user->getParentOp()))
         return;
     }
   }
@@ -605,7 +711,7 @@ void BlockingAnalysisImpl::visitVectorizableOp(
 
   // propagate the block size on its operands
   for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
-    auto req = BlockingRequests(block, UsePoint(op, i));
+    auto req = BlockingRequests(block, op->getOpOperand(i));
     propagateIfChanged(inputOpr, inputOpr->join(req));
   }
 
@@ -619,7 +725,7 @@ void BlockingAnalysisImpl::visitShapecastOp(
     mlir::ArrayRef<const BlockingLattice *> results) {
   auto shape = op.getSource().getType().getShape();
   if (shape.size() == 2) {
-    auto BlockingRequest = BlockingRequests(shape, UsePoint(op, 0));
+    auto BlockingRequest = BlockingRequests(shape, op->getOpOperand(0));
     propagateIfChanged(operands[0], operands[0]->join(BlockingRequest));
   }
 }
@@ -632,10 +738,22 @@ void BlockingAnalysisImpl::visitCreateMaskOp(
   auto elemTy = vecTy.getElementType();
 
   auto lattice = results[0]->getValue();
+
+  if (!op->use_empty() && !lattice.isInitialized())
+    return;
+
   BlockingRequests &def = getLatticeElement(op->getResult(0))->getValue();
   // TODO: following the Antonio's implementation and use the default size
-  // [1, subgroupSize] for CreateMaskOp, but it can be more general.
+  // [1, subgroupSize] for CreateMaskOp if 2D transform is not enabled.
+  // If 2D transform is enabled, it will aligned with its users.
   Block block = getInnerBlockSize(op, elemTy, shape);
+
+  // TODO: need to enable the following code after 2D lowering in
+  // GPUToSPIRV is enabled.
+  // for (auto &req : lattice.getRequests()) {
+  //   block[0] = std::max(block[0], req[0]);
+  //   block[1] = std::min(block[1], req[1]);
+  // }
   def.updateDefBlock(block);
 }
 
@@ -653,14 +771,18 @@ template <typename Integertype>
 Block BlockingAnalysisImpl::getInnerBlockSize(
     mlir::Operation *op, mlir::Type elemTy, llvm::ArrayRef<Integertype> &shape,
     int memorySpace) {
-  assert(elemTy.isIntOrFloat() && "only support int or float element type.");
 
-  int elemSize = elemTy.getIntOrFloatBitWidth();
+  // TODO: is it safe to treat index as 32 bit integer?
+  // Expecting index vector is mainly used for gather/scatter ops on SLM.
+  // in which the address is 32-bit.
+  int elemSize = elemTy.isIntOrFloat() ? elemTy.getIntOrFloatBitWidth() : 32;
   const int64_t subgroupSize = uArch->getOneGRFSizeBits() / elemSize;
 
   int maxHeight = 0, minHeight = 0, maxWidth = 0, minWidth = 0;
   if (mlir::isa<xetile::ReductionOp>(op) ||
-      mlir::isa<xetile::BroadcastOp>(op)) {
+      mlir::isa<xetile::BroadcastOp>(op) ||
+      mlir::isa<xetile::LoadGatherOp>(op) ||
+      mlir::isa<xetile::StoreScatterOp>(op)) {
     // for reduction and broadcast ops, we simply using
     // [1, subgroupSize] as innerblock size
     maxWidth = subgroupSize;
@@ -789,7 +911,7 @@ void BlockingAnalysis::printAnalysisResult() {
         for (auto [i, inputOpr] : llvm::enumerate(op->getOperands())) {
           if (mlir::isa<mlir::VectorType>(inputOpr.getType()) ||
               mlir::isa<xetile::TileType>(inputOpr.getType())) {
-            UsePoint p(op, i);
+            mlir::OpOperand &p = op->getOpOperand(i);
             llvm::dbgs() << "\n   opr[" << i << "]: " << inputOpr
                          << " --> blkSZ: " << getUseBlockSize(inputOpr, p);
           }
@@ -815,20 +937,21 @@ void BlockingAnalysis::printAnalysisResult() {
       for (auto [i, res] : llvm::enumerate(YieldOp.getResults()))
         llvm::dbgs() << "\n   res[" << i << "]: " << res
                      << " --> blkSZ: " << getDefBlockSize(res) << ", "
-                     << getUseBlockSize(res, UsePoint(op, i));
+                     << getUseBlockSize(res, op->getOpOperand(i));
       llvm::dbgs() << "\n";
     } else if (auto StoreOp = mlir::dyn_cast<xetile::StoreTileOp>(op)) {
       llvm::dbgs() << "\nOp: " << *op;
       for (auto [i, inputOpr] : llvm::enumerate(op->getOperands())) {
         llvm::dbgs() << "\n   opr[" << i << "]: " << inputOpr << " --> blkSZ: "
-                     << getUseBlockSize(inputOpr, UsePoint(StoreOp, i));
+                     << getUseBlockSize(inputOpr, op->getOpOperand(i));
       }
       llvm::dbgs() << "\n";
     }
   });
 }
 
-Block BlockingAnalysis::getUseBlockSize(mlir::Value val, UsePoint point) const {
+Block BlockingAnalysis::getUseBlockSize(mlir::Value val,
+                                        mlir::OpOperand &point) const {
   auto *state = solver.lookupState<BlockingLattice>(val);
   if (!state)
     return Block();

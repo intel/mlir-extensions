@@ -47,7 +47,6 @@
 #include <mlir/Dialect/Tosa/IR/TosaOps.h>
 #include <mlir/Pass/Pass.h>
 
-#include <iostream>
 #include <optional>
 
 namespace imex {
@@ -527,12 +526,15 @@ struct CopyLowering
         ::mlir::MemRefType::get(tTyp.getShape(), tTyp.getElementType());
     auto mr = rewriter.create<::mlir::memref::AllocOp>(
         loc, mrTyp, dynDims, rewriter.getI64IntegerAttr(8));
-    // and copy if non-0
+    // and copy if not zero sized
     if (!retArTyp.hasZeroSize()) {
       auto srcMR =
           createToMemRef(loc, rewriter, src, srcArTyp.getMemRefType(src));
-      // create a region with given env, add copy op within it
-      auto env = rewriter.getStringAttr("protect_copy_op");
+      // wrap copy in a region to mark it non-deletable or a gpu copy
+      bool hasGPUEnv = ::imex::ndarray::hasGPUEnv(srcArTyp) ||
+                       ::imex::ndarray::hasGPUEnv(retArTyp);
+      std::string regName = hasGPUEnv ? "gpu_copy_op" : "protect_copy_op";
+      auto env = rewriter.getStringAttr(regName);
       rewriter.create<::imex::region::EnvironmentRegionOp>(
           loc, env, std::nullopt, std::nullopt,
           [&srcMR, &mr](::mlir::OpBuilder &builder, ::mlir::Location loc) {
@@ -1282,10 +1284,9 @@ struct ConvertNDArrayToLinalgPass
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convNDArray2RankedTensor);
 
-    auto materializeCast =
-        [](::mlir::OpBuilder &builder, ::mlir::Type type,
-           ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> std::optional<::mlir::Value> {
+    auto materializeCast = [](::mlir::OpBuilder &builder, ::mlir::Type type,
+                              ::mlir::ValueRange inputs,
+                              ::mlir::Location loc) -> ::mlir::Value {
       if (inputs.size() == 1) {
         auto input = inputs[0];
         auto itype = input.getType();

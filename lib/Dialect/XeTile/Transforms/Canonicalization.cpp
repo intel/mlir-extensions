@@ -21,7 +21,6 @@
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -30,7 +29,6 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
@@ -41,11 +39,8 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
 #include <cassert>
@@ -277,10 +272,11 @@ struct VectorBroadcastToXetileBroadcastOpPattern
       newOp->setDiscardableAttrs(discardableAttrs);
       return mlir::success();
     }
-    // If ranks are same, inner dimension is stretched in vector.broadcast. So
-    // broadcast dimension is 1 for this case.
+    // If ranks are same, decide the broadcast dimension based on the source
+    // vector shape.
+    auto broadcastDim = (sourceShape[0] == 1) ? 0 : 1;
     auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
-        op, resultTy, op.getSource(), llvm::ArrayRef<int64_t>({1}));
+        op, resultTy, op.getSource(), llvm::ArrayRef<int64_t>({broadcastDim}));
     newOp->setDiscardableAttrs(discardableAttrs);
     return mlir::success();
   }
@@ -400,7 +396,7 @@ struct XeTileCanonicalizationPass final
                                   mlir::ValueRange inputs, mlir::Location loc) {
         auto cast =
             builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
-        return std::optional<mlir::Value>(cast.getResult(0));
+        return cast.getResult(0);
       };
       typeConverter.addConversion([](mlir::Type type) { return type; });
       typeConverter.addConversion([](imex::xetile::TileType tileTy) {
@@ -408,8 +404,7 @@ struct XeTileCanonicalizationPass final
           auto newAttr = imex::xetile::XeTileAttr::get(
               tileTy.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
               mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
-              tileTy.getInnerBlocks(), tileTy.getMemorySpace(),
-              tileTy.getScatterAttr());
+              tileTy.getMemorySpace(), tileTy.getScatterAttr());
 
           return imex::xetile::TileType::get(
               swapLastTwoElems(tileTy.getShape()), tileTy.getElementType(),

@@ -27,8 +27,6 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SmallVectorExtras.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <cassert>
 #include <memory>
@@ -82,15 +80,13 @@ struct HoistTransposeBeforeExtractStridedSliceOpPattern
         transposeOp.getVector().getDefiningOp());
     if (!extractOp)
       return mlir::failure();
-    // Source of extract op must be a load op.
-    auto loadOp = llvm::dyn_cast<mlir::xegpu::LoadNdOp>(
-        extractOp.getVector().getDefiningOp());
-    if (!loadOp)
+    auto sourceOfExtract = extractOp.getVector().getDefiningOp();
+    if (!sourceOfExtract)
       return mlir::failure();
-    // Check if the load is already transposed by previous application of this
+    // Check if the source is already transposed by previous application of this
     // pattern.
     mlir::vector::TransposeOp transposedLoad = nullptr;
-    for (auto user : loadOp->getUsers()) {
+    for (auto user : sourceOfExtract->getUsers()) {
       if (auto transposeUser =
               llvm::dyn_cast<mlir::vector::TransposeOp>(user)) {
         transposedLoad = transposeUser;
@@ -100,7 +96,7 @@ struct HoistTransposeBeforeExtractStridedSliceOpPattern
     // If not found, create a new transpose op.
     if (!transposedLoad)
       transposedLoad = rewriter.create<mlir::vector::TransposeOp>(
-          transposeOp.getLoc(), loadOp.getResult(),
+          transposeOp.getLoc(), sourceOfExtract->getResult(0),
           llvm::ArrayRef<int64_t>({1, 0}));
     // Extract the required slice from the transposed load and replace the
     // original transpose op with it.
@@ -126,25 +122,47 @@ struct HoistTransposePass final
     mlir::Operation *op = getOperation();
     llvm::SmallDenseSet<mlir::vector::TransposeOp> transposeOps;
 
+    // Visit ExtractStridedSliceOp and check if it is followed by a TransposeOp.
+    auto visitExtractStridedSliceOp =
+        [&](mlir::vector::ExtractStridedSliceOp extractStridedSliceOp)
+        -> mlir::vector::TransposeOp {
+      // If extract op has more than one user, skip.
+      if (!extractStridedSliceOp->hasOneUse())
+        return nullptr;
+      // If the user is not a transpose op, skip.
+      auto transposeOp = llvm::dyn_cast_if_present<mlir::vector::TransposeOp>(
+          *extractStridedSliceOp->user_begin());
+      if (!(transposeOp &&
+            transposeOp.getPermutation() == llvm::ArrayRef<int64_t>({1, 0})))
+        return nullptr;
+      return transposeOp;
+    };
+
     op->walk([&](mlir::xegpu::LoadNdOp loadOp) -> mlir::WalkResult {
-      // Check all users of the load op are ExtractStridedSliceOp followed by a
-      // TransposeOp.
+      // Check all users of the load op are,
+      // 1. ExtractStridedSliceOp -> TransposeOp chain
+      // 2. ExtractOp -> ExtractStridedSliceOp -> TransposeOp chain
       for (auto user : loadOp->getUsers()) {
-        auto extractOp =
-            llvm::dyn_cast_if_present<mlir::vector::ExtractStridedSliceOp>(
-                user);
-        if (!extractOp)
+        if (auto extractStridedSliceOp =
+                llvm::dyn_cast_if_present<mlir::vector::ExtractStridedSliceOp>(
+                    user)) {
+          auto found = visitExtractStridedSliceOp(extractStridedSliceOp);
+          if (found)
+            transposeOps.insert(found);
+        } else if (auto extractOp =
+                       llvm::dyn_cast_if_present<mlir::vector::ExtractOp>(
+                           user)) {
+          for (auto extractUser : extractOp->getUsers()) {
+            if (auto extractStridedSliceOp = llvm::dyn_cast_if_present<
+                    mlir::vector::ExtractStridedSliceOp>(extractUser)) {
+              auto found = visitExtractStridedSliceOp(extractStridedSliceOp);
+              if (found)
+                transposeOps.insert(found);
+            }
+          }
+        } else {
           return mlir::WalkResult::skip();
-        // If extract op has more than one user, skip.
-        if (!extractOp->hasOneUse())
-          return mlir::WalkResult::skip();
-        // If the user is not a transpose op, skip.
-        auto transposeOp = llvm::dyn_cast_if_present<mlir::vector::TransposeOp>(
-            *extractOp->user_begin());
-        if (!(transposeOp &&
-              transposeOp.getPermutation() == llvm::ArrayRef<int64_t>({1, 0})))
-          return mlir::WalkResult::skip();
-        transposeOps.insert(transposeOp);
+        }
       }
       return mlir::WalkResult::advance();
     });

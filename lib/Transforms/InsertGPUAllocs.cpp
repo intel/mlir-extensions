@@ -105,7 +105,7 @@ public:
         auto allocResult = builder.create<::mlir::gpu::AllocOp>(
             alloc.getLoc(), alloc.getType(), /*asyncToken*/ nullptr,
             /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
-            alloc.getSymbolOperands(), true);
+            alloc.getSymbolOperands(), /*hostShared*/ hostShared);
         alloc.replaceAllUsesWith(allocResult);
         alloc.erase();
       }

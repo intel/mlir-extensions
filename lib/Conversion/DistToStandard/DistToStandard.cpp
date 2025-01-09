@@ -40,10 +40,7 @@
 
 #include <array>
 #include <cstdlib>
-#include <iostream>
 #include <optional>
-#include <sstream>
-#include <string>
 
 namespace imex {
 #define GEN_PASS_DEF_CONVERTDISTTOSTANDARD
@@ -1712,8 +1709,7 @@ struct ConvertDistToStandardPass
 
     auto materializeArray =
         [&](::mlir::OpBuilder &builder, ::imex::ndarray::NDArrayType type,
-            ::mlir::ValueRange inputs,
-            ::mlir::Location loc) -> std::optional<::mlir::Value> {
+            ::mlir::ValueRange inputs, ::mlir::Location loc) -> ::mlir::Value {
       assert(inputs.size() == 1);
       auto input = inputs[0];
       auto itype = input.getType();

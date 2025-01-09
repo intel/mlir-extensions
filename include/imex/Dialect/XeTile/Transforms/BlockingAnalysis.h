@@ -41,10 +41,6 @@ private:
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, Block blk);
 
-// A pair of operator and operand index number representing
-// the use point of a value.
-typedef std::pair<mlir::Operation *, int64_t> UsePoint;
-
 class BlockingAnalysis {
 public:
   explicit BlockingAnalysis(std::shared_ptr<XeuArchInterface> uArch) {
@@ -54,7 +50,7 @@ public:
 
   mlir::LogicalResult run(mlir::Operation *op);
 
-  Block getUseBlockSize(mlir::Value val, UsePoint point) const;
+  Block getUseBlockSize(mlir::Value val, mlir::OpOperand &point) const;
   Block getDefBlockSize(mlir::Value val) const;
   void printAnalysisResult();
 

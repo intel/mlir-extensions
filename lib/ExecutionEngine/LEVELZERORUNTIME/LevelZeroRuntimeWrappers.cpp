@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
-#include <array>
 #include <atomic>
 #include <cassert>
 #include <cfloat>
@@ -22,10 +20,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
-#include <memory>
 #include <mutex>
 #include <stdexcept>
-#include <tuple>
 #include <vector>
 
 #include <level_zero/ze_api.h>

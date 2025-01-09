@@ -21,13 +21,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Transforms/Utils/AddDiscriminators.h"
 
 #include "imex/Transforms/Passes.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
-#include <cstdint>
-#include <numeric>
 
 namespace imex {
 #define GEN_PASS_DEF_REMOVESINGLEELEMVECTOR
@@ -258,7 +253,9 @@ struct RemoveSingleElemVectorPass final
         });
 
     mlir::RewritePatternSet patterns(context);
-    patterns.add<VectorExtractStridedSliceConversion, VectorizableOpPattern,
+    // Disable ectorExtractStridedSliceConversion for now as it interferes with
+    // xetile-blockop-fallback pass
+    patterns.add</*VectorExtractStridedSliceConversion,*/ VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
                  VectorSplatOpConversion, VectorExtractElementOpConversion>(
         typeConverter, context);

@@ -16,29 +16,19 @@
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Math/IR/Math.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
-#include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
-#include "mlir/IR/BuiltinDialect.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
-#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
 #include "LscIntrinsicEnums.h"
-#include "Utils.h"
+#include "imex/Utils/VCUtils.h"
 
 using namespace mlir;
 using mlir::xegpu::AtomicRMWOp;
@@ -125,7 +115,8 @@ static LogicalResult isValid1DBlockSetup(Type elemTy, int elems, Location &loc,
   if (bitWidth < 32)
     return rewriter.notifyMatchFailure(loc, "only 32-bit data supported.");
 
-  if (!llvm::is_contained({1, 2, 3, 4, 8, 16, 32, 64}, elems))
+  auto validChunkSizes = getSupportedChunkSizes(1);
+  if (!llvm::is_contained(validChunkSizes, elems))
     return rewriter.notifyMatchFailure(
         loc, "invalid number of elements. Supports 1, 2, 3, 4, 8, 16, 32, 64.");
 
@@ -149,9 +140,11 @@ static LogicalResult isValidScatterSetup(Type elemTy, int simd_lanes,
   //   return rewriter.notifyMatchFailure(
   //       loc, "A valid simd lane is 16 or 32 for PVC.");
 
-  if (!llvm::is_contained({1, 2, 3, 4, 8, 16, 32, 64}, chunk_size))
+  auto validChunkSizes = getSupportedChunkSizes(simd_lanes);
+  if (!llvm::is_contained(validChunkSizes, chunk_size))
     return rewriter.notifyMatchFailure(
-        loc, "invalid chunk size. Supports 1, 2, 3, 4, 8, 16, 32, 64.");
+        loc, "invalid chunk size. Supports 1, 2, 3, 4, 8"
+             "(and 16, 32, 64 if simd_lanes == 1).");
 
   auto bitWidth = elemTy.getIntOrFloatBitWidth();
 
@@ -209,7 +202,7 @@ static std::string getLSCIntrinsicStr(llvm::StringRef opName, int simd_lanes,
 // lsc.load/store/prefetch.2d.ugm. The fullname is in format of
 //    1. lsc.load.2d.ugm.desc.<transform>.<retType>.<cache_controls>
 //    2. lsc.store.2d.ugm.desc.<cacheCtrType>.<dataType>
-//    3. lsc.prefetch.2d.ugm.desc.<predType>
+//    3. lsc.prefetch.2d.ugm.desc.<predType>.<dataType>
 // All the types are encoded as vN[i/f]M, where N is the number of elements,
 // and M is the bit width. So for vector<16xf32>, it will be v16f32, and for
 // vector<16xi1>, it will be v16i1. cacheCtrType is fixed to vNi8, where N is
@@ -238,8 +231,8 @@ static std::string getBlockIntrinsicStr(llvm::StringRef opName,
                          cache_levels, dataTyStr)
         .str();
   } else if (opName == "prefetch") {
-    return llvm::formatv("llvm.genx.lsc.prefetch.2d.ugm.desc.v{0}i8",
-                         cache_levels)
+    return llvm::formatv("llvm.genx.lsc.prefetch.2d.ugm.desc.v{0}i8.{1}",
+                         cache_levels, dataTyStr)
         .str();
   }
   llvm_unreachable("unsupported opName");
@@ -685,11 +678,14 @@ gen2DPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
   assert(tdescTy.getRank() == 2 && !tdescTy.isScattered() &&
          "Only works on 2D block TensorDesc.");
 
-  auto intrinsicStr = getBlockIntrinsicStr("prefetch");
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
   auto elemTy = tdescTy.getElementType();
   auto noRetTy = TypeRange({});
+  auto bitWidth = elemTy.getIntOrFloatBitWidth();
+  auto prefix = elemTy.isInteger() ? "i" : elemTy.isBF16() ? "bf" : "f";
+  auto typeStr = llvm::formatv("{0}{1}", prefix, bitWidth).str();
+  auto intrinsicStr = getBlockIntrinsicStr("prefetch", typeStr);
 
   // for arg8: dummy value
   auto attr = elemTy.isInteger()
@@ -721,6 +717,62 @@ static func::CallOp gen2DStoreIntrinsicCall(
   return gen2DBlockIntrinsicCall(rewriter, loc, intrinsicStr, noRetTy, l1, l3,
                                  nblks, shape, payload, data);
 }
+
+auto get1DTdescNumTotalElems = [](TensorDescType tdescTy) -> int64_t {
+  return tdescTy.getNumElements() * tdescTy.getArrayLength();
+};
+
+auto getElemBitWidth = [](TensorDescType tdescTy) -> unsigned {
+  return tdescTy.getElementType().getIntOrFloatBitWidth();
+};
+
+auto isLowPrecision = [](TensorDescType tdescTy) -> bool {
+  auto width = getElemBitWidth(tdescTy);
+  return width < 32 && width >= 4;
+};
+
+auto getScaled1DTdesc =
+    [](TensorDescType tdescTy,
+       ConversionPatternRewriter &rewriter) -> TensorDescType {
+  // return if not 1D tensor desc
+  if (tdescTy.getShape().size() != 1)
+    return tdescTy;
+  // return if not low precision
+  if (!isLowPrecision(tdescTy))
+    return tdescTy;
+
+  auto scaledTy = tdescTy.getElementType();
+  auto totalBytes =
+      get1DTdescNumTotalElems(tdescTy) * getElemBitWidth(tdescTy) / 8;
+  switch (totalBytes) {
+  // i32 for 4, 8, 12, 16, 32, 64, 128, 256
+  // i64 for 24 and 512
+  case 4:
+  case 8:
+  case 12:
+  case 16:
+  case 32:
+  case 64:
+  case 128:
+  case 256:
+    scaledTy = rewriter.getI32Type();
+    break;
+  case 24:
+  case 512:
+    scaledTy = rewriter.getI64Type();
+    break;
+  default:
+    break;
+  }
+  return TensorDescType::get(
+      tdescTy.getContext(),
+      {totalBytes / (scaledTy.getIntOrFloatBitWidth() / 8)}, scaledTy,
+      tdescTy.getEncoding(), /*sg_map*/ nullptr);
+};
+
+auto isScaled = [](TensorDescType tdescTy, TensorDescType scaledTy) -> bool {
+  return getElemBitWidth(tdescTy) != getElemBitWidth(scaledTy);
+};
 
 #define shrui(...) rewriter.createOrFold<arith::ShRUIOp>(loc, __VA_ARGS__)
 class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
@@ -759,16 +811,25 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         return rewriter.notifyMatchFailure(
             op, "transpose is not supported for slm and 1D tensor desc");
 
-      auto elems = tdescTy.getNumElements() * tdescTy.getArrayLength();
+      auto scaledTdescTy = getScaled1DTdesc(tdescTy, rewriter);
+      auto scaledElems = get1DTdescNumTotalElems(scaledTdescTy);
+      auto scaledElemTy = scaledTdescTy.getElementType();
 
-      if (failed(isValid1DBlockSetup(elemTy, elems, loc, rewriter))) {
+      if (failed(
+              isValid1DBlockSetup(scaledElemTy, scaledElems, loc, rewriter))) {
         return rewriter.notifyMatchFailure(
             loc, "unsupported 1D/SLM TensorDescType.");
       }
-
+      bool scaled = isScaled(tdescTy, scaledTdescTy);
+      auto resTy =
+          scaled ? VectorType::get({scaledElems}, scaledElemTy) : op.getType();
       auto newValue = gen1DLoadInstrinsicCall(
-          rewriter, loc, op.getType(), l1hint, l3hint, elemTy, elems,
+          rewriter, loc, resTy, l1hint, l3hint, scaledElemTy, scaledElems,
           tdescTy.getMemorySpace(), adaptor.getTensorDesc());
+      if (scaled) {
+        newValue =
+            rewriter.create<vector::BitCastOp>(loc, op.getType(), newValue);
+      }
       rewriter.replaceOp(op, newValue);
       return success();
     } else if (rank == 2) { // 2d.ugm.desc
@@ -866,7 +927,6 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
 
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
-    auto elemTy = tdescTy.getElementType();
     auto rank = tdescTy.getRank();
     auto scope = tdescTy.getMemorySpace();
 
@@ -881,15 +941,17 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
         return success();
       }
 
-      auto elems = tdescTy.getNumElements() * tdescTy.getArrayLength();
+      auto scaledTdescTy = getScaled1DTdesc(tdescTy, rewriter);
+      auto scaledElems = get1DTdescNumTotalElems(scaledTdescTy);
+      auto scaledElemTy = scaledTdescTy.getElementType();
 
-      if (failed(isValid1DBlockSetup(elemTy, elems, loc, rewriter)))
+      if (failed(isValid1DBlockSetup(scaledElemTy, scaledElems, loc, rewriter)))
         return rewriter.notifyMatchFailure(
             loc, "unsupported 1D/SLM TensorDescType.");
 
-      auto callOp =
-          gen1DPrefetchIntrinsicCall(rewriter, loc, l1hint, l3hint, elemTy,
-                                     elems, scope, adaptor.getTensorDesc());
+      auto callOp = gen1DPrefetchIntrinsicCall(rewriter, loc, l1hint, l3hint,
+                                               scaledElemTy, scaledElems, scope,
+                                               adaptor.getTensorDesc());
       rewriter.replaceOp(op, callOp);
       return success();
     } else if (rank == 2) { // 2d.ugm.desc
@@ -914,7 +976,6 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
 
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
-    auto elemTy = tdescTy.getElementType();
     auto rank = tdescTy.getRank();
     auto scope = tdescTy.getMemorySpace();
 
@@ -925,25 +986,21 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
     auto data = adaptor.getValue();
 
     if (rank == 1) {
-      // for slm and 1D tensor desc, use lsc.store,
-      // all non 32-bit data has to be encoded as i32.
+      auto scaledTdescTy = getScaled1DTdesc(tdescTy, rewriter);
+      auto scaledElems = get1DTdescNumTotalElems(scaledTdescTy);
+      auto scaledElemTy = scaledTdescTy.getElementType();
 
-      // get instrinsic name, the data type has to be encoded
-      // as vNi32 for 8-bit/16-bit data in regular store.
-      // for example, Vector<8x16xf16> should be encoded as V128I32.
-      auto lscTy = getOrigOrI32VectorType(op.getValueType());
-      auto typeStr = convertVectorType(lscTy).first;
-      auto intrinsicStr = getLSCIntrinsicStr("store", 1, scope, typeStr);
-
-      auto elems = tdescTy.getNumElements();
-
-      if (failed(isValid1DBlockSetup(elemTy, elems, loc, rewriter)))
+      if (failed(isValid1DBlockSetup(scaledElemTy, scaledElems, loc, rewriter)))
         return rewriter.notifyMatchFailure(
             loc, "unsupported 1D/SLM TensorDescType.");
 
-      auto callOp =
-          gen1DStoreInstrinsicCall(rewriter, loc, l1hint, l3hint, elemTy, elems,
-                                   scope, adaptor.getTensorDesc(), data);
+      if (isScaled(tdescTy, scaledTdescTy)) {
+        auto scaledVecTy = VectorType::get({scaledElems}, scaledElemTy);
+        data = rewriter.create<vector::BitCastOp>(loc, scaledVecTy, data);
+      }
+      auto callOp = gen1DStoreInstrinsicCall(rewriter, loc, l1hint, l3hint,
+                                             scaledElemTy, scaledElems, scope,
+                                             adaptor.getTensorDesc(), data);
 
       rewriter.replaceOp(op, callOp);
       return success();

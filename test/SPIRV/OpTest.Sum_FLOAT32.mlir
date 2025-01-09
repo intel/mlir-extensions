@@ -61,14 +61,14 @@ module @sum attributes {gpu.container_module} {
           %cst1_i64 = spirv.Constant 1 : i64
           %7 = spirv.IMul %cst1_i64, %3 : i64
           %8 = spirv.IAdd %6, %7 : i64
-          %9 = spirv.AccessChain %arg0[%8] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64
+          %9 = spirv.AccessChain %arg0[%8] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           %10 = spirv.Load "CrossWorkgroup" %9 : f32
           %cst0_i64_0 = spirv.Constant 0 : i64
-          %11 = spirv.AccessChain %arg1[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64
+          %11 = spirv.AccessChain %arg1[%cst0_i64_0] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           %12 = spirv.Load "CrossWorkgroup" %11 : f32
           %13 = spirv.FAdd %12, %10 : f32
           %cst0_i64_1 = spirv.Constant 0 : i64
-          %14 = spirv.AccessChain %arg1[%cst0_i64_1] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64
+          %14 = spirv.AccessChain %arg1[%cst0_i64_1] : !spirv.ptr<!spirv.array<1 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
           spirv.Store "CrossWorkgroup" %14, %13 : f32
           %15 = spirv.IAdd %3, %arg4 : i64
           spirv.Branch ^bb1(%15 : i64)

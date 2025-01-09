@@ -7,6 +7,7 @@ builtin.module(
         imex-xegpu-apply-vnni-transformation,
         imex-xegpu-optimize-transpose)
     imex-vector-linearize
+    gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true})
     gpu.module(convert-xegpu-to-vc)
     cse
     reconcile-unrealized-casts

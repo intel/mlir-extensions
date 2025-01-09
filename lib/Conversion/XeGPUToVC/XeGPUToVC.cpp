@@ -13,33 +13,29 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
-
+#include "imex/Conversion/XeGPUToVC/XeGPUToVC.h"
+#include "imex/Conversion/ArithToVC/ArithToVC.h"
+#include "imex/Conversion/MathToVC/MathToVC.h"
+#include "imex/Utils/VCUtils.h"
+#include "imex/Utils/XeCommon.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
-#include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
-
-#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/Utils/StaticValueUtils.h"
-
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/FormatVariadic.h"
-
-#include "Utils.h"
 
 namespace imex {
 #define GEN_PASS_DEF_CONVERTXEGPUTOVC
@@ -73,23 +69,6 @@ static bool isOneOrUnknow(OpFoldResult ofr) {
   return !val || *val == 1;
 }
 
-// convert OpFoldResult to Value by replacing integer
-// attributes with arith::ConstantOps. It also performs
-// simple type conversions
-static Value getValueOrConstantOp(OpFoldResult ofr, Location loc,
-                                  ConversionPatternRewriter &rewriter,
-                                  Type type = nullptr) {
-  if (ofr.is<Value>())
-    return ofr.get<Value>();
-
-  auto intAttr = cast<IntegerAttr>(ofr.get<Attribute>());
-
-  if (type)
-    intAttr = IntegerAttr::get(type, intAttr.getInt());
-
-  return rewriter.create<arith::ConstantOp>(loc, intAttr);
-}
-
 static Value castValueTo(Value val, Type toType, Location loc,
                          ConversionPatternRewriter &rewriter) {
 
@@ -116,40 +95,6 @@ static Value castValueTo(Value val, Type toType, Location loc,
 
   // return original value for unsupported conversion
   return val;
-}
-
-#define muli(a, b) rewriter.createOrFold<arith::MulIOp>(loc, a, b)
-#define addi(a, b) rewriter.createOrFold<arith::AddIOp>(loc, a, b)
-#define subi(a, b) rewriter.createOrFold<arith::SubIOp>(loc, a, b)
-
-// A universal get method for strides of CreateNdDescOp op
-
-// Get the effective strides of the CreateNdDescOp op
-// Stride information provided to CreateNdDescOp is multifaceted
-// In other words strides info provided to CreateNdDescOp in multiple ways:
-// 1. For static memrefs: the strides info are inherent in the memref data type
-// 2. For dynamic memrefs and i64/i32 source: the strides info is provided via
-// the operand `strides`, however the strides operand can also take two
-// different types:
-// 2.1 Constant type: constant attribute can be passed
-// 2.2 Value type: a value type can be passed
-// This function collects these info based on different scenarios and returns
-// them in Value types.
-
-// We use getMixedStrides() to collect the strides info instead of handling
-// aforementioned cases manually, since, it already uses
-// OffsetSizeAndStrideOpInterface, getMixedStrides() already takes care of
-// memref type.
-SmallVector<Value> getStridesInValueType(ConversionPatternRewriter &rewriter,
-                                         CreateNdDescOp op) {
-  SmallVector<Value> stridesVal;
-  auto mixedStrides = op.getMixedStrides();
-  for (size_t i = 0; i < mixedStrides.size(); i++) {
-    auto stride =
-        getValueOrConstantOp(mixedStrides[i], op.getLoc(), rewriter, indexTy);
-    stridesVal.push_back(stride);
-  }
-  return stridesVal;
 }
 
 // Given an n-dim memref, a tensor descriptor with tile rank of 2 defines a
@@ -179,13 +124,17 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
   auto tileRank = op.getTensorDesc().getType().getRank();
   auto offsets = op.getMixedOffsets();
 
-  auto strides = getStridesInValueType(rewriter, op);
+  auto strides = getStridesOrOffsetsOrShapesInValueType(
+      rewriter, op.getMixedStrides(), loc);
 
-  // Calculate the effective rank of the source based on strides arrayref size
+  // Calculate the effective rank of the source based on strides arrayref
+  // size
   auto effectiveRank = strides.size();
   int64_t ranksToAdjust = effectiveRank;
-  auto bytesPerElem =
-      op.getTensorDesc().getType().getElementType().getIntOrFloatBitWidth() / 8;
+  auto eTyBitWidth =
+      op.getTensorDesc().getType().getElementType().getIntOrFloatBitWidth();
+  auto bytesPerElem = eTyBitWidth / 8;
+  Value eTyBitWidthVal = index_val(eTyBitWidth);
   Value bytesPerElemVal = index_val(bytesPerElem);
 
   // We only need combine ranks that are larger than tileRank (e.g., if we the
@@ -196,8 +145,12 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
 
   auto computeBase = [&](Value base) {
     for (auto i = 0; i < ranksToAdjust; i++) {
-      auto factor = muli(strides[i], bytesPerElemVal);
+      Value factor;
       Value offsetVal;
+      if (eTyBitWidth < 8)
+        factor = muli(strides[i], eTyBitWidthVal);
+      else
+        factor = muli(strides[i], bytesPerElemVal);
       if (offsets[i].is<Value>()) {
         offsetVal = offsets[i].get<Value>();
       } else {
@@ -205,6 +158,8 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
             llvm::cast<IntegerAttr>(offsets[i].get<Attribute>()).getInt());
       }
       auto linearOffset = muli(offsetVal, factor);
+      if (eTyBitWidth < 8)
+        linearOffset = divi(linearOffset, index_val(8));
       base = addi(base, linearOffset);
     }
 
@@ -225,7 +180,7 @@ public:
     auto tdescTy = op.getType();
     auto scope = tdescTy.getMemorySpace();
     auto rank = tdescTy.getRank();
-    auto elemBytes = tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
+    auto eTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
     // SLM has to use 32-bit address, while ugm needs to use 64-bit address.
     auto addrTy =
@@ -258,12 +213,13 @@ public:
       auto payloadTy = VectorType::get(simd_lanes, addrTy);
 
       // adjust base address to get absolute offset in unit of bytes.
-      // the computation is simply: base + linearOffset * elemBytes
+      // the computation is simply: base + linearOffset (in bytes)
       Value offset =
           getValueOrConstantOp(op.getMixedOffsets().back(), loc, rewriter);
       offset = castValueTo(offset, addrTy, loc, rewriter);
-      Value factor = integer_val(elemBytes, addrTy);
-      auto payload = addi(base, muli(offset, factor));
+      Value numOffsetBytes =
+          getOffsetInUnitOfBytes(rewriter, loc, addrTy, offset, eTyBitWidth);
+      auto payload = addi(base, numOffsetBytes);
 
       // convert the payload into vector type
       payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, payload);
@@ -300,12 +256,15 @@ public:
         if (v) {
           auto value = ofr.get<Value>();
           value = rewriter.create<arith::IndexCastUIOp>(loc, i32Ty, value);
-          if (mul > 1)
-            value = rewriter.create<arith::MulIOp>(loc, value, i32_val(mul));
+          if (mul > 8)
+            value =
+                rewriter.create<arith::MulIOp>(loc, value, i32_val(mul / 8));
+          else if (mul >= 4)
+            value = getOffsetInUnitOfBytes(rewriter, loc, i32Ty, value, mul);
           return (!minus) ? value : subi(value, i32_val(minus));
         } else {
           int value = cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
-          return i32_val(value * mul - minus);
+          return i32_val(((value * mul) / 8) - minus);
         }
       };
 
@@ -316,8 +275,9 @@ public:
       // is in rows.
       auto matrixShape = op.getMixedSizes();
       auto size = matrixShape.size();
-      auto surfaceW = encodeShapeAndOffset(matrixShape[size - 1], elemBytes, 1);
-      auto surfaceH = encodeShapeAndOffset(matrixShape[size - 2], 1, 1);
+      auto surfaceW =
+          encodeShapeAndOffset(matrixShape[size - 1], eTyBitWidth, 1);
+      auto surfaceH = encodeShapeAndOffset(matrixShape[size - 2], 8, 1);
 
       // encode the pitch, which is in bytes minus 1
       auto matrixStrides = op.getMixedStrides();
@@ -328,7 +288,7 @@ public:
       assert(isOneOrUnknow(matrixStrides[size - 1]) &&
              "Fast Changing Dimension can only have stride of 1.");
       auto surfaceP =
-          encodeShapeAndOffset(matrixStrides[size - 2], elemBytes, 1);
+          encodeShapeAndOffset(matrixStrides[size - 2], eTyBitWidth, 1);
 
       payload = rewriter.create<vector::InsertOp>(loc, surfaceW, payload, 2);
       payload = rewriter.create<vector::InsertOp>(loc, surfaceH, payload, 3);
@@ -336,8 +296,8 @@ public:
 
       // encode the offset, they are in elements
       auto offsets = op.getMixedOffsets();
-      auto offsetX = encodeShapeAndOffset(offsets[size - 1], 1, 0);
-      auto offsetY = encodeShapeAndOffset(offsets[size - 2], 1, 0);
+      auto offsetX = encodeShapeAndOffset(offsets[size - 1], 8, 0);
+      auto offsetY = encodeShapeAndOffset(offsets[size - 2], 8, 0);
       payload = rewriter.create<vector::InsertOp>(loc, offsetX, payload, 5);
       payload = rewriter.create<vector::InsertOp>(loc, offsetY, payload, 6);
 
@@ -386,11 +346,11 @@ public:
       }
 
       // update offset from unit of elements to unit of bytes
-      auto elemBytes = tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
-      auto factor = integer_val(elemBytes, addrTy);
       auto offset = getValueOrConstantOp(offsets.back(), loc, rewriter);
       offset = castValueTo(offset, addrTy, loc, rewriter);
-      offset = muli(offset, factor);
+      auto eTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
+      offset =
+          getOffsetInUnitOfBytes(rewriter, loc, addrTy, offset, eTyBitWidth);
 
       // convert offset to vector type and update the payload
       const int simd_lanes = 1;
@@ -458,10 +418,10 @@ public:
     auto payloadTy = vecTy(simd_lanes, addrTy);
 
     // offset is represented in number of elements, need to scale it to bytes
-    auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
-    auto factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
+    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
     Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = muli(factor, offsets);
+    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
+                                        offsets, eTyBitWidth);
 
     // create a payload with the base address broadcasted to all simd lanes
     Value payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, base);
@@ -493,10 +453,10 @@ public:
     auto simd_lanes = tdescTy.getShape()[0];
     auto payloadTy = VectorType::get(simd_lanes, addrTy);
 
-    auto elemBytes = elemTy.getIntOrFloatBitWidth() / 8;
-    Value factor = dense_vector_int_val(elemBytes, addrTy, simd_lanes);
+    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
     Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = muli(factor, offsets);
+    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
+                                        offsets, eTyBitWidth);
 
     auto payload = addi(adaptor.getTensorDesc(), offsets);
     rewriter.replaceOp(op, payload);
@@ -648,11 +608,11 @@ public:
   matchAndRewrite(ShapeCastOp shapeCastOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto *converter = getTypeConverter();
-
     Type dstType = converter->convertType(shapeCastOp.getType());
 
     if (!dstType)
       return failure();
+
     if (dstType == adaptor.getSource().getType() ||
         shapeCastOp.getResultVectorType().getNumElements() == 1) {
       rewriter.replaceOp(shapeCastOp, adaptor.getSource());
@@ -776,75 +736,6 @@ public:
   }
 };
 
-static bool isGenericVectorTy(Type type) {
-  if (isa<spirv::ScalarType>(type))
-    return true;
-  auto vecSize = dyn_cast<VectorType>(type).getNumElements();
-  return vecSize == 2 || vecSize == 3 || vecSize == 4 || vecSize == 8 ||
-         vecSize == 16;
-}
-
-template <typename MOp> std::string getVCIntrinsicName() {
-  constexpr bool isFMaxOp = std::is_same_v<MOp, arith::MaximumFOp>;
-  constexpr bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
-  if (isFMaxOp)
-    return "llvm.genx.fmax.";
-  else if (isExpOp)
-    return "llvm.genx.exp.";
-  else
-    assert(0 && "Unsupported math Op. Add more support!");
-}
-
-template <typename MOp>
-struct ElementwiseToVCPattern : public OpConversionPattern<MOp> {
-  using OpConversionPattern<MOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(MOp op, typename MOp::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto vecTy = dyn_cast<VectorType>(op.getType());
-    if (!vecTy)
-      return failure();
-    if (vecTy.getRank() != 1)
-      return failure();
-    bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
-    if (!isExpOp) {
-      bool isGenericSize = isGenericVectorTy(op.getType());
-      bool isFastmath =
-          (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
-      if (isGenericSize && (!isFastmath))
-        return failure();
-    }
-    auto loc = op.getLoc();
-    // This lowering pattern is needed only for spirv ops with large vector
-    // lengths.
-    // for larger vector lengths, "llvm.genx.exp" returns the base 2
-    // exponentiation of the input. To get the base e exponentiation, we need to
-    // scale the input by log2(e)
-    auto operands = adaptor.getOperands();
-    SmallVector<Value> args{operands};
-    if (isExpOp) {
-      auto log2e = rewriter.create<arith::ConstantOp>(
-          loc,
-          rewriter.getFloatAttr(vecTy.getElementType(), 1.442695040888963));
-      auto log2eConstVec =
-          rewriter.create<vector::BroadcastOp>(loc, vecTy, log2e);
-      auto input = operands[0];
-      auto scaledInput =
-          rewriter.create<arith::MulFOp>(op.getLoc(), input, log2eConstVec);
-      args.clear();
-      args.push_back(scaledInput);
-    }
-
-    // for large vectors, generate the corresponding VC intrinsic.
-    auto funcName = getVCIntrinsicName<MOp>();
-    funcName += encodeVectorType(rewriter, vecTy).first;
-    auto callOp =
-        createFuncCall(rewriter, loc, funcName, {op.getType()}, args, false);
-    rewriter.replaceOp(op, callOp);
-    return success();
-  }
-};
-
 bool isLegalXeGPUSCFOp(Operation *op, TypeConverter typeConverter) {
   llvm::SmallVector<Value> args;
   if (llvm::isa<ForOp>(op))
@@ -868,6 +759,10 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     RewritePatternSet patterns(&getContext());
     ConversionTarget target(getContext());
 
+    // Configure the legality of the conversion target for MathToVC patterns.
+    configureMathToVCConversionLegality(target);
+    configureArithToVCConversionLegality(target);
+
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
                            memref::MemRefDialect, vector::VectorDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
@@ -875,30 +770,10 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     target.addDynamicallyLegalDialect<scf::SCFDialect>(
         [&](Operation *op) { return isLegalXeGPUSCFOp(op, typeConverter); });
 
-    target.addDynamicallyLegalOp<arith::MaximumFOp>([&](arith::MaximumFOp op) {
-      if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-        if (vecTy.getRank() != 1)
-          return true;
-        bool isGenericSize = isGenericVectorTy(op.getType());
-        bool isFastmath =
-            (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
-        if (isGenericSize && (!isFastmath))
-          return true;
-        return false;
-      }
-      return true;
+    target.addDynamicallyLegalOp<ShapeCastOp>([&](ShapeCastOp op) {
+      return typeConverter.isLegal(op.getType()) &&
+             typeConverter.isLegal(op.getSource().getType());
     });
-
-    target.addDynamicallyLegalOp<math::ExpOp>([&](math::ExpOp op) {
-      if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-        if (vecTy.getRank() != 1)
-          return true;
-        return false;
-      }
-      return true;
-    });
-
-    target.addIllegalOp<ShapeCastOp>();
 
     // TODO: can we change it to addDynamicLegalOp?
     target.addLegalOp<mlir::UnrealizedConversionCastOp>();
@@ -924,24 +799,20 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     });
 
     typeConverter.addConversion([&](VectorType type) -> Type {
-      // TODO: it looks like needs some improvement for matching upstream
-      // passes
+      // TODO: I don't think we need to convert 2D VectorType to
+      // 1D VectorType. It needs to removed after we move vector
+      // linearization after this pass
 
       unsigned rank = type.getRank();
       auto elemType = type.getElementType();
 
-      if (llvm::isa<IndexType>(elemType))
-        elemType = IntegerType::get(&getContext(), 64);
-
-      auto scalarType = llvm::dyn_cast_or_null<spirv::ScalarType>(elemType);
-      if (!scalarType && !elemType.isBF16()) {
-        llvm::dbgs() << type
-                     << " illegal: cannot convert non-scalar element type\n";
-        return nullptr;
-      }
-
-      if (rank < 1 || type.getNumElements() == 1)
+      if (rank < 1)
         return elemType;
+
+      // TODO: a temporary fix to avoid do type conversion
+      // for create_mask result
+      if (elemType.isInteger(1))
+        return type;
 
       unsigned sum = 1;
       for (unsigned i = 0; i < rank; i++) {
@@ -961,15 +832,17 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                                                         patterns.getContext());
 
     // Ops to llvm.genx only Patterns
-    patterns.add<NbarrierWaitPattern, CompilerHintPattern,
-                 ElementwiseToVCPattern<arith::MaximumFOp>,
-                 ElementwiseToVCPattern<math::ExpOp>, DpasPattern,
+    patterns.add<NbarrierWaitPattern, CompilerHintPattern, DpasPattern,
                  NbarrierArrivePattern>(patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
 
     populateLoadStoreLSCPatterns(typeConverter, patterns);
+
+    populateArithToVCPatterns(typeConverter, patterns);
+
+    populateMathToVCPatterns(typeConverter, patterns);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();

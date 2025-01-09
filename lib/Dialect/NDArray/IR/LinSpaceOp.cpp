@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
-#include <iostream>
 
 namespace {
 /// Pattern to rewrite a create op with constant arguments.

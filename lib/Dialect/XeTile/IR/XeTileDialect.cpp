@@ -2,10 +2,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 #include <cstdint>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
 #include <llvm/ADT/TypeSwitch.h>
@@ -112,18 +110,14 @@ mlir::LogicalResult WorkGroupMapAttr::verify(
   return mlir::success();
 }
 
-mlir::LogicalResult XeTileAttr::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    ::imex::xetile::SubGroupMapAttr sg_map, xetile::WorkGroupMapAttr wg_map,
-    mlir::DenseI32ArrayAttr order, mlir::DenseI64ArrayAttr inner_blocks,
-    mlir::Attribute MemorySpace, mlir::BoolAttr scattered) {
-
+mlir::LogicalResult
+XeTileAttr::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+                   ::imex::xetile::SubGroupMapAttr sg_map,
+                   xetile::WorkGroupMapAttr wg_map,
+                   mlir::DenseI32ArrayAttr order, mlir::Attribute MemorySpace,
+                   mlir::BoolAttr scattered) {
   if (order != mlir::DenseI32ArrayAttr() && order.size() != 2)
     emitError() << "expect integer array of size 2 for order";
-  if (inner_blocks != mlir::DenseI64ArrayAttr() &&
-      (inner_blocks.size() > 0 && inner_blocks.size() != 2))
-    emitError() << "expect integer array of size 2 for non empty inner_blocks "
-                   "attribute";
   return mlir::success();
 }
 

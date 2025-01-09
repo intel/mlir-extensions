@@ -35,10 +35,7 @@
 #include <llvm/ADT/SetVector.h>
 #include <llvm/Support/Debug.h>
 
-#include <optional>
-
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
-#include "imex/Utils/DebugUtils.h"
 
 using namespace mlir;
 using namespace imex;
@@ -59,11 +56,14 @@ public:
     op->walk([&](imex::xetile::InitTileOp op) {
       mlir::OpBuilder rewriter(op);
       if (usageAnalysis.isForLoadAndStore(op) ||
-          usageAnalysis.isForLoadAndPrefetch(op)) {
+          usageAnalysis.isForLoadAndPrefetch(op) ||
+          usageAnalysis.isForLoadAndAtomicRMW(op) ||
+          usageAnalysis.isForAtomicRMWAndStore(op)) {
         mlir::Operation *cloneOp = rewriter.clone(*op);
         for (auto user : op->getUsers()) {
           if (llvm::isa<xetile::StoreTileOp>(user) ||
-              llvm::dyn_cast<xetile::PrefetchTileOp>(user)) {
+              llvm::dyn_cast<xetile::PrefetchTileOp>(user) ||
+              llvm::dyn_cast<xetile::AtomicRMWOp>(user)) {
             auto *targetOp = llvm::dyn_cast_if_present<mlir::Operation *>(user);
             targetOp->replaceUsesOfWith(op->getResults()[0],
                                         cloneOp->getResults()[0]);

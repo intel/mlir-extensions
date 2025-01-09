@@ -17,12 +17,15 @@
 
 #include "mlir/Pass/Pass.h"
 
+#include <imex/Conversion/ArithToVC/ArithToVC.h>
 #include <imex/Conversion/DistToStandard/DistToStandard.h>
 #include <imex/Conversion/DropRegions/DropRegions.h>
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h>
+#include <imex/Conversion/MathToVC/MathToVC.h>
 #include <imex/Conversion/NDArrayToLinalg/NDArrayToLinalg.h>
+#include <imex/Conversion/RegionParallelLoopToGpu/RegionParallelLoopToGpu.h>
 #include <imex/Conversion/XeGPUToVC/XeGPUToVC.h>
 #include <imex/Conversion/XeTileToXeGPU/XeTileToXeGPU.h>
 

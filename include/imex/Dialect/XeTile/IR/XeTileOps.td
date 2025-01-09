@@ -38,10 +38,6 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
         memref or an address is used as the base, it is required to specify the shape and strides
         of the memory region described by the tile.
 
-        Optionally, the tile can be described in blocked layout as well. This is done by specifying
-        an "inner_blocks" attribute which describes the size (rows and cols) of the block. This attribute
-        is used by later lowering passes to detremine the 2D block load/store sizes.
-
         The operation takes in the following arguments:
         * source:  Source can be static/dynamic shaped memref or an address (i64)
         * offsets: offsets into the "source" memref or address at which to
@@ -285,7 +281,9 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
 
 }
 
-def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
+def XeTile_LoadTileOp : XeTile_Op<"load_tile", [
+        AllElementTypesMatch<["source", "value"]>,
+        AllShapesMatch<["source", "value"]>]> {
     let summary = "Loads a tile into a register region";
     let description = [{
         "load_tile" operation loads the values of a tile into a register region with 2D or 4D layout.
@@ -309,22 +307,17 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
             %4 = xetile.load_tile %src { padding = 1.0 : f32}
                 : !xetile.tile<64x32xf32> -> vector<32x64xf32>
         ```
-
-        Example 3: loading into a 4D register region.
-        ```mlir
-            %4 = xetile.load_tile %src : !xetile.tile<64x32xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
-                -> vector<8x2x8x16xf32>
-        ```
     }];
 
-    let arguments = (ins
-        XeTile: $source,
-        OptionalAttr<XeTile_PaddingValueAttr>: $padding
-    );
-    let results = (outs XeTile_2DOr4DVector: $value);
+    let arguments = (ins XeTile: $source,
+                         OptionalAttr<XeTile_PaddingValueAttr>: $padding,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                         OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
+
+    let results = (outs XeTile_2DVector: $value);
 
     let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `->` type($value)";
-    let hasVerifier = true;
 
     let extraClassDeclaration = [{
         // padding value defaults to zero in the appropriate type if its not specified
@@ -340,7 +333,9 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
 
 }
 
-def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
+def XeTile_StoreTileOp : XeTile_Op<"store_tile", [
+        AllElementTypesMatch<["value", "tile"]>,
+        AllShapesMatch<["value", "tile"]>]> {
     let summary = "stores a register region into memory";
     let description = [{
         "store_tile" operation can be used to store a register region into a 2D memory region
@@ -355,23 +350,18 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
         ```mlir
             xetile.store_tile %value, %dst : vector<64x32xf32>, !tile<64x32xf32>
         ```
-
-        Example 2: storing a 4D register region
-        ```mlir
-            xetile.store_tile %value, %dst : vector<8x2x8x16xf32>,
-                !tile<64x32xf32, #xetile.tile_attr<inner_blocks=[8, 16]>>
-        ```
     }];
 
     let arguments = (ins
-        XeTile_2DOr4DVector: $value,
-        XeTile: $tile
-    );
+        XeTile_2DVector: $value,
+        XeTile: $tile,
+        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
 
     let assemblyFormat = [{
         $value`,`` `$tile attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
     }];
-    let hasVerifier = true;
 }
 
 def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
@@ -429,26 +419,18 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
             %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec
                 : vector<64x32xf32>, vector<32x128xf32>, vector<64x128xf32> -> vector<64x128xf32>
         ```
-
-        Example 3: tile_mma on 4D vectors of A, B and, C
-        ```mlir
-            %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec
-                : vector<8x4x8x8xf32>, vector<4x8x8x16xf32>, vector<8x8x8x16xf32> -> vector<8x8x8x16xf32>
-        ```
-
-
     }];
 
     let arguments = (ins
-        XeTile_2DOr4DVector: $a,
-        XeTile_2DOr4DVector: $b,
-        Optional<XeTile_2DOr4DVector>: $c,
+        XeTile_2DVector: $a,
+        XeTile_2DVector: $b,
+        Optional<XeTile_2DVector>: $c,
         OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_a,
         OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_b,
         OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_c
     );
 
-    let results = (outs XeTile_2DOr4DVector: $output);
+    let results = (outs XeTile_2DVector: $output);
      let assemblyFormat = [{
         $a `,` $b (`,` $c^)? attr-dict `:` type($a)`,` type($b) (`,` type($c)^)?  `->` type($output)
      }];
@@ -493,7 +475,7 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", [AttrSizedOperan
         XeTile: $tile,
         Optional<Index>: $offset_x,
         Optional<Index>: $offset_y,
-        Optional<FixedVectorOfRankAndType<[1], [Index]>>:$indices);
+        Optional<FixedVectorOfRankAndType<[1,2], [Index]>>:$indices);
 
     let results = (outs
         XeTile: $result
@@ -502,60 +484,6 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", [AttrSizedOperan
     let assemblyFormat = [{
         $tile`,`` `(``$indices^):(`[` $offset_x `,` $offset_y `]` )? attr-dict `:` qualified(type($tile)) (`,` type($indices)^)?
     }];
-}
-
-def XeTile_TilePackOp : XeTile_Op<"tile_pack", [Pure]> {
-    let summary = "pack 2D vector into a 4D blocked vector";
-    let description = [{
-        "tile_pack" operation is used for converting a 2D vector into a blocked 4D vector. The
-        block size is specified by the `inner_blocks` atrribute. The outermost 2 dimensions of
-        the output specify the number of blocks along row and col dimensions, and innermost 2
-        dimensions of the output is equal to the dimensions of the `inner_blocks` i.e. blocking
-        follows this rule:
-            out_vec_shape[0] = in_vec_shape[0]/inner_blocks[0]
-            out_vec_shape[1] = in_vec_shape[1]/inner_blocks[1]
-            out_vec_shape[2] = inner_blocks[0]
-            out_vec_shape[3] = inner_blocks[1]
-
-        Example 1:
-        ```mlir
-            %1 = xetile.tile_pack %0 {inner_blocks = array<i64: 16, 16>}
-                : vector<64x32xf32> -> vector<4x2x16x16xf32>
-        ```
-    }];
-
-    let arguments = (ins XeTile_2DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
-    let results = (outs XeTile_4DVector: $out_vec);
-
-    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
-    let hasVerifier = true;
-    let hasFolder = 1;
-}
-
-def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", [Pure]> {
-    let summary = "unpack a blocked 4D vector into a 2D vector";
-    let description = [{
-        "tile_unpack" operation performs the reverse of "tile_pack". Given a 4D vector and
-        an `inner_block` attribute, this operation unpacks the blocked vector into a 2D vector.
-        Similar to "tile_pack" this operation follows the rule:
-            out_vec_shape[0] == in_vec_shape[0]*inner_blocks[0]
-            out_vec_shape[1] == in_vec_shape[1]*inner_blocks[1]
-            inner_blocks[0] == in_vec_shape[2]
-            inner_blocks[1] == in_vec_shape[3]
-
-        Example 1:
-        ```mlir
-            %1 = xetile.tile_unpack %0 {inner_blocks = array<i64: 16, 16>}
-                : vector<4x2x16x16xf16> -> vector<64x32xf16>
-        ```
-    }];
-
-    let arguments = (ins XeTile_4DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
-    let results = (outs XeTile_2DVector: $out_vec);
-
-    let assemblyFormat = "$in_vec attr-dict `:` qualified(type($in_vec)) `->` type($out_vec)";
-    let hasVerifier = true;
-    let hasFolder = 1;
 }
 
 def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
@@ -572,9 +500,9 @@ def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
         ```
     }];
     let arguments = (ins XeTile_AtomicRMWKindAttr:$kind,
-                        XeTile_2DOr4DVector:$value,
+                        XeTile_2DVector:$value,
                         XeTile:$tile);
-    let results = (outs XeTile_2DOr4DVector:$result);
+    let results = (outs XeTile_2DVector:$result);
     let assemblyFormat = [{
         $kind $value `,` $tile  attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
                 `->` qualified(type($result))
@@ -587,9 +515,9 @@ def XeTile_TransposeOp: XeTile_Op<"transpose", []> {
         It has the same semantic with `vector.transpose`, but limits the vector to be 2D.
     }];
 
-    let arguments = (ins XeTile_2DOr4DVector: $vector,
+    let arguments = (ins XeTile_2DVector: $vector,
                          DenseI64ArrayAttr:$permutation);
-    let results = (outs XeTile_2DOr4DVector: $result);
+    let results = (outs XeTile_2DVector: $result);
     let assemblyFormat = [{
         $vector `,` $permutation attr-dict `:` type($vector) `->` type($result)
     }];
@@ -605,9 +533,9 @@ def XeTile_ReductionOp: XeTile_Op<"reduction", []> {
     }];
 
     let arguments = (ins Vector_CombiningKindAttr: $kind,
-                         XeTile_2DOr4DVector: $source,
+                         XeTile_2DVector: $source,
                          DenseI64ArrayAttr: $reduction_dims);
-    let results = (outs XeTile_2DOr4DVector: $result);
+    let results = (outs XeTile_2DVector: $result);
     let assemblyFormat = [{
         $kind `,` $source $reduction_dims attr-dict `:` type($source) `->` type($result)
     }];
@@ -618,17 +546,33 @@ def XeTile_ReductionOp: XeTile_Op<"reduction", []> {
 def XeTile_BroadcastOp: XeTile_Op<"broadcast", []> {
     let summary = "broadcast a vector from 1D to 2D.";
 
-    let arguments = (ins XeTile_2DOr4DVector: $source,
+    let arguments = (ins XeTile_2DVector: $source,
                          DenseI64ArrayAttr: $broadcast_dim);
-    let results = (outs XeTile_2DOr4DVector: $result);
+    let results = (outs XeTile_2DVector: $result);
     let assemblyFormat = [{
         $source $broadcast_dim attr-dict `:` type($source) `->` type($result)
     }];
     let hasVerifier = 1;
 }
 
+def XeTile_ConvertLayoutOp: XeTile_Op<"convert_layout", [AllTypesMatch<["source", "result"]>]> {
+    let summary = "Convert the sg layout of the input operand";
+    let description = [{
+        convert_layout with wg_map attributes remaps the SG layout
+        into a new layout which shuffles the data between subgroups with a workgroup
+    }];
+    let arguments = (ins XeTile_2DVector: $source,
+                         XeTile_WorkGroupMapAttr: $wg_map_result,
+                         OptionalAttr<XeTile_WorkGroupMapAttr>: $wg_map_source
+                         );
+    let results = (outs XeTile_2DVector: $result);
+    let assemblyFormat = [{
+        $source attr-dict `:` type($source)
+    }];
+}
+
 def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value"]>,
-                                            AllShapesMatch<["tile", "value", "mask"]>]> {
+                                            AllShapesMatch<["value", "mask"]>]> {
    let summary = "load a set of scattered data points from memory.";
    let description = [{
         The `load` operation is used to load data with scattered tile (each element in the tile
@@ -639,7 +583,10 @@ def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value
 
    let arguments = (ins XeTile: $tile,
                         XeTile_MaskType: $mask,
-                        OptionalAttr<XeTile_PaddingValueAttr>: $padding);
+                        OptionalAttr<XeTile_PaddingValueAttr>: $padding,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
    let results = (outs XeTile_1DOr2DVector: $value);
    let assemblyFormat = [{
         $tile `` `,` $mask attr-dict `:` qualified(type($tile)) `` `,` type($mask) `->` type($value)
@@ -647,7 +594,7 @@ def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value
 }
 
 def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "tile"]>,
-                                               AllShapesMatch<["value", "tile", "mask"]>]> {
+                                               AllShapesMatch<["value", "mask"]>]> {
    let summary = "load a set of data to scattered memory locations.";
    let description = [{
         The `store` operation is used to store data into scattered tile (each element in the tile
@@ -657,7 +604,10 @@ def XeTile_StoreScatterOp: XeTile_Op<"store", [AllElementTypesMatch<["value", "t
    }];
    let arguments = (ins XeTile_1DOr2DVector: $value,
                         XeTile: $tile,
-                        XeTile_MaskType: $mask);
+                        XeTile_MaskType: $mask,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
+                        OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
    let assemblyFormat = [{
     $value `,` $tile `,` $mask attr-dict `:` type($value) `,` qualified(type($tile)) `,` type($mask)
    }];

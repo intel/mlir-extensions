@@ -13,8 +13,8 @@
 
 #include <level_zero/ze_api.h>
 
+#include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <vector>
 
 #define VALIDATECALL(zeCall)                                                   \

@@ -75,7 +75,7 @@ module @transpose attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %3 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg1[%7] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %8, %arg0 : f32
       spirv.Return
     }
@@ -105,7 +105,7 @@ module @transpose attributes {gpu.container_module} {
       %cst1_i64 = spirv.Constant 1 : i64
       %6 = spirv.IMul %cst1_i64, %1 : i64
       %7 = spirv.IAdd %5, %6 : i64
-      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64
+      %8 = spirv.AccessChain %arg0[%7] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %9 = spirv.Load "CrossWorkgroup" %8 : f32
       %cst0_i64_1 = spirv.Constant 0 : i64
       %cst10_i64 = spirv.Constant 10 : i64
@@ -114,7 +114,7 @@ module @transpose attributes {gpu.container_module} {
       %cst1_i64_2 = spirv.Constant 1 : i64
       %12 = spirv.IMul %cst1_i64_2, %3 : i64
       %13 = spirv.IAdd %11, %12 : i64
-      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64
+      %14 = spirv.AccessChain %arg1[%13] : !spirv.ptr<!spirv.array<200 x f32>, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %14, %9 : f32
       spirv.Return
     }

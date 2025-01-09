@@ -16,7 +16,6 @@
 
 #include <imex/Transforms/Passes.h>
 
-#include "llvm/ADT/SmallVector.h"
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>

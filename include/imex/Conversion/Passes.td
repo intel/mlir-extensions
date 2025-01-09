@@ -109,6 +109,19 @@ def DropRegions: Pass<"drop-regions"> {
   let options = [];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertRegionParallelLoopToGpu
+//===----------------------------------------------------------------------===//
+
+def ConvertRegionParallelLoopToGpu : Pass<"convert-region-parallel-loops-to-gpu"> {
+  let summary = "Convert mapped scf.parallel ops within GPU regions to gpu launch operations";
+  let description = [{
+    Convert scf.parallel ops within GPU regions to gpu launch operations.
+  }];
+  let constructor = "::imex::createConvertRegionParallelLoopToGpuPass()";
+  let dependentDialects = [];
+  let options = [];
+}
 
 //===----------------------------------------------------------------------===//
 // GPUToSPIRV
@@ -368,8 +381,8 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
     func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
       %c0 = arith.constant 0 : index
       %c64 = arith.constant 64 : index
-	    %1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<2x1x8x16xf16>
-      %2 = xetile.load_tile %1 : !xetile.tile<2x1x8x16xf16> -> vector<2x1x8x16xf16>
+      %1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<8x16xf16>
+      %2 = xetile.load_tile %1 : !xetile.tile<8x16xf16> -> vector<8x16xf16>
 	    return
     }
 
@@ -379,11 +392,7 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
       %c0 = arith.constant 0 : index
       %c64 = arith.constant 64 : index
       %0 = xegpu.create_nd_tdesc %arg0[%c0, %c64] {boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %c8 = arith.constant 8 : index
-      %c64_0 = arith.constant 64 : index
-      %1 = xegpu.create_nd_tdesc %arg0[%c8, %c64_0] {boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
       %2 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<uncached>, l3_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-      %3 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<uncached>, l3_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 	    return
     }
   }];
@@ -396,7 +405,7 @@ def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModul
                            "::mlir::arith::ArithDialect",
                            ];
   let options = [
-     Option<"device", "device", "std::string",
+    Option<"device", "device", "std::string",
             /*default=*/"\"pvc\"",
             "gpu platform architecture where these ops are running">
  ];
@@ -426,5 +435,66 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
                             ];
   let constructor = "imex::createConvertXeGPUToVCPass()";
 }
+
+
+//===----------------------------------------------------------------------===//
+// MathToVC
+//===----------------------------------------------------------------------===//
+// high-precision-interim-calculation
+def ConvertMathToVC : Pass<"convert-math-to-vc", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Generate vc-intrinsics functions for select math dialect operations";
+  let description = [{
+    Convert select math dialect operations into the Func dialect calls to vc-intrinsics
+    functions.
+    Some math operations are not supported by the VC compiler (IGC vector backend)
+    and need to be converted to vc-intrinsic calls.
+    This pass converts these math operations to vc-intrinsics.
+    }];
+  let options = [
+    Option<"enableHighPrecisionInterimCalculation", "enable-high-precision-interim-calculation", "bool",
+           /*default=*/"false",
+           "Enables high precision (f32) interim  calculation for math operations."
+           "For any interim instruction added as part of the conversion will be high precision(f32).">
+  ];
+
+  let dependentDialects = ["::mlir::math::MathDialect",
+                           "::mlir::vector::VectorDialect",
+                            "::mlir::LLVM::LLVMDialect",
+                            "::mlir::func::FuncDialect",
+                           "::mlir::arith::ArithDialect"
+                            ];
+  let constructor = "imex::createConvertMathToVCPass()";
+}
+
+
+//===----------------------------------------------------------------------===//
+// ArithToVC
+//===----------------------------------------------------------------------===//
+// high-precision-interim-calculation
+def ConvertArithToVC : Pass<"convert-arith-to-vc", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Generate vc-intrinsics functions for select arith dialect operations";
+  let description = [{
+    Convert select arith dialect operations into the Func dialect calls to vc-intrinsics
+    functions.
+    Some arith operations SPIR-V counterpart are not supported by the VC compiler
+    (IGC vector backend) or not performant enough
+    and need to be converted to vc-intrinsic calls.
+    This pass converts these arith operations to vc-intrinsics.
+    }];
+  let options = [
+    Option<"enableHighPrecisionInterimCalculation", "enable-high-precision-interim-calculation", "bool",
+           /*default=*/"false",
+           "Enables high precision (f32) interim  calculation for arith operations."
+           "For any interim instruction added as part of the conversion will be high precision(f32).">
+  ];
+
+  let dependentDialects = ["::mlir::arith::ArithDialect",
+                           "::mlir::vector::VectorDialect",
+                            "::mlir::LLVM::LLVMDialect",
+                            "::mlir::func::FuncDialect"
+                            ];
+  let constructor = "imex::createConvertArithToVCPass()";
+}
+
 
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
