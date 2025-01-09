@@ -156,7 +156,7 @@ xetile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
    %vector_a = xetile.broadcast %vector_b [0]: vector<1x32xfloat> into vector<64x32xfloat>
 ```
 
-`broadcast_size` allows the broadcast dimension being more than 1. The broadcast operation "stretches" the input vector to match output shape as defined by `broadcast_size`. Along the broadcast dimension, each element is being replicated and fill a contiguous block of `broadcast_size`, and then fit into the output vector. 
+`broadcast_size` allows the broadcast dimension being more than 1. The broadcast operation "stretches" the input vector to match output shape as defined by `broadcast_size`. Along the broadcast dimension, each element is being replicated and fill a contiguous block of `broadcast_size`, and then fit into the output vector.
 
 ```mlir
    %vector_a = xetile.broadcast %vector_b [0] {$broadcast_size=32}: vector<2x64xfloat> into vector<64x64xfloat>
