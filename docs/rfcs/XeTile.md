@@ -215,7 +215,7 @@ The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTi
 |transpose	| operation ::= xetile.transpose attr_dict $vec : type($vec) -> type($res)	 | %vector_a = xetile.transpose %vector_b {#mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
 |reduction	| operation ::= xetile.reduction $kind $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.reduction <add> %vector_b [1] {#mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
 |broadcast	| operation ::= xetile.broadcast $src attr_dict : type($value) -> type($res)	 | %vector_a = xetile.broadcast %vector_b  [0] {#mp_a}: vector<1x32xfloat> into vector<64x32xfloat>  |
-|tile_conv_layout	| operation ::= xetile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.tile_conv_layout %vector_b {#mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
+|convert_layout	| operation ::= xetile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.convert_layout %vector_b {#mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
 
 With the `wg_map` attribute attached for the output vector, `tile_mma` does a matrix multiplication at a work group level vector.
 ```mlir
@@ -274,20 +274,20 @@ The transpose can be implemented by saving and restoring from the shared local m
 
 An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
 
-`tile_conv_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
+`convert_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
 
 Example with the wg_map specified for both input and output operands.
 ```mlir
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = xetile.tile_conv_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+   %vector_a = xetile.convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
 Example without the wg_map specified for the input operand.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = xetile.tile_conv_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
+   %vector_a = xetile.convert_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
-The tile_conv_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
+The convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
 
 ## Alternative design considerations
@@ -493,7 +493,7 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
          %12  = load_tile %7  : tile<1x256xf32, #mp_bcast> -> vector<1x256xf16>                          // sg_layout=[8, 4], sg_data=[1,64]
          %13 = broadcast {#mp_bcast #mp_c} %12 [0]: vector<1x256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4]
          %14 = add %6, %13 : vector<256x256xf32>
-         %15 = tile_conv_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
+         %15 = convert_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
          %16 = reduction {#mp_reduce2 #mp_reduce} <add> %15 [1]: vector<256x256xf32> => vector<256x1xf32>  // sg_layout=[32, 1]
          store_tile %3, %7: (tile<256x1xf32, #mp_reduce>, vector<256x1xf32>)                               // sg_layout=[32, 1]
     } 
