@@ -39,6 +39,12 @@ struct VectorExtractElementOpConversion final
   mlir::LogicalResult
   matchAndRewrite(mlir::vector::ExtractElementOp extractOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+
+    if (adaptor.getVector().getType() == extractOp.getType()) {
+      rewriter.replaceOp(extractOp, adaptor.getVector());
+      return mlir::success();
+    }
+
     auto vector = extractOp.getVector();
     auto vecTy = vector.getType();
     auto constOp = vector.getDefiningOp<mlir::arith::ConstantOp>();
@@ -57,6 +63,7 @@ struct VectorExtractElementOpConversion final
       rewriter.replaceOp(extractOp, newVal);
       return mlir::success();
     }
+
     return mlir::failure();
   }
 };
@@ -207,25 +214,33 @@ struct RemoveSingleElemVectorPass final
   void runOnOperation() override {
     auto *context = &getContext();
     mlir::TypeConverter typeConverter;
-
+    // convert a value from vector<1xT> to T using vector::ExtractElementOp
     auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type resultType,
                               mlir::ValueRange inputs, mlir::Location loc) {
+      if (inputs.size() != 1)
+        return mlir::Value();
+
+      auto vecTy = mlir::dyn_cast<mlir::VectorType>(inputs[0].getType());
+      if (!vecTy || vecTy.getNumElements() != 1)
+        return mlir::Value();
+
+      auto zero =
+          builder.create<mlir::arith::ConstantOp>(loc, builder.getIndexAttr(0));
       return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
-          .getResult(0);
+          .create<mlir::vector::ExtractElementOp>(loc, inputs[0], zero)
+          .getResult();
     };
 
     typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);
+
     typeConverter.addConversion([](mlir::Type type) {
       auto vecTy = mlir::dyn_cast<mlir::VectorType>(type);
       if (vecTy && vecTy.getNumElements() == 1)
         return vecTy.getElementType();
       return type;
     });
-
-    // typeConverter.addConversion([](mlir::Type type) { return type; });
 
     mlir::ConversionTarget target(*context);
     target.addLegalOp<mlir::arith::ConstantOp>();
