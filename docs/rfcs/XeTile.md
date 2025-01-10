@@ -148,8 +148,8 @@ xetile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKind
 ```
 `reduction_size` attribute support reduction over a given size, which may be a divisor of dimension size being reduced. This allow user to partially reduce the tensor without reshaping the vector to higher dimension just for reduction. With `reduction_size`, the reduction is done over contiguous elements along the reduction dimension.
 ```mlir
-   %vector_a = xetile.reduction <add> %vector_b [0] {$reduction_size=32}: vector<64x64xfloat>, vector<2x64xfloat> into vector<2x64xfloat>
-   %vector_a = xetile.reduction <add> %vector_b [1] {$reduction_size=32}: vector<64x64xfloat>, vector<64x2xfloat> into vector<64x2xfloat>
+   %vector_a = xetile.reduction <add> %vector_b [0] {$reduction_size=32}: vector<64x64xfloat> into vector<2x64xfloat>
+   %vector_a = xetile.reduction <add> %vector_b [1] {$reduction_size=32}: vector<64x64xfloat> into vector<64x2xfloat>
 ```
 `broadcast` broadcast from a 2D vector to a 2D vector. The source tensor's broadcast dimension must be 1.
 ```mlir
@@ -242,7 +242,7 @@ The `wg_map` attribute of input vector operands can be derived from the wg_map_d
    #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
    #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [1, 32]>
    %vector_a = math.exp %input {#wg_map_a} : vector<256x128xf32>
-   %vector_b = xetile.reduction <add> %vector_a [0] {$reduction_size = [32]}  {#wg_map_b}: vector<256x128xfloat>,  vector<8x128xfloat> into vector<8x128xfloat>
+   %vector_b = xetile.reduction <add> %vector_a [0] {$reduction_size = [32]}  {#wg_map_b}: vector<256x128xfloat> into vector<8x128xfloat>
 ```
 
 The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_layout must be same, sg_data for the dimension being reduced must be same as the input vector, and the other dimension must be same as the wg_map_a. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
