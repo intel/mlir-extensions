@@ -323,3 +323,24 @@ gpu.module @test_module {
 // CHECK-SAME: %[[ARG0:[a-zA-Z0-9]+]]: vector<16x32xf32>) -> vector<32x16xf32>
 // CHECK: %[[T0:.*]] = xetile.transpose %arg0, [1, 0] : vector<16x32xf32> -> vector<32x16xf32>
 // CHECK: gpu.return %[[T0]] : vector<32x16xf32>
+
+// -----
+// Intend to be unchanged for SLM
+gpu.module @test_module {
+  gpu.func @test_slm(%arg0: memref<512x128xf16, 3>) {
+    %0 = xetile.init_tile %arg0[0, 0] : memref<512x128xf16, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3>>
+    %1 = xetile.load_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<16x32xf16>
+    %view = memref.transpose %arg0 (i, j) -> (j, i) : memref<512x128xf16, 3> to memref<128x512xf16, strided<[1, 128]>, 3>
+    %2 = xetile.init_tile %view[16, 32] : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3>>
+    xetile.store_tile %1, %2 : vector<16x32xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3>>
+    gpu.return
+  }
+}
+
+//CHECK-LABEL: gpu.func @test_slm
+//CHECK-SAME: (%[[arg0:.*]]: memref<512x128xf16, 3>)
+//CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][0, 0] : memref<512x128xf16, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+//CHECK: %[[r1:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<16x32xf16>
+//CHECK: %[[transpose:.*]] = memref.transpose %[[arg0]] (d0, d1) -> (d1, d0) : memref<512x128xf16, 3> to memref<128x512xf16, strided<[1, 128]>, 3>
+//CHECK: %[[r2:.*]] = xetile.init_tile %[[transpose]][16, 32] : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+//CHECK: xetile.store_tile %[[r1]],  %[[r2]] : vector<16x32xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
