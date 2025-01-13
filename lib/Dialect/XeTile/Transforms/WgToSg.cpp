@@ -1007,9 +1007,7 @@ void analyzeInitTileOps(mlir::Operation *op) {
     mlir::BlockArgument loopArg;
     if (auto scfFor = llvm::dyn_cast_if_present<mlir::scf::ForOp>(initOpUser)) {
       auto argument = imex::getArgForOperand(scfFor, initOp.getResult());
-      int userCount = 0;
       for (auto user : argument.getUsers()) {
-        userCount++;
         if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
           loadUser = user;
           ops.push_back(scfFor);
