@@ -31,6 +31,24 @@ using namespace mlir::xegpu;
 
 namespace imex {
 
+// this method computes the vnni factor for the given element type.
+// it returns 1 by default for types does not need vnni transformation.
+int getVnniFactor(mlir::Type elemTy);
+
+// a helper function to get the vector type after doing vnni transformation
+// e.g., vector<4x4xf16> -> vector<2x4x2xf16>
+mlir::VectorType getPackedType(mlir::VectorType vecTy);
+
+// Apply VNNI transformation to the given value, using VectorShuffle
+// and shapecast operations. Since it is to add some extra operations
+// on the given value. Thus, the function also returns the first
+// operation applied to the value for convenience, such that the
+// user can replace all uses of current value, except the first
+// appended operation.
+std::pair<mlir::Value, mlir::Operation *>
+applyVnniTransform(mlir::OpBuilder &builder,
+                   mlir::TypedValue<mlir::VectorType> value);
+
 // valid chunk sizes are 1, 2, 3, 4, 8 if simdLanes > 1.
 // 16, 32, and 64 are only available if simdLanes == 1.
 llvm::SmallVector<int> getSupportedChunkSizes(int simdlanes);
