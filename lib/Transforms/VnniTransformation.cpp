@@ -20,6 +20,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 
 #include "imex/Transforms/Passes.h"
+#include "imex/Utils/XeCommon.h"
 
 #include <optional>
 
@@ -27,6 +28,8 @@ namespace imex {
 #define GEN_PASS_DEF_VNNITRANSFORMATION
 #include "imex/Transforms/Passes.h.inc"
 } // namespace imex
+
+using namespace imex;
 
 namespace {
 // Struct describing current layout per mlir::Value.
@@ -101,11 +104,6 @@ public:
     return mlir::ChangeResult::Change;
   }
 };
-
-static int getVnniFactor(mlir::Type elemTy) {
-  assert(elemTy.isIntOrFloat() && "Only integer and float types supported");
-  return 32 / elemTy.getIntOrFloatBitWidth();
-}
 
 static bool isVNNIApplicable(mlir::Type type) {
   auto vecTy = mlir::dyn_cast<mlir::VectorType>(type);
@@ -266,68 +264,6 @@ private:
   mlir::DataFlowSolver solver;
 };
 } // namespace
-
-static mlir::VectorType getPackedType(mlir::VectorType vecTy) {
-  auto shape = vecTy.getShape().vec();
-  auto factor = getVnniFactor(vecTy.getElementType());
-  unsigned axis = shape.size() == 3 ? 1 : 0;
-
-  // Only 2D/3D vector supported and The vector size
-  // must be divisible by the factor
-  if ((shape.size() != 2 && shape.size() != 3) || !factor ||
-      shape[axis] % factor != 0)
-    return nullptr;
-
-  shape.emplace_back(factor);
-  shape[axis] /= factor;
-  return mlir::VectorType::get(shape, vecTy.getElementType());
-}
-
-static llvm::SmallVector<int64_t>
-getVNNIShuffleIndices(mlir::VectorType srcType) {
-  auto numElements = srcType.getNumElements();
-  llvm::SmallVector<int64_t> ret(numElements, 0);
-  auto dstType = getPackedType(srcType);
-  auto dstShape = dstType.getShape();
-  // Convert from contiguous layout to VNNI packed, e.g. from
-  // `vector<16x16xf16>` to `vector<8x16x2xf16>`.
-  // To arrange the data in VNNI format, the shuffle indices must satisfy
-  // following mapping.
-  // [i, j, k] => i * dstShape[1] * dstShape[2] + j + k * dstShape[1]
-  int shuffleIndex = 0;
-  for (unsigned i = 0; i < dstShape[0]; ++i) {
-    for (unsigned j = 0; j < dstShape[1]; ++j) {
-      for (unsigned k = 0; k < dstShape[2]; ++k) {
-        ret[shuffleIndex++] =
-            i * dstShape[1] * dstShape[2] + j + k * dstShape[1];
-      }
-    }
-  }
-  return ret;
-}
-
-static std::pair<mlir::Value, mlir::Operation *>
-applyVnniTransform(mlir::OpBuilder &builder,
-                   mlir::TypedValue<mlir::VectorType> src) {
-  assert(src && "value must be non-null");
-  auto loc = src.getLoc();
-  auto srcTy = src.getType();
-  auto elems = srcTy.getNumElements();
-  auto elemTy = srcTy.getElementType();
-  auto linearVecTy = mlir::VectorType::get(elems, elemTy);
-  auto root = builder.create<mlir::vector::ShapeCastOp>(loc, linearVecTy, src);
-  auto mask = getVNNIShuffleIndices(srcTy);
-  auto shuffle = builder.create<mlir::vector::ShuffleOp>(loc, root, root, mask);
-  auto packedTy = getPackedType(srcTy);
-  auto cast = builder.create<mlir::vector::ShapeCastOp>(loc, packedTy, shuffle);
-  // for convenience of load+transpose optimization, add packed attribute
-  // to indicate these ops are used to do vnni transform.
-  root.getOperation()->setAttr("packed", builder.getUnitAttr());
-  shuffle.getOperation()->setAttr("packed", builder.getUnitAttr());
-  cast.getOperation()->setAttr("packed", builder.getUnitAttr());
-
-  return {cast, root};
-}
 
 static void applyVnniTransformOnResults(mlir::OpBuilder &builder,
                                         mlir::Operation *op,
