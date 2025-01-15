@@ -517,6 +517,22 @@ struct VectorCreateMaskOpConversion final
   }
 };
 
+struct VectorBitCastOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::BitCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::BitCastOp castOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstTy = getTypeConverter()->convertType(castOp.getType());
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(castOp, "cannot convert type.");
+
+    rewriter.replaceOpWithNewOp<mlir::vector::BitCastOp>(castOp, dstTy,
+                                                         adaptor.getSource());
+    return mlir::success();
+  }
+};
+
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -564,6 +580,11 @@ struct VectorLinearizePass final
           return op.getType().getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::vector::BitCastOp>(
+        [&](mlir::vector::BitCastOp op) {
+          return op.getType().getRank() == 1;
+        });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -576,8 +597,8 @@ struct VectorLinearizePass final
     patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,
-                 VectorStoreOpConversion, VectorCreateMaskOpConversion>(
-        typeConverter, context);
+                 VectorStoreOpConversion, VectorCreateMaskOpConversion,
+                 VectorBitCastOpConversion>(typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(
