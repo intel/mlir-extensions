@@ -31,11 +31,74 @@ gpu.module @test_kernel {
   //CHECK: gpu.func @sg_load_tile_unaligned(%[[arg0:.*]]: memref<128x128xf16>)
   gpu.func @sg_load_tile_unaligned(%a: memref<128x128xf16>) {
     %c0 = arith.constant 0 : index
-    //CHECK-COUNT-20: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<17x19xf16>
-    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<85x76xf16>
-    //CHECK-COUNT-20: xetile.load_tile {{.*}} : !xetile.tile<17x19xf16> -> vector<17x19xf16>
-    %2 = xetile.load_tile %1 : !xetile.tile<85x76xf16> -> vector<85x76xf16>
+    //CHECK-COUNT-8: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<20x32xf16>
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<80x64xf16>
+    //CHECK-COUNT-8: xetile.load_tile {{.*}} : !xetile.tile<20x32xf16> -> vector<20x32xf16>
+    %2 = xetile.load_tile %1 : !xetile.tile<80x64xf16> -> vector<80x64xf16>
     //CHECK: gpu.return
+    gpu.return
+  }
+
+  //CHECK: gpu.func @sg_load_tile_unaligned_2(%[[arg0:.*]]: memref<128x128xf16>)
+  gpu.func @sg_load_tile_unaligned_2(%a: memref<128x128xf16>) {
+    %c0 = arith.constant 0 : index
+    //CHECK: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<24x32xf16>
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<24x32xf16>
+    //CHECK: xetile.load_tile {{.*}} : !xetile.tile<24x32xf16> -> vector<24x32xf16>
+    %2 = xetile.load_tile %1 : !xetile.tile<24x32xf16> -> vector<24x32xf16>
+    //CHECK: gpu.return
+    gpu.return
+  }
+
+  //CHECK: gpu.func @sg_load_tile_unaligned_3(%[[arg0:.*]]: memref<128x128xf16>)
+  gpu.func @sg_load_tile_unaligned_3(%a: memref<128x128xf16>) {
+    %c0 = arith.constant 0 : index
+    //CHECK-COUNT-2: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<28x32xf16>
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<56x32xf16>
+    //CHECK-COUNT-2: xetile.load_tile {{.*}} : !xetile.tile<28x32xf16> -> vector<28x32xf16>
+    %2 = xetile.load_tile %1 : !xetile.tile<56x32xf16> -> vector<56x32xf16>
+    //CHECK: gpu.return
+    gpu.return
+  }
+
+  //CHECK: gpu.func @sg_load_tile_unaligned_4(%[[arg0:.*]]: memref<128x128xf16>)
+  gpu.func @sg_load_tile_unaligned_4(%a: memref<128x128xf16>) {
+    %c0 = arith.constant 0 : index
+    %cst = arith.constant dense<0.0> : vector<64x32xf16>
+    //CHECK-COUNT-20: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<16x16xf16>
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<80x64xf16>
+    //CHECK-COUNT-20: xetile.load_tile {{.*}} : !xetile.tile<16x16xf16> -> vector<16x16xf16>
+    %2 = xetile.load_tile %1 : !xetile.tile<80x64xf16> -> vector<80x64xf16>
+    %3 = xetile.tile_mma %2, %cst: vector<80x64xf16>, vector<64x32xf16> -> vector<80x32xf32>
+    //CHECK: gpu.return
+    gpu.return
+  }
+
+  //CHECK: gpu.func @sg_load_tile_unaligned_5(%[[arg0:.*]]: memref<128x128xf16>)
+  gpu.func @sg_load_tile_unaligned_5(%a: memref<128x128xf16>) {
+    %c0 = arith.constant 0 : index
+    %cst = arith.constant dense<0.0> : vector<32x32xf16>
+    //CHECK-COUNT-14: xetile.init_tile %arg0[{{.*}}] : memref<128x128xf16> -> !xetile.tile<8x16xf16>
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<56x32xf16>
+    //CHECK-COUNT-14: xetile.load_tile {{.*}} : !xetile.tile<8x16xf16> -> vector<8x16xf16>
+    %2 = xetile.load_tile %1 : !xetile.tile<56x32xf16> -> vector<56x32xf16>
+    %3 = xetile.tile_mma %2, %cst: vector<56x32xf16>, vector<32x32xf16> -> vector<56x32xf32>
+    //CHECK: gpu.return
+    gpu.return
+  }
+
+  //CHECK: gpu.func @sg_load_tile_unaligned_6(%[[arg0:.*]]: memref<128x128xf16>)
+  gpu.func @sg_load_tile_unaligned_6(%a: memref<128x128xf16>) {
+    %c0 = arith.constant 0 : index
+    %c64 = arith.constant 64 : index
+    %1 = xetile.init_tile %a[%c0, %c0] : memref<128x128xf16> -> !xetile.tile<24x48xf16>
+    %2 = xetile.init_tile %a[%c64, %c64] : memref<128x128xf16> -> !xetile.tile<48x32xf16>
+    //CHECK-COUNT-3: xetile.load_tile {{.*}} : !xetile.tile<24x16xf16> -> vector<24x16xf16>
+    %3 = xetile.load_tile %1 : !xetile.tile<24x48xf16> -> vector<24x48xf16>
+
+    //CHECK-COUNT-6: xetile.load_tile {{.*}} : !xetile.tile<16x16xf16> -> vector<16x16xf16>
+    %4 = xetile.load_tile %2 : !xetile.tile<48x32xf16> -> vector<48x32xf16>
+    %5 = xetile.tile_mma %3, %4: vector<24x48xf16>, vector<48x32xf16> -> vector<24x32xf32>
     gpu.return
   }
 
@@ -1561,4 +1624,34 @@ gpu.module @test_kernel {
     xetile.store %6, %7, %cst : vector<1x32xf32>, !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
     gpu.return
   }
+
+  //CHECK-LABEL: gpu.func @store_tile_slm
+  gpu.func @store_tile_slm() {
+    %c0 = arith.constant 0 : index
+    %a = arith.constant dense<0.000000e+00> : vector<24x32xf16>
+    %slm = memref.alloc() : memref<8192xi8, 3>
+    %view = memref.view %slm[%c0][] : memref<8192xi8, 3> to memref<64x64xf16, 3>
+    //CHECK-COUNT-6: {{.*}} = xetile.init_tile {{.*}} : memref<64x64xf16, 3> -> !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    %st_tile = xetile.init_tile %view[%c0, %c0] : memref<64x64xf16, 3> -> !xetile.tile<24x32xf16, #xetile.tile_attr<memory_space=3>>
+    //CHECK-COUNT-6: xetile.store_tile {{.*}} : vector<8x16xf16>, !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    xetile.store_tile %a, %st_tile : vector<24x32xf16>, !xetile.tile<24x32xf16, #xetile.tile_attr<memory_space=3>>
+    gpu.return
+  }
+
+  //CHECK-LABEL: gpu.func @load_store_tile_slm_transpose
+  gpu.func @load_store_tile_slm_transpose(%arg0: memref<512x128xf16, 3>) {
+
+    //CHECK-COUNT-4: {{.*}} = xetile.init_tile {{.*}} : memref<512x128xf16, 3> -> !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    //CHECK-COUNT-4: {{.*}} = xetile.load_tile {{.*}} : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<8x16xf16>
+    %0 = xetile.init_tile %arg0[0, 0] : memref<512x128xf16, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    %1 = xetile.load_tile %0 : !xetile.tile<16x32xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<16x32xf16>
+    %transpose = memref.transpose %arg0 (i, j) -> (j, i) : memref<512x128xf16, 3> to memref<128x512xf16, strided<[1, 128]>, 3>
+
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile {{.*}} : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x16xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+    //CHECK-COUNT-2: xetile.store_tile {{.*}} : vector<16x16xf16>, !xetile.tile<16x16xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+    %2 = xetile.init_tile %transpose[16, 32] : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+    xetile.store_tile %1,  %2 : vector<16x32xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+    gpu.return
+  }
+
 }

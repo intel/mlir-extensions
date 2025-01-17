@@ -22,6 +22,53 @@
 
 namespace imex {
 
+bool isColMajorOrder(mlir::DenseI32ArrayAttr order) {
+  return (order == mlir::DenseI32ArrayAttr::get(order.getContext(), {0, 1}));
+}
+
+int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
+                         int vnniFactor, bool colMajor) {
+  if (colMajor) {
+    // for col-major, the scattered load/store will be used, and the width
+    // will be mapped to simd lanes and height will be mapped to ChunkSize.
+    for (auto h : getSupportedChunkSizes(width)) {
+      h *= vnniFactor;
+      if (shape[0] % h == 0)
+        return h;
+    }
+  } else {
+    // for row-major, the 1D block load/store will be used, the chunk size
+    // is the whole block size, thus the height = chunkSize/width.
+    for (auto chunk : getSupportedChunkSizes(1)) {
+      auto h = chunk / width;
+      h *= vnniFactor;
+      if (chunk % width == 0 && h && shape[0] % h == 0)
+        return h;
+    }
+  }
+  return 0;
+}
+
+bool isSupportedOptimalSLMAccess(xetile::TileType tileTy) {
+  // 1D load/store supports maximumly 64 elements, and scattered load/store
+  // (used for transposed cases) supports maximumly 128 elements (16x8, since
+  // we fixed block width to 16, which is mapped to simd16). For simplicity,
+  // we start with simple cases, that can be evenly divided by the maximum
+  // capacity of one instruction.
+
+  const int width = 16;
+  auto memSpace = tileTy.getMemorySpaceAsInt();
+  auto shape = tileTy.getShape();
+  auto vnni = getVnniFactor(tileTy.getElementType());
+
+  if (memSpace == 3 && shape[1] % width == 0 && shape[0] % vnni == 0) {
+    auto colMajor = isColMajorOrder(tileTy.getOrder());
+    auto h = getHeightForSLMBlock(shape, width, vnni, colMajor);
+    return h != 0;
+  }
+  return false;
+}
+
 static llvm::SmallVector<int64_t>
 getVNNIShuffleIndices(mlir::VectorType srcType) {
   auto numElements = srcType.getNumElements();
