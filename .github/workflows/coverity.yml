@@ -13,7 +13,7 @@ permissions: read-all
 jobs:
   coverity:
     name: Coverity
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       COV_TOKEN: jQxsG_hSGU57M7A7lqyBvg
       LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
