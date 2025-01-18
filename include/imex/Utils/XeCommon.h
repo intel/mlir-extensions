@@ -31,6 +31,22 @@ using namespace mlir::xegpu;
 
 namespace imex {
 
+// a helper util to check whether the order is column major.
+bool isColMajorOrder(mlir::DenseI32ArrayAttr order);
+
+// a helper util to get the height for SLM block, given the
+// block width (which is typically the simd lanes, currently fixed
+// to 16), vnni factor, the tile shape, and tile order. The height
+// is constrained by the supported chunk sizes, which are 1, 2, 3, 4, 8
+// for scattered load/store (used for colMajor), and 16, 32, 64 for 1D
+// block load/store. Also shape[0] % height == 0. otherwise, it returns 0.
+int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
+                         int vnniFactor, bool colMajor);
+
+// a helper util to check whether the tile type is supported
+// for optimal SLM access lowering.
+bool isSupportedOptimalSLMAccess(xetile::TileType tileTy);
+
 // this method computes the vnni factor for the given element type.
 // it returns 1 by default for types does not need vnni transformation.
 int getVnniFactor(mlir::Type elemTy);
