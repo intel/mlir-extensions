@@ -147,7 +147,7 @@ private:
           // If current user is a forOp, we need to get the block argument.
           if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
             auto opArgs = imex::getArgsForOperand(forOp, currOp->getResult(0));
-            assert (opArgs.size() == 1 && "Duplicated tiles are not supported");
+            assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
             auto blockArg = opArgs[0];
             for (auto user : blockArg.getUsers())
               worklist.insert(user);
@@ -949,7 +949,7 @@ private:
           // `op` can be passed in as a block argument to the forOp. So mark all
           // users of the block arg inside forOp body.
           auto opArgs = imex::getArgsForOperand(forOp, op->getResult(0));
-          assert (opArgs.size() == 1 && "Duplicated tiles are not supported");
+          assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
           auto blockArg = opArgs[0];
           for (auto blockArgUser : blockArg.getUsers())
             markOp(blockArgUser);

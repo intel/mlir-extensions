@@ -144,7 +144,8 @@ llvm::SmallVector<int> getSupportedChunkSizes(int simdlanes) {
   return {8, 4, 3, 2, 1};
 }
 
-llvm::SmallVector<int64_t> getOperandIndices(mlir::Operation *op, mlir::Value operand) {
+llvm::SmallVector<int64_t> getOperandIndices(mlir::Operation *op,
+                                             mlir::Value operand) {
   llvm::SmallVector<int64_t> resIndices;
   for (auto [i, value] : llvm::enumerate(op->getOperands())) {
     if (operand == value)
@@ -162,11 +163,11 @@ int getResultIndex(mlir::Operation *op, mlir::Value value) {
 }
 
 llvm::SmallVector<mlir::BlockArgument> getArgsForOperand(mlir::scf::ForOp &op,
-                                     mlir::Value operand) {
+                                                         mlir::Value operand) {
   llvm::SmallVector<mlir::BlockArgument> argList;
   auto indices = getOperandIndices(op, operand);
   auto numControls = op.getNumControlOperands();
-  for (auto idx: indices) {
+  for (auto idx : indices) {
     assert(idx >= static_cast<int>(numControls));
     argList.push_back(op.getRegionIterArg(idx - numControls));
   }

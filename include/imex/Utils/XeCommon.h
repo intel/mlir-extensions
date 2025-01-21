@@ -108,13 +108,15 @@ mlir::TypedValue<mlir::VectorType> concat(mlir::Value lhs, mlir::Value rhs,
 // xetile.TileType. They are currently not supported yet.
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod);
 
-llvm::SmallVector<int64_t> getOperandIndices(mlir::Operation *op, mlir::Value operand);
+llvm::SmallVector<int64_t> getOperandIndices(mlir::Operation *op,
+                                             mlir::Value operand);
 
 // Obtain the index of the result in the operation. If the result is not found,
 // return -1.
 int getResultIndex(mlir::Operation *op, mlir::Value result);
 
-llvm::SmallVector<mlir::BlockArgument> getArgsForOperand(mlir::scf::ForOp &op, mlir::Value operand);
+llvm::SmallVector<mlir::BlockArgument> getArgsForOperand(mlir::scf::ForOp &op,
+                                                         mlir::Value operand);
 
 mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
                                      mlir::TypeRange resultTypes,
@@ -150,7 +152,7 @@ public:
                          llvm::dyn_cast_if_present<mlir::scf::ForOp>(user)) {
             // we need to check all ForOp arguments for using initTileOp result
             auto args = getArgsForOperand(forOp, curr);
-            q.insert(q.end(),args.begin(), args.end());
+            q.insert(q.end(), args.begin(), args.end());
           }
         }
       }
@@ -164,7 +166,8 @@ public:
         for (mlir::Operation *user : curr.getUsers()) {
           if (auto mma = llvm::dyn_cast_if_present<xetile::TileMMAOp>(user)) {
             auto opIndices = getOperandIndices(mma, curr);
-            assert (opIndices.size() == 1 && "Only MMA operations with non-equal ops supported");
+            assert(opIndices.size() == 1 &&
+                   "Only MMA operations with non-equal ops supported");
             auto idx = opIndices[0];
             if (idx == 0)
               Usage[op] |= (uint)UsageType::DPAS_A;
