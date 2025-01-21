@@ -61,12 +61,20 @@ public:
           usageAnalysis.isForAtomicRMWAndStore(op)) {
         mlir::Operation *cloneOp = rewriter.clone(*op);
         for (auto user : op->getUsers()) {
+          auto *targetOp = llvm::dyn_cast_if_present<mlir::Operation *>(user);
           if (llvm::isa<xetile::StoreTileOp>(user) ||
               llvm::dyn_cast<xetile::PrefetchTileOp>(user) ||
               llvm::dyn_cast<xetile::AtomicRMWOp>(user)) {
-            auto *targetOp = llvm::dyn_cast_if_present<mlir::Operation *>(user);
             targetOp->replaceUsesOfWith(op->getResults()[0],
                                         cloneOp->getResults()[0]);
+          } else if (auto forOp =
+                         llvm::dyn_cast<mlir::scf::ForOp>(user)) {
+            // we can end up on InitTileOp uses as the same ForOp arguments
+            auto opIndices = getOperandIndices(forOp, op->getResults()[0]);
+            assert(opIndices.size() < 3 &&
+              "Only cases with no more than 2 same arguments of ForOp supported");
+            auto idx = opIndices[0];
+            targetOp->setOperands(idx, 1, {cloneOp->getResults()[0]});
           }
         }
       }
