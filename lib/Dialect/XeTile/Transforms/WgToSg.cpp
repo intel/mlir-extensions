@@ -1006,7 +1006,9 @@ void analyzeInitTileOps(mlir::Operation *op) {
     mlir::Operation *loadUser = nullptr;
     mlir::BlockArgument loopArg;
     if (auto scfFor = llvm::dyn_cast_if_present<mlir::scf::ForOp>(initOpUser)) {
-      auto argument = imex::getArgForOperand(scfFor, initOp.getResult());
+      auto opArgs = imex::getArgsForOperand(scfFor, initOp.getResult());
+      assert (opArgs.size() == 1 && "Duplicated tiles are not supported");
+      auto argument = opArgs[0];
       for (auto user : argument.getUsers()) {
         if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
           loadUser = user;
