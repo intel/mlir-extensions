@@ -146,7 +146,9 @@ private:
         for (auto user : currOp->getUsers()) {
           // If current user is a forOp, we need to get the block argument.
           if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
-            auto blockArg = imex::getArgForOperand(forOp, currOp->getResult(0));
+            auto opArgs = imex::getArgsForOperand(forOp, currOp->getResult(0));
+            assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
+            auto blockArg = opArgs[0];
             for (auto user : blockArg.getUsers())
               worklist.insert(user);
           } else if (!llvm::isa<xegpu::UpdateNdOffsetOp>(user)) {
@@ -944,9 +946,11 @@ private:
       for (auto user : op->getUsers()) {
         // ForOp requires special handling.
         if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
-          // `op` can be pased in as a block argument to the forOp. So mark all
+          // `op` can be passed in as a block argument to the forOp. So mark all
           // users of the block arg inside forOp body.
-          auto blockArg = imex::getArgForOperand(forOp, op->getResult(0));
+          auto opArgs = imex::getArgsForOperand(forOp, op->getResult(0));
+          assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
+          auto blockArg = opArgs[0];
           for (auto blockArgUser : blockArg.getUsers())
             markOp(blockArgUser);
           // Also, do the same for the corresponding result of the forOp.
