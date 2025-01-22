@@ -246,7 +246,7 @@ struct DistRuntimeToIDTRPass
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<CopyReshapeOpPattern, CopyPermuteOpPattern, WaitOpPattern>(
         getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }; // runOnOperation()
 
 }; // DistRuntimeToIDTRPass
