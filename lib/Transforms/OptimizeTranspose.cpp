@@ -418,7 +418,7 @@ static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
         loc, tdescTy, slm, llvm::ArrayRef<OpFoldResult>({offset}));
     Value value = rewriter.create<xegpu::LoadNdOp>(
         loc, loadTy, tdesc, nullptr /*packed*/, nullptr /*transpose*/,
-        nullptr /*transpose_bit_width*/, nullptr /*l1_hint*/,
+        /*nullptr transpose_bit_width,*/ nullptr /*l1_hint*/,
         nullptr /*l2_hint*/, nullptr /*l3_hint*/);
     // if original data is not 32-bit, need to bitcast current 32-bit data
     //  back to original element type.
@@ -513,7 +513,7 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
     for (auto source : sources) {
       auto loadNdOp = rewriter.create<xegpu::LoadNdOp>(
           op.getLoc(), newLoadTy, source, op.getPackedAttr(),
-          op.getTransposeAttr(), op.getTransposeBitWidthAttr(),
+          op.getTransposeAttr(), // op.getTransposeAttr(),
           op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       loadNdOps.push_back(loadNdOp);
     }
@@ -880,13 +880,13 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto packedAttr = UnitAttr(); // empty packed attribute.
       auto transposeAttr =
           DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
-      auto transposeBitWidthAttr = IntegerAttr::get(
-          rewriter.getIntegerType(32),
-          32); // need to do a 32 bit transpose to get the packed layout.
+      // auto transposeBitWidthAttr = IntegerAttr::get(
+      //     rewriter.getIntegerType(32),
+      //     32); // need to do a 32 bit transpose to get the packed layout.
       auto newLoadOp = rewriter.create<xegpu::LoadNdOp>(
           loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), packedAttr,
-          transposeAttr, transposeBitWidthAttr, loadOp.getL1HintAttr(),
-          loadOp.getL2HintAttr(), loadOp.getL3HintAttr());
+          transposeAttr, loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+          loadOp.getL3HintAttr());
       // Replace the uses of the packed layout conversion with new load.
       rewriter.replaceAllUsesWith(packedLayoutOps.back()->getResult(0),
                                   newLoadOp.getResult());
@@ -909,8 +909,8 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
           DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
       auto newLoadOp = rewriter.create<xegpu::LoadNdOp>(
           loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), packedAttr,
-          transposeAttr, IntegerAttr(), loadOp.getL1HintAttr(),
-          loadOp.getL2HintAttr(), loadOp.getL3HintAttr());
+          transposeAttr, loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+          loadOp.getL3HintAttr());
       rewriter.replaceAllUsesWith(op.getResult(), newLoadOp.getResult());
     }
 
@@ -1053,8 +1053,8 @@ private:
     config.useTopDownTraversal = true;
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     patterns.add<TransposeRewritePattern>(context, analysis, uArchInterface);
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
-                                            config))) {
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                     config))) {
       return signalPassFailure();
     }
   }

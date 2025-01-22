@@ -428,7 +428,7 @@ struct XeTileBlockOpFallbackPass final
     config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
     patterns.add<InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
                  UpdateTileOffsetOpPattern, SCFForOpPattern>(context);
-    if (failed(applyPatternsAndFoldGreedily(op, std::move(patterns), config))) {
+    if (failed(applyPatternsGreedily(op, std::move(patterns), config))) {
       return signalPassFailure();
     }
   }
