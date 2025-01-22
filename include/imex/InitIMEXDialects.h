@@ -36,12 +36,12 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
                     ::imex::region::RegionDialect,
                     ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect>();
-                    
+
   ndarray::registerAllExtensions(registry);
   // clang-format on
 
   // Register all external models.
-  region::registerBufferizableOpInterfaceExternalModels(registry);
+  // FIXME region::registerBufferizableOpInterfaceExternalModels(registry);
 }
 
 /// Append all the IMEX dialects to the registry contained in the given context.
