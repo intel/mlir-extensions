@@ -463,7 +463,7 @@ struct InsertSliceShardingInterface
                         OpBuilder &builder) const {
     if (resultShardings.size() != 1 || operandShardings.size() < 2 ||
         resultShardings[0] != operandShardings[0]) {
-      return failure();
+      return op->emitOpError("incorrect sharding annotations");
     }
 
     auto typedOp = cast<imex::ndarray::InsertSliceOp>(op);
