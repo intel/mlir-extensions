@@ -3,7 +3,7 @@
 builtin.module {
     memref.global constant @static_mpi_rank : memref<index> = dense<10>
     mesh.mesh @mesh4x4(shape = 4x4)
-    func.func @test_shard_propagate_insert_slice_2d(%arg0: tensor<1200x1200xi64>) {
+    func.func @test_shard_propagate_insert_slice_2d(%arg0: tensor<1200x1200xi64>) -> tensor<1200x1200xi64> {
         %s = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
         %0 = mesh.shard %arg0 to %s : tensor<1200x1200xi64>
         %1 = ndarray.subview %0[0, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
@@ -13,8 +13,8 @@ builtin.module {
         %4 = linalg.add ins(%1, %2 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o1 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
         %o2 = tensor.empty() : tensor<1000x1000xi64>
         %5 = linalg.add ins(%3, %4 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o2 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
-        ndarray.insert_slice %5 into %0[2, 2][1000, 1000][1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
-        return
+        %6 = ndarray.insert_slice %5 into %0[2, 2][1000, 1000][1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
+        return %6 : tensor<1200x1200xi64>
     }
 }
 // CHECK: mesh.mesh @mesh4x4(shape = 4x4)
