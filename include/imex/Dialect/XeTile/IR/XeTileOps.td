@@ -362,6 +362,8 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", [
     let assemblyFormat = [{
         $value`,`` `$tile attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
     }];
+
+    let hasVerifier = 1;
 }
 
 def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
@@ -569,6 +571,8 @@ def XeTile_ConvertLayoutOp: XeTile_Op<"convert_layout", [AllTypesMatch<["source"
     let assemblyFormat = [{
         $source attr-dict `:` type($source)
     }];
+
+    let hasVerifier = 1;
 }
 
 def XeTile_LoadGatherOp: XeTile_Op<"load", [AllElementTypesMatch<["tile", "value"]>,
