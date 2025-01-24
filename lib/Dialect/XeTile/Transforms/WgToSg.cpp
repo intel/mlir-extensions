@@ -787,10 +787,14 @@ class WGToSGXeTileConvertLayout
     auto dstMapDimY = createIndexConstant(indexType, dstSgLayout[1]);
     auto loadSgIdX = rewriter.create<mlir::index::DivUOp>(loc, sgId, dstMapDimY);
     auto loadSgIdY =  rewriter.create<mlir::index::RemUOp>(loc, sgId, dstMapDimY);
-    auto loadOffsetX = rewriter.createOrFold<mlir::index::MulOp>(
+    mlir::Value loadOffsetX = rewriter.createOrFold<mlir::index::MulOp>(
                 loc, loadSgIdX, createIndexConstant(indexType, dstMapSgData[0]));
-    auto loadOffsetY = rewriter.createOrFold<mlir::index::MulOp>(
+    mlir::Value loadOffsetY = rewriter.createOrFold<mlir::index::MulOp>(
                 loc, loadSgIdY, createIndexConstant(indexType, dstMapSgData[1]));
+    loadOffsetX = rewriter.createOrFold<mlir::index::RemUOp>(
+                loc, loadOffsetX, createIndexConstant(indexType, resShape[0]));
+    loadOffsetY = rewriter.createOrFold<mlir::index::RemUOp>(
+                loc, loadOffsetY, createIndexConstant(indexType, resShape[1]));
     auto loadInitTileOp = rewriter.create<xetile::InitTileOp>(
           loc, dstTileTy, viewOp, llvm::ArrayRef<mlir::OpFoldResult>({loadOffsetX, loadOffsetY}));
     //TODO: Set up cache attributes

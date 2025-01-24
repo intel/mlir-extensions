@@ -9,6 +9,10 @@
 #tile_attr = #xetile.tile_attr<wg_map = #wg_map, sg_map = #sg_map>
 #tile_attr_w_order = #xetile.tile_attr<order = [0, 1]>
 
+#st_sg_map = #xetile.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
+#st_wg_map = #xetile.wg_map<sg_layout = [4, 1], sg_data = [32, 128]>
+#st_tile_attr = #xetile.tile_attr<wg_map = #st_wg_map, sg_map = #st_sg_map>
+
 
 #wg_map_mma_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
 #wg_map_mma_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
@@ -185,7 +189,7 @@ func.func @test_load_tile(%src: !xetile.tile<64x32xf16>, %src1 : !xetile.tile<12
 // CHECK-LABEL: func @test_store_tile({{.*}}) {
 func.func @test_store_tile(%value1 : vector<64x32xf16>,
   %value2 : vector<8x4x8x16xf16>, %value3 : vector<128x128xf16>, %dst: !xetile.tile<64x32xf16>,
-  %dst1 : !xetile.tile<128x128xf16, #tile_attr>,
+  %dst1 : !xetile.tile<128x128xf16, #st_tile_attr>,
   %dst2 : !xetile.tile<64x32xf16, #tile_attr_w_order>) {
 
   // CHECK: xetile.store_tile
@@ -194,8 +198,8 @@ func.func @test_store_tile(%value1 : vector<64x32xf16>,
 
   // CHECK: xetile.store_tile
   // CHECK-SAME: vector<128x128xf16>, !xetile.tile<128x128xf16, #xetile.tile_attr<sg_map =
-  // CHECK-SAME: <wi_layout = [2, 8], wi_data = [1, 2]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 128]>>>
-  xetile.store_tile %value3, %dst1 : vector<128x128xf16>, !xetile.tile<128x128xf16, #tile_attr>
+  // CHECK-SAME: <wi_layout = [2, 8], wi_data = [1, 2]>, wg_map = <sg_layout = [4, 1], sg_data = [32, 128]>>>
+  xetile.store_tile %value3, %dst1 : vector<128x128xf16>, !xetile.tile<128x128xf16, #st_tile_attr>
 
   // CHECK: xetile.store_tile
   // CHECK-SAME: vector<64x32xf16>, !xetile.tile<64x32xf16, #xetile.tile_attr<order = [0, 1]>>

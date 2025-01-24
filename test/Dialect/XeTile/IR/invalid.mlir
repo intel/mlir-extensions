@@ -135,8 +135,30 @@ func.func @test_broadcast(%source: vector<2x16xf16>) {
 }
 
 // -----
-func.func @test_init_tile_for_scattered(%a: memref<1024x1024xf16>, %indices: vector<128xindex>) {
-  // expected-error@+1 {{Expecting a 0-D or 1-D memref as source.}}
-  %1 = xetile.init_tile %a, %indices : memref<1024x1024xf16>, vector<128xindex> -> !xetile.tile<128xf16, #xetile.tile_attr<scattered = true>>
+func.func @test_convert_layout(%a: vector<64x64xf32>) {
+  // expected-error@+1 {{data is not evenly distributed to each subgroup}}
+  %1 = xetile.convert_layout %a {wg_map_result = #xetile.wg_map<sg_layout = [4, 8], sg_data = [16, 16]>, wg_map_source = #xetile.wg_map<sg_layout = [8, 4], sg_data = [16, 16]>} : vector<64x64xf32>
+  return
+}
+// -----
+func.func @test_convert_layout(%a: vector<64x64xf32>) {
+  // expected-error@+1 {{data is not evenly distributed to each subgroup}}
+  %1 = xetile.convert_layout %a {wg_map_result = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 8]>, wg_map_source = #xetile.wg_map<sg_layout = [8, 4], sg_data = [8, 32]>} : vector<64x64xf32>
+  return
+}
+
+// -----
+func.func @test_invalid_wg_map(%a: vector<64x64xf32>, %b: memref<64x64xf32>) {
+  %t = xetile.init_tile %b[0, 0] : memref<64x64xf32> -> !xetile.tile<64x64xf32, #xetile.tile_attr<wg_map = #xetile.wg_map<sg_layout = [8, 4], sg_data = [8, 32]>>>
+  // expected-error@+1 {{data is not evenly distributed to each subgroup}}
+  xetile.store_tile %a, %t : vector<64x64xf32>, !xetile.tile<64x64xf32, #xetile.tile_attr<wg_map = #xetile.wg_map<sg_layout = [8, 4], sg_data = [8, 32]>>>
+  return
+}
+
+// -----
+func.func @test_invalid_wg_map(%a: vector<64x64xf32>, %b: memref<64x64xf32>) {
+  %t = xetile.init_tile %b[0, 0] : memref<64x64xf32> -> !xetile.tile<64x64xf32, #xetile.tile_attr<wg_map = #xetile.wg_map<sg_layout = [8, 4], sg_data = [8, 32]>>>
+  // expected-error@+1 {{data is not evenly distributed to each subgroup}}
+  xetile.store_tile %a, %t : vector<64x64xf32>, !xetile.tile<64x64xf32, #xetile.tile_attr<wg_map = #xetile.wg_map<sg_layout = [8, 4], sg_data = [8, 32]>>>
   return
 }

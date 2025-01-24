@@ -59,6 +59,20 @@ static bool isConstantIndex(mlir::OpFoldResult value) {
          nullptr;
 }
 
+// check whether the given shape can be perfectly distributed to each subgroup.
+// If so return true, otherwise return false.
+static bool isEvenDistributed(llvm::ArrayRef<int64_t> shape,
+                              xetile::WorkGroupMapAttr attr) {
+  assert(attr && "workgroup map attribute is missing.");
+  auto data = attr.getSgData().asArrayRef();
+  auto layout = attr.getSgLayout().asArrayRef();
+  for (auto [s, d, l] : llvm::zip_equal(shape, data, layout)) {
+    if (s != d * l)
+      return false;
+  }
+  return true;
+}
+
 mlir::LogicalResult InitTileOp::verify() {
   auto tileTy = getType();
 
@@ -232,6 +246,14 @@ void InitTileOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
         {} /* static strides */, indices);
 }
 
+mlir::LogicalResult StoreTileOp::verify() {
+  auto tileTy = getTile().getType();
+  auto attr = tileTy.getWgMap();
+  if (attr && !isEvenDistributed(tileTy.getShape(), attr))
+    return emitOpError("data is not evenly distributed to each subgroup.");
+  return mlir::success();
+}
+
 mlir::LogicalResult TileMMAOp::verify() {
   int64_t aRank = getAType().getRank();
   int64_t bRank = getBType().getRank();
@@ -310,6 +332,14 @@ mlir::LogicalResult BroadcastOp::verify() {
   for (auto i : dims)
     if (srcShape[i] != 1)
       return emitOpError("broadcast dimension of source must have size 1");
+  return mlir::success();
+}
+
+mlir::LogicalResult ConvertLayoutOp::verify() {
+  auto attr = getWgMapSourceAttr();
+  auto shape = getSource().getType().getShape();
+  if (attr && !isEvenDistributed(shape, attr))
+    return emitOpError("data is not evenly distributed to each subgroup.");
   return mlir::success();
 }
 
