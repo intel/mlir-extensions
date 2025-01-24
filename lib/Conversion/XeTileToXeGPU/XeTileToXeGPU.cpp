@@ -227,10 +227,9 @@ public:
       auto [L1, L2, L3] = getCachePolicy(op);
       auto packAttr = mlir::UnitAttr();
       auto transAttr = mlir::DenseI64ArrayAttr();
-      auto bitWidthAttr = mlir::IntegerAttr();
       rewriter.replaceOpWithNewOp<mlir::xegpu::LoadNdOp>(
-          op, op.getType(), adaptor.getSource(), packAttr, transAttr,
-          bitWidthAttr, L1, L2, L3);
+          op, op.getType(), adaptor.getSource(), packAttr, transAttr, L1, L2,
+          L3);
       return mlir::success();
     }
     return mlir::failure();

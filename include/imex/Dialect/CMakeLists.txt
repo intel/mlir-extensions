@@ -1,4 +1,3 @@
-add_subdirectory(Dist)
 add_subdirectory(DistRuntime)
 add_subdirectory(NDArray)
 add_subdirectory(Region)

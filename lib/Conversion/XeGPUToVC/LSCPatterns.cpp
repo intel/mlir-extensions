@@ -842,7 +842,8 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
       // TODO: remove this after moving transposeBitWidth into a standalone
       // pass. update the width and pictch of the payload when transposeBitWidth
       // is set, and larger than the element bit width.
-      auto transposeBitWidth = op.getTransposeBitWidth().value_or(0);
+      auto transposeBitWidth =
+          1; // FIXME op.getTransposeBitWidth().value_or(0);
       auto factor = transposeBitWidth / elemTy.getIntOrFloatBitWidth();
       if (factor > 1) {
         // update the block offset X of the payload, since it is in unit of

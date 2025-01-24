@@ -1631,7 +1631,7 @@ public:
           ops.push_back(op);
       });
       if (mlir::failed(
-              mlir::applyOpPatternsAndFold(ops, std::move(patterns), config)))
+              mlir::applyOpPatternsGreedily(ops, std::move(patterns), config)))
         return signalPassFailure();
     });
 

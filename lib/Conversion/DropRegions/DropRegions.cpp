@@ -56,7 +56,7 @@ struct DropRegionsPass : public ::imex::impl::DropRegionsBase<DropRegionsPass> {
   void runOnOperation() override {
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<RemoveRegion>(getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }
 };
 

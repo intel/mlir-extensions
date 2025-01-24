@@ -543,8 +543,7 @@ struct VectorLinearizePass final
     {
       mlir::RewritePatternSet patterns(&getContext());
       mlir::vector::populateVectorBroadcastLoweringPatterns(patterns);
-      (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                               std::move(patterns));
+      (void)mlir::applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
     mlir::TypeConverter typeConverter;
