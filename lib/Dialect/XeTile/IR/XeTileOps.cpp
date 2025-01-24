@@ -97,8 +97,9 @@ mlir::LogicalResult InitTileOp::verify() {
   if ((getMixedSizes().size() != getMixedStrides().size()) ||
       (getMixedStrides().size() != getMixedOffsets().size()) ||
       (static_cast<int64_t>(getMixedSizes().size()) < tileTy.getRank()))
-    return emitOpError("memref with a dynamic shape or raw address is used as source but "
-                       "dynamic shape argument missing or it is not of valid rank");
+    return emitOpError(
+        "memref with a dynamic shape or raw address is used as source but "
+        "dynamic shape argument missing or it is not of valid rank");
 
   auto order = tileTy.getOrder();
   bool rowMajor = (order[0] == 1 && order[1] == 0);
