@@ -13,7 +13,7 @@
 #tile_attr_b = #xetile.tile_attr<wg_map = #wg_map_b, sg_map = #sg_map_b>
 
 #sg_map_c = #xetile.sg_map< wi_layout = [1, 16], wi_data = [1, 1]>
-#wg_map_c = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 32]>
+#wg_map_c = #xetile.wg_map<sg_layout = [4, 4], sg_data = [32, 32]>
 #tile_attr_c = #xetile.tile_attr<wg_map = #wg_map_c, sg_map = #sg_map_c>
 
 // CHECK-LABEL: func @test_gemm({{.*}}) {
@@ -31,11 +31,11 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
   // intialize C tile and load it
   // CHECK: xetile.init_tile
   // CHECK-SAME: memref<1024x1024xf32> -> !xetile.tile<128x128xf32, #xetile.tile_attr<sg_map = <wi_layout = [1, 16],
-  // CHECK-SAME: wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 32]>>>
+  // CHECK-SAME: wi_data = [1, 1]>, wg_map = <sg_layout = [4, 4], sg_data = [32, 32]>>>
   %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32> -> !xetile.tile<128x128xf32, #tile_attr_c>
   // CHECK:  xetile.load_tile
   // CHECK-SAME: : !xetile.tile<128x128xf32, #xetile.tile_attr<sg_map =
-  // CHECK-SAME: <wi_layout = [1, 16], wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 32]>>> -> vector<128x128xf32>
+  // CHECK-SAME: <wi_layout = [1, 16], wi_data = [1, 1]>, wg_map = <sg_layout = [4, 4], sg_data = [32, 32]>>> -> vector<128x128xf32>
   %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<128x128xf32, #tile_attr_c> -> vector<128x128xf32>
   // initalize A and B tiles
   // CHECK: xetile.init_tile
@@ -80,7 +80,7 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
   // store the final accumulated C tile result back to memory
   // CHECK: xetile.store_tile
   // CHECK-SAME: vector<128x128xf32>, !xetile.tile<128x128xf32, #xetile.tile_attr<sg_map = <wi_layout = [1, 16],
-  // CHECK-SAME: wi_data = [1, 1]>, wg_map = <sg_layout = [2, 2], sg_data = [32, 32]>>>
+  // CHECK-SAME: wi_data = [1, 1]>, wg_map = <sg_layout = [4, 4], sg_data = [32, 32]>>>
   xetile.store_tile %out#2, %c_init_tile : vector<128x128xf32>, !xetile.tile<128x128xf32, #tile_attr_c>
   return
 }

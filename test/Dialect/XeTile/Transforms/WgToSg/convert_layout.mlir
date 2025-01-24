@@ -26,7 +26,9 @@ gpu.module @test_convert_layout{
     //CHECK: %[[R7:.*]] = index.mul %[[R5]], %[[c8]]
     //CHECK: %[[c256:.*]] = arith.constant 256 : index
     //CHECK: %[[R8:.*]] = index.mul %[[R6]], %[[c256]]
-    //CHECK: %[[INITTILEDSTMAP:.*]] = xetile.init_tile %[[SLMVIEW]][%[[R7]], %[[R8]]] : memref<256x256xf32, 3> -> !xetile.tile<8x256xf32, #xetile.tile_attr<memory_space = 3 : i32>>
+    //CHECK: %[[R9:.*]] = index.remu %[[R7]], %c256
+    //CHECK: %[[R10:.*]] = index.remu %[[R8]], %c256
+    //CHECK: %[[INITTILEDSTMAP:.*]] = xetile.init_tile %[[SLMVIEW]][%[[R9]], %[[R10]]] : memref<256x256xf32, 3> -> !xetile.tile<8x256xf32, #xetile.tile_attr<memory_space = 3 : i32>>
     //CHECK: %[[LOADTILE:.*]] = xetile.load_tile %[[INITTILEDSTMAP]] : !xetile.tile<8x256xf32, #xetile.tile_attr<memory_space = 3 : i32>> -> vector<8x256xf32>
 
     %cst = arith.constant {map = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>} dense<0.000000e+00> : vector<256x256xf32>
