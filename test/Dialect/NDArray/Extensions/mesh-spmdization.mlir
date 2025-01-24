@@ -90,12 +90,11 @@ func.func @test_linspace_offsets() -> tensor<?xi64> {
     return %1 : tensor<?xi64>
 }
 
-
 mesh.mesh @mesh4x4(shape = 4x4)
 
 // CHECK-LABEL: func.func @test_subview_insert_slice_2d(
-// CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) {
-func.func @test_subview_insert_slice_2d(%arg0: tensor<1200x1200xi64>) {
+// CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) -> tensor<302x302xi64> {
+func.func @test_subview_insert_slice_2d(%arg0: tensor<1200x1200xi64>) -> tensor<1200x1200xi64> {
     %sharding = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
     %sharding_annotated = mesh.shard %arg0 to %sharding : tensor<1200x1200xi64>
     %sharding_0 = mesh.sharding @mesh4x4 split_axes = [[0], [1]] halo_sizes = [0, 2, 0, 2] : !mesh.sharding
@@ -110,7 +109,10 @@ func.func @test_subview_insert_slice_2d(%arg0: tensor<1200x1200xi64>) {
     %sharding_annotated_4 = mesh.shard %0 to %sharding_2 : tensor<1000x1000xi64>
     %sharding_annotated_5 = mesh.shard %sharding_annotated_4 to %sharding_2 annotate_for_users : tensor<1000x1000xi64>
     %sharding_annotated_6 = mesh.shard %sharding_annotated_1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
-    // CHECK-NEXT: ndarray.insert_slice [[v2]] into [[v1]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
-    ndarray.insert_slice %sharding_annotated_5 into %sharding_annotated_6[2, 2] [1000, 1000] [1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
-    return
+    // CHECK-NEXT: [[v3:%.*]] = ndarray.insert_slice [[v2]] into [[v1]][0, 0] [300, 300] [1, 1] : tensor<300x300xi64> into tensor<302x302xi64>
+    // CHECK-NEXT: [[v4:%.*]] = mesh.update_halo [[v3]] on @mesh4x4 split_axes = {{\[\[}}0], [1]] halo_sizes = [0, 2, 0, 2] : tensor<302x302xi64>
+    %1 = ndarray.insert_slice %sharding_annotated_5 into %sharding_annotated_6[2, 2] [1000, 1000] [1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
+    %sharding_annotated_7 = mesh.shard %1 to %sharding_0 annotate_for_users : tensor<1200x1200xi64>
+    // CHECK: return [[v4]] : tensor<302x302xi64>
+    return %sharding_annotated_7 : tensor<1200x1200xi64>
 }

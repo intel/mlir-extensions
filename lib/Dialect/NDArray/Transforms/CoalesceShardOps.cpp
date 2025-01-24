@@ -42,6 +42,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Mesh/IR/MeshDialect.h>
 #include <mlir/Dialect/Mesh/IR/MeshOps.h>
+#include <mlir/Dialect/Tosa/IR/TosaOps.h>
 #include <mlir/Dialect/Utils/IndexingUtils.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Interfaces/ShapedOpInterfaces.h>
@@ -63,6 +64,21 @@ bool isCreator(::mlir::Operation *op) {
 
 bool isElementwise(::mlir::Operation *op) {
   return ::mlir::isa<
+      ::mlir::tosa::AddOp, ::mlir::tosa::ArithmeticRightShiftOp,
+      ::mlir::tosa::BitwiseAndOp, ::mlir::tosa::BitwiseOrOp,
+      ::mlir::tosa::BitwiseXorOp, ::mlir::tosa::IntDivOp,
+      ::mlir::tosa::LogicalAndOp, ::mlir::tosa::LogicalLeftShiftOp,
+      ::mlir::tosa::LogicalRightShiftOp, ::mlir::tosa::LogicalOrOp,
+      ::mlir::tosa::LogicalXorOp, ::mlir::tosa::MaximumOp,
+      ::mlir::tosa::MinimumOp, ::mlir::tosa::MulOp, ::mlir::tosa::PowOp,
+      ::mlir::tosa::SubOp, ::mlir::tosa::SelectOp, ::mlir::tosa::EqualOp,
+      ::mlir::tosa::GreaterOp, ::mlir::tosa::GreaterEqualOp,
+      ::mlir::tosa::ClampOp, ::mlir::tosa::SigmoidOp, ::mlir::tosa::TanhOp,
+      ::mlir::tosa::ErfOp, ::mlir::tosa::AbsOp, ::mlir::tosa::BitwiseNotOp,
+      ::mlir::tosa::CeilOp, ::mlir::tosa::ClzOp, ::mlir::tosa::CosOp,
+      ::mlir::tosa::ExpOp, ::mlir::tosa::FloorOp, ::mlir::tosa::LogOp,
+      ::mlir::tosa::LogicalNotOp, ::mlir::tosa::NegateOp,
+      ::mlir::tosa::ReciprocalOp, ::mlir::tosa::RsqrtOp, ::mlir::tosa::SinOp,
       ::mlir::linalg::AbsOp, ::mlir::linalg::AddOp, ::mlir::linalg::CeilOp,
       ::mlir::linalg::Conv3DOp, ::mlir::linalg::CopyOp, ::mlir::linalg::DivOp,
       ::mlir::linalg::DivUnsignedOp, ::mlir::linalg::ElemwiseBinaryOp,
