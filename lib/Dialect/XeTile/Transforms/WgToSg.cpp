@@ -990,7 +990,6 @@ class WGToSGVectorShapeCast
 // Helper function to analyze the def-use chain of initTileOps. Currently we
 // pattern match the following def-use chain as a candidate for
 // load + tranpose optimization.
-// init_tile -> scf.for -> load_tile -> vector.transpose -> (pre-op) -> tile_mma
 void analyzeInitTileOps(mlir::Operation *op) {
 
   op->walk([&](imex::xetile::InitTileOp initOp) -> mlir::WalkResult {
@@ -1005,9 +1004,16 @@ void analyzeInitTileOps(mlir::Operation *op) {
     if (!initOp->hasOneUse())
       return mlir::WalkResult::skip();
     ops.push_back(initOp);
-    auto initOpUser = *initOp->user_begin();
-    // InitTileOp must be consumed by a ForOp
+
+    // First check for simple pattern of init -> load -> transpose
     mlir::Operation *loadUser = nullptr;
+    auto initOpUser = *initOp->user_begin();
+    if (llvm::isa<xetile::LoadTileOp>(initOpUser)){
+      loadUser = initOpUser;
+      ops.push_back(loadUser);
+    }
+
+    // InitTileOp must be consumed by a ForOp
     mlir::BlockArgument loopArg;
     if (auto scfFor = llvm::dyn_cast_if_present<mlir::scf::ForOp>(initOpUser)) {
       auto opArgs = imex::getArgsForOperand(scfFor, initOp.getResult());
@@ -1018,7 +1024,7 @@ void analyzeInitTileOps(mlir::Operation *op) {
           loadUser = user;
           ops.push_back(scfFor);
           ops.push_back(user);
-        } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
+        } else if (llvm::isa<xetile::UpdateTileOffsetOp>(user)) {
           ops.push_back(scfFor);
           ops.push_back(user);
         }
@@ -1037,11 +1043,11 @@ void analyzeInitTileOps(mlir::Operation *op) {
           }
 
           for (auto scfForUser : loopArg.getUsers()) {
-            if (llvm::isa<imex::xetile::LoadTileOp>(scfForUser)) {
+            if (llvm::isa<xetile::LoadTileOp>(scfForUser)) {
               loadUser = scfForUser;
               ops.push_back(scfFor);
               ops.push_back(scfForUser);
-            } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(
+            } else if (llvm::isa<xetile::UpdateTileOffsetOp>(
                            scfForUser)) {
               ops.push_back(scfFor);
               ops.push_back(scfForUser);
@@ -1049,11 +1055,9 @@ void analyzeInitTileOps(mlir::Operation *op) {
           }
         }
       }
-      if (!loadUser)
-        return mlir::WalkResult::skip();
-    } else
+    }
+    if (!loadUser)
       return mlir::WalkResult::skip();
-
     // LoadOp must be consumed by a transpose
     if (!(loadUser->hasOneUse() &&
           llvm::isa<mlir::vector::TransposeOp>(*loadUser->user_begin())))
@@ -1066,13 +1070,13 @@ void analyzeInitTileOps(mlir::Operation *op) {
 
     // Check if vector.transpose is consumed by TileMMA directly or
     // is consumed by some pre-op and then TileMMA.
-    if (!llvm::isa<imex::xetile::TileMMAOp>(consumerOp)) {
+    if (!llvm::isa<xetile::TileMMAOp>(consumerOp)) {
       if (!OpTrait::hasElementwiseMappableTraits(consumerOp) &&
           !(llvm::isa<mlir::vector::BroadcastOp>(consumerOp))) {
         return mlir::WalkResult::skip();
       } else {
         if (!(consumerOp->hasOneUse() &&
-              llvm::isa<imex::xetile::TileMMAOp>(*consumerOp->user_begin())))
+              llvm::isa<xetile::TileMMAOp>(*consumerOp->user_begin())))
           return mlir::WalkResult::skip();
       }
     }
@@ -1100,6 +1104,23 @@ void populateXeTileWgToSgPatterns(imex::XeOneToNTypeConverter &converter,
                   WGToSGElementWiseOpPattern<mlir::math::SqrtOp, 1>,
                   WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
                   WGToSGArithConstantOpPattern>(patterns.getContext(), converter);
+}
+
+bool hasMap(mlir::Operation* op){
+  if (llvm::isa<imex::xetile::LoadTileOp>(op)){
+    auto tileTy =  mlir::dyn_cast<xetile::TileType>(op->getOperand(0).getType());
+    if (tileTy.getWgMap())
+      return true;
+    else
+      return false;
+  }
+
+  auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+  auto wgMapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("wg_map_a"));
+  if (!mapAttr && !wgMapAttr)
+    return false;
+  else
+    return true;
 }
 
 // Transforms WG XeTile IR to SG XeTile
@@ -1171,16 +1192,15 @@ public:
 
     target.addDynamicallyLegalOp<mlir::scf::ForOp>(
         [&](mlir::scf::ForOp op) -> bool {
-          if(op.getInitArgs().empty())
-            return true;
           for (auto arg : op.getInitArgs()) {
             auto tileTy = mlir::dyn_cast<xetile::TileType>(arg.getType());
-            if (!tileTy)
-              continue;
-            else if (!tileTy.getWgMap())
-              return true;
+            auto vecTy =  mlir::dyn_cast<mlir::VectorType>(arg.getType());
+            if (tileTy && tileTy.getWgMap())
+              return false;
+            if (vecTy && hasMap(arg.getDefiningOp()))
+              return false;
           }
-          return false;
+          return true;
         });
 
     target.addDynamicallyLegalOp<mlir::scf::YieldOp>(
@@ -1188,7 +1208,10 @@ public:
           // For cases with scf.if having hidden yield
           for (auto result: op.getResults()) {
             auto tileTy = mlir::dyn_cast<xetile::TileType>(result.getType());
+            auto vecTy =  mlir::dyn_cast<mlir::VectorType>(result.getType());
             if (tileTy && tileTy.getWgMap())
+              return false;
+            if (vecTy && hasMap(result.getDefiningOp()))
               return false;
           }
           return true;
