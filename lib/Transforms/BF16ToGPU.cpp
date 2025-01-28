@@ -131,7 +131,8 @@ public:
             // Change bf16 iter arg types to f32 type
             if (argt.isBF16()) {
               arg.setType(builder.getF32Type());
-            } else if (argt.isFloat8E5M2() || argt.isFloat8E4M3FN()) {
+            } else if (llvm::isa<Float8E5M2Type>(argt) ||
+                       llvm::isa<Float8E4M3FNType>(argt)) {
               // TODO: Handle loop fp8 type iter args
               llvm_unreachable(
                   "Unhandled case when loop iter arg is of f8 type");

@@ -178,7 +178,7 @@ struct HoistTransposePass final
     // before element-wise ops.
     patterns.add<HoistTransposeBeforeExtractStridedSliceOpPattern>(
         context, transposeOps);
-    if (failed(applyPatternsAndFoldGreedily(op, std::move(patterns), config))) {
+    if (failed(applyPatternsGreedily(op, std::move(patterns), config))) {
       return signalPassFailure();
     }
   }

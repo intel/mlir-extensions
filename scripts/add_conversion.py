@@ -195,7 +195,7 @@ struct Convert{name}Pass // convert {args.source} to {args.target}
   void runOnOperation() override {{
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<FIXME patterns>(getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }}
 }};
 

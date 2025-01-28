@@ -143,7 +143,7 @@ struct AddGPURegionsPass
                    NDArrayOpRWP<::imex::dist::SubviewOp>,
                    NDArrayOpRWP<::imex::dist::EWBinOp>,
                    NDArrayOpRWP<::imex::dist::EWUnyOp>>(getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }
 };
 

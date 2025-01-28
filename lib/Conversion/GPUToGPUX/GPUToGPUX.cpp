@@ -219,7 +219,7 @@ struct GPUToGPUXPass : public imex::impl::ConvertGPUToGPUXBase<GPUToGPUXPass> {
     patterns.insert<ConvertAllocOp, ConvertDeallocOp, ConvertLaunchOp,
                     ConvertWaitOp, ConvertMemcpyOp, ConvertMemsetOp>(ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+    (void)mlir::applyPatternsGreedily(getOperation(),
                                              std::move(patterns));
   }
 };

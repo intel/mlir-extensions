@@ -127,7 +127,7 @@ private:
         return;
       }
       DEBUG_MSG("tile-loops", "  Tiling applied successfully.");
-      rewriter.replaceOp(op, tilingResult.value().replacements);
+      rewriter.replaceOp(op, tilingResult->mergeResult.replacements);
     }
   }
 };

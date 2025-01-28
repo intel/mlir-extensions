@@ -42,11 +42,11 @@ template <typename T> struct EasyVal {
   //                           nullptr>
   EasyVal(const mlir::Location &loc, mlir::OpBuilder &builder,
           const ::mlir::OpFoldResult &value)
-      : _value(value.is<::mlir::Value>()
-                   ? value.get<::mlir::Value>()
+      : _value(llvm::isa<::mlir::Value>(value)
+                   ? llvm::cast<::mlir::Value>(value)
                    : builder.create<::mlir::arith::ConstantOp>(
                          *_loc, ::mlir::cast<::mlir::IntegerAttr>(
-                                    value.get<::mlir::Attribute>()))),
+                                    llvm::cast<::mlir::Attribute>(value)))),
         _loc(&loc), _builder(&builder) {}
 
   /// Create Value from C++ value
@@ -269,8 +269,8 @@ template <typename T, typename std::enable_if<std::is_same<
                           T, ::mlir::OpFoldResult>::value>::type * = nullptr>
 inline EasyIdx easyIdx(const mlir::Location &loc, mlir::OpBuilder &builder,
                        const T &value) {
-  return value.template is<::mlir::Value>()
-             ? easyIdx(loc, builder, value.template get<::mlir::Value>())
+  return llvm::isa<::mlir::Value>(value)
+             ? easyIdx(loc, builder, llvm::cast<::mlir::Value>(value))
              : easyIdx(loc, builder,
                        ::mlir::getConstantIntValue(value).value());
 }

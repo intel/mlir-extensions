@@ -151,11 +151,11 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
         factor = muli(strides[i], eTyBitWidthVal);
       else
         factor = muli(strides[i], bytesPerElemVal);
-      if (offsets[i].is<Value>()) {
-        offsetVal = offsets[i].get<Value>();
+      if (llvm::isa<Value>(offsets[i])) {
+        offsetVal = llvm::cast<Value>(offsets[i]);
       } else {
         offsetVal = index_val(
-            llvm::cast<IntegerAttr>(offsets[i].get<Attribute>()).getInt());
+            llvm::cast<IntegerAttr>(llvm::cast<Attribute>(offsets[i])).getInt());
       }
       auto linearOffset = muli(offsetVal, factor);
       if (eTyBitWidth < 8)
@@ -252,9 +252,8 @@ public:
       // with 32-bit data
       auto encodeShapeAndOffset = [&](OpFoldResult ofr, unsigned mul,
                                       unsigned minus = 0) -> Value {
-        auto v = llvm::dyn_cast_if_present<Value>(ofr);
-        if (v) {
-          auto value = ofr.get<Value>();
+        auto value = llvm::dyn_cast_if_present<Value>(ofr);
+        if (value) {
           value = rewriter.create<arith::IndexCastUIOp>(loc, i32Ty, value);
           if (mul > 8)
             value =
@@ -263,7 +262,7 @@ public:
             value = getOffsetInUnitOfBytes(rewriter, loc, i32Ty, value, mul);
           return (!minus) ? value : subi(value, i32_val(minus));
         } else {
-          int value = cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
+          int value = llvm::cast<IntegerAttr>(llvm::cast<Attribute>(ofr)).getInt();
           return i32_val(((value * mul) / 8) - minus);
         }
       };

@@ -6,7 +6,6 @@ builtin.module(convert-tensor-to-linalg
     func.func(convert-linalg-to-loops)
     convert-scf-to-cf
     convert-cf-to-llvm
-    convert-arith-to-llvm
     convert-math-to-llvm
     convert-math-to-libm
     convert-complex-to-llvm
@@ -16,5 +15,6 @@ builtin.module(convert-tensor-to-linalg
     finalize-memref-to-llvm
     lower-affine
     convert-func-to-llvm
+    convert-arith-to-llvm
     reconcile-unrealized-casts)
 // End

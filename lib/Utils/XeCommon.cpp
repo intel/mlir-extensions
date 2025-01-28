@@ -424,10 +424,10 @@ bool isVectorAnyINTELType(mlir::Type type) {
 mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
                                  mlir::PatternRewriter &rewriter,
                                  mlir::Type type) {
-  if (ofr.is<mlir::Value>())
-    return ofr.get<mlir::Value>();
+  if (llvm::isa<mlir::Value>(ofr))
+    return llvm::cast<mlir::Value>(ofr);
 
-  auto intAttr = llvm::cast<mlir::IntegerAttr>(ofr.get<mlir::Attribute>());
+  auto intAttr = llvm::cast<mlir::IntegerAttr>(llvm::cast<mlir::Attribute>(ofr));
 
   if (type)
     intAttr = mlir::IntegerAttr::get(type, intAttr.getInt());

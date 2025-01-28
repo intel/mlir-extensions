@@ -45,6 +45,7 @@ builtin.module(
     convert-gpu-to-gpux
     convert-func-to-llvm
     convert-math-to-llvm
+    convert-arith-to-llvm
     convert-gpux-to-llvm
     finalize-memref-to-llvm
     reconcile-unrealized-casts)
