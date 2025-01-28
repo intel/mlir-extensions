@@ -155,6 +155,8 @@ XePVCuArch::get2DLoadConfig(mlir::Operation *op, int element_data_size,
     break;
   }
   loadParams.GRFDataSize.load = 2048;
+  loadParams.minPitch = 64;
+  loadParams.pitchMultiple = 16;
   return loadParams;
 }
 
@@ -188,7 +190,8 @@ XePVCuArch::get2DStoreConfig(int element_data_size) {
   }
 
   storeParams.GRFDataSize.store = 512;
-
+  storeParams.minPitch = 64;
+  storeParams.pitchMultiple = 16;
   return storeParams;
 }
 

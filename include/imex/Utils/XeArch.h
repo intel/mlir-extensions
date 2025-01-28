@@ -55,6 +55,9 @@ struct LoadStore2DConfig {
   llvm::SmallVector<int> array_length; // # of blocks to read/write memory
   int restriction;                     // Max Width in bytes
   GRFSize GRFDataSize;                 // Max GRF Data for load and store
+  int minPitch;                        // Min pitch in bytes
+  int pitchMultiple;                   // Pitch must be multiple in bytes of
+                                       //   this value
 };
 
 /// This Base class provides uArch interface for defining HW supported configs
