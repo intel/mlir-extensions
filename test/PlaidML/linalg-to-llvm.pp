@@ -33,6 +33,7 @@ builtin.module(convert-tensor-to-linalg
     finalize-memref-to-llvm
     convert-func-to-llvm
     convert-math-to-llvm
+    convert-arith-to-llvm
     convert-gpux-to-llvm
     lower-affine
     reconcile-unrealized-casts)

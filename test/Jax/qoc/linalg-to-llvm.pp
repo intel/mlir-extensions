@@ -31,6 +31,7 @@ builtin.module(convert-tensor-to-linalg
     convert-gpu-to-gpux
     convert-func-to-llvm
     convert-math-to-llvm
+    convert-arith-to-llvm
     convert-gpux-to-llvm
     expand-strided-metadata
     lower-affine

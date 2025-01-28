@@ -61,7 +61,7 @@ index 48e4c24f8386..677074986d2d 100644
 +// Whether the number of elements of a vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsVectorOfLengthRangePred<list<int> allowedRanges> :
-+  And<[IsVectorTypePred,
++  And<[IsVectorOfNonZeroRankTypePred,
 +       And<[CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
@@ -72,7 +72,7 @@ index 48e4c24f8386..677074986d2d 100644
 +// Whether the number of elements of a fixed-length vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsFixedVectorOfLengthRangePred<list<int> allowedRanges> :
-+  And<[IsFixedVectorTypePred,
++  And<[IsFixedVectorOfAnyRankTypePred,
 +       And<[CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
@@ -117,9 +117,9 @@ index 48e4c24f8386..677074986d2d 100644
 +// list
 +class VectorOfLengthRangeAndType<list<int> allowedRanges,
 +                            list<Type> allowedTypes> : Type<
-+  And<[VectorOf<allowedTypes>.predicate,
++  And<[VectorOfNonZeroRankOf<allowedTypes>.predicate,
 +       VectorOfLengthRange<allowedRanges>.predicate]>,
-+  VectorOf<allowedTypes>.summary # VectorOfLengthRange<allowedRanges>.summary,
++  VectorOfNonZeroRankOf<allowedTypes>.summary # VectorOfLengthRange<allowedRanges>.summary,
 +  "::mlir::VectorType">;
 +
 +// Any fixed-length vector where the number of elements is from the given
@@ -127,9 +127,9 @@ index 48e4c24f8386..677074986d2d 100644
 +// list
 +class FixedVectorOfLengthRangeAndType<list<int> allowedRanges,
 +                                    list<Type> allowedTypes> : Type<
-+  And<[FixedVectorOf<allowedTypes>.predicate,
++  And<[FixedVectorOfAnyRank<allowedTypes>.predicate,
 +       FixedVectorOfLengthRange<allowedRanges>.predicate]>,
-+  FixedVectorOf<allowedTypes>.summary #
++  FixedVectorOfAnyRank<allowedTypes>.summary #
 +  FixedVectorOfLengthRange<allowedRanges>.summary,
 +  "::mlir::VectorType">;
 +
@@ -138,9 +138,9 @@ index 48e4c24f8386..677074986d2d 100644
 +// list
 +class ScalableVectorOfLengthRangeAndType<list<int> allowedRanges,
 +                                    list<Type> allowedTypes> : Type<
-+  And<[ScalableVectorOf<allowedTypes>.predicate,
++  And<[ScalableVectorOfAnyRank<allowedTypes>.predicate,
 +       ScalableVectorOfLengthRange<allowedRanges>.predicate]>,
-+  ScalableVectorOf<allowedTypes>.summary #
++  ScalableVectorOfAnyRank<allowedTypes>.summary #
 +  ScalableVectorOfLengthRange<allowedRanges>.summary,
 +  "::mlir::VectorType">;
 +

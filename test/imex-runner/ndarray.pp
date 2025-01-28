@@ -25,5 +25,7 @@ builtin.module(
     convert-math-to-llvm
     convert-math-to-libm
     convert-func-to-llvm
+    convert-arith-to-llvm
+    convert-cf-to-llvm
     reconcile-unrealized-casts
 )

@@ -8,7 +8,7 @@ module {
       %3 = linalg.fill ins(%c1_i64 : i64) outs(%2 : tensor<16xi64>) -> tensor<16xi64>
       region.env_region_yield %3 : tensor<16xi64>
     }
-    %1 = bufferization.to_memref %0 : memref<16xi64, strided<[?], offset: ?>>
+    %1 = bufferization.to_memref %0 : tensor<16xi64> to memref<16xi64, strided<[?], offset: ?>>
     return %1 : memref<16xi64, strided<[?], offset: ?>>
   }
 }

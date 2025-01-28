@@ -53,10 +53,10 @@ static bool isColumnMajor(mlir::AffineMap layoutMap) {
 // Helper to check if given OpFoldResult is a constant.
 static bool isConstantIndex(mlir::OpFoldResult value) {
   // If the value is an attribute, then it is a constant.
-  if (value.is<mlir::Attribute>())
+  if (llvm::isa<mlir::Attribute>(value))
     return true;
-  return value.get<mlir::Value>().getDefiningOp<mlir::arith::ConstantOp>() !=
-         nullptr;
+  return llvm::cast<mlir::Value>(value)
+             .getDefiningOp<mlir::arith::ConstantOp>() != nullptr;
 }
 
 // check whether the given shape can be perfectly distributed to each subgroup.
@@ -128,8 +128,7 @@ mlir::LogicalResult InitTileOp::verify() {
     llvm::SmallVector<int64_t, 4> strides;
     auto shape = getSourceMemrefStaticShape();
     int64_t offset;
-    if (mlir::succeeded(
-            mlir::getStridesAndOffset(memrefType, strides, offset))) {
+    if (mlir::succeeded(memrefType.getStridesAndOffset(strides, offset))) {
       int64_t rank = memrefType.getRank();
       if (rowMajor &&
           !((strides[rank - 2] == shape[rank - 1]) && (strides[rank - 1] == 1)))

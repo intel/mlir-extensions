@@ -437,7 +437,7 @@ struct DistRuntimeToIDTRPass
     insertPatterns<CopyReshapeOpPattern, TeamSizeOpPattern, TeamMemberOpPattern,
                    GetHaloOpPattern, AllReduceOpPattern, WaitOpPattern,
                    CopyPermuteOpPattern>(getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }; // runOnOperation()
 
 }; // DistRuntimeToIDTRPass

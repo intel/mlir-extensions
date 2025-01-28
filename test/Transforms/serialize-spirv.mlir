@@ -15,16 +15,16 @@ module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#s
     ^bb1:  // pred: ^bb0
       %4 = spirv.IMul %1, %cst5_i64 : i64
       %5 = spirv.IAdd %4, %3 : i64
-      %6 = spirv.InBoundsPtrAccessChain %arg0[%5] : !spirv.ptr<f32, CrossWorkgroup>, i64
+      %6 = spirv.InBoundsPtrAccessChain %arg0[%5] : !spirv.ptr<f32, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %7 = spirv.Load "CrossWorkgroup" %6 ["Aligned", 4] : f32
       %8 = spirv.IMul %1, %cst5_i64 : i64
       %9 = spirv.IAdd %8, %3 : i64
-      %10 = spirv.InBoundsPtrAccessChain %arg1[%9] : !spirv.ptr<f32, CrossWorkgroup>, i64
+      %10 = spirv.InBoundsPtrAccessChain %arg1[%9] : !spirv.ptr<f32, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       %11 = spirv.Load "CrossWorkgroup" %10 ["Aligned", 4] : f32
       %12 = spirv.FAdd %7, %11 : f32
       %13 = spirv.IMul %1, %cst5_i64 : i64
       %14 = spirv.IAdd %13, %3 : i64
-      %15 = spirv.InBoundsPtrAccessChain %arg2[%14] : !spirv.ptr<f32, CrossWorkgroup>, i64
+      %15 = spirv.InBoundsPtrAccessChain %arg2[%14] : !spirv.ptr<f32, CrossWorkgroup>, i64 -> !spirv.ptr<f32, CrossWorkgroup>
       spirv.Store "CrossWorkgroup" %15, %12 ["Aligned", 4] : f32
       spirv.Return
     }

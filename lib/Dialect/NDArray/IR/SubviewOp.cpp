@@ -339,7 +339,7 @@ mlir::LogicalResult imex::ndarray::SubviewOp::reifyResultShapes(
               loc, mlir::cast<mlir::IntegerAttr>(attr).getInt()));
       continue;
     }
-    reifiedReturnShapes[0].push_back(size.value().get<mlir::Value>());
+    reifiedReturnShapes[0].push_back(llvm::cast<mlir::Value>(size.value()));
   }
   return mlir::success();
 }
