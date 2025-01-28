@@ -207,6 +207,54 @@ struct VectorSplatOpConversion final
   }
 };
 
+// Vector store op transformation pattern for single element vector.
+// Vector.store is converted to memref.store if the vector is a single element
+// vector.
+
+// The full transformation is as follows:
+
+// Input:
+// vector.store %vector, %memref[%idx] : memref<4xf32>, vector<1xf32>
+
+// Output:
+// %scalar = vector.extractelement %vector[%c0:i32] : vector<1xf32>
+// memref.store %scalar, %memref[%idx] : memref<4xf32>
+
+struct VectorStoreOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::StoreOp> {
+  using mlir::OpConversionPattern<mlir::vector::StoreOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::StoreOp storeOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto vecTy = storeOp.getVectorType();
+    // Only do transformation if the vector type is 1D and has a single element
+    // @TODO: Do we need to handle 0-D vector?
+    if (!(vecTy.getRank() == 1 && vecTy.getNumElements() == 1)) {
+      return mlir::success();
+    }
+
+    auto vector = storeOp.getValueToStore();
+    auto base = storeOp.getBase();
+    auto indices = storeOp.getIndices();
+
+    // Create a i32 constant of value 0 for index
+    auto zero = rewriter.create<mlir::arith::ConstantOp>(
+        storeOp.getLoc(), rewriter.getI32IntegerAttr(0));
+
+    // Extract the single element from the vector as a scalar
+    auto scalar = rewriter.create<mlir::vector::ExtractElementOp>(
+        storeOp.getLoc(), vector, zero);
+
+    // Create a memref.store op with the scalar value
+    auto memrefStoreOp = rewriter.create<mlir::memref::StoreOp>(
+        storeOp.getLoc(), scalar, base, indices);
+
+    rewriter.replaceOp(storeOp, memrefStoreOp);
+    return mlir::success();
+  }
+};
+
 struct RemoveSingleElemVectorPass final
     : public imex::impl::RemoveSingleElemVectorBase<
           RemoveSingleElemVectorPass> {
@@ -243,6 +291,7 @@ struct RemoveSingleElemVectorPass final
     });
 
     mlir::ConversionTarget target(*context);
+    target.addLegalOp<mlir::memref::StoreOp>();
     target.addLegalOp<mlir::arith::ConstantOp>();
     target.addLegalOp<mlir::vector::InsertElementOp>();
     target.addDynamicallyLegalOp<mlir::vector::ExtractElementOp>(
@@ -272,8 +321,8 @@ struct RemoveSingleElemVectorPass final
     // xetile-blockop-fallback pass
     patterns.add</*VectorExtractStridedSliceConversion,*/ VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
-                 VectorSplatOpConversion, VectorExtractElementOpConversion>(
-        typeConverter, context);
+                 VectorSplatOpConversion, VectorExtractElementOpConversion,
+                 VectorStoreOpConversion>(typeConverter, context);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       return signalPassFailure();
