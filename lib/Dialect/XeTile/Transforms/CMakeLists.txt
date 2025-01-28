@@ -5,7 +5,6 @@ add_imex_dialect_library(IMEXXeTileTransforms
   InitDuplicate.cpp
   Canonicalization.cpp
   WgToSg.cpp
-  XeTileOneToNConversion.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/XeTile
