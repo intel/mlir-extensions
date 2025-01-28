@@ -111,6 +111,11 @@ def XeTileBlockOpFallback : Pass<"xetile-blockop-fallback", "::mlir::gpu::GPUMod
                            "mlir::index::IndexDialect",
                            "mlir::memref::MemRefDialect",
                            "mlir::vector::VectorDialect"];
+  let options = [
+     Option<"device", "device", "std::string",
+            /*default=*/"\"pvc\"",
+            "gpu platform architecture where these ops are running">
+ ];
 }
 
 #endif // _XeTile_PASSES_TD_INCLUDED_

@@ -40,12 +40,14 @@ std::unique_ptr<mlir::Pass>
 createXeTileBlockingPass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createXeTileWgToSgPass();
 std::unique_ptr<mlir::Pass> createXeTileCanonicalizationPass();
-std::unique_ptr<mlir::Pass> createXeTileBlockOpFallbackPass();
+std::unique_ptr<mlir::Pass>
+createXeTileBlockOpFallbackPass(const std::string &device = "pvc");
 
 #define GEN_PASS_DECL_XETILEBLOCKING
 #define GEN_PASS_DECL_XETILECANONICALIZATION
 #define GEN_PASS_DECL_XETILEINITDUPLICATE
 #define GEN_PASS_DECL_XETILEWGTOSG
+#define GEN_PASS_DECL_XETILEBLOCKOPFALLBACK
 #include <imex/Dialect/XeTile/Transforms/Passes.h.inc>
 
 //===----------------------------------------------------------------------===//
