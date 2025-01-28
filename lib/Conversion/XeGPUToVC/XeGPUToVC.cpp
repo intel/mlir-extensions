@@ -154,8 +154,9 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
       if (llvm::isa<Value>(offsets[i])) {
         offsetVal = llvm::cast<Value>(offsets[i]);
       } else {
-        offsetVal = index_val(
-            llvm::cast<IntegerAttr>(llvm::cast<Attribute>(offsets[i])).getInt());
+        offsetVal =
+            index_val(llvm::cast<IntegerAttr>(llvm::cast<Attribute>(offsets[i]))
+                          .getInt());
       }
       auto linearOffset = muli(offsetVal, factor);
       if (eTyBitWidth < 8)
@@ -262,7 +263,8 @@ public:
             value = getOffsetInUnitOfBytes(rewriter, loc, i32Ty, value, mul);
           return (!minus) ? value : subi(value, i32_val(minus));
         } else {
-          int value = llvm::cast<IntegerAttr>(llvm::cast<Attribute>(ofr)).getInt();
+          int value =
+              llvm::cast<IntegerAttr>(llvm::cast<Attribute>(ofr)).getInt();
           return i32_val(((value * mul) / 8) - minus);
         }
       };

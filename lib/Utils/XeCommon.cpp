@@ -427,7 +427,8 @@ mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
   if (llvm::isa<mlir::Value>(ofr))
     return llvm::cast<mlir::Value>(ofr);
 
-  auto intAttr = llvm::cast<mlir::IntegerAttr>(llvm::cast<mlir::Attribute>(ofr));
+  auto intAttr =
+      llvm::cast<mlir::IntegerAttr>(llvm::cast<mlir::Attribute>(ofr));
 
   if (type)
     intAttr = mlir::IntegerAttr::get(type, intAttr.getInt());

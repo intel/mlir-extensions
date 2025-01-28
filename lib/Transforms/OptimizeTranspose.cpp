@@ -1058,7 +1058,7 @@ private:
     config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
     patterns.add<TransposeRewritePattern>(context, analysis, uArchInterface);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
-                                            config))) {
+                                     config))) {
       return signalPassFailure();
     }
   }

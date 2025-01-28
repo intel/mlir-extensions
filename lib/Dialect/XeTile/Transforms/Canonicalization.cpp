@@ -383,8 +383,8 @@ struct XeTileCanonicalizationPass final
                    VectorBroadcastToXetileBroadcastOpPattern,
                    VectorMultiReductionToXeTileReduce>(context);
 
-      if (failed(applyPatternsGreedily(getOperation(),
-                                              std::move(patterns), config))) {
+      if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                       config))) {
         return signalPassFailure();
       }
     }
@@ -489,8 +489,8 @@ struct XeTileCanonicalizationPass final
       config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
       patterns.add<RemoveRedundantTransposeOpPattern>(context);
 
-      if (failed(applyPatternsGreedily(getOperation(),
-                                              std::move(patterns), config))) {
+      if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                       config))) {
         return signalPassFailure();
       }
     }
