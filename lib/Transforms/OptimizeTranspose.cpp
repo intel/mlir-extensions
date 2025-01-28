@@ -29,11 +29,13 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -448,7 +450,7 @@ struct CreateNdDescOpPattern
   using OpConversionPattern<xegpu::CreateNdDescOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(xegpu::CreateNdDescOp op, OpAdaptor adaptor,
+  matchAndRewrite(xegpu::CreateNdDescOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto tdescTy = op.getTensorDesc().getType();
     if (tdescTy.getArrayLength() == 1)
@@ -486,10 +488,7 @@ struct CreateNdDescOpPattern
       createNdDescOps.push_back(newOp);
     }
 
-    // Create UnrealizedConversionCastOp to reconcile the types.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
-                                                            createNdDescOps);
-
+    rewriter.replaceOpWithMultiple(op, {createNdDescOps});
     return success();
   }
 };
@@ -500,28 +499,23 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
   using OpConversionPattern<xegpu::LoadNdOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(xegpu::LoadNdOp op, OpAdaptor adaptor,
+  matchAndRewrite(xegpu::LoadNdOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto tdesc = adaptor.getTensorDesc();
-    auto unrealizedCastOp =
-        llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-            tdesc.getDefiningOp());
-    if (!unrealizedCastOp)
+    auto tdescSources = adaptor.getTensorDesc();
+    // Check if this LooadNdOp must be split
+    if (tdescSources.size() == 1)
       return failure();
-    auto sources = tdesc.getDefiningOp()->getOperands();
     llvm::SmallVector<Value> loadNdOps;
     auto newLoadTy = VectorType::get(op.getTensorDescType().getShape(),
                                      op.getType().getElementType());
-    for (auto source : sources) {
+    for (auto source : tdescSources) {
       auto loadNdOp = rewriter.create<xegpu::LoadNdOp>(
           op.getLoc(), newLoadTy, source, op.getPackedAttr(),
           op.getTransposeAttr(), op.getTransposeBitWidthAttr(),
           op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       loadNdOps.push_back(loadNdOp);
     }
-    // Create UnrealizedConversionCastOp to reconcile the types.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
-                                                            loadNdOps);
+    rewriter.replaceOpWithMultiple(op, {loadNdOps});
     return success();
   }
 };
@@ -532,81 +526,49 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
 struct ScfForOpPattern : public OpConversionPattern<scf::ForOp> {
   using OpConversionPattern<scf::ForOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(scf::ForOp op, OpAdaptor adaptor,
+  matchAndRewrite(scf::ForOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Value> newIterArgs; // Keep track of new iter args.
-    llvm::DenseMap<unsigned, std::pair<unsigned, unsigned>>
-        forOpOutputTypeMapping; // Keep track old iter
-                                // args indice to new iter args indice/s mapping
-    for (auto [index, initArg] : llvm::enumerate(adaptor.getInitArgs())) {
-      // If initArg is a UnrealizedConversionCastOp, new iter args need to be
-      // updated. And we keep track of the old -> new iter arg indice mapping.
-      if (auto unrealizedConversionCast =
-              llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-                  initArg.getDefiningOp())) {
-        auto sources = unrealizedConversionCast.getOperands();
-        forOpOutputTypeMapping[index] =
-            std::make_pair(newIterArgs.size(), sources.size());
-        newIterArgs.insert(newIterArgs.end(), sources.begin(), sources.end());
-      } else {
-        forOpOutputTypeMapping[index] = std::make_pair(newIterArgs.size(), 1);
-        newIterArgs.push_back(initArg);
-      }
+    // Collect the sizes of the new argument mapping. This is needed for mapping
+    // ForOp results.
+    SmallVector<size_t> remappedArgSizes;
+    llvm::ArrayRef<ValueRange> remappedInitArgs = adaptor.getInitArgs();
+    SmallVector<Value> flattenedRemappedInitArgs;
+    for (auto initArg : remappedInitArgs) {
+      remappedArgSizes.push_back(initArg.size());
+      flattenedRemappedInitArgs.append(initArg.begin(), initArg.end());
     }
 
-    // Create a new ForOp with the expanded iter args.
+    // Do a signature conversion for the old for body.
+    auto oldBody = op.getBody();
+    auto oldBodyArgTypes = oldBody->getArgumentTypes();
+    TypeConverter::SignatureConversion signatureConversion(
+        oldBodyArgTypes.size());
+    signatureConversion.addInputs(0, oldBodyArgTypes[0]);
+    for (unsigned i = 1; i < oldBodyArgTypes.size(); i++) {
+      auto remappedTypes = llvm::to_vector(remappedInitArgs[i - 1].getTypes());
+      signatureConversion.addInputs(i, remappedTypes);
+    }
+    rewriter.applySignatureConversion(oldBody, signatureConversion);
+    // Create a new ForOp.
     auto newForOp = rewriter.create<scf::ForOp>(
         op.getLoc(), op.getLowerBound(), op.getUpperBound(), op.getStep(),
-        ValueRange(newIterArgs));
-    // We don't need the empty blocks created by rewriter.
+        flattenedRemappedInitArgs);
     rewriter.eraseBlock(newForOp.getBody());
+    rewriter.inlineRegionBefore(op.getRegion(), newForOp.getRegion(),
+                                newForOp.getRegion().begin());
 
-    Region *region = &op.getRegion();
-    Block *block = &region->front();
-    // Perform signature conversion on the body block of the original forOp.
-    OneToNTypeMapping signatureConverter(block->getArgumentTypes());
-
-    for (size_t i = 0; i < block->getNumArguments(); i++) {
-      // If iter args are expanded due to UnrealizedConversionCastOp, we need
-      // 1:N type mapping in the signature converter.
-      if (i >= 1 && forOpOutputTypeMapping[i - 1].second > 1) {
-        auto sources =
-            adaptor.getInitArgs()[i - 1].getDefiningOp()->getOperands();
-        auto sourceTypes = llvm::map_to_vector(
-            sources, [](Value source) { return source.getType(); });
-        signatureConverter.addInputs(i, sourceTypes);
-      } else {
-        signatureConverter.addInputs(i, block->getArgument(i).getType());
-      }
+    // Compute the remapped results.
+    SmallVector<ValueRange> remappedResults;
+    unsigned newResultOffset = 0;
+    for (unsigned i = 0; i < remappedArgSizes.size(); i++) {
+      unsigned remappedResultSize = remappedArgSizes[i];
+      ValueRange remappedResultValues =
+          newForOp.getResults().slice(newResultOffset, remappedResultSize);
+      remappedResults.push_back(remappedResultValues);
+      newResultOffset += remappedResultSize;
     }
-    // Apply the signature conversion to the block.
-    rewriter.applySignatureConversion(block, signatureConverter,
-                                      getTypeConverter());
-    // Splice the old body region into the new for-op.
-    Region &dstRegion = newForOp.getBodyRegion();
-    rewriter.inlineRegionBefore(op.getRegion(), dstRegion, dstRegion.end());
 
-    // Compute the new results for the ForOp. If the iter args are expanded, the
-    // result types also need to be resolved by adding UnrealizedConversionCast
-    // ops.
-    llvm::SmallVector<Value> newResults;
-    for (auto [index, result] : llvm::enumerate(op.getResults())) {
-      auto newResultPosAndSize = forOpOutputTypeMapping[index];
-      auto sources = newForOp.getResults().slice(newResultPosAndSize.first,
-                                                 newResultPosAndSize.second);
-      // If this result is expanded, reconcile the types using
-      // UnrealizedConversionCastOp.
-      if (sources.size() > 1) {
-        auto unrealizedCastOp = rewriter.create<UnrealizedConversionCastOp>(
-            op.getLoc(), result.getType(), sources);
-        newResults.push_back(unrealizedCastOp.getResult(0));
-      } else {
-        newResults.push_back(sources[0]);
-      }
-    }
-    // Create UnrealizedConversionCastOp to reconcile the types.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-        op, op.getResultTypes(), newResults);
+    rewriter.replaceOpWithMultiple(op, remappedResults);
     return success();
   }
 };
@@ -615,20 +577,18 @@ struct ScfForOpPattern : public OpConversionPattern<scf::ForOp> {
 struct ScfTYieldOpPattern : public OpConversionPattern<scf::YieldOp> {
   using OpConversionPattern<scf::YieldOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(scf::YieldOp op, OpAdaptor adaptor,
+  matchAndRewrite(scf::YieldOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Value> newOperands;
-    for (auto operand : adaptor.getOperands()) {
-      if (auto unrealizedConversionCast =
-              llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-                  operand.getDefiningOp())) {
-        auto sources = unrealizedConversionCast.getOperands();
-        newOperands.insert(newOperands.end(), sources.begin(), sources.end());
-      } else {
-        newOperands.push_back(operand);
-      }
-    }
-    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, newOperands);
+    ArrayRef<ValueRange> remappedYields = adaptor.getOperands();
+    SmallVector<Value> newYieldedValues;
+    for (auto yield : remappedYields)
+      newYieldedValues.append(yield.begin(), yield.end());
+
+    rewriter.modifyOpInPlace(op, [&]() {
+      op.getResultsMutable().clear();
+      op.getResultsMutable().append(newYieldedValues);
+      op->removeAttr(adjustArrayLenAttrName);
+    });
     return success();
   }
 };
@@ -642,16 +602,12 @@ struct VectorExrtactOpPattern final
   using OpConversionPattern<vector::ExtractOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(vector::ExtractOp op, OpAdaptor adaptor,
+  matchAndRewrite(vector::ExtractOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto source = adaptor.getVector();
-    auto unrealizedCastOp =
-        llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-            source.getDefiningOp());
-    if (!unrealizedCastOp)
+    auto sources = adaptor.getVector();
+    // If single source, skip
+    if (sources.size() == 1)
       return failure();
-
-    auto sources = source.getDefiningOp()->getOperands();
     auto extractIndex = op.getStaticPosition();
     assert(extractIndex.size() == 1 && extractIndex[0] != ShapedType::kDynamic);
     rewriter.replaceOp(op, sources[extractIndex[0]]);
@@ -667,27 +623,23 @@ struct UpdateNdOffsetOpPattern final
   using OpConversionPattern<xegpu::UpdateNdOffsetOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(xegpu::UpdateNdOffsetOp op, OpAdaptor adaptor,
+  matchAndRewrite(xegpu::UpdateNdOffsetOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto tdesc = adaptor.getTensorDesc();
-    auto unrealizedCastOp =
-        llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-            tdesc.getDefiningOp());
-    if (!unrealizedCastOp)
+    auto tdescSources = adaptor.getTensorDesc();
+    // Check if this UpdateNdOffsetOp must be split
+    if (tdescSources.size() == 1)
       return failure();
-    auto sources = unrealizedCastOp.getOperands();
     auto offsets = op.getMixedOffsets();
     llvm::SmallVector<Value> dynamicOffsets;
     llvm::SmallVector<int64_t> staticOffsets;
     dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
     llvm::SmallVector<Value> newOps;
-    for (auto source : sources) {
+    for (auto source : tdescSources) {
       auto newOp = rewriter.create<xegpu::UpdateNdOffsetOp>(
           op.getLoc(), source.getType(), source, dynamicOffsets, staticOffsets);
       newOps.push_back(newOp);
     }
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
-                                                            newOps);
+    rewriter.replaceOpWithMultiple(op, {newOps});
     return success();
   }
 };
@@ -974,17 +926,8 @@ private:
 
   void runArrayLengthAdjustment() {
     Operation *module = getOperation();
-    TypeConverter typeConverter;
-    auto addNToOneCast = [](OpBuilder &builder, Type type, ValueRange inputs,
-                            Location loc) {
-      auto cast = builder.create<UnrealizedConversionCastOp>(loc, type, inputs);
-      return cast.getResult(0);
-    };
-    typeConverter.addSourceMaterialization(addNToOneCast);
-    typeConverter.addArgumentMaterialization(addNToOneCast);
     RewritePatternSet patterns(&getContext());
     ConversionTarget target(getContext());
-
     // Only rewrite ops marked for array length adjustment.
     target
         .addDynamicallyLegalOp<xegpu::CreateNdDescOp, scf::ForOp, scf::YieldOp,
@@ -992,61 +935,12 @@ private:
             [&](Operation *op) -> bool {
               return op->getAttr(adjustArrayLenAttrName) == mlir::Attribute();
             });
-    target.addLegalOp<UnrealizedConversionCastOp>();
     target.addLegalDialect<arith::ArithDialect>();
-    patterns.add<CreateNdDescOpPattern, LoadNdOpPattern, ScfForOpPattern,
-                 ScfTYieldOpPattern, VectorExrtactOpPattern,
-                 UpdateNdOffsetOpPattern>(&getContext());
+    patterns.add<CreateNdDescOpPattern, LoadNdOpPattern, VectorExrtactOpPattern,
+                 ScfForOpPattern, ScfTYieldOpPattern, UpdateNdOffsetOpPattern>(
+        &getContext());
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return signalPassFailure();
-
-    // At this point, some of the original ops may still be using the results of
-    // UnrealizedConversionCastOps. So clean them up. For Example, some post ops
-    // (arith.* ops) or store ops may still be using the results of adjusted
-    // ForOp results through UnrealizedConversionCastOps.
-    module->walk([](Operation *op) {
-      // Ignore UnrealizedConversionCastOps that were inserted by array length
-      // adjustment. These will be cleaned up by DCE.
-      if (llvm::isa<UnrealizedConversionCastOp>(op))
-        return;
-      llvm::SmallVector<Value> newOperands;
-      bool operandsUpdated = false;
-      for (auto [i, operand] : llvm::enumerate(op->getOperands())) {
-        if (auto unrealizedConversionCast =
-                llvm::dyn_cast_if_present<UnrealizedConversionCastOp>(
-                    operand.getDefiningOp())) {
-          // This UnrealizedConversionCastOp is a dummy pass through added by
-          // our array langth adjustment patterns i.e. It preserves the input
-          // and output types.
-          assert(unrealizedConversionCast.getOperandTypes() ==
-                     unrealizedConversionCast.getResultTypes() &&
-                 "unexpected unrealized conversion cast found as operand");
-          // Get the corresponding result index for this operand.
-          auto resultIndex =
-              imex::getResultIndex(unrealizedConversionCast, operand);
-          // Collect the operand from the corresponding result index. This
-          // should be our new operand.
-          newOperands.push_back(
-              unrealizedConversionCast.getOperand(resultIndex));
-          operandsUpdated = true;
-        } else {
-          newOperands.push_back(operand);
-        }
-      }
-      // If no operands are updated, we skip.
-      if (!operandsUpdated)
-        return;
-      // Update the operands.
-      op->setOperands(newOperands);
-      op->removeAttr(adjustArrayLenAttrName);
-    });
-
-    // Clean up the UnrealizedConversionCastOps that are not used.
-    // TODO: Maybe we don't need this if CSE is run after this pass.
-    module->walk([](mlir::UnrealizedConversionCastOp castOp) {
-      if (castOp->use_empty())
-        castOp.erase();
-    });
   }
 
   void runLoadTransposeFusion(LoadTransposeAnalysis &analysis) {
