@@ -173,7 +173,8 @@ def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
   let summary = "Remove <1xT> vectors, and replace them with scalars.";
   let constructor = "imex::createRemoveSingleElemVectorPass()";
   let dependentDialects = [
-    "::mlir::vector::VectorDialect"
+    "::mlir::vector::VectorDialect",
+    "::mlir::memref::MemRefDialect"
   ];
 }
 
