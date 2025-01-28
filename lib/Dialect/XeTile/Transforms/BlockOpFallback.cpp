@@ -19,6 +19,7 @@
 
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Dialect/XeTile/Transforms/Passes.h"
+#include "imex/Utils/XeArch.h"
 #include "imex/Utils/XeCommon.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
@@ -80,8 +81,11 @@ static imex::xetile::TileType addScatterAttr(imex::xetile::TileType tileTy) {
 
 struct InitTileOpPattern final
     : public mlir::OpRewritePattern<imex::xetile::InitTileOp> {
-  InitTileOpPattern(mlir::MLIRContext *context)
-      : OpRewritePattern<imex::xetile::InitTileOp>(context) {}
+  InitTileOpPattern(mlir::MLIRContext *context,
+                    std::shared_ptr<imex::XeuArchInterface> uArch)
+      : OpRewritePattern<imex::xetile::InitTileOp>(context) {
+    uArchInterface = uArch;
+  }
   mlir::LogicalResult
   matchAndRewrite(imex::xetile::InitTileOp initTileOp,
                   mlir::PatternRewriter &rewriter) const override {
@@ -121,9 +125,17 @@ struct InitTileOpPattern final
     auto elemBitwidth =
         initTileOp.getSourceMemrefElemType().getIntOrFloatBitWidth();
     auto pitchNumBytes = pitchNumElems * elemBitwidth / 8;
-    isValidPitch = pitchNumBytes >= 64 && (pitchNumBytes % 16 == 0);
+    auto config = uArchInterface->get2DPrefetchConfig(initTileOp.getOperation(),
+                                                      elemBitwidth);
+    auto conf = config.value();
+    isValidPitch = (pitchNumBytes >= conf.minPitch) &&
+                   (pitchNumBytes % conf.pitchMultiple == 0);
     // If memspace is not SLM and pitch is valid, no need to rewrite
     if (!isSLM && isValidPitch) {
+      return mlir::failure();
+    }
+    bool mayNeedMask = (pitchNumElems % tileTy.getShape().back() != 0);
+    if (mayNeedMask) {
       return mlir::failure();
     }
     // Get flat shape size
@@ -229,6 +241,9 @@ struct InitTileOpPattern final
 
     return mlir::success();
   }
+
+private:
+  std::shared_ptr<imex::XeuArchInterface> uArchInterface = nullptr;
 };
 
 struct LoadTileOpPattern final
@@ -414,11 +429,40 @@ struct SCFForOpPattern final : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   }
 };
 
-struct XeTileBlockOpFallbackPass final
+class XeTileBlockOpFallbackPass final
     : public imex::impl::XeTileBlockOpFallbackBase<XeTileBlockOpFallbackPass> {
+public:
+  XeTileBlockOpFallbackPass() {
+    uArchInterface = std::make_shared<imex::XePVCuArch>();
+  }
+
+  XeTileBlockOpFallbackPass(const std::string &deviceName) {
+    if (deviceName == "pvc") {
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
+    }
+  }
+
+  mlir::LogicalResult
+  initializeOptions(mlir::StringRef options,
+                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                        errorHandler) override {
+    if (failed(Pass::initializeOptions(options, errorHandler)))
+      return mlir::failure();
+    if (device == "pvc")
+      uArchInterface = std::make_shared<imex::XePVCuArch>();
+    else
+      return errorHandler(llvm::Twine("Invalid device: ") + device);
+    return mlir::success();
+  }
+
   void runOnOperation() override {
     auto *context = &getContext();
     mlir::Operation *op = getOperation();
+
+    if (!uArchInterface) {
+      op->emitOpError("Can not get GPU Arch Definition for given Arch param");
+      return signalPassFailure();
+    }
 
     mlir::RewritePatternSet patterns(context);
     mlir::GreedyRewriteConfig config;
@@ -426,18 +470,24 @@ struct XeTileBlockOpFallbackPass final
         mlir::GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
-    patterns.add<InitTileOpPattern, LoadTileOpPattern, StoreTileOpPattern,
+    patterns.add<InitTileOpPattern>(context, uArchInterface);
+    patterns.add<LoadTileOpPattern, StoreTileOpPattern,
                  UpdateTileOffsetOpPattern, SCFForOpPattern>(context);
     if (failed(applyPatternsGreedily(op, std::move(patterns), config))) {
       return signalPassFailure();
     }
   }
+
+private:
+  std::shared_ptr<imex::XeuArchInterface> uArchInterface = nullptr;
 };
 
 } // namespace blockopfallback
 
 namespace imex {
-std::unique_ptr<mlir::Pass> createXeTileBlockOpFallbackPass() {
-  return std::make_unique<blockopfallback::XeTileBlockOpFallbackPass>();
+std::unique_ptr<mlir::Pass>
+createXeTileBlockOpFallbackPass(const std::string &deviceName) {
+  return std::make_unique<blockopfallback::XeTileBlockOpFallbackPass>(
+      deviceName);
 }
 } // namespace imex

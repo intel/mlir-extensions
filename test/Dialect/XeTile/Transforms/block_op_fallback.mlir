@@ -1,4 +1,17 @@
-// RUN: imex-opt --split-input-file --xetile-blockop-fallback %s -verify-diagnostics -o -| FileCheck %s
+// RUN: imex-opt --split-input-file --xetile-blockop-fallback=device=pvc %s -verify-diagnostics -o -| FileCheck %s
+
+gpu.module @test_module {
+  // CHECK-LABEL: @test_pitch_not_multiple_of_tile_width
+  gpu.func @test_pitch_not_multiple_of_tile_width(%arg0: memref<512x250xf32>) {
+    // CHECK: %[[VAR0:.*]] = xetile.init_tile %arg0[0, 0] : memref<512x250xf32> -> !xetile.tile<32x16xf32
+    %0 = xetile.init_tile %arg0 [0, 0] : memref<512x250xf32> -> !xetile.tile<32x16xf32, #xetile.tile_attr<order = [1, 0]>>
+    // CHECK: %[[VAR1:.*]] = xetile.load_tile %[[VAR0]]
+    %1 = xetile.load_tile %0 : !xetile.tile<32x16xf32, #xetile.tile_attr<order = [1, 0]>> -> vector<32x16xf32>
+    gpu.return
+  }
+}
+
+// -----
 
 gpu.module @test_module {
   // CHECK-LABEL: @test_pitch_one_elems_and_offset_attr
