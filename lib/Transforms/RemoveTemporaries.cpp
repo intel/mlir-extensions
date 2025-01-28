@@ -214,8 +214,8 @@ bool collectWriteEffectOps(::mlir::Operation *startOp, ::mlir::Operation *endOp,
 // Compares write/read memref types and infers possible RAW conflicts
 // Requires that strides and offsets are static.
 bool safeToWrite(::mlir::MemRefType write, ::mlir::MemRefType read) {
-  auto wStrOff = ::mlir::getStridesAndOffset(write);
-  auto rStrOff = ::mlir::getStridesAndOffset(read);
+  auto wStrOff = write.getStridesAndOffset();
+  auto rStrOff = read.getStridesAndOffset();
   auto wStrides = wStrOff.first;
   auto wOffset = wStrOff.second;
   auto rStrides = rStrOff.first;

@@ -80,7 +80,7 @@ struct InitTileOpPattern final
       auto sourceShape = sourceTy.getShape();
       llvm::SmallVector<int64_t> strides;
       int64_t offset;
-      if (failed(mlir::getStridesAndOffset(sourceTy, strides, offset)))
+      if (failed(sourceTy.getStridesAndOffset(strides, offset)))
         return rewriter.notifyMatchFailure(initOp, "unexpected memref type.");
       // Swap the last 2 dimensions of the strides to make it row-major.
       auto newStrides = swapLastTwoElems<int64_t>(strides);
@@ -383,8 +383,8 @@ struct XeTileCanonicalizationPass final
                    VectorBroadcastToXetileBroadcastOpPattern,
                    VectorMultiReductionToXeTileReduce>(context);
 
-      if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                              std::move(patterns), config))) {
+      if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                       config))) {
         return signalPassFailure();
       }
     }
@@ -489,8 +489,8 @@ struct XeTileCanonicalizationPass final
       config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
       patterns.add<RemoveRedundantTransposeOpPattern>(context);
 
-      if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                              std::move(patterns), config))) {
+      if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                       config))) {
         return signalPassFailure();
       }
     }

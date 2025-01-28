@@ -230,7 +230,7 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
             int64_t offset;
             auto memrefType = mlir::dyn_cast<mlir::MemRefType>(getSourceType());
             assert(mlir::succeeded(
-                       mlir::getStridesAndOffset(memrefType, strides, offset)) &&
+                       memrefType.getStridesAndOffset(strides, offset)) &&
                    "Failed to get strides and offset. Invalid source memref.");
             // Reuse the op storage.
             setConstStrides(strides);
@@ -326,7 +326,7 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", [
                 auto int32Zero = mlir::IntegerAttr::get(mlir::IntegerType::get((*this).getContext(), 32), 0);
                 return getPadding().value_or(int32Zero);
             }
-            auto float32Zero = mlir::FloatAttr::get(mlir::FloatType::getF32((*this).getContext()), 0.0);
+            auto float32Zero = mlir::FloatAttr::get(mlir::Float32Type::get((*this).getContext()), 0.0);
             return getPadding().value_or(float32Zero);
         }
     }];

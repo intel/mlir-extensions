@@ -202,7 +202,7 @@ struct NDArrayDistPass : public ::imex::impl::NDArrayDistBase<NDArrayDistPass> {
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<DistEWBinOpRWP, DistEWUnyOpRWP, DistSubviewOpRWP,
                    DistInsertSliceOpRWP>(getContext(), patterns);
-    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+    (void)::mlir::applyPatternsGreedily(this->getOperation(), patterns);
   }
 };
 

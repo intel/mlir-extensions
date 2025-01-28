@@ -635,12 +635,12 @@ public:
 
       auto addi = [&](mlir::OpFoldResult a, int64_t b) -> mlir::Value {
         if (mlir::isa<mlir::Attribute>(a)) {
-          auto attr = a.get<mlir::Attribute>();
+          auto attr = llvm::cast<mlir::Attribute>(a);
           auto sum =
-              rewriter.getIndexAttr(cast<IntegerAttr>(attr).getInt() + b);
+              rewriter.getIndexAttr(llvm::cast<IntegerAttr>(attr).getInt() + b);
           return rewriter.create<mlir::arith::ConstantOp>(loc, sum);
         } else {
-          auto aV = a.get<mlir::Value>();
+          auto aV = llvm::cast<mlir::Value>(a);
           auto bV = rewriter.create<mlir::arith::ConstantOp>(
               loc, rewriter.getIndexAttr(b));
           return rewriter.create<mlir::arith::AddIOp>(loc, aV, bV);
@@ -1631,7 +1631,7 @@ public:
           ops.push_back(op);
       });
       if (mlir::failed(
-              mlir::applyOpPatternsAndFold(ops, std::move(patterns), config)))
+              mlir::applyOpPatternsGreedily(ops, std::move(patterns), config)))
         return signalPassFailure();
     });
 
