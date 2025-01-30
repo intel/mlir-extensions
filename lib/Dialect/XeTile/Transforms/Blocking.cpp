@@ -884,6 +884,48 @@ public:
   }
 };
 
+class RewriteAtomicRMWOp
+    : public RewriteXeTileOp<xetile::AtomicRMWOp, BlockingAnalysis> {
+public:
+  using RewriteXeTileOp<xetile::AtomicRMWOp, BlockingAnalysis>::RewriteXeTileOp;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::AtomicRMWOp op,
+                  OpPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto value = op.getValue();
+    auto valTy = value.getType();
+    auto tile = op.getTile();
+    auto tileTy = tile.getType();
+    auto shape = tileTy.getShape();
+    auto blockSize = analysis.getUseBlockSize(tile, op->getOpOperand(1));
+
+    if (!blockSize || shape == blockSize.asArrayRef())
+      return failure();
+
+    auto convertedValTypes = convertTypes(valTy, blockSize.asArrayRef());
+    auto convertedValues = addPackOp(value, convertedValTypes,
+                                     blockSize.asArrayRef(), loc, rewriter);
+    auto convertedTileTypes = convertTypes(tileTy, blockSize.asArrayRef());
+    auto convertedTiles = addPackOp(tile, convertedTileTypes,
+                                    blockSize.asArrayRef(), loc, rewriter);
+
+    llvm::SmallVector<mlir::Value> newOps;
+    for (auto [v, t] : llvm::zip(convertedValues, convertedTiles)) {
+      auto valTy = mlir::dyn_cast<mlir::VectorType>(v.getType());
+      auto vecTy =
+          ::mlir::VectorType::get(valTy.getShape(), valTy.getElementType());
+      auto newOp =
+          rewriter.create<xetile::AtomicRMWOp>(loc, vecTy, op.getKind(), v, t);
+      newOps.push_back(newOp);
+    }
+    auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
+                              rewriter);
+    rewriter.replaceOp(op, castOp);
+    return mlir::success();
+  }
+};
+
 // rewrite a update_tile_offset op on big tile size into multiple
 // update_tile_offset ops on smaller tile size.
 class RewriteUpdateTileOffsetOp
@@ -1563,7 +1605,7 @@ void populateXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
       Blocking::RewriteTileBroadcastOp, Blocking::RewriteTileTransposeOp,
       Blocking::RewriteVectorizableOp, Blocking::RewriteSCFForOp,
       Blocking::RewriteSCFYieldOp, Blocking::RewriteCreateMaskOp,
-      Blocking::RewriteCreateMaskOp>(patterns.getContext(), analysis);
+      Blocking::RewriteAtomicRMWOp>(patterns.getContext(), analysis);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector

@@ -36,6 +36,8 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 
 namespace imex {
 #define GEN_PASS_DEF_CONVERTXEGPUTOVC
@@ -765,7 +767,8 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     configureArithToVCConversionLegality(target);
 
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
-                           memref::MemRefDialect, vector::VectorDialect>();
+                           memref::MemRefDialect, vector::VectorDialect,
+                           spirv::SPIRVDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
 
     target.addDynamicallyLegalDialect<scf::SCFDialect>(

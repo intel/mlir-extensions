@@ -23,9 +23,10 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 
 #include "LscIntrinsicEnums.h"
 #include "imex/Utils/VCUtils.h"
@@ -1194,6 +1195,7 @@ public:
     } else {
       lscVecSize = log2(numDstVal) + 2;
     }
+
     auto vecSize = createIntConstant(i8Type, lscVecSize);
     auto transposed = createIntConstant(i8Type, 1);
     auto mask = adaptor.getMask();
@@ -1202,9 +1204,7 @@ public:
     Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32Ty = VectorType::get(16, i32Type);
-    auto i32ZeroAttr = IntegerAttr::get(i32Type, 0);
-    Value undef = rewriter.create<arith::ConstantOp>(
-        loc, DenseElementsAttr::get(v16i32Ty, i32ZeroAttr));
+    Value undef = rewriter.create<mlir::spirv::UndefOp>(loc, v16i32Ty);
     Value src0 = undef;
     if (op.getValue()) {
       src0 = op.getValue();
@@ -1222,7 +1222,6 @@ public:
     auto retType = newType;
     auto newOp = createFuncCall(rewriter, loc, funcName, TypeRange{retType},
                                 args, false);
-
     auto *converter = this->getTypeConverter();
     auto castTy = converter->convertType(op.getType());
     auto cast =
