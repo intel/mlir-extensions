@@ -394,83 +394,6 @@ class WGToSGUpdateTileOffsetOpPattern
   }
 };
 
-template <typename Op, int numOperands>
-Op createOp(ConversionPatternRewriter &rewriter, mlir::Location loc,
-            llvm::SmallVector<llvm::SmallVector<mlir::Value>> operands, int i) {
-  static_assert(numOperands >= 1 && numOperands <= 3,
-                "Unsupported number of operands");
-
-  if constexpr (numOperands == 1) {
-    return rewriter.create<Op>(loc, operands[0][i]);
-  } else if constexpr (numOperands == 2) {
-    return rewriter.create<Op>(loc, operands[0][i], operands[1][i]);
-  } else if constexpr (numOperands == 3) {
-    return rewriter.create<Op>(loc, operands[0][i], operands[1][i],
-                               operands[2][i]);
-  }
-}
-
-template <typename Op, int numOperands>
-class WGToSGElementWiseOpPattern : public OpConversionPattern<Op> {
-  using OpConversionPattern<Op>::OpConversionPattern;
-  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
-  using OneToNOpAdaptor =
-      typename Op::template GenericAdaptor<ArrayRef<ValueRange>>;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, OneToNOpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto res = op.getResult();
-    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-
-    auto mapAttr =
-        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
-    if (!mapAttr) {
-      return mlir::failure();
-    }
-
-    auto wgTileShape = resType.getShape();
-    auto sgData = mapAttr.getSgData();
-    auto sgLayout = mapAttr.getSgLayout();
-
-    auto newTy =
-        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
-
-    // Get all the slices of Operands
-    auto operands = adaptor.getOperands();
-
-    llvm::SmallVector<llvm::SmallVector<mlir::Value>> operand;
-    if (numOperands == 1)
-      operand.push_back(operands[0]);
-    else if (numOperands == 2) {
-      operand.push_back(operands[0]);
-      operand.push_back(operands[1]);
-    } else {
-      operand.push_back(operands[0]);
-      operand.push_back(operands[1]);
-      operand.push_back(operands[2]);
-    }
-
-    size_t numOps;
-    if (sgLayout[0] * sgData[0] == wgTileShape[0] &&
-        sgLayout[1] * sgData[1] == wgTileShape[1])
-      numOps = 1; // 1:1 mapping
-    else
-      numOps = (wgTileShape[0] / (sgLayout[0] * sgData[0])) +
-               (wgTileShape[1] / (sgLayout[1] * sgData[1]));
-
-    llvm::SmallVector<::mlir::Value> newOps;
-    for (size_t i = 0; i < numOps; i++) {
-      auto newOp = createOp<Op, numOperands>(rewriter, op.getLoc(), operand, i);
-      newOp->getResult(0).setType(newTy);
-      newOps.push_back(newOp);
-    }
-
-    rewriter.replaceOpWithMultiple(op, {newOps});
-    return mlir::success();
-  }
-};
-
 class WGToSGArithConstantOpPattern
     : public OpConversionPattern<mlir::arith::ConstantOp> {
   using OpConversionPattern<mlir::arith::ConstantOp>::OpConversionPattern;
@@ -544,63 +467,6 @@ class WGToSGArithConstantOpPattern
     }
 
     rewriter.replaceOpWithMultiple(op, {newOps});
-    return mlir::success();
-  }
-};
-
-// TODO: Templatize this pattern for similar elementwise ops
-class WGToSGArithExtFOpPattern
-    : public OpConversionPattern<mlir::arith::ExtFOp> {
-  using OpConversionPattern<mlir::arith::ExtFOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::arith::ExtFOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto res = op.getResult();
-    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-
-    auto mapAttr =
-        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
-    if (!mapAttr) {
-      return mlir::failure();
-    }
-
-    auto sgData = mapAttr.getSgData();
-
-    auto newTy =
-        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
-
-    auto newOp = rewriter.create<mlir::arith::ExtFOp>(op.getLoc(), newTy, adaptor.getOperands()[0]);
-    rewriter.replaceOp(op, newOp);
-    return mlir::success();
-  }
-};
-
-class WGToSGArithTruncFOpPattern
-    : public OpConversionPattern<mlir::arith::TruncFOp> {
-  using OpConversionPattern<mlir::arith::TruncFOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::arith::TruncFOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    auto res = op.getResult();
-    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
-
-    auto mapAttr =
-        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
-    if (!mapAttr) {
-      return mlir::failure();
-    }
-
-    auto sgData = mapAttr.getSgData();
-
-    auto newTy =
-        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
-
-    auto newOp = rewriter.create<mlir::arith::TruncFOp>(op.getLoc(), newTy, adaptor.getOperands()[0]);
-    rewriter.replaceOp(op, newOp);
     return mlir::success();
   }
 };
@@ -828,7 +694,6 @@ class WGToSGVectorBroadcast
   }
 };
 
-
 class WGToSGPrefetchOpPattern : public OpConversionPattern<xetile::PrefetchTileOp> {
   using OpConversionPattern<xetile::PrefetchTileOp>::OpConversionPattern;
 
@@ -969,6 +834,177 @@ class WGToSGVectorShapeCast
   }
 };
 
+template <typename Op, int numOperands>
+Op createOp(ConversionPatternRewriter &rewriter, mlir::Location loc,
+            llvm::SmallVector<llvm::SmallVector<mlir::Value>> operands, int i) {
+  static_assert(numOperands >= 1 && numOperands <= 3,
+                "Unsupported number of operands");
+
+  if constexpr (numOperands == 1) {
+    return rewriter.create<Op>(loc, operands[0][i]);
+  } else if constexpr (numOperands == 2) {
+    return rewriter.create<Op>(loc, operands[0][i], operands[1][i]);
+  } else if constexpr (numOperands == 3) {
+    return rewriter.create<Op>(loc, operands[0][i], operands[1][i],
+                               operands[2][i]);
+  }
+}
+
+// This Pattern transforms arith/math ops where the ops have same arg and result type
+// Example ops :
+// math.exp {{%.*}} : vector<40x96xf32>
+// arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
+template <typename Op, int numOperands>
+class WGToSGElementWiseOpSameArgAndResultTypePattern : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OneToNOpAdaptor =
+      typename Op::template GenericAdaptor<ArrayRef<ValueRange>>;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto wgTileShape = resType.getShape();
+    auto sgData = mapAttr.getSgData();
+    auto sgLayout = mapAttr.getSgLayout();
+
+    auto newTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
+
+    // Get all the slices of Operands
+    auto operands = adaptor.getOperands();
+
+    llvm::SmallVector<llvm::SmallVector<mlir::Value>> operand;
+    if (numOperands == 1)
+      operand.push_back(operands[0]);
+    else if (numOperands == 2) {
+      operand.push_back(operands[0]);
+      operand.push_back(operands[1]);
+    } else {
+      operand.push_back(operands[0]);
+      operand.push_back(operands[1]);
+      operand.push_back(operands[2]);
+    }
+
+    size_t numOps;
+    if (sgLayout[0] * sgData[0] == wgTileShape[0] &&
+        sgLayout[1] * sgData[1] == wgTileShape[1])
+      numOps = 1; // 1:1 mapping
+    else
+      numOps = (wgTileShape[0] / (sgLayout[0] * sgData[0])) +
+               (wgTileShape[1] / (sgLayout[1] * sgData[1]));
+
+    llvm::SmallVector<::mlir::Value> newOps;
+    for (size_t i = 0; i < numOps; i++) {
+      auto newOp = createOp<Op, numOperands>(rewriter, op.getLoc(), operand, i);
+      newOp->getResult(0).setType(newTy);
+      newOps.push_back(newOp);
+    }
+
+    rewriter.replaceOpWithMultiple(op, {newOps});
+    return mlir::success();
+  }
+};
+
+// This Pattern trasforms arith ops where the ops have same shape as arg but
+// different result type
+// Example ops :
+// arith.bitcast {{%.*}} : vector<32x32xf16> to vector<32x32xi16>
+// arith.uitofp {{%.*}} : vector<32x32xi16> to vector<32x32xf16>
+template <typename Op>
+class WGToSGArithDifferentResultTypePattern : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OpAdaptor = typename Op::template GenericAdaptor<RangeT>;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+
+    auto newTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
+
+    auto newOp = rewriter.create<Op>(op.getLoc(), newTy, adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+// arith::CmpIOp and arith::CmpFOp
+template <typename Op>
+class WGToSGElementWiseOpComparisonOpsPattern : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using RangeT = llvm::ArrayRef<mlir::ValueRange>;
+  using OpAdaptor = typename Op::template GenericAdaptor<RangeT>;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto arg = op.getLhs();
+    auto argType = mlir::dyn_cast<mlir::VectorType>(arg.getType());
+    auto result = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(result.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+
+    auto newTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, argType.getElementType());
+
+    auto resTy =
+        mlir::VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
+
+    auto newOp = rewriter.create<Op>(op.getLoc(), newTy, op.getPredicate(),
+                                 adaptor.getLhs()[0], adaptor.getRhs()[0]);
+    newOp->getResult(0).setType(resTy);
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+static bool hasMap(mlir::Operation* op){
+  if (llvm::isa<imex::xetile::LoadTileOp>(op)){
+    auto tileTy =  mlir::dyn_cast<xetile::TileType>(op->getOperand(0).getType());
+    if (tileTy.getWgMap())
+      return true;
+    else
+      return false;
+  }
+
+  auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+  auto wgMapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("wg_map_a"));
+  if (!mapAttr && !wgMapAttr)
+    return false;
+  else
+    return true;
+}
+
 // Helper function to analyze the def-use chain of initTileOps. Currently we
 // pattern match the following def-use chain as a candidate for
 // load + tranpose optimization.
@@ -1078,30 +1114,27 @@ void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns) {
                   WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
                   WGToSGSCFYieldOpPattern, WGToSGVectorTranspose, WGToSGVectorBroadcast,
-                  WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern, WGToSGArithExtFOpPattern,
-                  WGToSGArithTruncFOpPattern, WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp
+                  WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern,
+                  WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp
                   >(patterns.getContext());
-  patterns.insert<WGToSGElementWiseOpPattern<mlir::math::ExpOp, 1>,
-                  WGToSGElementWiseOpPattern<mlir::math::SqrtOp, 1>,
-                  WGToSGElementWiseOpPattern<mlir::arith::AddFOp, 2>,
+  patterns.insert<WGToSGElementWiseOpSameArgAndResultTypePattern<mlir::math::ExpOp, 1>,
+                  WGToSGElementWiseOpSameArgAndResultTypePattern<mlir::math::SqrtOp, 1>,
+                  WGToSGElementWiseOpSameArgAndResultTypePattern<mlir::arith::AddFOp, 2>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::TruncFOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::TruncIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::ExtFOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::ExtSIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::ExtUIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::SIToFPOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::UIToFPOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::FPToSIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::FPToUIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::IndexCastUIOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::IndexCastOp>,
+                  WGToSGArithDifferentResultTypePattern<mlir::arith::BitcastOp>,
+                  WGToSGElementWiseOpComparisonOpsPattern<mlir::arith::CmpIOp>,
+                  WGToSGElementWiseOpComparisonOpsPattern<mlir::arith::CmpFOp>,
                   WGToSGArithConstantOpPattern>(patterns.getContext());
-}
-
-bool hasMap(mlir::Operation* op){
-  if (llvm::isa<imex::xetile::LoadTileOp>(op)){
-    auto tileTy =  mlir::dyn_cast<xetile::TileType>(op->getOperand(0).getType());
-    if (tileTy.getWgMap())
-      return true;
-    else
-      return false;
-  }
-
-  auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
-  auto wgMapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("wg_map_a"));
-  if (!mapAttr && !wgMapAttr)
-    return false;
-  else
-    return true;
 }
 
 // Transforms WG XeTile IR to SG XeTile
@@ -1199,7 +1232,11 @@ public:
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
                                  mlir::math::ExpOp, mlir::math::SqrtOp, mlir::arith::ExtFOp,
-                                 mlir::arith::TruncFOp, mlir::vector::TransposeOp,
+                                 mlir::arith::ExtSIOp, mlir::arith::ExtUIOp, mlir::arith::FPToSIOp,
+                                 mlir::arith::FPToUIOp, mlir::arith::UIToFPOp, mlir::arith::SIToFPOp,
+                                 mlir::arith::TruncFOp, mlir::arith::TruncIOp, mlir::arith::CmpIOp,
+                                 mlir::arith::CmpFOp,  mlir::arith::IndexCastUIOp,
+                                 mlir::arith::IndexCastOp, mlir::arith::BitcastOp, mlir::vector::TransposeOp,
                                  mlir::vector::BroadcastOp, mlir::vector::MultiDimReductionOp,
                                  mlir::vector::ShapeCastOp>(
         [&](mlir::Operation *op) -> bool {
