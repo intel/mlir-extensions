@@ -138,6 +138,23 @@ struct InitTileOpPattern final
     if (mayNeedMask) {
       return mlir::failure();
     }
+
+    // memspace is SLM, but can be hanled with optimal SLM accesses,
+    // no need to rewrite too, but the shape of all uses (init_tile) of
+    // the SLM must support optimal SLM accesses.
+    auto isSupportedOptimalSLMAccessForAllUsers = [&](mlir::Value value) {
+      for (mlir::Operation *u : value.getUsers()) {
+        auto init = mlir::dyn_cast<imex::xetile::InitTileOp>(u);
+        if (!init || !imex::isSupportedOptimalSLMAccess(init.getType()))
+          return false;
+      }
+      return true;
+    };
+    auto src = initTileOp.getSource();
+    if (isSLM && isSupportedOptimalSLMAccessForAllUsers(src)) {
+      return mlir::failure();
+    }
+
     // Get flat shape size
     int64_t flatSize = 1;
     for (auto dim : srcShape) {
