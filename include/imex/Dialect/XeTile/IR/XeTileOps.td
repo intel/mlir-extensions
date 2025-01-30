@@ -18,6 +18,7 @@ include "imex/Dialect/XeTile/IR/XeTileDialect.td"
 include "imex/Dialect/XeTile/IR/XeTileTypes.td"
 include "imex/Dialect/XeTile/IR/XeTileAttrs.td"
 
+include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/Dialect/Vector/IR/VectorAttributes.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 
@@ -501,7 +502,7 @@ def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
                 vector<8x16xbf16>, tile<8x16xbf16> -> vector<8x16xbf16>
         ```
     }];
-    let arguments = (ins XeTile_AtomicRMWKindAttr:$kind,
+    let arguments = (ins AtomicRMWKindAttr:$kind,
                         XeTile_2DVector:$value,
                         XeTile:$tile);
     let results = (outs XeTile_2DVector:$result);
