@@ -318,6 +318,35 @@ public:
   }
 };
 
+class AtomicRMWOpPattern
+    : public mlir::OpConversionPattern<xetile::AtomicRMWOp> {
+public:
+  using mlir::OpConversionPattern<xetile::AtomicRMWOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(xetile::AtomicRMWOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto type = op.getValue().getType();
+    auto elemTy = type.getElementType();
+    auto value = adaptor.getValue();
+    auto valTy = mlir::VectorType::get(type.getNumElements(), elemTy);
+    auto maskTy = mlir::VectorType::get(type.getNumElements(),
+                                        rewriter.getIntegerType(1));
+    llvm::SmallVector<bool> maskValues(type.getNumElements(), true);
+    auto maskAttr = mlir::DenseElementsAttr::get(maskTy, maskValues);
+    mlir::Value mask =
+        rewriter.create<mlir::arith::ConstantOp>(loc, maskTy, maskAttr);
+    value =
+        rewriter.create<mlir::vector::ShapeCastOp>(op.getLoc(), valTy, value);
+    auto atomicrmwOp = rewriter.create<mlir::xegpu::AtomicRMWOp>(
+        loc, valTy, op.getKind(), adaptor.getTile(), mask, value);
+    auto v = rewriter.create<mlir::vector::ShapeCastOp>(loc, op.getType(),
+                                                        atomicrmwOp);
+    rewriter.replaceOp(op, v);
+    return mlir::success();
+  }
+};
+
 // convert xetile.mma to xegpu::DpasOp.
 class MMAOpPattern : public mlir::OpConversionPattern<xetile::TileMMAOp> {
 public:
@@ -691,8 +720,8 @@ void populateXeTileToXeGPUConversionPatterns(
   patterns.add<InitOpPattern, UpdateOpPattern, PrefetchOpPattern, LoadOpPattern,
                StoreOpPattern, GatherOpPattern, ScatterOpPattern, MMAOpPattern,
                BroadcastOpPattern, ReduceOpPattern, TransposeOpPattern,
-               SCFForOpPattern, SCFYieldOpPattern, MemRefViewOpPattern>(
-      converter, patterns.getContext());
+               SCFForOpPattern, SCFYieldOpPattern, MemRefViewOpPattern,
+               AtomicRMWOpPattern>(converter, patterns.getContext());
 }
 
 /// Create a pass that convert XeTile to XeGPU

@@ -291,6 +291,10 @@ private:
                            mlir::ArrayRef<BlockingLattice *> operands,
                            mlir::ArrayRef<const BlockingLattice *> results);
 
+  void visitAtomicRMWOp(xetile::AtomicRMWOp op,
+                        mlir::ArrayRef<BlockingLattice *> operands,
+                        mlir::ArrayRef<const BlockingLattice *> results);
+
   void visitUpdateTileOp(xetile::UpdateTileOffsetOp op,
                          mlir::ArrayRef<BlockingLattice *> operands,
                          mlir::ArrayRef<const BlockingLattice *> results);
@@ -358,6 +362,9 @@ mlir::LogicalResult BlockingAnalysisImpl::visitOperation(
 
   if (auto scatterOp = mlir::dyn_cast<xetile::StoreScatterOp>(op))
     visitStoreScatterOp(scatterOp, operands, results);
+
+  if (auto atomicrmwOp = mlir::dyn_cast<xetile::AtomicRMWOp>(op))
+    visitAtomicRMWOp(atomicrmwOp, operands, results);
 
   if (auto tileMMAOp = mlir::dyn_cast<xetile::TileMMAOp>(op))
     visitTileMMAOp(tileMMAOp, operands, results);
@@ -555,6 +562,23 @@ void BlockingAnalysisImpl::visitStoreScatterOp(
   // TODO: currently 1D scatter is not considered.
   if (shape.size() == 1)
     return;
+
+  auto size = getDefaultSize(elemTy, shape);
+  if (!size)
+    return;
+
+  for (auto &&[i, inputOpr] : llvm::enumerate(operands)) {
+    auto blockingRequest = BlockingRequests(size, op->getOpOperand(i));
+    propagateIfChanged(inputOpr, inputOpr->join(blockingRequest));
+  }
+}
+
+void BlockingAnalysisImpl::visitAtomicRMWOp(
+    xetile::AtomicRMWOp op, mlir::ArrayRef<BlockingLattice *> operands,
+    mlir::ArrayRef<const BlockingLattice *> results) {
+  auto tileTy = op.getTile().getType();
+  auto elemTy = tileTy.getElementType();
+  auto shape = tileTy.getShape();
 
   auto size = getDefaultSize(elemTy, shape);
   if (!size)
