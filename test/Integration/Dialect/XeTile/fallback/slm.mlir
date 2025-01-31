@@ -28,8 +28,9 @@ module @narrow_tile attributes {gpu.container_module} {
       %cst32 = arith.constant 32 : index
       %0 = xetile.init_tile %arg0 [0, 0] : memref<32x32xf32> -> !xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0]>>
       %1 = xetile.init_tile %arg1 [0, 0] : memref<32x32xf32> -> !xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0]>>
-      %slm = memref.alloc() : memref<8x16xf32, 3>
-      %slm_tile = xetile.init_tile %slm [0, 0] : memref<8x16xf32, 3> -> !xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0], memory_space = 3 : i32>>
+      %slm = memref.alloc() : memref<512xi8, 3>
+      %view = memref.view %slm[%cst0][] : memref<512xi8, 3> to memref<8x16xf32, 3>
+      %slm_tile = xetile.init_tile %view[0, 0] : memref<8x16xf32, 3> -> !xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0], memory_space = 3 : i32>>
       %out:2 = scf.for %j = %cst0 to %cst32 step %cst8
         iter_args(%a_tile = %0, %b_tile = %1)
         -> (!xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0]>>, !xetile.tile<8x16xf32, #xetile.tile_attr<order = [1, 0]>>) {

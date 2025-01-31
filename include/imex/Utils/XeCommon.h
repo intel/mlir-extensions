@@ -45,7 +45,21 @@ int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
                          int vnniFactor, bool colMajor);
 
 // a helper util to check whether the tile type is supported
-// for optimal SLM access lowering.
+// for optimal SLM access lowering. It currently has to meet
+// the following conditions:
+//   tileShape[1] % 16 == 0
+//   slmShape[0] % tileShape[0] == 0
+//   slmShape[1] % tileShape[1] == 0
+//   TileOffset[0] % tileShape[0] == 0
+//   TileOffset[1] % tileShape[1] == 0
+//
+//   regular tile (tile without order attribute)
+//   tileShape[0] x tileShape[1] % 64 == 0 (in bytes) to work
+//   tileShape[0] x tileShape[1] % 256 == 0 (in bytes) for best performance
+//
+//   transposed tile (tile with order attribute)
+//   tileShape[0] % vnni == 0 to work
+//   tileShape[0] % (8 * vnni) == 0 for best performance.
 bool isSupportedOptimalSLMAccess(xetile::TileType tileTy);
 
 // this method computes the vnni factor for the given element type.

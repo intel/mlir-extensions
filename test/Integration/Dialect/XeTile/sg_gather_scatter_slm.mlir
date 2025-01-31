@@ -50,8 +50,11 @@ module @gemm attributes {gpu.container_module} {
       %a_tile = xetile.init_tile %A[%off_y, %off_x] : memref<32x32xf16> -> !xetile.tile<4x8xf16>
       %data = xetile.load_tile %a_tile : !xetile.tile<4x8xf16> -> vector<4x8xf16>
 
-      %slm = memref.alloc() : memref<32x32xf16, 3>
-      %cast = memref.reinterpret_cast %slm to offset: [0], sizes: [1024], strides: [1] : memref<32x32xf16, 3> to memref<1024xf16, 3>
+      // %slm = memref.alloc() : memref<32x32xf16, 3>
+      // %cast = memref.reinterpret_cast %slm to offset: [0], sizes: [1024], strides: [1] : memref<32x32xf16, 3> to memref<1024xf16, 3>
+
+      %slm = memref.alloc() : memref<1024xf16, 3>
+
       %mask = arith.constant dense<true>: vector<4x8xi1>
 
       // store data to slm using original layout
@@ -63,7 +66,7 @@ module @gemm attributes {gpu.container_module} {
       %offset = arith.addi %off_y2, %off_x : index
       %offsets = vector.splat %offset: vector<4x8xindex>
       %indices = arith.addi %base_indices, %offsets : vector<4x8xindex>
-      %st_tile = xetile.init_tile %cast, %indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
+      %st_tile = xetile.init_tile %slm, %indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
       xetile.store %data, %st_tile, %mask : vector<4x8xf16>, !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>, vector<4x8xi1>
 
       gpu.barrier
@@ -79,7 +82,7 @@ module @gemm attributes {gpu.container_module} {
       %trans_off = arith.addi %trans_off_x, %trans_off_y : index
       %trans_offsets = vector.splat %trans_off: vector<4x8xindex>
       %trans_indices = arith.addi %trans_base_indices, %trans_offsets : vector<4x8xindex>
-      %ld_tile = xetile.init_tile %cast, %trans_indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
+      %ld_tile = xetile.init_tile %slm, %trans_indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
       %d = xetile.load %ld_tile, %mask : !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>, vector<4x8xi1> -> vector<4x8xf16>
 
       %b_tile = xetile.init_tile %B[%off_y, %off_x] : memref<32x32xf16> -> !xetile.tile<4x8xf16>

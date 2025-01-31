@@ -402,3 +402,58 @@ module attributes {gpu.container_module} {
     }
   }
 }
+
+// -----
+// code is unchanged intentionally for optimal case
+gpu.module @kernel {
+  gpu.func @test_optimal(%arg0: memref<64x64xf16>, %arg1: memref<64x64xf16>, %arg2: memref<64x64xf16>) kernel {
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c0 = arith.constant 0 : index
+    %c32 = arith.constant 32 : index
+    %c4 = arith.constant 4 : index
+    %c2 = arith.constant 2 : index
+    %block_id_x = gpu.block_id  x
+    %block_id_y = gpu.block_id  y
+    %0 = gpu.subgroup_id : index
+    %1 = index.divu %0, %c2
+    %2 = index.remu %0, %c2
+    %3 = index.remu %1, %c16
+    %4 = index.mul %3, %c4
+    %5 = index.add %block_id_x, %4
+    %6 = index.remu %2, %c2
+    %7 = index.mul %6, %c32
+    %8 = index.add %block_id_y, %7
+    %9 = xetile.init_tile %arg0[%5, %8] : memref<64x64xf16> -> !xetile.tile<4x32xf16>
+    %10 = xetile.load_tile %9 : !xetile.tile<4x32xf16> -> vector<4x32xf16>
+    %alloc = memref.alloc() : memref<8192xi8, 3>
+    %view = memref.view %alloc[%c0][] : memref<8192xi8, 3> to memref<64x64xf16, 3>
+    %11 = index.mul %1, %c4
+    %12 = index.mul %2, %c32
+    //CHECK: xetile.init_tile {{.*}} : memref<64x64xf16, 3> -> !xetile.tile<4x32xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    //CHECK: xetile.store_tile {{.*}} : vector<4x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    %13 = xetile.init_tile %view[%11, %12] : memref<64x64xf16, 3> -> !xetile.tile<4x32xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    xetile.store_tile %10,  %13 : vector<4x32xf16>, !xetile.tile<4x32xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    gpu.barrier
+    %14 = index.divu %0, %c4
+    %15 = index.remu %0, %c4
+    %16 = index.mul %14, %c8
+    %17 = index.mul %15, %c16
+    //CHECK: xetile.init_tile {{.*}} : memref<64x64xf16, 3> -> !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    //CHECK: xetile.load_tile {{.*}} : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i32>> -> vector<8x16xf16>
+    %18 = xetile.init_tile %view[%16, %17] : memref<64x64xf16, 3> -> !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i32>>
+    %19 = xetile.load_tile %18 : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i32>> -> vector<8x16xf16>
+    %20 = index.remu %14, %c8
+    %21 = index.mul %20, %c8
+    %22 = index.add %block_id_x, %21
+    %23 = index.remu %15, %c4
+    %24 = index.mul %23, %c16
+    %25 = index.add %block_id_y, %24
+    %26 = xetile.init_tile %arg1[%22, %25] : memref<64x64xf16> -> !xetile.tile<8x16xf16>
+    %27 = xetile.load_tile %26 : !xetile.tile<8x16xf16> -> vector<8x16xf16>
+    %28 = arith.addf %27, %19 : vector<8x16xf16>
+    %29 = xetile.init_tile %arg2[%22, %25] : memref<64x64xf16> -> !xetile.tile<8x16xf16>
+    xetile.store_tile %28,  %29 : vector<8x16xf16>, !xetile.tile<8x16xf16>
+    gpu.return
+  }
+}
