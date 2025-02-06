@@ -164,3 +164,9 @@ jobs:
           curl -X PUT \
             -d token=$COV_TOKEN \
             https://scan.coverity.com/projects/$project_id/builds/$build_id/enqueue
+            
+      - name: Upload report to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coverity Report
+          path: cov-int.tgz            
