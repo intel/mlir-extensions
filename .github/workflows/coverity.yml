@@ -169,4 +169,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Coverity Report
-          path: cov-int.tgz            
+          path: $HOME/cov-int.tgz            
