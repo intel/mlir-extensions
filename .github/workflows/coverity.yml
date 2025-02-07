@@ -135,6 +135,8 @@ jobs:
         run: |
           cd $HOME
           tar zcf cov-int.tgz cov-int
+          ls $HOME
+          ls $HOME/work/mlir-extensions/mlir-extensions
           pwd
           ls -al cov-int.tgz
           echo hello > test.txt
