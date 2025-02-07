@@ -135,11 +135,11 @@ jobs:
         run: |
           cd $HOME
           tar zcf cov-int.tgz cov-int
+          echo hello > test.txt
           ls $HOME
           ls $HOME/work/mlir-extensions/mlir-extensions
           pwd
-          ls -al cov-int.tgz
-          echo hello > test.txt
+          ls -al cov-int.tgz          
           echo $HOME
          
       - name: Upload report to artifacts
@@ -148,4 +148,4 @@ jobs:
           name: Coverity Report
           path: |
             test.txt
-            cov-int.tgz            
+            $HOME/work/mlir-extensions/mlir-extensions/cov-int.tgz    
