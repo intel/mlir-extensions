@@ -137,10 +137,13 @@ jobs:
           tar zcf cov-int.tgz cov-int
           pwd
           ls -al cov-int.tgz
+          echo hello > test.txt
           echo $HOME
          
       - name: Upload report to artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Coverity Report
-          path: cov-int.tgz            
+          path: |
+            test.txt
+            cov-int.tgz            
