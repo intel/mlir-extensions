@@ -135,6 +135,9 @@ jobs:
         run: |
           cd $HOME
           tar zcf cov-int.tgz cov-int
+          pwd
+          ls -al cov-int.tgz
+          echo $HOME
          
       - name: Upload report to artifacts
         uses: actions/upload-artifact@v4
