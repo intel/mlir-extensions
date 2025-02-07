@@ -12,9 +12,11 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
+#include "mlir/Dialect/XeGPU/IR/XeGPU.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
@@ -103,7 +105,8 @@ static void populateVectorLinearizeTypeConversionsAndLegality(
         !mlir::isa<mlir::VectorType>(type))
       return nullptr;
 
-    return builder.create<mlir::vector::ShapeCastOp>(loc, type, inputs.front());
+    return builder.createOrFold<mlir::vector::ShapeCastOp>(loc, type,
+                                                           inputs.front());
   };
   typeConverter.addArgumentMaterialization(materializeCast);
   typeConverter.addSourceMaterialization(materializeCast);
@@ -113,6 +116,13 @@ static void populateVectorLinearizeTypeConversionsAndLegality(
         if ((mlir::isa<mlir::arith::ConstantOp>(op) ||
              op->hasTrait<mlir::OpTrait::Vectorizable>())) {
           return typeConverter.isLegal(op);
+        }
+        if (auto l = mlir::dyn_cast<mlir::LoopLikeOpInterface>(op)) {
+          for (auto arg : l.getRegionIterArgs()) {
+            if (!typeConverter.isLegal(arg.getType()))
+              return false;
+          }
+          return true;
         }
         return std::nullopt;
       });
@@ -308,6 +318,43 @@ struct VectorExtractStridedSliceConversion final
           extractOp, dstType, srcVector, srcVector,
           rewriter.getDenseI64ArrayAttr(indices));
     }
+    return mlir::success();
+  }
+};
+
+struct VectorInsertStridedSliceConversion final
+    : public mlir::OpConversionPattern<mlir::vector::InsertStridedSliceOp> {
+  using mlir::OpConversionPattern<
+      mlir::vector::InsertStridedSliceOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::InsertStridedSliceOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto srcTy = op.getSourceVectorType();
+    auto destTy = op.getDestVectorType();
+
+    if (op.hasNonUnitStrides()) {
+      return rewriter.notifyMatchFailure(
+          op, "InsertStridedSliceOp only supports unit strides.");
+    }
+
+    if (llvm::any_of(srcTy.getShape().drop_back(),
+                     [](int64_t dim) { return dim != 1; })) {
+      return rewriter.notifyMatchFailure(op,
+                                         "Only supports vectors with leading "
+                                         "dims (except the last dim) as 1s.");
+    }
+
+    auto strides = destTy.getShape().drop_front().vec();
+    strides.push_back(1);
+    int64_t linearizedOffset = 0;
+    for (auto [off, stride] : llvm::zip_equal(op.getOffsets(), strides)) {
+      linearizedOffset += mlir::getConstantIntValue(off).value() * stride;
+    }
+
+    rewriter.replaceOpWithNewOp<mlir::vector::InsertStridedSliceOp>(
+        op, adaptor.getSource(), adaptor.getDest(), linearizedOffset, 1);
+
     return mlir::success();
   }
 };
@@ -533,6 +580,64 @@ struct VectorBitCastOpConversion final
   }
 };
 
+// Linearize the vectors in loop like ops, e.g., scf.for. It needs to
+// update the inits, the block arguments, the yields, and the results.
+struct LoopOpInterfaceConversion final
+    : public mlir::OpInterfaceConversionPattern<mlir::LoopLikeOpInterface> {
+  using OpInterfaceConversionPattern<
+      mlir::LoopLikeOpInterface>::OpInterfaceConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::LoopLikeOpInterface op,
+                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    auto converter = getTypeConverter();
+
+    rewriter.saveInsertionPoint();
+    rewriter.startOpModification(op);
+
+    // update init args
+    op->setOperands(operands);
+
+    // Convert the types of the block arguments.
+    for (auto region : op.getLoopRegions()) {
+      if (mlir::failed(rewriter.convertRegionTypes(region, *converter)))
+        return mlir::failure();
+    }
+
+    // update the yield values
+    if (auto yieldValues = op.getYieldedValuesMutable()) {
+      for (mlir::OpOperand &yield : *yieldValues) {
+        auto value = yield.get();
+        auto type = value.getType();
+        if (!converter->isLegal(type)) {
+          auto newTy = converter->convertType(type);
+          rewriter.setInsertionPoint(yield.getOwner());
+          value = rewriter.create<mlir::vector::ShapeCastOp>(loc, newTy, value);
+          yield.set(value);
+        }
+      }
+    }
+
+    // update the result types
+    rewriter.setInsertionPointAfter(op);
+    if (auto results = op.getLoopResults()) {
+      for (auto result : results.value()) {
+        if (!converter->isLegal(result.getType())) {
+          auto oldTy = result.getType();
+          auto newTy = converter->convertType(oldTy);
+          result.setType(newTy);
+          auto castOp =
+              rewriter.create<mlir::vector::ShapeCastOp>(loc, oldTy, result);
+          result.replaceAllUsesExcept(castOp.getResult(), castOp);
+        }
+      }
+    }
+    rewriter.finalizeOpModification(op);
+    return mlir::success();
+  }
+};
+
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -564,6 +669,21 @@ struct VectorLinearizePass final
           return op.getVector().getType().getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::vector::InsertStridedSliceOp>(
+        [&](mlir::vector::InsertStridedSliceOp op) {
+          auto srcTy = op.getSourceVectorType();
+          if (!op.hasNonUnitStrides() && srcTy.getRank() != 1 &&
+              llvm::all_of(srcTy.getShape().drop_back(),
+                           [](int64_t dim) { return dim == 1; }))
+            return false;
+          return true;
+        });
+
+    target.addDynamicallyLegalOp<mlir::vector::ExtractOp>(
+        [&](mlir::vector::ExtractOp op) {
+          return op.getVector().getType().getRank() == 1;
+        });
+
     target.addDynamicallyLegalOp<mlir::vector::LoadOp>(
         [&](mlir::vector::LoadOp op) {
           return op.getVectorType().getRank() == 1;
@@ -587,17 +707,20 @@ struct VectorLinearizePass final
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
+    target.addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
     target.addDynamicallyLegalOp<mlir::vector::SplatOp>(
         [&](mlir::vector::SplatOp op) -> bool {
           return (op && op.getAggregate().getType().getRank() == 1);
         });
 
-    patterns.add<VectorExtractStridedSliceConversion, VectorShffleOpConversion,
+    patterns.add<VectorExtractStridedSliceConversion,
+                 VectorInsertStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,
                  VectorStoreOpConversion, VectorCreateMaskOpConversion,
-                 VectorBitCastOpConversion>(typeConverter, context);
+                 VectorBitCastOpConversion, LoopOpInterfaceConversion>(
+        typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(

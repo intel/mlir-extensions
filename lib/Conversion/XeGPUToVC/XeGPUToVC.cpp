@@ -39,6 +39,8 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 
+#include "LscIntrinsicEnums.h"
+
 namespace imex {
 #define GEN_PASS_DEF_CONVERTXEGPUTOVC
 #include "imex/Conversion/Passes.h.inc"
@@ -148,18 +150,12 @@ static Value adjustBasePointer(ConversionPatternRewriter &rewriter,
   auto computeBase = [&](Value base) {
     for (auto i = 0; i < ranksToAdjust; i++) {
       Value factor;
-      Value offsetVal;
       if (eTyBitWidth < 8)
         factor = muli(strides[i], eTyBitWidthVal);
       else
         factor = muli(strides[i], bytesPerElemVal);
-      if (llvm::isa<Value>(offsets[i])) {
-        offsetVal = llvm::cast<Value>(offsets[i]);
-      } else {
-        offsetVal =
-            index_val(llvm::cast<IntegerAttr>(llvm::cast<Attribute>(offsets[i]))
-                          .getInt());
-      }
+      auto offsetVal =
+          mlir::getValueOrCreateConstantIndexOp(rewriter, loc, offsets[i]);
       auto linearOffset = muli(offsetVal, factor);
       if (eTyBitWidth < 8)
         linearOffset = divi(linearOffset, index_val(8));
@@ -475,21 +471,21 @@ public:
   matchAndRewrite(DpasOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto lhsType = mlir::cast<VectorType>(op.getLhs().getType());
-    auto rhsType = mlir::cast<VectorType>(op.getRhs().getType());
-    auto resultType = mlir::cast<VectorType>(op.getResultType());
+    auto lhsType = op.getLhsType();
+    auto rhsType = op.getRhsType();
+    auto resultType = op.getResultType();
     uint8_t rc = lhsType.getShape()[0];
     uint8_t sd = rhsType.getShape()[0];
     auto encodePrecision = [&](Type type) -> uint8_t {
-      if (type == rewriter.getBF16Type())
-        return 9;
-      else if (type == rewriter.getF16Type())
-        return 10;
-      else if (type == rewriter.getTF32Type())
-        return 12;
+      if (type.isBF16())
+        return (uint8_t)GenPrecision::BF16;
+      else if (type.isF16())
+        return (uint8_t)GenPrecision::FP16;
+      else if (type.isTF32())
+        return (uint8_t)GenPrecision::TF32;
       else {
         assert(0 && "add more support");
-        return 0;
+        return (uint8_t)GenPrecision::INVALID;
       }
     };
     uint8_t prec1 = encodePrecision(rhsType.getElementType());
@@ -509,13 +505,11 @@ public:
         encodeVectorType(rewriter, resultType, /*use64bitData=*/false,
                          /*enforceInteger=*/false, /*keepF16=*/true);
 
-    if (lhsNewType != adaptor.getLhs().getType()) {
-      lhs =
-          rewriter.create<vector::BitCastOp>(loc, lhsNewType, adaptor.getLhs());
+    if (lhsNewType != lhs.getType()) {
+      lhs = rewriter.create<vector::BitCastOp>(loc, lhsNewType, lhs);
     }
-    if (rhsNewType != adaptor.getRhs().getType()) {
-      rhs =
-          rewriter.create<vector::BitCastOp>(loc, rhsNewType, adaptor.getRhs());
+    if (rhsNewType != rhs.getType()) {
+      rhs = rewriter.create<vector::BitCastOp>(loc, rhsNewType, rhs);
     }
     SmallVector<Value, 4> args{rhs, lhs, info};
     std::string funcName = "llvm.genx.dpas.nosrc0.";
@@ -541,9 +535,7 @@ public:
     funcName += lhsName;
     auto funcOp = createFuncCall(rewriter, loc, funcName,
                                  TypeRange{newResultType}, args, false);
-    auto newcast = rewriter.create<vector::ShapeCastOp>(loc, resultType,
-                                                        funcOp.getResult(0));
-    rewriter.replaceOp(op, newcast);
+    rewriter.replaceOp(op, funcOp.getResult(0));
     return success();
   }
 };
@@ -599,79 +591,6 @@ public:
                            num_consumers});
     rewriter.replaceOp(op, nbarrier);
 
-    return success();
-  }
-};
-
-class VectorShapeCastPattern : public OpConversionPattern<ShapeCastOp> {
-public:
-  using OpConversionPattern<ShapeCastOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ShapeCastOp shapeCastOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *converter = getTypeConverter();
-    Type dstType = converter->convertType(shapeCastOp.getType());
-
-    if (!dstType)
-      return failure();
-
-    if (dstType == adaptor.getSource().getType() ||
-        shapeCastOp.getResultVectorType().getNumElements() == 1) {
-      rewriter.replaceOp(shapeCastOp, adaptor.getSource());
-      return success();
-    }
-    rewriter.replaceOpWithNewOp<vector::BitCastOp>(shapeCastOp, dstType,
-                                                   adaptor.getSource());
-    return success();
-  }
-};
-
-class SCFForPattern : public OpConversionPattern<ForOp> {
-public:
-  using OpConversionPattern<ForOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ForOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    llvm::SmallVector<Value> convertedArgs;
-
-    convertedArgs.append(adaptor.getInitArgs().begin(),
-                         adaptor.getInitArgs().end());
-
-    auto newOp =
-        rewriter.create<ForOp>(op.getLoc(), op.getLowerBound(),
-                               op.getUpperBound(), op.getStep(), convertedArgs);
-
-    TypeConverter::SignatureConversion signatureConverter(
-        op.getRegion().getNumArguments());
-    for (size_t i = 0; i < op.getRegion().getNumArguments(); i++) {
-      signatureConverter.addInputs(i,
-                                   newOp.getRegion().getArgument(i).getType());
-    }
-
-    rewriter.applySignatureConversion(&op.getRegion().getBlocks().front(),
-                                      signatureConverter);
-
-    rewriter.eraseBlock(newOp.getBody());
-    rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
-                                newOp.getRegion().end());
-    rewriter.replaceOp(op, newOp.getResults());
-
-    return success();
-  }
-};
-
-class SCFYieldPattern : public OpConversionPattern<YieldOp> {
-public:
-  using OpConversionPattern<YieldOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(YieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto newOp = rewriter.create<YieldOp>(op.getLoc(), adaptor.getResults());
-    rewriter.replaceOp(op, newOp);
     return success();
   }
 };
@@ -747,7 +666,7 @@ bool isLegalXeGPUSCFOp(Operation *op, TypeConverter typeConverter) {
     args = llvm::cast<scf::YieldOp>(op).getResults();
   // Check the legality of arguments using the type converter.
   for (const auto &arg : args) {
-    if (!typeConverter.isLegal(arg.getType()))
+    if (isa<xegpu::TensorDescType>(arg.getType()))
       return false;
   }
   return true;
@@ -758,7 +677,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
   void runOnOperation() override {
     gpu::GPUModuleOp m = getOperation();
-    LLVMTypeConverter typeConverter(&getContext());
+    TypeConverter typeConverter;
     RewritePatternSet patterns(&getContext());
     ConversionTarget target(getContext());
 
@@ -771,19 +690,11 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                            spirv::SPIRVDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
 
-    target.addDynamicallyLegalDialect<scf::SCFDialect>(
-        [&](Operation *op) { return isLegalXeGPUSCFOp(op, typeConverter); });
-
-    target.addDynamicallyLegalOp<ShapeCastOp>([&](ShapeCastOp op) {
-      return typeConverter.isLegal(op.getType()) &&
-             typeConverter.isLegal(op.getSource().getType());
-    });
-
     // TODO: can we change it to addDynamicLegalOp?
     target.addLegalOp<mlir::UnrealizedConversionCastOp>();
 
-    // Don't convert "index" to "i64"
-    typeConverter.addConversion([&](IndexType type) { return type; });
+    // Don't convert other types, e.g., IndexType
+    typeConverter.addConversion([&](Type type) { return type; });
 
     typeConverter.addConversion([&](xegpu::TensorDescType type) -> Type {
       auto scope = type.getMemorySpace();
@@ -802,42 +713,44 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       return type;
     });
 
-    typeConverter.addConversion([&](VectorType type) -> Type {
-      // TODO: I don't think we need to convert 2D VectorType to
-      // 1D VectorType. It needs to removed after we move vector
-      // linearization after this pass
-
-      unsigned rank = type.getRank();
+    typeConverter.addConversion([&](VectorType type) {
       auto elemType = type.getElementType();
-
-      if (rank < 1)
-        return elemType;
-
-      // TODO: a temporary fix to avoid do type conversion
-      // for create_mask result
-      if (elemType.isInteger(1))
+      if (!mlir::vector::isLinearizableVector(type))
         return type;
-
-      unsigned sum = 1;
-      for (unsigned i = 0; i < rank; i++) {
-        sum *= type.getShape()[i];
-      }
-
-      return VectorType::get(sum, elemType);
+      return VectorType::get(type.getNumElements(), elemType,
+                             type.isScalable());
     });
 
-    // Ops don't use intrinsics
-    // TODO: why some of them needs typeconverter, some doesn't
-    patterns.add<CreateNdDescPattern, UpdateNDOffsetPattern, CreateDescPattern,
-                 UpdateOffsetOpPattern, AllocNbarrierPattern,
-                 InitNbarrierPattern, SCFYieldPattern>(patterns.getContext());
+    // a materialization function used by typeConverter to materialize
+    // arguments, source and target. If input and output are vectors,
+    // shapecast will used, otherwise unrealized_conversion_cast will be used.
+    auto materializeCast = [&](mlir::OpBuilder &builder, mlir::Type type,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return nullptr;
+      auto valTy = inputs.front().getType();
+      if (isa<VectorType>(type) && isa<VectorType>(valTy))
+        return builder.create<ShapeCastOp>(loc, type, inputs.front());
 
-    patterns.add<VectorShapeCastPattern, SCFForPattern>(typeConverter,
-                                                        patterns.getContext());
+      if (isa<xegpu::TensorDescType>(type) || isa<xegpu::TensorDescType>(valTy))
+        return builder.create<UnrealizedConversionCastOp>(loc, type, inputs)
+            .getResult(0);
 
-    // Ops to llvm.genx only Patterns
-    patterns.add<NbarrierWaitPattern, CompilerHintPattern, DpasPattern,
+      return nullptr;
+    };
+    typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
+
+    // We don't have a type conversion for xegpu.nbarrier, so barrier
+    // related ops don't need typeconverters.
+    patterns.add<AllocNbarrierPattern, InitNbarrierPattern, NbarrierWaitPattern,
                  NbarrierArrivePattern>(patterns.getContext());
+
+    patterns.add<CreateNdDescPattern, UpdateNDOffsetPattern, CreateDescPattern,
+                 UpdateOffsetOpPattern, CompilerHintPattern, DpasPattern>(
+        typeConverter, patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
@@ -850,6 +763,43 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();
+
+    // handle unrealized_conversion_cast generated for ops e.g., scf.for and
+    // scf.yield
+    m.walk([&](mlir::UnrealizedConversionCastOp op) {
+      if (op.getInputs().size() != 1 || op.getResults().size() != 1)
+        return WalkResult::skip();
+
+      auto input = op.getOperand(0);
+      auto output = op.getResult(0);
+
+      // resolve TensorDesc -> vector unrealized type conversion. It is
+      // typically inserted for BlockArguments in e.g., SCF for ops.
+      // We simply need to update the argument type and replace the
+      // users with the argument. For the loop op, we also need to update
+      // the type of corresponding tied loop result.
+      if (mlir::isa<xegpu::TensorDescType>(input.getType())) {
+        auto argument = mlir::dyn_cast<mlir::BlockArgument>(input);
+        if (argument) {
+          argument.setType(output.getType());
+          output.replaceAllUsesWith(argument);
+          if (auto loopOp = mlir::dyn_cast<mlir::LoopLikeOpInterface>(
+                  argument.getOwner()->getParentOp())) {
+            auto result = loopOp.getTiedLoopResult(argument);
+            result.setType(output.getType());
+          }
+        }
+      }
+
+      // resolve vector -> TensorDesc unrealized type conversion. It is
+      // typically inserted for SCF yield ops.
+      if (mlir::isa<xegpu::TensorDescType>(output.getType()))
+        output.replaceAllUsesWith(input);
+
+      if (op->use_empty())
+        op->erase();
+      return WalkResult::advance();
+    });
   }
 };
 
