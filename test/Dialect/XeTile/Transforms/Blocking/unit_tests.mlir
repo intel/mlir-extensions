@@ -1654,4 +1654,28 @@ gpu.module @test_kernel {
     gpu.return
   }
 
+  gpu.func @mma_with_scattered_load_store(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>) {
+    %cst = arith.constant dense<[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]> : vector<1x16xindex>
+    %idx = xetile.broadcast %cst [0] : vector<1x16xindex> -> vector<16x16xindex>
+    %mask = arith.constant dense<true> : vector<16x16xi1>
+    %cast = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+    %cast_2 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+    %cast_3 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %a_tile = xetile.init_tile %cast, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: %{{.*}} = xetile.load {{.*}} : !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    %a = xetile.load %a_tile, %mask : !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1> -> vector<16x16xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %b_tile = xetile.init_tile %cast_2, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: %{{.*}} = xetile.load {{.*}} : !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    %b = xetile.load %b_tile, %mask : !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1> -> vector<16x16xf32>
+    //CHECK-COUNT-4: %{{.*}} = xetile.tile_mma {{.*}} : vector<8x8xf32>, vector<8x16xf32>{{.*}} -> vector<8x16xf32>
+    %mma = xetile.tile_mma %a, %b : vector<16x16xf32>, vector<16x16xf32> -> vector<16x16xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %c_tile = xetile.init_tile %cast_3, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: xetile.store {{.*}} : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1>
+    xetile.store %mma, %c_tile, %mask : vector<16x16xf32>, !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1>
+    gpu.return
+  }
+
 }

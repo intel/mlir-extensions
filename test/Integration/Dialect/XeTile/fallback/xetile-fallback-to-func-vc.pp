@@ -9,14 +9,13 @@ builtin.module(
 	cse
         imex-xegpu-hoist-transpose
         imex-xegpu-apply-vnni-transformation
-        imex-xegpu-optimize-transpose)
+        imex-xegpu-optimize-transpose
+        cse
+        convert-xegpu-to-vc)
     cse
     imex-vector-linearize
-    cse
-    imex-remove-single-elem-vector
     canonicalize
     cse
-    gpu.module(convert-xegpu-to-vc)
     reconcile-unrealized-casts
     bf16-to-gpu
     cse

@@ -20,6 +20,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/Vector/Utils/VectorUtils.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
@@ -63,16 +64,15 @@ struct ElementwiseArithOpPattern final : public OpConversionPattern<MOp> {
   matchAndRewrite(MOp op, typename MOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check if the result type is a 1D vector
-    auto vecTy = dyn_cast<VectorType>(op.getType());
-    if (!vecTy)
-      return failure();
-    if (vecTy.getRank() != 1)
+    auto *converter = this->getTypeConverter();
+    auto vecTy = dyn_cast<VectorType>(converter->convertType(op.getType()));
+    if (!vecTy || vecTy.getRank() != 1)
       return failure();
 
     auto loc = op.getLoc();
     auto args = adaptor.getOperands();
 
-    bool isVectorAnyINTELType = imex::isVectorAnyINTELType(op.getType());
+    bool isVectorAnyINTELType = imex::isVectorAnyINTELType(vecTy);
     bool isFastmath =
         (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
     if (!isVectorAnyINTELType && !isFastmath)
@@ -80,8 +80,7 @@ struct ElementwiseArithOpPattern final : public OpConversionPattern<MOp> {
     // for large vectors, generate the corresponding VC intrinsic.
     auto funcName = getVCIntrinsicName<MOp>();
     funcName += encodeVectorType(rewriter, vecTy).first;
-    auto callOp =
-        createFuncCall(rewriter, loc, funcName, {op.getType()}, args, false);
+    auto callOp = createFuncCall(rewriter, loc, funcName, {vecTy}, args, false);
     rewriter.replaceOp(op, callOp);
     return success();
   }
@@ -94,12 +93,11 @@ struct ElementwiseArithOpPattern final : public OpConversionPattern<MOp> {
 //===----------------------------------------------------------------------===//
 
 void imex::populateArithToVCPatterns(
-    ::mlir::LLVMTypeConverter &typeConverter,
-    ::mlir::RewritePatternSet &patterns,
+    ::mlir::TypeConverter &typeConverter, ::mlir::RewritePatternSet &patterns,
     bool enableHighPrecisionInterimCalculation) {
   // Add patterns
   patterns.add<ElementwiseArithOpPattern<arith::MaximumFOp>>(
-      patterns.getContext());
+      typeConverter, patterns.getContext());
 }
 
 //===----------------------------------------------------------------------===//
@@ -109,12 +107,11 @@ void imex::configureArithToVCConversionLegality(
     ::mlir::ConversionTarget &target) {
   // Add legal dialects
   target.addLegalDialect<func::FuncDialect, arith::ArithDialect>();
-  // arith.maximumf is only converted if they are 1D vectors
+  // arith.maximumf is converted if they are vectors
   target.addDynamicallyLegalOp<arith::MaximumFOp>([&](arith::MaximumFOp op) {
     if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-      if (vecTy.getRank() != 1)
-        return true;
-      bool isVectorAnyINTELType = imex::isVectorAnyINTELType(op.getType());
+      vecTy = VectorType::get(vecTy.getNumElements(), vecTy.getElementType());
+      bool isVectorAnyINTELType = imex::isVectorAnyINTELType(vecTy);
       bool isFastmath =
           (op.getFastmathAttr().getValue() != arith::FastMathFlags::none);
       if (!isVectorAnyINTELType && !isFastmath)
@@ -138,9 +135,30 @@ struct ArithToVCPass : public imex::impl::ConvertArithToVCBase<ArithToVCPass> {
   }
   void runOnOperation() override {
     gpu::GPUModuleOp m = getOperation();
-    LLVMTypeConverter typeConverter(&getContext());
     ConversionTarget target(getContext());
     RewritePatternSet patterns(&getContext());
+
+    TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion([](mlir::VectorType type) {
+      if (!mlir::vector::isLinearizableVector(type))
+        return type;
+      return mlir::VectorType::get(type.getNumElements(), type.getElementType(),
+                                   type.isScalable());
+    });
+    auto materializeCast = [&](mlir::OpBuilder &builder, mlir::Type type,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1 || !mlir::isa<mlir::VectorType>(type) ||
+          !mlir::isa<mlir::VectorType>(inputs.front().getType()))
+        return nullptr;
+
+      return builder.create<mlir::vector::ShapeCastOp>(loc, type,
+                                                       inputs.front());
+    };
+    typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
 
     // Add patterns
     imex::populateArithToVCPatterns(

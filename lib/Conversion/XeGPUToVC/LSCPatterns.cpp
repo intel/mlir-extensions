@@ -911,7 +911,6 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         auto targetTy = convertVectorType(op.getType()).second;
         callOp = rewriter.create<vector::BitCastOp>(loc, targetTy, callOp);
       }
-
       rewriter.replaceOp(op, callOp);
       return success();
     }
@@ -1304,11 +1303,8 @@ void populateAtomicAndFenceLSCPatterns(TypeConverter &converter,
 
 void populateLoadStoreLSCPatterns(TypeConverter &converter,
                                   RewritePatternSet &patterns) {
-  // TODO: why some patterns need typconverter and some not?
-  patterns.add<LSC::LoadNdPattern, LSC::StoreNdPattern, LSC::PrefetchNdPattern>(
-      patterns.getContext());
-
-  patterns.add<LSC::LoadGatherPattern, LSC::StoreScatterPattern,
+  patterns.add<LSC::LoadNdPattern, LSC::StoreNdPattern, LSC::PrefetchNdPattern,
+               LSC::LoadGatherPattern, LSC::StoreScatterPattern,
                LSC::PrefetchPattern>(converter, patterns.getContext());
 }
 
