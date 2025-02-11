@@ -425,17 +425,17 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
 
   %vector_a = xegpu.load_nd %tdesc_1:
      tensor_desc<16xbf16, #sg_map_a> into vector<1x1xbf16>
-```	
+```
 `xegpu.sg_map` also applies to 3d vector, which represents the result of 2d block load with array_length.
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>, #sg_map_a>
-      
+
   %result = xegpu.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached}:
-          tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16> 
-```	  
+          tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16>
+```  
 
 xegpu.sg_map is also used to describe the WI data distribution for regular loads. The example below shows that each work item (WI) loads one fp32 data element. The resulting vector <16 x fp32> is loaded and distributed to each WI as <1 x fp32>.
 ```mlir
