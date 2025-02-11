@@ -328,9 +328,38 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 ## XeGPU Attributes to support Work Item Level semantics
 
-Attribute `xegpu.sg_map` describes the mapping between work item (WI) and the 2D tensor specified by the tensor descriptor. To distribute the XeGPU operation to work items, the tensor_desc must be specified with the `sg_map` attribute at the tensor description creation time.
+**Attribute xegpu.sg_map**
+xegpu.sg_map specifies how a 2D tensor (defined by the tensor descriptor) is partitioned among work items (WIs) within a subgroup. sg_map consists of two parameters:
+  * wi_layout: Defines the 2D arrangement of WIs within the subgroup.
+  * wi_data: Specifies the shape of the tensor fragment that each WI loads or stores as a single packed data unit (16/32-bit).
 
-Within the sg_map, `wi_layout` specifies the layout of work items, describing the mapping of work items to the tensor. wi_layout[0] x wi_layout[1] must be equal to the subgroup size. `wi_data` specifies the minimum number of data elements assigned to each work item for a single distribution. In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1].
+sg_map describes the pattern of a single packed data unit load/store done by all work items in a subgroup -- a distribution unit. Processing the entire tensor may require one or more distribution units. 
+
+When a sg_map attribute is attached to a tensor descriptor, load/store/dpas will operate in SIMT flavor. The sg_map attribute must be specified when creating the tensor descriptor.
+
+**Constraints**
+Given these definitions:
+```mlir
+wi_data_size = wi_data[0] × wi_data[1]
+subgroup_size = wi_layout[0] × wi_layout[1]
+distribute_unit_size = subgroup_size × wi_data_size
+tensor_size = tensor_desc[0] × tensor_desc[1]
+n_distribution_units = tensor_size / distribute_unit_size
+```
+
+the following conditions must hold:
+
+* subgroup_size must represent the number of WIs in a subgroup for a kernel.
+* tensor_size must be evenly divisible by distribute_unit_size (i.e., tensor_size % distribute_unit_size == 0).
+* tensor_desc[0] must be evenly divisible by wi_layout[0] × wi_data[0].
+* tensor_desc[1] must be evenly divisible by wi_layout[1] × wi_data[1].
+
+Note: When wi_data describes multiple elements, they must all come from a single, contiguous dimension.
+
+**Resulting WI Data Fragment**
+Each work item’s fragment of the distributed tensor is represented by a 2d vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2d vector will be further lowered to a 1d “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
+
+In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. So, wi_data_size is 1, distribute_unit_size is 16, tensor_size is 128.
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -338,24 +367,6 @@ Within the sg_map, `wi_layout` specifies the layout of work items, describing th
 		: uint64, index, index, index, index, index, index
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
-
-wi_data_size refers to the data size mapped to indiviudal work item, and distribute_unit_size represents the minimun size of 2D tensor to be distributed to all work items in a subgroup. tensor_size refers to the size of the tensor sepcified by tensor_desc. In the example above, wi_data_size is 1, distribute_unit_size is 16, tensor_size is 128.
-```mlir
-        wi_data_size = wi_data[0] x wi_data[1]
-	subgroup_size == wi_layout[0] x wi_layout[1]
- 	distribute_unit_size = subgroup_size x wi_data_size
-  	tensor_size = tensor_desc[0] x tensor_desc[1]
-```
-wi_data_size can be greater than 1, meaning each work item can own multiple elements in a single distribution. These multiple elements, indicated by wi_data, must come from one dimension and must be contiguous along that dimension.
-
-To distribute a tensor, tensor_size must be divisible by distribute_unit_size. Specifically, tensor_desc[0] must be divisible by wi_layout[0] x wi_data[0], and tensor_desc[1] must be divisible by wi_layout[1] x wi_data[1]. The 2D subtensor is distributed in a round-robin manner, meaning each work item receives multiple distributions. As a result, the distribution assigns a 2D data fragment to each work item, where the first dimension corresponds to the number of distributions, and the second corresponds to wi_data_size. The 2D data fragment is ultimately lowered to a "SIMT-flavored" vector, such as a SPIR-V vector or LLVM vector, where each vector element contains the packed data of the wi_data. The size of packed data could be 32-bit or 16-bit. 
-
-```mlir
-	WI_data_frag[0] = tensor_size / distribute_unit_size 
-	WI_data_frag[1] = wi_data_size 
-```
-
-The WI dsitribution is represented by the shape of the result vector being loaded, which is being reduced from [tensor_decs[0], tensor_desc[1]] to [WI_data_frag[0], WI_data_frag[1]].
 
 With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT flavor and returns back a fragement associated with individual work item. The tensor_desc in the first example below specifies a tensor of 8x16 elements, which is distributed 8 times so each work item gets <8x1xbf16>. The second example shows the each work gets <8x2xint8> with 2 int8 elements packed as one 16-bit data.  
 ```mlir
@@ -366,6 +377,16 @@ With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT 
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
   %vector_a = xegpu.load_nd %tdesc_a:
      tensor_desc<8x32xint8, #sg_map_a> into vector<8x2xint8>
+```
+The example below shows a larger 2d tensor being distributed using sg_map. 
+```mlir
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  %vector_a = xegpu.load_nd %tdesc_a:
+     tensor_desc<12x32xbf16, #sg_map_a> into vector<24x1xbf16>
+
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
+  %vector_a = xegpu.load_nd %tdesc_a:
+     tensor_desc<12x32xbf16, #sg_map_a> into vector<12x2xbf16>
 ```
 
 The example below shows the wi_data contains 2 elements for the first dimension. The result vector takes wi_data_size as inner dimension size, the data fragement <16x1xbf16> is loaded and packed as <8x2xbf16>, a process also known as "VNNI" 
@@ -395,6 +416,26 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
 ```
 
 `xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution.
+
+```mlir
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  #tdesc_attr1 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false, sg= #sg_map_a>
+  %tdesc1 = xegpu.create_nd_tdesc %mem_addr, %offset :
+		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
+
+  %vector_a = xegpu.load_nd %tdesc_1:
+     tensor_desc<16xbf16, #sg_map_a> into vector<1x1xbf16>
+```	
+`xegpu.sg_map` also applies to 3d vector, which represents the result of 2d block load with array_length.  
+```mlir
+#sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+%tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
+		: uint64, index, index, index, index, index, index
+     	into tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>, #sg_map_a>
+      
+  %result = xegpu.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached} :
+          tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16> 
+```	  
 
 xegpu.sg_map is also used to describe the WI data distribution for regular loads. The example below shows that each work item (WI) loads one fp32 data element. The resulting vector <16 x fp32> is loaded and distributed to each WI as <1 x fp32>.
 ```mlir
@@ -491,6 +532,8 @@ user must use for the WI data distribution of 1d block load and regular load wit
   For 1d block load
   # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
 
   For regular load with chunk_size  // PVC subgroup_size = 16
   #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]> // for 32-bit data element
@@ -500,6 +543,8 @@ user must use for the WI data distribution of 1d block load and regular load wit
   For 1d block load
   # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
   #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>  // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
 
   For regular load with chunk_size // ARC subgroup_size = 8
   #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]> // for 32-bit data element
