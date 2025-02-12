@@ -356,9 +356,13 @@ the following conditions must hold:
 As a result, tensor_size will be evenly divisible by distribution_unit_size (i.e., tensor_size % distribution_unit_size == 0), and each work item will recieve the distributed unit multiple times, with each unit having wi_data_size.
 Note: When wi_data describes multiple elements, they must all come from a single, contiguous dimension.
 
-**Resulting WI Data Fragment**
-Each work item’s fragment of the distributed tensor is represented by a 2d vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2d vector will be further lowered to a 1d “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
+Conceptually, the work item (WI) distribution process can be broken down into two steps. The first step divides the 2D tensor data according to `wi_layout` to obtain a 2D subtensor. The second step extracts the elements to be packed from the dimension indicated by `wi_data`, treating it as the innermost dimension, and then linearizes the remaining elements in the 2D subtensor as the outermost dimension.
 
+**Resulting WI Data Fragment**
+
+Each work item’s fragment of the distributed tensor is represented by a 2D vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2D vector will be further lowered to a 1D “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
+
+**Examples of WI distribution with sg_map** 
 In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. So, wi_data_size is 1, distribution_unit_size is 16, tensor_size is 128.
 
 ```mlir
@@ -378,7 +382,7 @@ With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT 
   %vector_a = xegpu.load_nd %tdesc_a:
      tensor_desc<8x32xint8, #sg_map_a> into vector<8x2xint8>
 ```
-The example below shows a larger 2d tensor being distributed using sg_map.
+The example below shows a larger 2D tensor being distributed using sg_map.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %vector_a = xegpu.load_nd %tdesc_a:
@@ -400,22 +404,25 @@ The example below shows the wi_data contains 2 elements for the first dimension.
 
 For load_nd with `transpose` attribute, wi_layout is transposed to match with the tensor dimension swap. The tensor is distributed 8 times, each time get one f32 elements, so each WI get <8x1xf32>.
 ```mlir
-  #sg_map_at = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]> 
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> 
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]} :
      tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 ```
 The examples below demonstrate how wi_data can be used to model the transpose_bit_width. When wi_data is [1, 2], the transpose treats the matrix as consisting of 32-bit data elements. In this case, each work item receives 8x2 bf16 elements, rather than 16x1 bf16.
 ```mlir
-  #sg_map_at = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> 
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]}:
      tensor_desc<16x16xfp16> into vector<16x1xfp16>
 
-  #sg_map_at = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]>
+  #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]>
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> 
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0], transpose_bit_width = 32}:
      tensor_desc<16x16xbf16, #sg_map_at> into vector<8x2xbf16>
 ```
 
-`xegpu.sg_map` is also applied to 1d vector load for WI data distribution. When the tensor_desc only specify 1d tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution.
+`xegpu.sg_map` is also applied to 1D vector load for WI data distribution. When the tensor_desc only specify 1D tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution.
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -426,7 +433,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
   %vector_a = xegpu.load_nd %tdesc_1:
      tensor_desc<16xbf16, #sg_map_a> into vector<1x1xbf16>
 ```
-`xegpu.sg_map` also applies to 3d vector, which represents the result of 2d block load with array_length.
+`xegpu.sg_map` also applies to 3D vector, which represents the result of 2D block load with array_length.
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
@@ -475,7 +482,7 @@ The load with chunk_size pack the low-precision data to 32-bit data using wi_dat
 User must use legal sg_map value for the WI data distribution for certain operations on PVC and ARC. It includes load_nd/store_nd, load/store with chunk_size, and DPAS.
 
 ## Rules of sg_map setting for load and store on PVC and ARC
-User must use for the WI data distribution of 2d block load and store to work with DPAS on PVC. Not using the sg_map value defined here leads to undefined behavior.
+The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on PVC. Not using the sg_map value defined here leads to undefined behavior.
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
 For matrix A load
@@ -500,7 +507,7 @@ For matrix load with transpose for A or B
 #sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
 ```
 
-User must use for the WI data distribution of 2d block load and store to work with DPAS on ARC.
+The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on ARC. 
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
 For matrix A load
@@ -525,35 +532,11 @@ For matrix load with transpose for A or B
 #sg_map_a_tf32 = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]>   // WI data distribute from [8, 8] to [8, 1]
 ```
 A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC.
-Reference: https://registry.khronos.org/OpenCL/extensions/intel/cl_intel_subgroup_matrix_multiply_accumulate.html
+Reference of related spirv extension: [SPV_INTEL_2d_block_io](https://github.com/KhronosGroup/SPIRV-Registry/pull/305), [add SPV_INTEL_subgroup_matrix_multiply_accumulate](https://github.com/KhronosGroup/SPIRV-Registry/pull/306)
 
-user must use for the WI data distribution of 1d block load and regular load with chunk_size on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.
-```mlir
-  For 1d block load
-  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
-  #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // for 32-bit data element
-  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
-  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
+The sg_map required by DPAS operation can be propogated from DPAS to 2D block load operations. The sg_map can be associated with sg_map temporarily and throw away after the sg_map is propogated to tensor descriptor. The sg_map does not describe the data fragments  after the tensor being loaded to register, which is already being packed. Instead, it describes the data fragments based on the unpacked plain layout of the input and output tensors.  
 
-  For regular load with chunk_size  // PVC subgroup_size = 16
-  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]> // for 32-bit data element
-  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
-  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
-
-  For 1d block load
-  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
-  #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>  // for 32-bit data element
-  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
-  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
-
-  For regular load with chunk_size // ARC subgroup_size = 8
-  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]> // for 32-bit data element
-  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
-  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
-```
-
-The DPAS operation can be associated with sg_map temporarily within the sg_map propagation pass, as DPAS requires each work item to hold the correct data fragments for both the input and output tensors. The sg_map does not describe the in-register data layout; rather, it describes the data fragments based on the plain layout of the input and output tensors. Therefore, the sg_map settings for 2D block loads of matrices A, B, and C/D are the same. Below are a few examples of DPAS's sg_map.
-
+Below are a few examples of DPAS's sg_map.
 ```mlir
   PVC BF16 example
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
@@ -570,9 +553,46 @@ The DPAS operation can be associated with sg_map temporarily within the sg_map p
   %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x4xui8> into vector<8x1xfloat>
 ```
 
-## sg_map use case - 2d load
+The sg_map propagation process may encounter other operations that require modifications to the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose. The bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. Operations such as reduction, broadcast, and regular element-wise operations do not modify the sg_map.
 
-An example on how to load a 2d block, perform dpas, and store back to memory.
+```mlir
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
+  //Before WI distribution:  %vector_b = vector.transpose %vector_a {#sg_map_b} :vector<16x16xbf16> into vector<16x16xbf16> 
+  %vector_b = vector.transpose %vector_a {#sg_map_b} :vector<8x2xbf16> into vector<8x2xbf16>
+```
+
+
+user must use for the WI data distribution of 1D block load and regular load with chunk_size on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.
+```mlir
+  For 1D block load
+  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
+  #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>  // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
+
+  For regular load with chunk_size  // PVC subgroup_size = 16
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]> // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
+
+  For 1D block load
+  # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
+  #sg_map = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>  // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
+
+  For regular load with chunk_size // ARC subgroup_size = 8
+  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 1]> // for 32-bit data element
+  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 2]>  // for 16-bit data element like bf16, f16
+  #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
+```
+
+
+
+## sg_map use case - 2D load
+
+An example on how to load a 2D block, perform dpas, and store back to memory.
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
