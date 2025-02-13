@@ -534,7 +534,7 @@ For matrix load with transpose for A or B
 A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC.
 Reference of related spirv extension: [SPV_INTEL_2d_block_io](https://github.com/KhronosGroup/SPIRV-Registry/pull/305), [add SPV_INTEL_subgroup_matrix_multiply_accumulate](https://github.com/KhronosGroup/SPIRV-Registry/pull/306)
 
-The sg_map required by DPAS operation can be propogated from DPAS to 2D block load operations. The sg_map can be associated with sg_map temporarily and throw away after the sg_map is propogated to tensor descriptor. The sg_map does not describe the data fragments  after the tensor being loaded to register, which is already being packed. Instead, it describes the data fragments based on the unpacked plain layout of the input and output tensors.  
+The sg_map required by DPAS operation can be propogated from DPAS to 2D block load operations at subgroup level. The sg_map can be associated with sg_map temporarily and throw away after the sg_map is propogated to tensor descriptor. The sg_map does not describe the data fragments  after the tensor being loaded to register, which is already being packed. Instead, it describes the data fragments based on the unpacked plain layout of the input and output tensors.  
 
 Below are a few examples of DPAS's sg_map.
 ```mlir
@@ -543,6 +543,7 @@ Below are a few examples of DPAS's sg_map.
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
 
+  // Before WI distribution: %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x16xbf16>, vector<16x16xbf16> into vector<8x16xfloat>
   %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x1xbf16>, vector<8x2xbf16> into vector<8x1xfloat>
 
   ARC int8 example
@@ -550,20 +551,64 @@ Below are a few examples of DPAS's sg_map.
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 8], wi_data = [1, 1]>
   #sg_map_b_ui8_reg = xegpu.sg_map<wi_layout = [1, 8], wi_data = [4, 1]>
 
-  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x4xui8> into vector<8x1xfloat>
+  // Before WI distribution: %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a #sg_map_b_reg #sg_map_c} :vector<8x32xui8>, vector<32x16xui8> into vector<8x16xi32>
+  %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_a_ui #sg_map_b_ui8_reg #sg_map_c} :vector<8x4xui8>, vector<8x4xui8> into vector<8x1xi32>
 ```
 
-The sg_map propagation process may encounter other operations that require modifications to the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose. The bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. Operations such as reduction, broadcast, and regular element-wise operations do not modify the sg_map.
+The sg_map propagation process may encounter other operations that require modifications to the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose. The bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. 
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
-  //Before WI distribution:  %vector_b = vector.transpose %vector_a {#sg_map_b} :vector<16x16xbf16> into vector<16x16xbf16> 
+  //Before WI distribution:  %vector_b = vector.transpose [1, 0] %vector_a {#sg_map_b} :vector<16x16xbf16> into vector<16x16xbf16> 
   %vector_b = vector.transpose %vector_a {#sg_map_b} :vector<8x2xbf16> into vector<8x2xbf16>
+
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
+  //Before WI distribution:  %vector_b = vector.bitcast %vector_a {#sg_map_b} :vector<8x16xi16> into vector<8x32xi8> 
+  %vector_b = vector.bitcast %vector_a :vector<8x1xi16> into vector<8x2xi8>
 ```
 
+Operations such as reduction and broadcast are exception to WI distribution rule. The vector of the reduced dimension doesn't participate in the WI distribution so that the dimension size doesn't change. The wi_layout must be [1, %subgroup_size], and wi_data must be [1, 1]. The SIMT distribution needs to use different dialect operations since the vector dialect can't express cross-lane semantics.  
+```mlir
 
-user must use for the WI data distribution of 1D block load and regular load with chunk_size on PVC and ARC. Not using this sg_map defined here leads to undefined behavior.
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  //Before WI distribution:  %vector_b = xetile.reduction [1] %vector_a {#sg_map_b} :vector<16x16xbf16> into vector<16x1xbf16> //xetile.reduction used as vector.reduction doesn't keep the reduction dim in the result vector
+  %vector_b = gpu.subgroup_reduce %vector_a :vector<16x1xbf16> into vector<16x1xbf16>
+
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  //Before WI distribution:  %vector_b = xetile.broadcast %vector_a {#sg_map_b} :vector<16x1xbf16> into vector<16x16xbf16> //xetile.broadcast used as vector.broadcast doesn't allow the broadcast dim in the input vector
+  %cst0 = arith.constant 0 : i32
+  %7, %8 = gpu.shuffle idx %0, %cst0, %subgroup_size: vector<16x1xbf16> into vector<16x1xbf16>
+
+```
+
+Extract, insert and regular element-wise operations do not modify the sg_map. However, the result of SIMT distribution may have to use different operations. 
+```mlir
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
+  // Before WI distribution:  %vector_b = vector.extract %vector_a [0] {#sg_map_b} :vector<32x16xbf16> from vector<2x32x16xbf16> 
+  %vector_b = vector.extract_strided_slice  %vector_a { offsets = [0], sizes = [16], strides = [1]}: vector<16x2xbf16> from vector<32x2xbf16>
+
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
+  //Before WI distribution:  %vector_b = vector.extract_strided_slice  %vector_a { offsets = [0], sizes = [32], strides = [1]}:  vector<32x16xbf16> from vector<64x16xbf16>
+  %vector_b = vector.extract_strided_slice  %vector_a { offsets = [0], sizes = [16], strides = [1]}: vector<16x2xf16> from vector<32x2xbf16>
+
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> 
+  #sg_map_c = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
+  //Before WI distribution:  %vector_c = arith.addf  %vector_a, %vector_b {#sg_map_c} :vector<24x32xbf16>
+  %vec_a1, %vec_a2 = vector.deinterleave %vector_a : vector<24x2xbf16> to vector<24x1xbf16>
+  %vec_b1, %vec_b2 = vector.deinterleave %vector_b : vector<24x2xbf16> to vector<24x1xbf16>
+  %vec_c1 = vector.add  %vec_a1, %vec_b1 : vector<24x1xbf16>
+  %vec_c2 = vector.add  %vec_a2, %vec_b2 : vector<24x1xbf16>
+  %vector_c = vector.interleave %vec_c1, %vec_c2 :vector<24x1xbf16> to vector(24x2xbf16>
+```
+
+users must use for the WI data distribution of 1D block load and regular load with chunk_size on PVC and ARC. The rule of thumb is that the wi_data size must be 32bit, regardless on PVC or ARC.  Not using this sg_map defined here leads to undefined behavior.
 ```mlir
   For 1D block load
   # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
