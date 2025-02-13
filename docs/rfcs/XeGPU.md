@@ -534,7 +534,7 @@ For matrix load with transpose for A or B
 A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC.
 Reference of related spirv extension: [SPV_INTEL_2d_block_io](https://github.com/KhronosGroup/SPIRV-Registry/pull/305), [add SPV_INTEL_subgroup_matrix_multiply_accumulate](https://github.com/KhronosGroup/SPIRV-Registry/pull/306)
 
-The sg_map required by DPAS operation can be propogated from DPAS to 2D block load operations at subgroup level. The sg_map can be associated with sg_map temporarily and throw away after the sg_map is propogated to tensor descriptor. The sg_map does not describe the data fragments  after the tensor being loaded to register, which is already being packed. Instead, it describes the data fragments based on the unpacked plain layout of the input and output tensors.  
+The sg_map required by DPAS operation can be propogated to 2D block load operations at subgroup level. During the propogation, the sg_map may be temporarily associated with vector/arith/math operations and removed after it is propogated to tensor_desc. The sg_map does not describe the data fragments after the tensor being loaded and packed to registers. Instead, It describes the data fragments and packing built upon the plain tensor layout.
 
 Below are a few examples of DPAS's sg_map.
 ```mlir
@@ -555,7 +555,7 @@ Below are a few examples of DPAS's sg_map.
   %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_c} :vector<8x4xui8>, vector<8x4xui8> into vector<8x1xi32>
 ```
 
-The sg_map propagation process may encounter other operations that require modifications to the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose. The bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. 
+The sg_map propagation process may encounter operations that require changing the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose, and the bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. 
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
@@ -569,7 +569,7 @@ The sg_map propagation process may encounter other operations that require modif
   %vector_b = vector.bitcast %vector_a :vector<8x1xi16> into vector<8x2xi8>
 ```
 
-Operations such as reduction and broadcast are exception to WI distribution rule. The vector of the reduced dimension doesn't participate in the WI distribution so that the dimension size doesn't change ****No to change***. The wi_layout must be [1, %subgroup_size], and wi_data must be [1, 1]. The SIMT distribution needs to use different dialect operations since the vector dialect can't express cross-lane semantics.  
+Operations such as reduction and broadcast are exception to WI distribution rule. The 1d reduced vector doesn't participate in the WI distribution so that the dimension size doesn't change. The wi_layout must be [1, %subgroup_size], and wi_data must be [1, 1]. The SIMT distribution needs to use different dialect operations since the vector dialect can't express cross-lane semantics.  
 ```mlir
 
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
