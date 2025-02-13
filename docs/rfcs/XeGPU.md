@@ -150,8 +150,8 @@ any data movement.
   %bt = vector.shape_cast %at :  vector<8x64xfp16> into vector<8x32x2xfp16>
 ```
 
-`dpas` does the matrix multiplication on the 2D matrix represented as 2D. This is the official representation regardless the hardware
-requires VNNI layout for the B matrix or not.
+`dpas` does the matrix multiplication on the 2D matrix represented as 2D. This is the official representation regardless the hardware 
+requires VNNI layout for the B matrix or not in register.
 
 ```mlir
   // `dpas` on 2D shape of plain layout
@@ -362,7 +362,7 @@ Conceptually, the work item (WI) distribution process can be broken down into tw
 
 Each work item’s fragment of the distributed tensor is represented by a 2D vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2D vector will be further lowered to a 1D “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
 
-**Examples of WI distribution with sg_map** 
+**Examples of WI distribution with sg_map**
 In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. So, wi_data_size is 1, distribution_unit_size is 16, tensor_size is 128.
 
 ```mlir
@@ -393,8 +393,7 @@ The example below shows a larger 2D tensor being distributed using sg_map.
      tensor_desc<12x32xbf16, #sg_map_a> into vector<12x2xbf16>
 ```
 
-The example below shows the wi_data contains 2 elements for the first dimension. The result vector takes wi_data_size as inner dimension size, the data fragement <16x1xbf16> is loaded and packed as <8x2xbf16>, a process also known as "VNNI".
- transformation.
+The example below shows the wi_data contains 2 elements for the first dimension. The result vector takes wi_data_size as inner dimension size, the data fragement <16x1xbf16> is loaded and packed as <8x2xbf16>, a process also known as "VNNI" transformation.
 
 ```mlir
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
@@ -403,21 +402,23 @@ The example below shows the wi_data contains 2 elements for the first dimension.
 ```
 
 For load_nd with `transpose` attribute, wi_layout is transposed to match with the tensor dimension swap. The tensor is distributed 8 times, each time get one f32 elements, so each WI get <8x1xf32>.
+
 ```mlir
-  #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]> 
-  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> 
+  #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]} :
      tensor_desc<16x8xf32, #sg_map_at> into vector<8x1xf32>
 ```
+
 The examples below demonstrate how wi_data can be used to model the transpose_bit_width. When wi_data is [1, 2], the transpose treats the matrix as consisting of 32-bit data elements. In this case, each work item receives 8x2 bf16 elements, rather than 16x1 bf16.
 ```mlir
   #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>
-  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> 
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]}:
      tensor_desc<16x16xfp16> into vector<16x1xfp16>
 
   #sg_map_tdesc = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]>
-  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> 
+  // the sg_map of the result vector after transpose is xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
   %at = xegpu.load_nd %tdesc1 {transpose = [1,0]}:
      tensor_desc<16x16xbf16, #sg_map_at> into vector<8x2xbf16>
 ```
@@ -507,7 +508,7 @@ For matrix load with transpose for A or B
 #sg_map_at_tf32 = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 1]>   // WI data distribute from [16, 8] to [8, 1]
 ```
 
-The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on ARC. 
+The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on ARC.
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // ARC subgroup_size = 8
 For matrix A load
@@ -534,7 +535,7 @@ For matrix load with transpose for A or B
 A simple rule of thumb is that wi_data size is 16 bit for matrix a (with exception for tf32 data type) on PVC. For all rest mapping, the wi_data size is 32bit, regardless PVC or ARC.
 Reference of related spirv extension: [SPV_INTEL_2d_block_io](https://github.com/KhronosGroup/SPIRV-Registry/pull/305), [add SPV_INTEL_subgroup_matrix_multiply_accumulate](https://github.com/KhronosGroup/SPIRV-Registry/pull/306)
 
-The sg_map required by DPAS operation can be propogated to 2D block load operations at subgroup level. During the propogation, the sg_map may be temporarily associated with vector/arith/math operations and removed after it is propogated to tensor_desc. The sg_map does not describe the data fragments after the tensor being loaded and packed to registers. Instead, It describes the data fragments and packing built upon the plain tensor layout.
+The sg_map required by DPAS operation can be propogated to 2D block load operations at subgroup level. During the propogation, the sg_map may be temporarily associated with vector/arith/math operations for the output vectors and removed after it is propogated to tensor_desc. The sg_map does not describe the data fragments after the tensor being loaded and packed to registers. Instead, It describes the data fragments and packing built upon the plain tensor layout.
 
 Below are a few examples of DPAS's sg_map.
 ```mlir
@@ -555,7 +556,7 @@ Below are a few examples of DPAS's sg_map.
   %vector_c = xegpu.dpas %vector_a, %vector_b {#sg_map_c} :vector<8x4xui8>, vector<8x4xui8> into vector<8x1xi32>
 ```
 
-The sg_map propagation process may encounter operations that require changing the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose, and the bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed. 
+The sg_map propagation process may encounter operations that require changing the mapping between the input and output operands. Specifically, the transpose operation swaps the wi_layout and wi_data to correctly track the data fragments affected by the transpose, and the bitcast operation adjusts the wi_data to reflect the correct number of data elements being packed.
 
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [16, 1], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
@@ -565,7 +566,7 @@ The sg_map propagation process may encounter operations that require changing th
 
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
-  //Before WI distribution:  %vector_b = vector.bitcast %vector_a {#sg_map_b} :vector<8x16xi16> into vector<8x32xi8> 
+  //Before WI distribution:  %vector_b = vector.bitcast %vector_a {#sg_map_b} :vector<8x16xi16> into vector<8x32xi8>
   %vector_b = vector.bitcast %vector_a :vector<8x1xi16> into vector<8x2xi8>
 ```
 
@@ -588,7 +589,7 @@ Operations such as reduction and broadcast are exception to WI distribution rule
   %vector_b = reshape %vector_b' :vector<16xbf16> into vector<16x1xbf16>
 ```
 
-Extract, insert and regular element-wise operations do not modify the sg_map. However, the result of SIMT distribution may have to use different operations. 
+Extract, insert and regular element-wise operations do not modify the sg_map. However, the result of SIMT distribution may have to use different operations.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> //the producer op of vector_a uses #sg_map_a
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
@@ -601,7 +602,7 @@ Extract, insert and regular element-wise operations do not modify the sg_map. Ho
   %vector_b = vector.extract_strided_slice  %vector_a { offsets = [0], sizes = [16], strides = [1]}: vector<16x2xf16> from vector<32x2xbf16>
 
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> //the producer op of vector_a uses #sg_map_a
-  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]> 
+  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
   #sg_map_c = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
   //Before WI distribution:  %vector_c = arith.addf  %vector_a, %vector_b {#sg_map_c} :vector<24x32xbf16>
   %vec_a1, %vec_a2 = vector.deinterleave %vector_a : vector<24x2xbf16> to vector<24x1xbf16>
