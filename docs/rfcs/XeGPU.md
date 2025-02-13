@@ -98,6 +98,10 @@ The example below accepts a memory address and an offset and creates a 1D tensor
   #tdesc_attr2 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false>
   %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr2>
+
+  #tdesc_attr2 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false>
+  %tdesc2 = xegpu.create_nd_tdesc %mref, %offset :
+		memref<1024xbf16>, index into tensor_desc<16xbf16, #tdesc_attr2>
 ```
 
 Attribute `memory_space` indicates whether the tensor is located in the global or shared local memory. The default value is global.
