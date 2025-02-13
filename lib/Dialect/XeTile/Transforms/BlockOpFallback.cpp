@@ -142,14 +142,18 @@ struct InitTileOpPattern final
     // memspace is SLM, but can be hanled with optimal SLM accesses,
     // no need to rewrite too, but the shape of all uses (init_tile) of
     // the SLM must support optimal SLM accesses.
-    auto isSupportedOptimalSLMAccessForAllUsers = [&](mlir::Value value) {
-      for (mlir::Operation *u : value.getUsers()) {
-        auto init = mlir::dyn_cast<imex::xetile::InitTileOp>(u);
-        if (!init || !imex::isSupportedOptimalSLMAccess(init.getType()))
-          return false;
-      }
-      return true;
-    };
+    std::function<bool(mlir::Value)> isSupportedOptimalSLMAccessForAllUsers =
+        [&](mlir::Value value) {
+          bool res = true;
+          for (mlir::Operation *u : value.getUsers()) {
+            if (auto init = mlir::dyn_cast<imex::xetile::InitTileOp>(u))
+              res &= imex::isSupportedOptimalSLMAccess(init.getType());
+
+            if (auto trans = mlir::dyn_cast<mlir::memref::TransposeOp>(u))
+              res &= isSupportedOptimalSLMAccessForAllUsers(trans);
+          }
+          return res;
+        };
     auto src = initTileOp.getSource();
     if (isSLM && isSupportedOptimalSLMAccessForAllUsers(src)) {
       return mlir::failure();

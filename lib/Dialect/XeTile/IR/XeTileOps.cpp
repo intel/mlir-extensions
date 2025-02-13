@@ -67,7 +67,8 @@ static bool isEvenDistributed(llvm::ArrayRef<int64_t> shape,
   auto data = attr.getSgData().asArrayRef();
   auto layout = attr.getSgLayout().asArrayRef();
   for (auto [s, d, l] : llvm::zip_equal(shape, data, layout)) {
-    if (s != d * l)
+    // check s % (d * l) != 0
+    if (s % d != 0 || (s / d) % l != 0)
       return false;
   }
   return true;
