@@ -154,8 +154,7 @@ any data movement.
   %bt = vector.shape_cast %at :  vector<8x64xfp16> into vector<8x32x2xfp16>
 ```
 
-`dpas` does the matrix multiplication on the 2D matrix represented as 2D. This is the official representation regardless the hardware 
-requires VNNI layout for the B matrix or not in register.
+`dpas` does the matrix multiplication on the 2D matrix represented as 2D. This is the official representation regardless the hardware requires VNNI layout for the B matrix or not in register.
 
 ```mlir
   // `dpas` on 2D shape of plain layout
