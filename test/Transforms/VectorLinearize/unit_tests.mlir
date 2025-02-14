@@ -37,3 +37,24 @@ func.func @test() -> vector<2x4xf32> {
   }
   return %r : vector<2x4xf32>
 }
+
+// -----
+//CHECK: test_vector_insert_2d_idx(%[[arg0:.*]]: vector<4x8xf32>)
+func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32> {
+  //CHECK: %[[r0:.*]] = vector.shape_cast %arg0 : vector<4x8xf32> to vector<32xf32>
+  //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<128xf32>
+  //CHECK: %[[r1:.*]] = vector.extract_strided_slice %[[r0]] {offsets = [0], sizes = [8], strides = [1]} : vector<32xf32> to vector<8xf32>
+  //CHECK: %[[r2:.*]] = vector.insert_strided_slice %[[r1]], %cst {offsets = [0], strides = [1]} : vector<8xf32> into vector<128xf32>
+  //CHECK: %[[r3:.*]] = vector.extract_strided_slice %[[r0]] {offsets = [8], sizes = [8], strides = [1]} : vector<32xf32> to vector<8xf32>
+  //CHECK: %[[r4:.*]] = vector.insert_strided_slice %[[r3]], %[[r2]] {offsets = [16], strides = [1]} : vector<8xf32> into vector<128xf32>
+  //CHECK: %[[r5:.*]] = vector.extract_strided_slice %[[r0]] {offsets = [16], sizes = [8], strides = [1]} : vector<32xf32> to vector<8xf32>
+  //CHECK: %[[r6:.*]] = vector.insert_strided_slice %[[r5]], %[[r4]] {offsets = [32], strides = [1]} : vector<8xf32> into vector<128xf32>
+  //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[r0]] {offsets = [24], sizes = [8], strides = [1]} : vector<32xf32> to vector<8xf32>
+  //CHECK: %[[r8:.*]] = vector.insert_strided_slice %[[r7]], %[[r6]] {offsets = [48], strides = [1]} : vector<8xf32> into vector<128xf32>
+  //CHECK: %[[r9:.*]] = vector.shape_cast %[[r8]] : vector<128xf32> to vector<8x16xf32>
+  //CHECK: return %[[r9]] : vector<8x16xf32>
+
+  %cst = arith.constant dense <0.0> : vector<8x16xf32>
+  %0 = vector.insert_strided_slice %arg0, %cst {offsets = [0, 0], strides = [1, 1]} : vector<4x8xf32> into vector<8x16xf32>
+  return %0 : vector<8x16xf32>
+}

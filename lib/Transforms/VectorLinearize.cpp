@@ -322,6 +322,17 @@ struct VectorExtractStridedSliceConversion final
   }
 };
 
+// clang-format off
+// linearize InsertStridedSliceOp by extracting rows from the source vector
+// using extract_strided_slice and inserting them into the destination vector
+// using insert_strided_slice. For example.
+//   vector.insert_strided_slice %s, %d {offsets=[0, 0]}: vector<2x4xf32> into vector<4x4xf32>
+// will lowered into (both s and d are linearized to 1D):
+//   %0 = vector.extract_strided_slice %s {offsets=[0], sizes=[4], strides=[1]} : vector<4xf32> from vector<8xf32>
+//   %1 = vector.insert_strided_slice %0, %d {offsets=[0], strides=[1]} : vector<4xf32> into vector<16xf32>
+//   %2 = vector.extract_strided_slice %s {offsets=[4], sizes=[4], strides=[1]} : vector<4xf32> from vector<8xf32>
+//   %3 = vector.insert_strided_slice %2, %1 {offsets=[4], strides=[1]} : vector<4xf32> into vector<16xf32>
+// clang-format on
 struct VectorInsertStridedSliceConversion final
     : public mlir::OpConversionPattern<mlir::vector::InsertStridedSliceOp> {
   using mlir::OpConversionPattern<
@@ -330,31 +341,47 @@ struct VectorInsertStridedSliceConversion final
   mlir::LogicalResult
   matchAndRewrite(mlir::vector::InsertStridedSliceOp op, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
     auto srcTy = op.getSourceVectorType();
-    auto destTy = op.getDestVectorType();
+    auto dstTy = op.getDestVectorType();
 
     if (op.hasNonUnitStrides()) {
       return rewriter.notifyMatchFailure(
-          op, "InsertStridedSliceOp only supports unit strides.");
+          op, "InsertStridedSliceOp linearization only supports unit strides.");
     }
 
-    if (llvm::any_of(srcTy.getShape().drop_back(),
-                     [](int64_t dim) { return dim != 1; })) {
-      return rewriter.notifyMatchFailure(op,
-                                         "Only supports vectors with leading "
-                                         "dims (except the last dim) as 1s.");
+    if (srcTy.getRank() != 2) {
+      return rewriter.notifyMatchFailure(
+          op, "InsertStridedSliceOp linearization only supports 2D source.");
     }
 
-    auto strides = destTy.getShape().drop_front().vec();
-    strides.push_back(1);
+    if (!srcTy.hasStaticShape() || !dstTy.hasStaticShape()) {
+      return rewriter.notifyMatchFailure(
+          op, "InsertStridedSliceOp linerization only supports static shapes.");
+    }
+
+    auto dstShape = dstTy.getShape();
+    auto dstStrides = dstShape.drop_front().vec();
+    dstStrides.push_back(1);
     int64_t linearizedOffset = 0;
-    for (auto [off, stride] : llvm::zip_equal(op.getOffsets(), strides)) {
+    for (auto [off, stride] : llvm::zip_equal(op.getOffsets(), dstStrides)) {
       linearizedOffset += mlir::getConstantIntValue(off).value() * stride;
     }
 
-    rewriter.replaceOpWithNewOp<mlir::vector::InsertStridedSliceOp>(
-        op, adaptor.getSource(), adaptor.getDest(), linearizedOffset, 1);
+    // extracts a row from source, and insert it into the destination
+    auto srcShape = srcTy.getShape();
+    mlir::Value dstValue = adaptor.getDest();
+    for (auto i = 0; i < srcShape[0]; i++) {
+      auto srcOffset = i * srcShape[1];
+      auto value = rewriter.create<mlir::vector::ExtractStridedSliceOp>(
+          loc, adaptor.getSource(), srcOffset, srcShape[1], 1);
 
+      auto dstOffset = linearizedOffset + i * dstShape.back();
+      dstValue = rewriter.create<mlir::vector::InsertStridedSliceOp>(
+          loc, value, dstValue, dstOffset, 1);
+    }
+
+    rewriter.replaceOp(op, dstValue);
     return mlir::success();
   }
 };
@@ -672,9 +699,9 @@ struct VectorLinearizePass final
     target.addDynamicallyLegalOp<mlir::vector::InsertStridedSliceOp>(
         [&](mlir::vector::InsertStridedSliceOp op) {
           auto srcTy = op.getSourceVectorType();
-          if (!op.hasNonUnitStrides() && srcTy.getRank() != 1 &&
-              llvm::all_of(srcTy.getShape().drop_back(),
-                           [](int64_t dim) { return dim == 1; }))
+          auto dstTy = op.getDestVectorType();
+          if (!op.hasNonUnitStrides() && srcTy.getRank() == 2 &&
+              srcTy.hasStaticShape() && dstTy.hasStaticShape())
             return false;
           return true;
         });

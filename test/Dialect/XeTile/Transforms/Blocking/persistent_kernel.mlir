@@ -4,10 +4,10 @@ module @gemm attributes {gpu.container_module} {
 
     //CHECK: gpu.func @test_kernel(%[[arg0:.*]]: memref<4096x4096xf16>, %[[arg1:.*]]: memref<4096x4096xf16>, %[[arg2:.*]]: memref<4096x4096xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
       //CHECK: %[[c24:.*]] = arith.constant 24 : index
       //CHECK: %[[c0_i8:.*]] = arith.constant 0 : i8
       //CHECK: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
       //CHECK: %[[c48:.*]] = arith.constant 48 : index
       //CHECK: %[[c16:.*]] = arith.constant 16 : index
       //CHECK: %[[c0_i32:.*]] = arith.constant 0 : i32
@@ -133,6 +133,7 @@ module @gemm attributes {gpu.container_module} {
         %nbarrier_role = arith.constant 0 : i8
         //CHECK: %[[R31:.*]] = xegpu.init_nbarrier %[[c1_i8]], %[[c0_i8]] : i8, i8 -> !xegpu.nbarrier
         %nbarrier = xegpu.init_nbarrier %nbarrier_id, %nbarrier_role : i8, i8 -> !xegpu.nbarrier
+
         //CHECK: %[[R32:.*]]24 = scf.for %[[arg4:.*]] = %[[c0]] to %[[c4096]] step %[[c32]] iter_args({{.*}}) -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, !xetile.tile<8x32xf16>, !xetile.tile<8x32xf16>) {
         %k_loop_result:5 = scf.for %k = %c0 to %c4096 step %c32 iter_args (
             %A_tile = %A_sg_init_tile,
@@ -159,10 +160,8 @@ module @gemm attributes {gpu.container_module} {
             xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier
           }
           //CHECK-COUNT-2: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
           %a_val = xetile.load_tile %A_tile : !xetile.tile<32x32xf16> -> vector<32x32xf16>
           //CHECK-COUNT-4: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
           %b_val = xetile.load_tile %B_tile  : !xetile.tile<32x64xf16> -> vector<32x64xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
@@ -179,6 +178,8 @@ module @gemm attributes {gpu.container_module} {
           %next_B_tile = xetile.update_tile_offset %B_tile, [%c32, %c0]  : !xetile.tile<32x64xf16>
           //CHECK: xegpu.compile_hint
           xegpu.compile_hint
+          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+          //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
           //CHECK-COUNT-32: %{{.*}} = xetile.tile_mma %{{.*}} : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
           %new_c_val = xetile.tile_mma %a_val, %b_val, %c_val : vector<32x32xf16>, vector<32x64xf16>, vector<32x64xf32> -> vector<32x64xf32>
           //CHECK: xegpu.compile_hint
