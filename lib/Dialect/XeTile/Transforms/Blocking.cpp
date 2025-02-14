@@ -102,92 +102,79 @@ static const char *const packAttrName = "__xetile_blocking_pack__";
 static const char *const unpackAttrName = "__xetile_blocking_unpack__";
 static const char *const blockAttrName = "__xetile_blocking_inner_block__";
 
+// emulate the the unpack behavior using insert_strided_slice for VectorType
+// values and unrealized_conversion_cast for TileType values.
 static Value addUnpackOp(ValueRange srcs, Type destTy,
                          llvm::ArrayRef<int64_t> innerBlock, Location loc,
                          PatternRewriter &rewriter) {
-  auto attr = NamedAttribute(rewriter.getStringAttr(unpackAttrName),
-                             rewriter.getUnitAttr());
-  auto innerBlkAttr = NamedAttribute(rewriter.getStringAttr(blockAttrName),
-                                     rewriter.getDenseI64ArrayAttr(innerBlock));
-  auto castOp = rewriter.create<UnrealizedConversionCastOp>(
-      loc, destTy, srcs, llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
-  return castOp.getResult(0);
+  if (auto vecTy = dyn_cast<VectorType>(destTy)) {
+    assert(vecTy.getRank() == 2 && innerBlock.size() == 2 &&
+           "Expecting innerBlock size to match the rank of destTy.");
+    auto shape = vecTy.getShape();
+    auto zeroAttr = rewriter.getZeroAttr(vecTy.getElementType());
+
+    Value result = rewriter.create<arith::ConstantOp>(
+        loc, vecTy, DenseElementsAttr::get(vecTy, zeroAttr));
+    int64_t idx = 0;
+    for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
+      for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
+        result = rewriter.create<vector::InsertStridedSliceOp>(
+            loc, srcs[idx++], result, llvm::ArrayRef<int64_t>({i, j}),
+            llvm::ArrayRef<int64_t>({1, 1}));
+      }
+    }
+    return result;
+
+  } else if (isa<xetile::TileType>(destTy)) {
+    auto attr = NamedAttribute(rewriter.getStringAttr(unpackAttrName),
+                               rewriter.getUnitAttr());
+    auto innerBlkAttr =
+        NamedAttribute(rewriter.getStringAttr(blockAttrName),
+                       rewriter.getDenseI64ArrayAttr(innerBlock));
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+        loc, destTy, srcs,
+        llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
+    return castOp.getResult(0);
+  }
+
+  llvm_unreachable("Unexpected destTy.");
+  return Value();
 }
 
-static ValueRange addPackOp(Value src, TypeRange destTypes,
-                            llvm::ArrayRef<int64_t> innerBlock, Location loc,
-                            PatternRewriter &rewriter) {
-  auto attr = NamedAttribute(rewriter.getStringAttr(packAttrName),
-                             rewriter.getUnitAttr());
-  auto innerBlkAttr = NamedAttribute(rewriter.getStringAttr(blockAttrName),
-                                     rewriter.getDenseI64ArrayAttr(innerBlock));
-  auto castOp = rewriter.create<UnrealizedConversionCastOp>(
-      loc, destTypes, src,
-      llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
-  return castOp.getResults();
-}
+// emulate the the pack behavior using extract_strided_slice for VectorType
+// values and unrealized_conversion_cast for TileType values.
+static llvm::SmallVector<Value> addPackOp(Value src, TypeRange destTypes,
+                                          llvm::ArrayRef<int64_t> innerBlock,
+                                          Location loc,
+                                          PatternRewriter &rewriter) {
+  if (auto vecTy = dyn_cast<VectorType>(src.getType())) {
+    assert(vecTy.getRank() == 2 && innerBlock.size() == 2 &&
+           "Expecting innerBlock size to match the rank of src.");
+    auto shape = vecTy.getShape();
+    llvm::SmallVector<Value> results;
+    for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
+      for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
+        auto slice = rewriter.create<vector::ExtractStridedSliceOp>(
+            loc, src, llvm::ArrayRef<int64_t>({i, j}), innerBlock,
+            llvm::ArrayRef<int64_t>({1, 1}));
+        results.push_back(slice);
+      }
+    }
+    return results;
+  } else if (isa<xetile::TileType>(src.getType())) {
+    auto attr = NamedAttribute(rewriter.getStringAttr(packAttrName),
+                               rewriter.getUnitAttr());
+    auto innerBlkAttr =
+        NamedAttribute(rewriter.getStringAttr(blockAttrName),
+                       rewriter.getDenseI64ArrayAttr(innerBlock));
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+        loc, destTypes, src,
+        llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
+    return castOp.getResults();
+  }
 
-static bool isPackOp(UnrealizedConversionCastOp castOp) {
-  if (!castOp)
-    return false;
-  bool isVec = llvm::all_of(castOp->getResultTypes(),
-                            [](Type ty) { return isa<VectorType>(ty); });
-  isVec &= llvm::all_of(castOp->getOperandTypes(),
-                        [](Type ty) { return isa<VectorType>(ty); });
-  auto attr = castOp->getAttrOfType<UnitAttr>(packAttrName);
-  return isVec && bool(attr);
-}
-
-static bool isUnpackOp(UnrealizedConversionCastOp castOp) {
-  if (!castOp)
-    return false;
-  bool isVec = llvm::all_of(castOp->getResultTypes(),
-                            [](Type ty) { return isa<VectorType>(ty); });
-  isVec &= llvm::all_of(castOp->getOperandTypes(),
-                        [](Type ty) { return isa<VectorType>(ty); });
-  auto attr = castOp->getAttrOfType<UnitAttr>(unpackAttrName);
-  return isVec && bool(attr);
-}
-
-static std::pair<DenseI64ArrayAttr, DenseI64ArrayAttr>
-getGridAndBlockSizes(UnrealizedConversionCastOp castOp) {
-  assert((isUnpackOp(castOp) || isPackOp(castOp)) &&
-         "Expecting unpack or pack op.");
-  auto innerBlkSizes = castOp->getAttrOfType<DenseI64ArrayAttr>(blockAttrName);
-  llvm::ArrayRef<int64_t> shape;
-  if (isUnpackOp(castOp))
-    shape = dyn_cast<ShapedType>(castOp->getResult(0).getType()).getShape();
-
-  if (isPackOp(castOp))
-    shape = dyn_cast<ShapedType>(castOp->getOperand(0).getType()).getShape();
-
-  auto grids = DenseI64ArrayAttr::get(
-      castOp.getContext(),
-      {shape[0] / innerBlkSizes[0], shape[1] / innerBlkSizes[1]});
-  return {grids, innerBlkSizes};
-}
-
-// Check that lowerUnpackOrPack will be able to evenly combine/split the input
-// grid into the output grid.
-static bool isUnpackPackCompatible(UnrealizedConversionCastOp unpackOp,
-                                   UnrealizedConversionCastOp packOp) {
-
-  if (!isUnpackOp(unpackOp) || !isPackOp(packOp))
-    return false;
-
-  auto [inGrids, inBlkSizes] = Blocking::getGridAndBlockSizes(unpackOp);
-  auto [outGrids, outBlkSizes] = Blocking::getGridAndBlockSizes(packOp);
-
-  if (inBlkSizes[0] < outBlkSizes[0] && inGrids[0] % outGrids[0] != 0)
-    return false;
-  if (inBlkSizes[0] > outBlkSizes[0] && outGrids[0] % inGrids[0] != 0)
-    return false;
-  if (inBlkSizes[1] < outBlkSizes[1] && inGrids[1] % outGrids[1] != 0)
-    return false;
-  if (inBlkSizes[1] > outBlkSizes[1] && outGrids[1] % inGrids[1] != 0)
-    return false;
-
-  return true;
+  llvm_unreachable("Unexpected src type.");
+  return ValueRange();
 }
 
 // Create a BinOp on lhs and rhs based on the CombiningKind.
@@ -199,47 +186,47 @@ static Value createBinOp(vector::CombiningKind kind, Value lhs, Value rhs,
   // need to generate code based on element data type.
   if (kind == vector::CombiningKind::ADD) {
     if (isa<FloatType>(elemTy)) {
-      return rewriter.create<arith::AddFOp>(loc, lhs, rhs);
+      return rewriter.createOrFold<arith::AddFOp>(loc, lhs, rhs);
     }
     if (isa<IntegerType>(elemTy)) {
-      return rewriter.create<arith::AddIOp>(loc, lhs, rhs);
+      return rewriter.createOrFold<arith::AddIOp>(loc, lhs, rhs);
     }
   }
 
   if (kind == vector::CombiningKind::MUL) {
     if (isa<FloatType>(elemTy)) {
-      return rewriter.create<arith::MulFOp>(loc, lhs, rhs);
+      return rewriter.createOrFold<arith::MulFOp>(loc, lhs, rhs);
     }
     if (isa<IntegerType>(elemTy)) {
-      return rewriter.create<arith::MulIOp>(loc, lhs, rhs);
+      return rewriter.createOrFold<arith::MulIOp>(loc, lhs, rhs);
     }
   }
 
   switch (kind) {
   // the following are for ints only
   case vector::CombiningKind::MINUI:
-    return rewriter.create<arith::MinUIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MinUIOp>(loc, lhs, rhs);
   case vector::CombiningKind::MINSI:
-    return rewriter.create<arith::MinSIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MinSIOp>(loc, lhs, rhs);
   case vector::CombiningKind::MAXUI:
-    return rewriter.create<arith::MaxUIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MaxUIOp>(loc, lhs, rhs);
   case vector::CombiningKind::MAXSI:
-    return rewriter.create<arith::MaxSIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MaxSIOp>(loc, lhs, rhs);
   case vector::CombiningKind::AND:
-    return rewriter.create<arith::AndIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::AndIOp>(loc, lhs, rhs);
   case vector::CombiningKind::OR:
-    return rewriter.create<arith::OrIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::OrIOp>(loc, lhs, rhs);
   case vector::CombiningKind::XOR:
-    return rewriter.create<arith::XOrIOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::XOrIOp>(loc, lhs, rhs);
   // the following are for floats only
   case vector::CombiningKind::MINNUMF:
-    return rewriter.create<arith::MinNumFOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MinNumFOp>(loc, lhs, rhs);
   case vector::CombiningKind::MAXNUMF:
-    return rewriter.create<arith::MaxNumFOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MaxNumFOp>(loc, lhs, rhs);
   case vector::CombiningKind::MINIMUMF:
-    return rewriter.create<arith::MinimumFOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MinimumFOp>(loc, lhs, rhs);
   case vector::CombiningKind::MAXIMUMF:
-    return rewriter.create<arith::MaximumFOp>(loc, lhs, rhs);
+    return rewriter.createOrFold<arith::MaximumFOp>(loc, lhs, rhs);
   default:
     llvm_unreachable("Unexpected CombiningKind.");
     return lhs;
@@ -285,7 +272,7 @@ lowerOuterReduction(ValueRange sources, llvm::ArrayRef<int64_t> grid,
 // simple vector arithmetic operations are issued, we will get 32 vectors of
 // vector<16xf16>, each vector<16xf16> represents the partial reduction result
 // of each row. To perform redcution on dim 3, it uses two vector shuffles
-/// to shuffle values from two conjuction rows. For example, given
+// to shuffle values from two conjuction rows. For example, given
 // row1 = [a0, a1, ..., a15], and  row2 = [b0, b1, ..., b15]. It will shuffle
 // the vector into row1' = [a0, .., a7, b0, ..., b7],
 // row2' = [a8, ..., a15, b8, ..., b15], and then perform the vector arith op
@@ -406,94 +393,6 @@ static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
     intermediates.push_back(toFinalize);
   }
   return intermediates;
-}
-
-// a unified function lowering Unpack and Pack ops.
-static llvm::SmallVector<Value>
-lowerUnpackOrPack(ValueRange inputs, DenseI64ArrayAttr inBlkSizes,
-                  DenseI64ArrayAttr outBlkSizes, DenseI64ArrayAttr inGrids,
-                  DenseI64ArrayAttr outGrids, Location loc,
-                  OpBuilder &builder) {
-  // handle based on the dim0, and save results into intermediates
-  llvm::SmallVector<Value> intermediates(outGrids[0] * inGrids[1]);
-  if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
-    intermediates = inputs;
-  } else if (inBlkSizes[0] < outBlkSizes[0]) { // stack on dim 0
-    // `nums` small vectors will be stacked into one big vector
-    auto nums = inGrids[0] / outGrids[0];
-    llvm::SmallVector<Value> valSet;
-    for (auto j = 0; j < inGrids[1]; j++) {
-      for (auto i = 0; i < inGrids[0]; i++) {
-        auto idx = i * inGrids[1] + j;
-        valSet.push_back(inputs[idx]);
-        if (valSet.size() == static_cast<size_t>(nums)) {
-          auto newOp = packVectorsWith(valSet, stack, loc, builder);
-          intermediates[i / nums * inGrids[1] + j] = newOp;
-          valSet.clear();
-        }
-      }
-    }
-  } else {
-    // do extract on dim0 using vector::ExtractStridedSliceOp
-    // intermediates.resize(outGrids[0] * inGrids[1]);
-    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], inBlkSizes[1]});
-
-    // each vector will be horizonally cut into `nums` subvectors
-    auto nums = outGrids[0] / inGrids[0];
-    llvm::SmallVector<int64_t> strides({1, 1});
-    for (auto i = 0; i < inGrids[0]; i++) {
-      for (auto j = 0; j < inGrids[1]; j++) {
-        auto startPos = i * nums * inGrids[1] + j;
-        auto v = inputs[i * inGrids[1] + j];
-        for (auto k = 0; k < nums; k++) {
-          llvm::SmallVector<int64_t> offsets({k * blkSizes[0], 0});
-          auto newOp = builder.create<vector::ExtractStridedSliceOp>(
-              loc, v, offsets, blkSizes, strides);
-          auto idx = startPos + k * inGrids[1];
-          intermediates[idx] = newOp;
-        }
-      }
-    }
-  }
-
-  // handle intermediates based on the dim1, and save results into newOps
-  llvm::SmallVector<Value> newOps;
-  llvm::SmallVector<int64_t> interGrids = {outGrids[0], inGrids[1]};
-  if (inBlkSizes[1] == outBlkSizes[1]) {
-    // do nothing since they have the same size
-    newOps = intermediates;
-  } else if (inBlkSizes[1] < outBlkSizes[1]) {
-    // doing concat since blkSZ of input vector is smaller
-    // `nums` of small vectors will be concated into a big one
-    size_t nums = inGrids[1] / outGrids[1];
-    llvm::SmallVector<Value> valSet;
-    for (auto i = 0; i < interGrids[0]; i++) {
-      for (auto j = 0; j < interGrids[1]; j++) {
-        valSet.push_back(intermediates[i * interGrids[1] + j]);
-        if (valSet.size() == nums) {
-          auto newOp = packVectorsWith(valSet, concat, loc, builder);
-          newOps.push_back(newOp);
-          valSet.clear();
-        }
-      }
-    }
-  } else { // doing extract on dim 1
-    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], outBlkSizes[1]});
-    llvm::SmallVector<int64_t> strides({1, 1});
-    auto nums = outGrids[1] / interGrids[1];
-    for (auto i = 0; i < interGrids[0]; i++) {
-      for (auto j = 0; j < interGrids[1]; j++) {
-        auto v = intermediates[i * interGrids[1] + j];
-        for (int64_t k = 0; k < nums; k++) {
-          llvm::SmallVector<int64_t> offsets({0, k * blkSizes[1]});
-          auto newOp = builder.create<vector::ExtractStridedSliceOp>(
-              loc, v, offsets, blkSizes, strides);
-          newOps.push_back(newOp);
-        }
-      }
-    }
-  }
-  return newOps;
 }
 
 static llvm::SmallVector<Type> convertTypes(ShapedType type,
@@ -623,7 +522,7 @@ public:
           auto aV = llvm::cast<Value>(a);
           auto bV =
               rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
-          return rewriter.create<arith::AddIOp>(loc, aV, bV);
+          return rewriter.createOrFold<arith::AddIOp>(loc, aV, bV);
         }
       };
 
@@ -1101,8 +1000,8 @@ public:
       for (auto v : intermediates) {
         auto resultTy = VectorType::get({1, 1}, elemTy);
         for (auto i = 0; i < blkSize[1]; i++) {
-          auto pos = rewriter.create<arith::ConstantOp>(
-              loc, rewriter.getI32IntegerAttr(i));
+          auto pos =
+              rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(i));
           auto extractOp =
               rewriter.create<vector::ExtractElementOp>(loc, v, pos);
           auto splatOp = rewriter.create<vector::SplatOp>(op.getLoc(), resultTy,
@@ -1299,11 +1198,11 @@ public:
     auto newTy = VectorType::get(blockSize.asArrayRef(), elemTy);
 
     Location loc = op->getLoc();
-    llvm::SmallVector<ValueRange> newOperands;
+    llvm::SmallVector<llvm::SmallVector<Value>> newOperands;
     for (auto opr : op->getOperands()) {
       auto oprTy = dyn_cast<VectorType>(opr.getType());
       if (!oprTy || oprTy.getRank() != 2)
-        newOperands.emplace_back(opr);
+        newOperands.push_back({opr});
       auto convertedTypes = convertTypes(oprTy, blockSize.asArrayRef());
       auto convertedValues =
           addPackOp(opr, convertedTypes, blockSize.asArrayRef(), loc, rewriter);
@@ -1326,6 +1225,7 @@ public:
         }
         if (operands.size() != op->getNumOperands())
           return failure();
+
         OperationState opState(loc, op->getName(), operands, TypeRange(newTy),
                                op->getAttrs(), op->getSuccessors());
         auto newOp = rewriter.create(opState);
@@ -1493,12 +1393,12 @@ public:
       auto ofr = getAsOpFoldResult(a);
       if (auto cst = getConstantIntValue(ofr)) {
         auto val = std::max<int64_t>(*cst - b, 0);
-        auto attr = rewriter.getIndexAttr(val);
-        return rewriter.create<arith::ConstantOp>(loc, attr);
+        return rewriter.create<arith::ConstantOp>(loc,
+                                                  rewriter.getIndexAttr(val));
       } else {
         auto bV =
             rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
-        return rewriter.create<arith::SubIOp>(loc, a, bV);
+        return rewriter.createOrFold<arith::SubIOp>(loc, a, bV);
       }
     };
 
@@ -1635,83 +1535,10 @@ public:
         return signalPassFailure();
     });
 
-    // run CSE and Canonicalizer again to remove identical packOps,
-    // and fold pack/unpack ops with the same block size.
-    PassManager pm(&context);
-    pm.addPass(createCanonicalizerPass());
-    pm.addPass(createCSEPass());
-    if (failed(pm.run(mod)))
-      return signalPassFailure();
-
-    // Resolve unfoldable Unpack and Pack Ops
-    mod.walk([&](UnrealizedConversionCastOp castOp) {
-      // remove dead castOp.
-      if (castOp->use_empty()) {
-        castOp.erase();
-        return WalkResult::advance();
-      }
-
-      OpBuilder builder(castOp);
-      auto context = castOp.getContext();
-
-      // handle unpack op
-      if (Blocking::isUnpackOp(castOp)) {
-        auto user = dyn_cast<UnrealizedConversionCastOp>(*castOp->user_begin());
-
-        auto [inGrids, inBlkSizes] = Blocking::getGridAndBlockSizes(castOp);
-        DenseI64ArrayAttr outBlkSizes, outGrids;
-
-        // if unpack op is used by a pack op,
-        if (castOp->hasOneUse() && Blocking::isPackOp(user) &&
-            Blocking::isUnpackPackCompatible(castOp, user)) {
-          std::tie(outGrids, outBlkSizes) =
-              Blocking::getGridAndBlockSizes(user);
-        } else {
-          auto outTy = dyn_cast<ShapedType>(castOp->getResult(0).getType());
-          outGrids = DenseI64ArrayAttr::get(context, {1, 1});
-          outBlkSizes = DenseI64ArrayAttr::get(context, outTy.getShape());
-        }
-
-        builder.setInsertionPointAfter(castOp);
-        auto newOps = Blocking::lowerUnpackOrPack(
-            castOp.getInputs(), inBlkSizes, outBlkSizes, inGrids, outGrids,
-            castOp.getLoc(), builder);
-        if (newOps.size() == 1) {
-          castOp->getResult(0).replaceAllUsesWith(newOps[0]);
-        } else {
-          for (auto [n, c] : llvm::zip_equal(newOps, user->getResults()))
-            c.replaceAllUsesWith(n);
-        }
-        return WalkResult::advance();
-      }
-
-      // handle pack op
-      if (Blocking::isPackOp(castOp)) {
-        auto opr =
-            castOp->getOperand(0).getDefiningOp<UnrealizedConversionCastOp>();
-        // should be handled as a pair of unpack and pack op in above.
-        if (Blocking::isUnpackOp(opr) && opr->hasOneUse() &&
-            Blocking::isUnpackPackCompatible(opr, castOp))
-          return WalkResult::advance();
-
-        auto inTy = dyn_cast<ShapedType>(castOp->getOperand(0).getType());
-        auto inGrids = DenseI64ArrayAttr::get(context, {1, 1});
-        auto inBlkSizes = DenseI64ArrayAttr::get(context, inTy.getShape());
-        auto [outGrids, outBlkSizes] = Blocking::getGridAndBlockSizes(castOp);
-        auto newOps = Blocking::lowerUnpackOrPack(
-            castOp.getInputs(), inBlkSizes, outBlkSizes, inGrids, outGrids,
-            castOp.getLoc(), builder);
-        for (auto [n, c] : llvm::zip_equal(newOps, castOp->getResults()))
-          c.replaceAllUsesWith(n);
-      }
-      return WalkResult::advance();
-    });
-
-    // remove dead castOp.
-    mod.walk([&](UnrealizedConversionCastOp castOp) {
-      if (castOp->use_empty())
-        castOp.erase();
-    });
+    // aggressive folding ops, such as unpack and pack buildin castop for
+    // TileType, to simplify the code. It also reorders some constant ops, which
+    // make writing test cases easier.
+    (void)applyPatternsGreedily(mod, FrozenRewritePatternSet());
   }
 
 private:
