@@ -1,5 +1,5 @@
 // RUN: imex-opt --split-input-file --xetile-init-duplicate --xetile-blocking \
-// RUN: --cse --convert-xetile-to-xegpu --cse %s -verify-diagnostics -o -| FileCheck %s
+// RUN: --cse --convert-xetile-to-xegpu --cse --canonicalize %s -verify-diagnostics -o -| FileCheck %s
 
 gpu.module @test_kernel {
   //CHECK: gpu.func @sg_tiled_store(%[[arg0:.*]]: memref<1024x1024xf32>) {

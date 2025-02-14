@@ -18,8 +18,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r3:.*]] = xegpu.load_nd %[[r1]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       %2 = xetile.load_tile %1: !xetile.tile<32x64xf16> -> vector<32x64xf16>
 
-      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
-      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-8: {{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
       //CHECK-COUNT-8: {{.*}} = math.exp %{{.*}} : vector<8x32xf16>
       %3 = math.exp %2: vector<32x64xf16>
       //CHECK-COUNT-62: arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
@@ -42,8 +41,7 @@ gpu.module @test_kernel {
       //CHECK: %[[r2:.*]] = xegpu.load_nd %[[r0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       //CHECK: %[[r3:.*]] = xegpu.load_nd %[[r1]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x32xf16, #xegpu.block_tdesc_attr<array_length = 1 : i64, boundary_check = true>> -> vector<32x32xf16>
       %2 = xetile.load_tile %1: !xetile.tile<32x64xf16> -> vector<32x64xf16>
-      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
-      //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+      //CHECK-COUNT-8: {{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
       //CHECK-COUNT-8: {{.*}} = math.exp %{{.*}} : vector<8x32xf16>
       %3 = math.exp %2: vector<32x64xf16>
       //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<1x32xf16>
@@ -203,22 +201,13 @@ gpu.module @test_kernel {
       //CHECK: {{.*}} = vector.shuffle {{.*}}, {{.*}} [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62] : vector<32xf16>, vector<32xf16>
       //CHECK: {{.*}} = vector.shuffle {{.*}}, {{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
       //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<32xf16>
-      //CHECK-COUNT-32: {{.*}} = vector.extractelement {{.*}}[{{.*}} : i32] : vector<32xf16>
+      //CHECK-COUNT-32: {{.*}} = vector.extractelement {{.*}}[{{.*}} : index] : vector<32xf16>
       //CHECK-COUNT-32: {{.*}} = vector.splat {{.*}} : vector<1x32xf16>
       %4 = xetile.reduction <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
 
-      //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-      //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-      //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-      //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-      //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-      //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-      //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-      //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-      //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-      //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-      //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-      //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+      //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
+      //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
+
       %5 = xetile.broadcast %4 [1]: vector<32x1xf16> -> vector<32x64xf16>
       // CHECK-COUNT-8: {{.*}} = arith.divf {{.*}}, {{.*}} : vector<8x32xf16>
       %6 = arith.divf %3, %5: vector<32x64xf16>
