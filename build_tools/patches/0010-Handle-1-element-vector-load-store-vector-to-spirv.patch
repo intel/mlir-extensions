@@ -118,4 +118,3 @@ index fd73cea5e4f3..1ee1e4305e2b 100644
  //  CHECK-SAME:  %[[ARG1:.*]]: vector<4xf32>
 --
 2.34.1
-
