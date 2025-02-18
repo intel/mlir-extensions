@@ -1,0 +1,120 @@
+From 6c8ad4ef375fdf5d286a0c1feaf46a77237c0282 Mon Sep 17 00:00:00 2001
+From: Md Abdullah Shahneous Bari <98356296+mshahneo@users.noreply.github.com>
+Date: Fri, 7 Feb 2025 15:31:47 -0600
+Subject: [PATCH] [mlir][vector][spirv] Handle 1-element vector.{load|store}
+ lowering. (#126294)
+
+Add support for single element vector{load|store} lowering to SPIR-V.
+Since, SPIR-V converts single element vector to scalars, it needs
+special attention for vector{load|store} lowering to spirv{load|store}.
+---
+ .../VectorToSPIRV/VectorToSPIRV.cpp           | 29 +++++++++++---
+ .../VectorToSPIRV/vector-to-spirv.mlir        | 39 +++++++++++++++++++
+ 2 files changed, 62 insertions(+), 6 deletions(-)
+
+diff --git a/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp b/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp
+index d3731db1ce55..0cfea4cbf4f4 100644
+--- a/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp
++++ b/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp
+@@ -728,10 +728,20 @@ struct VectorLoadOpConverter final
+
+     spirv::StorageClass storageClass = attr.getValue();
+     auto vectorType = loadOp.getVectorType();
+-    auto vectorPtrType = spirv::PointerType::get(vectorType, storageClass);
+-    Value castedAccessChain =
+-        rewriter.create<spirv::BitcastOp>(loc, vectorPtrType, accessChain);
+-    rewriter.replaceOpWithNewOp<spirv::LoadOp>(loadOp, vectorType,
++    // Use the converted vector type instead of original (single element vector
++    // would get converted to scalar).
++    auto spirvVectorType = typeConverter.convertType(vectorType);
++    auto vectorPtrType = spirv::PointerType::get(spirvVectorType, storageClass);
++
++    // For single element vectors, we don't need to bitcast the access chain to
++    // the original vector type. Both is going to be the same, a pointer
++    // to a scalar.
++    Value castedAccessChain = (vectorType.getNumElements() == 1)
++                                  ? accessChain
++                                  : rewriter.create<spirv::BitcastOp>(
++                                        loc, vectorPtrType, accessChain);
++
++    rewriter.replaceOpWithNewOp<spirv::LoadOp>(loadOp, spirvVectorType,
+                                                castedAccessChain);
+
+     return success();
+@@ -764,8 +774,15 @@ struct VectorStoreOpConverter final
+     spirv::StorageClass storageClass = attr.getValue();
+     auto vectorType = storeOp.getVectorType();
+     auto vectorPtrType = spirv::PointerType::get(vectorType, storageClass);
+-    Value castedAccessChain =
+-        rewriter.create<spirv::BitcastOp>(loc, vectorPtrType, accessChain);
++
++    // For single element vectors, we don't need to bitcast the access chain to
++    // the original vector type. Both is going to be the same, a pointer
++    // to a scalar.
++    Value castedAccessChain = (vectorType.getNumElements() == 1)
++                                  ? accessChain
++                                  : rewriter.create<spirv::BitcastOp>(
++                                        loc, vectorPtrType, accessChain);
++
+     rewriter.replaceOpWithNewOp<spirv::StoreOp>(storeOp, castedAccessChain,
+                                                 adaptor.getValueToStore());
+
+diff --git a/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir b/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir
+index fd73cea5e4f3..1ee1e4305e2b 100644
+--- a/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir
++++ b/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir
+@@ -948,6 +948,27 @@ func.func @vector_load(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer>
+   return %0: vector<4xf32>
+ }
+
++
++// CHECK-LABEL: @vector_load_single_elem
++//  CHECK-SAME: (%[[ARG0:.*]]: memref<4xf32, #spirv.storage_class<StorageBuffer>>)
++//       CHECK:   %[[S0:.+]] = builtin.unrealized_conversion_cast %[[ARG0]] : memref<4xf32, #spirv.storage_class<StorageBuffer>> to !spirv.ptr<!spirv.struct<(!spirv.array<4 x f32, stride=4> [0])>, StorageBuffer>
++//       CHECK:   %[[C0:.+]] = arith.constant 0 : index
++//       CHECK:   %[[S1:.+]] = builtin.unrealized_conversion_cast %[[C0]] : index to i32
++//       CHECK:   %[[CST1:.+]] = spirv.Constant 0 : i32
++//       CHECK:   %[[CST2:.+]] = spirv.Constant 0 : i32
++//       CHECK:   %[[CST3:.+]] = spirv.Constant 1 : i32
++//       CHECK:   %[[S4:.+]] = spirv.AccessChain %[[S0]][%[[CST1]], %[[S1]]] : !spirv.ptr<!spirv.struct<(!spirv.array<4 x f32, stride=4> [0])>, StorageBuffer>, i32, i32
++//       CHECK:   %[[S5:.+]] = spirv.Load "StorageBuffer" %[[S4]] : f32
++//       CHECK:   %[[R0:.+]] = builtin.unrealized_conversion_cast %[[S5]] : f32 to vector<1xf32>
++//       CHECK:   return %[[R0]] : vector<1xf32>
++func.func @vector_load_single_elem(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer>>) -> vector<1xf32> {
++  %idx = arith.constant 0 : index
++  %cst_0 = arith.constant 0.000000e+00 : f32
++  %0 = vector.load %arg0[%idx] : memref<4xf32, #spirv.storage_class<StorageBuffer>>, vector<1xf32>
++  return %0: vector<1xf32>
++}
++
++
+ // CHECK-LABEL: @vector_load_2d
+ //  CHECK-SAME: (%[[ARG0:.*]]: memref<4x4xf32, #spirv.storage_class<StorageBuffer>>) -> vector<4xf32> {
+ //       CHECK:   %[[S0:.+]] = builtin.unrealized_conversion_cast %[[ARG0]] : memref<4x4xf32, #spirv.storage_class<StorageBuffer>> to !spirv.ptr<!spirv.struct<(!spirv.array<16 x f32, stride=4> [0])>, StorageBuffer>
+@@ -990,6 +1011,24 @@ func.func @vector_store(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer
+   return
+ }
+
++// CHECK-LABEL: @vector_store_single_elem
++//  CHECK-SAME: (%[[ARG0:.*]]: memref<4xf32, #spirv.storage_class<StorageBuffer>>
++//  CHECK-SAME:  %[[ARG1:.*]]: vector<1xf32>
++//       CHECK:  %[[S0:.+]] = builtin.unrealized_conversion_cast %[[ARG0]] : memref<4xf32, #spirv.storage_class<StorageBuffer>> to !spirv.ptr<!spirv.struct<(!spirv.array<4 x f32, stride=4> [0])>, StorageBuffer>
++//       CHECK:  %[[S1:.+]] = builtin.unrealized_conversion_cast %[[ARG1]] : vector<1xf32> to f32
++//       CHECK:  %[[C0:.+]] = arith.constant 0 : index
++//       CHECK:  %[[S2:.+]] = builtin.unrealized_conversion_cast %[[C0]] : index to i32
++//       CHECK:  %[[CST1:.+]] = spirv.Constant 0 : i32
++//       CHECK:  %[[CST2:.+]] = spirv.Constant 0 : i32
++//       CHECK:  %[[CST3:.+]] = spirv.Constant 1 : i32
++//       CHECK:  %[[S4:.+]] = spirv.AccessChain %[[S0]][%[[CST1]], %[[S2]]] : !spirv.ptr<!spirv.struct<(!spirv.array<4 x f32, stride=4> [0])>, StorageBuffer>, i32, i32 -> !spirv.ptr<f32, StorageBuffer>
++//       CHECK:  spirv.Store "StorageBuffer" %[[S4]], %[[S1]] : f32
++func.func @vector_store_single_elem(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer>>, %arg1 : vector<1xf32>) {
++  %idx = arith.constant 0 : index
++  vector.store %arg1, %arg0[%idx] : memref<4xf32, #spirv.storage_class<StorageBuffer>>, vector<1xf32>
++  return
++}
++
+ // CHECK-LABEL: @vector_store_2d
+ //  CHECK-SAME: (%[[ARG0:.*]]: memref<4x4xf32, #spirv.storage_class<StorageBuffer>>
+ //  CHECK-SAME:  %[[ARG1:.*]]: vector<4xf32>
+--
+2.34.1
