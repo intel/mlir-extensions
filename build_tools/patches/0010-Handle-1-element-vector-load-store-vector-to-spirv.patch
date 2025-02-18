@@ -17,7 +17,7 @@ index d3731db1ce55..0cfea4cbf4f4 100644
 --- a/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp
 +++ b/mlir/lib/Conversion/VectorToSPIRV/VectorToSPIRV.cpp
 @@ -728,10 +728,20 @@ struct VectorLoadOpConverter final
- 
+
      spirv::StorageClass storageClass = attr.getValue();
      auto vectorType = loadOp.getVectorType();
 -    auto vectorPtrType = spirv::PointerType::get(vectorType, storageClass);
@@ -39,7 +39,7 @@ index d3731db1ce55..0cfea4cbf4f4 100644
 +
 +    rewriter.replaceOpWithNewOp<spirv::LoadOp>(loadOp, spirvVectorType,
                                                 castedAccessChain);
- 
+
      return success();
 @@ -764,8 +774,15 @@ struct VectorStoreOpConverter final
      spirv::StorageClass storageClass = attr.getValue();
@@ -58,7 +58,7 @@ index d3731db1ce55..0cfea4cbf4f4 100644
 +
      rewriter.replaceOpWithNewOp<spirv::StoreOp>(storeOp, castedAccessChain,
                                                  adaptor.getValueToStore());
- 
+
 diff --git a/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir b/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir
 index fd73cea5e4f3..1ee1e4305e2b 100644
 --- a/mlir/test/Conversion/VectorToSPIRV/vector-to-spirv.mlir
@@ -66,7 +66,7 @@ index fd73cea5e4f3..1ee1e4305e2b 100644
 @@ -948,6 +948,27 @@ func.func @vector_load(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer>
    return %0: vector<4xf32>
  }
- 
+
 +
 +// CHECK-LABEL: @vector_load_single_elem
 +//  CHECK-SAME: (%[[ARG0:.*]]: memref<4xf32, #spirv.storage_class<StorageBuffer>>)
@@ -94,7 +94,7 @@ index fd73cea5e4f3..1ee1e4305e2b 100644
 @@ -990,6 +1011,24 @@ func.func @vector_store(%arg0 : memref<4xf32, #spirv.storage_class<StorageBuffer
    return
  }
- 
+
 +// CHECK-LABEL: @vector_store_single_elem
 +//  CHECK-SAME: (%[[ARG0:.*]]: memref<4xf32, #spirv.storage_class<StorageBuffer>>
 +//  CHECK-SAME:  %[[ARG1:.*]]: vector<1xf32>
@@ -116,6 +116,6 @@ index fd73cea5e4f3..1ee1e4305e2b 100644
  // CHECK-LABEL: @vector_store_2d
  //  CHECK-SAME: (%[[ARG0:.*]]: memref<4x4xf32, #spirv.storage_class<StorageBuffer>>
  //  CHECK-SAME:  %[[ARG1:.*]]: vector<4xf32>
--- 
+--
 2.34.1
 
