@@ -5,8 +5,6 @@
 builtin.module(
     imex-vector-linearize
     cse
-    imex-remove-single-elem-vector
-    cse
     gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true})
     reconcile-unrealized-casts
     bf16-to-gpu
