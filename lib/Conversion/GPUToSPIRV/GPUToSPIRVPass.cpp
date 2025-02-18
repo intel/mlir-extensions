@@ -132,6 +132,101 @@ public:
   }
 };
 
+// Pattern to convert arith.truncf (f32 -> bf16) followed by arith.bitcast (bf16
+// -> i16) to a SPIR-V convert op.
+class ArithTruncFBitcastConversionPattern final
+    : public mlir::OpConversionPattern<mlir::arith::TruncFOp> {
+public:
+  using OpConversionPattern<mlir::arith::TruncFOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::TruncFOp truncfOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+
+    // Lamda to return the element type of truncfOp
+    auto getOpElementType = [&](auto op) -> mlir::Type {
+      if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(op.getType()))
+        return vecTy.getElementType();
+      return op.getType();
+    };
+
+    if (!getOpElementType(truncfOp).isBF16())
+      return mlir::failure();
+
+    if (!truncfOp->hasOneUse())
+      return mlir::failure();
+
+    // Check if the result of truncf is used by a bitcast op
+    mlir::arith::BitcastOp bitcastOp =
+        mlir::dyn_cast<mlir::arith::BitcastOp>(*(truncfOp->getUsers().begin()));
+    // Check if the bitcast op is converting to i16
+    if (!bitcastOp || !getOpElementType(bitcastOp).isInteger(16))
+      return mlir::failure();
+
+    mlir::arith::BitcastOpAdaptor bitcastOpAdaptor(bitcastOp);
+
+    mlir::Value intelFToBF16ConvertionOp =
+        rewriter.create<mlir::spirv::INTELConvertFToBF16Op>(
+            truncfOp.getLoc(),
+            getTypeConverter()->convertType(bitcastOp.getType()),
+            adaptor.getOperands());
+
+    rewriter.replaceOp(bitcastOp, intelFToBF16ConvertionOp);
+    rewriter.eraseOp(truncfOp);
+    return mlir::success();
+  }
+};
+
+// Pattern to convert arith.bitcast (i16 -> bf16) followed by arith.extf (bf16
+// -> f32) to a SPIR-V convert op.
+class ArithBitcastExtFConversionPattern final
+    : public mlir::OpConversionPattern<mlir::arith::BitcastOp> {
+public:
+  using OpConversionPattern<mlir::arith::BitcastOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::BitcastOp bitcastOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    // Lamda to return the element type of bitcsatOp
+    auto getOpElementType = [&](auto op) -> mlir::Type {
+      if (auto vecTy = mlir::dyn_cast<mlir::VectorType>(op.getType()))
+        return vecTy.getElementType();
+      return op.getType();
+    };
+
+    if (!getOpElementType(bitcastOp).isBF16())
+      return mlir::failure();
+
+    if (!bitcastOp->hasOneUse())
+      return mlir::failure();
+
+    // Check if the result of bitcast is used by an extf op
+    mlir::arith::ExtFOp extfOp =
+        mlir::dyn_cast<mlir::arith::ExtFOp>(*(bitcastOp->getUsers().begin()));
+    // Check if the extf op is converting to f32
+    if (!extfOp || !getOpElementType(extfOp).isF32())
+      return mlir::failure();
+
+    mlir::Value intelBF16ToFConvertionOp =
+        rewriter.create<mlir::spirv::INTELConvertBF16ToFOp>(
+            bitcastOp.getLoc(),
+            getTypeConverter()->convertType(extfOp.getType()),
+            adaptor.getOperands());
+
+    rewriter.replaceOp(extfOp, intelBF16ToFConvertionOp);
+    rewriter.eraseOp(bitcastOp);
+
+    return mlir::success();
+  }
+};
+
+void populateBF16ArithToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
+                                      mlir::RewritePatternSet &patterns) {
+  patterns.add<ArithTruncFBitcastConversionPattern,
+               ArithBitcastExtFConversionPattern>(typeConverter,
+                                                  patterns.getContext());
+}
+
 // This pattern converts vector.from_elements op to SPIR-V CompositeInsertOp
 class VectorFromElementsConversionPattern final
     : public mlir::OpConversionPattern<mlir::vector::FromElementsOp> {
@@ -221,142 +316,20 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::RewritePatternSet patterns(context);
     mlir::SPIRVConversionOptions options;
     options.use64bitIndex = true;
+    options.emulateLT32BitScalarTypes = false;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
 
-    /// Walk gpu.func and collect root ops for these two special patterns
-    /// 1. Pattern to convert arith.truncf (f32 -> bf16) followed by
-    ///    arith.bitcast (bf16 -> i16)
-    ///    into a SPIR-V convert op.
-    /// 2. Pattern to convert arith.bitcast (i16 -> bf16) followed by
-    ///    arith.extf (bf16 -> f32)
-    ///    into a SPIR-V convert op.
-    /// And convert the patterns into spirv bf16<->f32 conversion ops.
-    mlir::OpBuilder builder(gpuModule);
-    llvm::SmallVector<mlir::Operation *, 16> eraseOps;
-    gpuModule->walk([&](mlir::gpu::GPUFuncOp fop) {
-      fop->walk([&](mlir::arith::BitcastOp bop) {
-        if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(bop.getType())) {
-          if (vecTy.getElementType().isInteger(16)) {
-            if (!bop.getOperand().getDefiningOp())
-              return ::mlir::WalkResult::skip();
-            mlir::arith::TruncFOp inputOp =
-                llvm::dyn_cast<mlir::arith::TruncFOp>(
-                    bop.getOperand().getDefiningOp());
-            if (inputOp) {
-              if (auto inTy =
-                      llvm::dyn_cast<mlir::VectorType>(inputOp.getType())) {
-                if (inTy.getElementType().isBF16()) {
-                  if (auto truncfInTy = llvm::dyn_cast<mlir::VectorType>(
-                          inputOp.getOperand().getType())) {
-                    if (truncfInTy.getElementType().isF32()) {
-                      builder.setInsertionPoint(inputOp);
-                      auto widen =
-                          builder.create<mlir::spirv::INTELConvertFToBF16Op>(
-                              inputOp.getLoc(),
-                              mlir::VectorType::get(truncfInTy.getShape(),
-                                                    builder.getI16Type()),
-                              inputOp.getOperand());
-                      bop->getResult(0).replaceAllUsesWith(widen);
-                      eraseOps.push_back(bop);
-                      eraseOps.push_back(inputOp);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } else if (bop.getType().isInteger(16)) {
-          if (!bop.getOperand().getDefiningOp())
-            return ::mlir::WalkResult::skip();
-          mlir::arith::TruncFOp inputOp = llvm::dyn_cast<mlir::arith::TruncFOp>(
-              bop.getOperand().getDefiningOp());
-          if (inputOp) {
-            if (inputOp.getType().isBF16() &&
-                inputOp.getOperand().getType().isF32()) {
-              builder.setInsertionPoint(inputOp);
-              auto narrow = builder.create<mlir::spirv::INTELConvertFToBF16Op>(
-                  inputOp.getLoc(), builder.getI16Type(), inputOp.getOperand());
-              bop->getResult(0).replaceAllUsesWith(narrow);
-              eraseOps.push_back(bop);
-              eraseOps.push_back(inputOp);
-            }
-          }
-        }
-        return ::mlir::WalkResult::advance();
-      });
-      fop->walk([&](mlir::arith::ExtFOp eop) {
-        if (auto vecTy = llvm::dyn_cast<mlir::VectorType>(eop.getType())) {
-          if (vecTy.getElementType().isF32()) {
-            // Check if the extf op is preceded by a bitcast op.
-            // When native bf16 support is enabled, extf is not preceded by a
-            // bitcast op (which is the case for bf16-to-gpu pass path, or
-            // non-native path), and sometimes the operand to the extf may be
-            // coming from not an op but rather an argument passed to a
-            // function, which may cause assert. The check would circumvent that
-            // issue.
-            if (!eop.getOperand().getDefiningOp())
-              return ::mlir::WalkResult::skip();
-            mlir::arith::BitcastOp inputOp =
-                llvm::dyn_cast<mlir::arith::BitcastOp>(
-                    eop.getOperand().getDefiningOp());
-            if (inputOp) {
-              if (auto inTy =
-                      llvm::dyn_cast<mlir::VectorType>(inputOp.getType())) {
-                if (inTy.getElementType().isBF16()) {
-                  if (auto bcastInTy = llvm::dyn_cast<mlir::VectorType>(
-                          inputOp.getOperand().getType())) {
-                    if (bcastInTy.getElementType().isInteger(16)) {
-                      builder.setInsertionPoint(inputOp);
-                      auto widen =
-                          builder.create<mlir::spirv::INTELConvertBF16ToFOp>(
-                              inputOp.getLoc(),
-                              mlir::VectorType::get(bcastInTy.getShape(),
-                                                    builder.getF32Type()),
-                              inputOp.getOperand());
-                      eop->getResult(0).replaceAllUsesWith(widen);
-                      eraseOps.push_back(eop);
-                      eraseOps.push_back(inputOp);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } else if (eop.getType().isF32()) {
-          if (!eop.getOperand().getDefiningOp())
-            return ::mlir::WalkResult::skip();
-          mlir::arith::BitcastOp inputOp =
-              llvm::dyn_cast<mlir::arith::BitcastOp>(
-                  eop.getOperand().getDefiningOp());
-          if (inputOp) {
-            if (inputOp.getType().isBF16() &&
-                inputOp.getOperand().getType().isInteger(16)) {
-              builder.setInsertionPoint(inputOp);
-              auto widen = builder.create<mlir::spirv::INTELConvertBF16ToFOp>(
-                  inputOp.getLoc(), builder.getF32Type(), inputOp.getOperand());
-              eop->getResult(0).replaceAllUsesWith(widen);
-              eraseOps.push_back(eop);
-              eraseOps.push_back(inputOp);
-            }
-          }
-        }
-        return ::mlir::WalkResult::advance();
-      });
-    });
     target->addDynamicallyLegalOp<mlir::spirv::INTELConvertBF16ToFOp>(
         [](mlir::spirv::INTELConvertBF16ToFOp) { return true; });
     target->addDynamicallyLegalOp<mlir::spirv::INTELConvertFToBF16Op>(
         [](mlir::spirv::INTELConvertFToBF16Op) { return true; });
-    for (auto eraseOp : eraseOps) {
-      eraseOp->erase();
-    }
 
-    // SPIR-V elementwise arith/math ops require special handling if the operate
-    // on large vectors. We dynamically legalize these ops based on the vector
-    // size they consume.
-    // FIXME: this is not an exhaustive list of arith/math ops that need special
-    // handling.
+    // SPIR-V elementwise arith/math ops require special handling if they
+    // operate on large vectors. We dynamically legalize these ops based on
+    // the vector size they consume.
+    // FIXME: this is not an exhaustive list of arith/math ops that need
+    // special handling.
     target->addDynamicallyLegalOp<mlir::spirv::CLExpOp>(
         [&](mlir::spirv::CLExpOp op) {
           return isGenericVectorTy(op.getType());
@@ -369,8 +342,8 @@ void GPUXToSPIRVPass::runOnOperation() {
     // Upstream SPIRVTypeConverter does not add conversion for
     // UnrankedMemRefType.
     // Conversion logic is the same as ranked dynamic memref type for OpenCL
-    // Kernel. unranked memref type is converted to a spirv pointer type with
-    // converted spirv scalar element type and spirv storage class.
+    // Kernel. unranked memref type is converted to a spirv pointer type
+    // with converted spirv scalar element type and spirv storage class.
     // Only scalar element type is currently supported.
     // Also vulkan should be handled differently but out of scope since this
     // conversion pass is for lowering to OpenCL spirv kernel only.
@@ -391,6 +364,7 @@ void GPUXToSPIRVPass::runOnOperation() {
           return mlir::spirv::PointerType::get(arrayElemType, storageClass);
         });
 
+    imex::populateBF16ArithToSPIRVPatterns(typeConverter, patterns);
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
