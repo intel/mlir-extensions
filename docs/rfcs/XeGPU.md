@@ -426,16 +426,16 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
      tensor_desc<16x16xbf16, #sg_map_at> into vector<8x2xbf16>
 ```
 
-`xegpu.sg_map` is also applied to 1D vector load for WI data distribution. When the tensor_desc only specify 1D tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution.
+`xegpu.sg_map` is also applied to 1D vector load for WI data distribution. When the tensor_desc only specify 1D tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution. Note that after the distribution, the output vector is shown as a 2d vector, with the inner-dimension used for packing.
 
 ```mlir
-  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
   #tdesc_attr1 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false, sg= #sg_map_a>
   %tdesc1 = xegpu.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
 
   %vector_a = xegpu.load_nd %tdesc_1:
-     tensor_desc<16xbf16, #sg_map_a> into vector<1x1xbf16>
+     tensor_desc<16xbf16, #sg_map_a> into vector<1x2xbf16>
 ```
 `xegpu.sg_map` also applies to 3D vector, which represents the result of 2D block load with array_length.
 ```mlir
