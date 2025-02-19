@@ -8,7 +8,7 @@ endif()
 
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
-set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Werror -Wnon-virtual-dtor")
+set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Werror -Wnon-virtual-dtor -Wno-error=address -Wno-error=pragmas -Wno-error=pedantic -Wno-error=parentheses")
 
 if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
     # Building as part of LLVM via the external project mechanism.
@@ -281,6 +281,13 @@ else ()
     set(IMEX_ENABLE_PVC_TARGET 0)
 endif()
 
+set(IMEX_ENABLE_BINDINGS_PYTHON 0 CACHE BOOL "Enable IMEX Python Binding")
+if (IMEX_ENABLE_BINDINGS_PYTHON)
+    set(IMEX_ENABLE_BINDINGS_PYTHON 1)
+else ()
+    set(IMEX_ENABLE_BINDINGS_PYTHON 0)
+endif()
+
 if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
     if (IMEX_ENABLE_DEBUG_BUILD)
         set (CMAKE_BUILD_TYPE Debug)
@@ -333,6 +340,9 @@ endif()
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)
     add_subdirectory(docs)
+endif()
+if (IMEX_ENABLE_BINDINGS_PYTHON)
+    add_subdirectory(python)
 endif()
 
 # Custom target to install all imex headers
