@@ -669,9 +669,8 @@ struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithDialect,
-                    mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
-                    mlir::vector::VectorDialect>();
+    registry.insert<mlir::arith::ArithDialect, mlir::memref::MemRefDialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect>();
   }
 
   void runOnOperation() override {
