@@ -489,8 +489,8 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", [AttrSizedOperan
     }];
 }
 
-def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
-    let summary = "performs  a read modify write operation that is free from data races.";
+def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", [MemoryEffects<[MemWrite]>]> {
+    let summary = "performs a read modify write operation that is free from data races.";
     let description = [{
         This operation performs a atomic read-modify-write on the memroy location
         specified by the tile. Operation reuses the arith dialect attribute
