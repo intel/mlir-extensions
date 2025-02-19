@@ -58,3 +58,20 @@ func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32>
   %0 = vector.insert_strided_slice %arg0, %cst {offsets = [0, 0], strides = [1, 1]} : vector<4x8xf32> into vector<8x16xf32>
   return %0 : vector<8x16xf32>
 }
+
+// CHECK-LABEL: @gather_memref_2d
+func.func @gather_memref_2d(%base: memref<?x?xf32>, %v: vector<2x3xindex>, %mask: vector<2x3xi1>, %pass_thru: vector<2x3xf32>) -> vector<2x3xf32> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+// CHECK:    %[[OFF0:.+]]  = arith.addi %{{.*}}, %{{.*}} : index
+// CHECK:    %{{.*}}  = scf.if %{{.*}} -> (vector<3xf32>)
+// CHECK:      [[LD0:%.+]]   = vector.load %{{.*}}[%{{.*}}, %[[OFF0]]] : memref<?x?xf32>, vector<1xf32>
+// CHECK:      [[ELEM0:%.+]] = vector.extract [[LD0]][0] : f32 from vector<1xf32>
+// CHECK:      [[INS0:%.+]]  = vector.insert [[ELEM0]], %{{.*}} [0] : f32 into vector<3xf32>
+// CHECK:      scf.yield [[INS0]] : vector<3xf32>
+// CHECK:    else
+// CHECK:      scf.yield %{{.*}}: vector<3xf32>
+// CHECK-COUNT-5: scf.if
+  %0 = vector.gather %base[%c0, %c1][%v], %mask, %pass_thru : memref<?x?xf32>, vector<2x3xindex>, vector<2x3xi1>, vector<2x3xf32> into vector<2x3xf32>
+  return %0 : vector<2x3xf32>
+}

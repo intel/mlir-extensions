@@ -668,13 +668,19 @@ struct LoopOpInterfaceConversion final
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::memref::MemRefDialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect>();
+  }
+
   void runOnOperation() override {
     auto *context = &getContext();
 
-    // vector.broadcast requires progressive lowering
+    // vector.broadcast and vector.gather requires progressive lowering
     {
       mlir::RewritePatternSet patterns(&getContext());
       mlir::vector::populateVectorBroadcastLoweringPatterns(patterns);
+      mlir::vector::populateVectorGatherLoweringPatterns(patterns);
       (void)mlir::applyPatternsGreedily(getOperation(), std::move(patterns));
     }
 
