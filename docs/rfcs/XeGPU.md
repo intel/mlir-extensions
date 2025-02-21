@@ -336,7 +336,7 @@ xegpu.sg_map specifies how a 2D tensor (defined by the tensor descriptor) is par
   * wi_layout: Defines the 2D arrangement of WIs within the subgroup.
   * wi_data: Specifies the shape of the tensor fragment that each WI loads or stores as a single packed data unit (16/32-bit).
 
-sg_map describes the pattern of a single packed data unit load/store done by all work items in a subgroup -- a distribution unit. Processing the entire tensor may require one or more distribution units.
+`sg_map` defines a single, minimal distribution unit, where each work item in a subgroup is assigned its own data fragment. Processing the entire tensor may require one or more distribution units.
 
 When a sg_map attribute is attached to a tensor descriptor, load/store/dpas will operate in SIMT flavor. The sg_map attribute must be specified when creating the tensor descriptor.
 
@@ -356,7 +356,7 @@ the following conditions must hold:
 * tensor_desc[0] must be evenly divisible by wi_layout[0] × wi_data[0].
 * tensor_desc[1] must be evenly divisible by wi_layout[1] × wi_data[1].
 
-As a result, tensor_size will be evenly divisible by distribution_unit_size (i.e., tensor_size % distribution_unit_size == 0), and each work item will recieve the distributed unit multiple times, with each unit having wi_data_size.
+As a result, tensor_size will be evenly divisible by distribution_unit_size (i.e., tensor_size % distribution_unit_size == 0), and each work item will recieve the distribution unit multiple times, with each unit having wi_data_size.
 Note: When wi_data describes multiple elements, they must all come from a single, contiguous dimension.
 
 Conceptually, the work item (WI) distribution process can be broken down into two steps. The first step divides the 2D tensor data according to `wi_layout` to obtain a 2D subtensor. The second step extracts the elements to be packed from the dimension indicated by `wi_data`, treating it as the innermost dimension, and then linearizes the remaining elements in the 2D subtensor as the outermost dimension.
@@ -375,7 +375,7 @@ In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each 
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
 
-With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT flavor and returns back a fragement associated with individual work item. The tensor_desc in the first example below specifies a tensor of 8x16 elements, which is distributed 8 times so each work item gets <8x1xbf16>. The second example shows the each work item gets <8x2xint8> with 2 int8 elements packed as one 16-bit data.  
+With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT flavor and returns back a fragement associated with individual work item. The tensor_desc in the first example below specifies a tensor of 8x16 elements, which is distributed 8 times so each work item gets <8x1xbf16>. The second example shows the each work item gets <8x2xint8> with 2 int8 elements packed as one unit.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %vector_a = xegpu.load_nd %tdesc_a:
