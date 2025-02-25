@@ -378,7 +378,7 @@ In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each 
      	into tensor_desc<8x16xbf16, #sg_map_a>
 ```
 
-With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT flavor and returns back a fragement associated with individual work item. The tensor_desc in the first example below specifies a tensor of 8x16 elements, which is distributed 8 times so each work item gets <8x1xbf16>. The second example shows the each work item gets <8x2xint8> with 2 int8 elements packed as one unit.
+With `sg_map` attribute attached to tensor_desc, xegpu.load_nd operates in SIMT flavor and returns back a fragment associated with individual work item. The tensor_desc in the first example below specifies a tensor of 8x16 elements, which is distributed 8 times so each work item gets <8x1xbf16>. The second example shows the each work item gets <8x2xint8> with 2 int8 elements packed as one unit.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %vector_a = xegpu.load_nd %tdesc_a:
@@ -451,7 +451,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
           tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16>
 ```  
 
-xegpu.sg_map is also used to describe the WI data distribution for regular loads. The example below shows that each work item (WI) loads one fp32 data element. The resulting vector <16 x fp32> is loaded and distributed to each WI as <1 x fp32>.
+`xegpu.sg_map` is also used to describe the WI data distribution for regular loads. The example below shows that each work item (WI) loads one fp32 data element. The resulting vector <16 x fp32> is loaded and distributed to each WI as <1 x fp32>.
 ```mlir
   #sg_map_t = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   #scatter_attr = !xegpu.tdesc_attr< memory_space=slm, scattered=true>
