@@ -154,7 +154,7 @@ struct VectorLoadOpConversion final
 
     // Construct the 2D vector.
     mlir::Value resultVec = rewriter.create<mlir::arith::ConstantOp>(
-        loc, mlir::DenseElementsAttr::get<float>(vecType, 0.0));
+        loc, rewriter.getZeroAttr(vecType));
     // Emit unrolled loads for each 1D vector slice.
     for (auto i = 0; i < unrollCount; i++) {
       mlir::Value xIndex = xBaseIndex;

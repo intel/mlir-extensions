@@ -285,6 +285,57 @@ func.func @test_vector_store_load_4x4(%buffer: memref<4x4xf32>) {
 }
 
 // -----
+
+func.func @test_vector_store_load_4x4_f16(%buffer: memref<4x4xf16>) {
+  %c0 = arith.constant 0 : index
+  %0 = vector.load %buffer[%c0, %c0] : memref<4x4xf16>, vector<4x4xf16>
+  vector.store %0, %buffer[%c0, %c0] : memref<4x4xf16>, vector<4x4xf16>
+  return
+}
+// CHECK-LABEL: test_vector_store_load_4x4_f16
+// CHECK:       %[[C0:.*]] = arith.constant 0 : index
+// CHECK:       %[[R0:.*]] = arith.constant dense<0.000000e+00> : vector<16xf16>
+// CHECK:       %[[L0:.*]] = vector.load %{{.*}}[%[[C0]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+// CHECK:       %[[T0:.*]] = vector.shuffle %[[L0]], %[[L0]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf16>, vector<4xf16>
+// CHECK:       %[[R1:.*]] = vector.shuffle %[[R0]], %[[T0]] [16, 17, 18, 19, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
+//
+// CHECK:       %[[C1:.*]] = arith.constant 1 : index
+// CHECK:       %[[I1:.*]] = arith.addi %[[C0]], %[[C1]] : index
+// CHECK:       %[[L1:.*]] = vector.load %{{.*}}[%[[I1]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+// CHECK:       %[[T1:.*]] = vector.shuffle %[[L1]], %[[L1]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf16>, vector<4xf16>
+// CHECK:       %[[R2:.*]] = vector.shuffle %[[R1]], %[[T1]] [0, 1, 2, 3, 16, 17, 18, 19, 8, 9, 10, 11, 12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
+//
+// CHECK:       %[[C2:.*]] = arith.constant 2 : index
+// CHECK:       %[[I2:.*]] = arith.addi %[[C0]], %[[C2]] : index
+// CHECK:       %[[L2:.*]] = vector.load %{{.*}}[%[[I2]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+// CHECK:       %[[T2:.*]] = vector.shuffle %[[L2]], %[[L2]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf16>, vector<4xf16>
+// CHECK:       %[[R3:.*]] = vector.shuffle %[[R2]], %[[T2]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
+//
+// CHECK:       %[[C3:.*]] = arith.constant 3 : index
+// CHECK:       %[[I3:.*]] = arith.addi %[[C0]], %[[C3]] : index
+// CHECK:       %[[L3:.*]] = vector.load %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+// CHECK:       %[[T3:.*]] = vector.shuffle %[[L3]], %[[L3]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf16>, vector<4xf16>
+// CHECK:       %[[R4:.*]] = vector.shuffle %[[R3]], %[[T3]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19] : vector<16xf16>, vector<16xf16>
+//
+// CHECK:       %[[S0:.*]] = vector.shuffle %[[R4]], %[[R4]] [0, 1, 2, 3] : vector<16xf16>, vector<16xf16>
+// CHECK:       vector.store %[[S0]], %{{.*}}[%[[C0]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+//
+// CHECK:       %[[S1:.*]] = vector.shuffle %[[R4]], %[[R4]] [4, 5, 6, 7] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[C1:.*]] = arith.constant 1 : index
+// CHECK:       %[[I1:.*]] = arith.addi %[[C0]], %[[C1]] : index
+// CHECK:       vector.store %[[S1]], %{{.*}}[%[[I1]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+//
+// CHECK:       %[[S2:.*]] = vector.shuffle %[[R4]], %[[R4]] [8, 9, 10, 11] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[C2:.*]] = arith.constant 2 : index
+// CHECK:       %[[I2:.*]] = arith.addi %[[C0]], %[[C2]] : index
+// CHECK:       vector.store %[[S2]], %{{.*}}[%[[I2]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+//
+// CHECK:       %[[S3:.*]] = vector.shuffle %[[R4]], %[[R4]] [12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[C3:.*]] = arith.constant 3 : index
+// CHECK:       %[[I3:.*]] = arith.addi %[[C0]], %[[C3]] : index
+// CHECK:       vector.store %[[S3]], %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
+
+// -----
 // CHECK-LABEL: @test_linearize_index
 //  CHECK-SAME: (%[[ARG0:.*]]: vector<2x2xindex>, %[[ARG1:.*]]: vector<2x2xi32>) -> vector<2x2xindex> {
 //       CHECK: %[[T0:.*]] = vector.shape_cast %[[ARG1]] : vector<2x2xi32> to vector<4xi32>
