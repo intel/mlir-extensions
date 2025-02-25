@@ -332,6 +332,7 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 ## XeGPU Attributes to support Work Item Level semantics
 
 **Attribute xegpu.sg_map**
+
 xegpu.sg_map specifies how a 2D tensor (defined by the tensor descriptor) is partitioned among work items (WIs) within a subgroup. sg_map consists of two parameters:
   * wi_layout: Defines the 2D arrangement of WIs within the subgroup.
   * wi_data: Specifies the shape of the tensor fragment that each WI loads or stores as a single packed data unit (16/32-bit).
@@ -341,6 +342,7 @@ xegpu.sg_map specifies how a 2D tensor (defined by the tensor descriptor) is par
 When a sg_map attribute is attached to a tensor descriptor, load/store/dpas will operate in SIMT flavor. The sg_map attribute must be specified when creating the tensor descriptor.
 
 **Constraints**
+
 Given these definitions:
 ```mlir
 wi_data_size = wi_data[0] × wi_data[1]
@@ -366,6 +368,7 @@ Conceptually, the work item (WI) distribution process can be broken down into tw
 Each work item’s fragment of the distributed tensor is represented by a 2D vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2D vector will be further lowered to a 1D “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
 
 **Examples of WI distribution with sg_map**
+
 In the example below, the subgroup has 16 work items in wi_layout=[1, 16], each accessing 1 element as specified by wi_data=[1,1]. So, wi_data_size is 1, distribution_unit_size is 16, tensor_size is 128.
 
 ```mlir
