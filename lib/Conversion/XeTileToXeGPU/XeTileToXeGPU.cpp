@@ -637,8 +637,10 @@ public:
   LogicalResult
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<xegpu::DpasOp>(op, op.getType(), adaptor.getA(),
-                                               adaptor.getB(), adaptor.getC());
+    rewriter.replaceOpWithNewOp<xegpu::DpasOp>(
+        op, op.getType(), adaptor.getA(), adaptor.getB(), adaptor.getC(),
+        ::mlir::xegpu::SGMapAttr(), ::mlir::xegpu::SGMapAttr(),
+        ::mlir::xegpu::SGMapAttr());
     return success();
   }
 };
