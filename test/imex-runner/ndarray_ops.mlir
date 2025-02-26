@@ -84,8 +84,8 @@ module {
     %c10 = arith.constant 10 : i32
     %0 = ndarray.linspace %c0 %c10 %c5 false   : (i32, i32, i32) -> tensor<?xi32>
     %1 = ndarray.linspace %c0 %c2 %c2 false   : (i32, i32, i32) -> tensor<?xi32>
-    ndarray.insert_slice %1 into %0[%i1] [%i2] [%i2] : tensor<?xi32> into tensor<?xi32>
-    %cast = tensor.cast %0 : tensor<?xi32> to tensor<*xi32>
+    %3 = ndarray.insert_slice %1 into %0[%i1] [%i2] [%i2] : tensor<?xi32> into tensor<?xi32>
+    %cast = tensor.cast %3 : tensor<?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
     return
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
@@ -103,8 +103,8 @@ module {
     %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
     %empty1 = tensor.empty(%i2, %i2) : tensor<?x?xi32>
     %1 = linalg.fill ins(%c5 : i32) outs(%empty1: tensor<?x?xi32>) -> tensor<?x?xi32>
-    ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> into tensor<?x?xi32>
-    %cast = tensor.cast %0 : tensor<?x?xi32> to tensor<*xi32>
+    %2 = ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<?x?xi32> into tensor<?x?xi32>
+    %cast = tensor.cast %2 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
     return
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
@@ -125,8 +125,8 @@ module {
     %0 = linalg.fill ins(%c1 : i32) outs(%empty: tensor<?x?xi32>) -> tensor<?x?xi32>
     %empty1 = tensor.empty() : tensor<i32>
     %1 = linalg.fill ins(%c5 : i32) outs(%empty1: tensor<i32>) -> tensor<i32>
-    ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<i32> into tensor<?x?xi32>
-    %cast = tensor.cast %0 : tensor<?x?xi32> to tensor<*xi32>
+    %2 = ndarray.insert_slice %1 into %0[%i1, %i2] [%i2, %i2] [%i1, %i1] : tensor<i32> into tensor<?x?xi32>
+    %cast = tensor.cast %2 : tensor<?x?xi32> to tensor<*xi32>
     call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
     return
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}

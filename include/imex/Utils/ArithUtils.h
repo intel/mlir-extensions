@@ -240,15 +240,17 @@ template <typename T> struct EasyVal {
       typename LHS, typename RHS, typename X = T,
       typename std::enable_if<std::is_same<X, bool>::value>::type * = nullptr>
   auto select(RHS const &l, LHS const &r) const {
-    if constexpr(std::is_integral<LHS>::value && std::is_integral<RHS>::value) {
+    if constexpr (std::is_integral<LHS>::value &&
+                  std::is_integral<RHS>::value) {
       return EasyVal<LHS>(*_loc, *_builder,
-              _builder->createOrFold<::mlir::arith::SelectOp>(*_loc, _value,
-                                                              EasyVal<LHS>(*_loc, *_builder, l),
-                                                              EasyVal<RHS>(*_loc, *_builder, r)));
-    } else if constexpr(!(std::is_integral<LHS>::value && std::is_integral<RHS>::value)) {
+                          _builder->createOrFold<::mlir::arith::SelectOp>(
+                              *_loc, _value, EasyVal<LHS>(*_loc, *_builder, l),
+                              EasyVal<RHS>(*_loc, *_builder, r)));
+    } else if constexpr (!(std::is_integral<LHS>::value &&
+                           std::is_integral<RHS>::value)) {
       return LHS{*_loc, *_builder,
-              _builder->createOrFold<::mlir::arith::SelectOp>(*_loc, _value,
-                                                              l.get(), r.get())};
+                 _builder->createOrFold<::mlir::arith::SelectOp>(
+                     *_loc, _value, l.get(), r.get())};
     }
   }
 };
@@ -289,7 +291,8 @@ using EasyI64 = EasyVal<int64_t>;
 /// Create I64 Value from MLIR value, potentially by casting
 inline EasyI64 easyI64(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                        const ::mlir::Value &value) {
-  return EasyI64(loc, builder, createCast(loc, builder, value, builder.getI64Type()));
+  return EasyI64(loc, builder,
+                 createCast(loc, builder, value, builder.getI64Type()));
 }
 
 /// Create I64 Value from C++ value
@@ -305,8 +308,8 @@ template <typename T, typename std::enable_if<std::is_same<
                           T, ::mlir::OpFoldResult>::value>::type * = nullptr>
 inline EasyI64 easyI64(const mlir::Location &loc, mlir::OpBuilder &builder,
                        const T &value) {
-  return value.template is<::mlir::Value>()
-             ? easyI64(loc, builder, value.template get<::mlir::Value>())
+  return mlir::isa<mlir::Value>(value)
+             ? easyI64(loc, builder, mlir::isa<::mlir::Value>(value))
              : easyI64(loc, builder,
                        ::mlir::getConstantIntValue(value).value());
 }

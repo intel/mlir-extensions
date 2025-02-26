@@ -224,8 +224,8 @@ static std::array<Value, 2> getShardSliceOffAndSz(
     // resOff = myOff_.get();
   }
 
-  // the global offset of the local shard is slice offset plus the computed
-  // offset in the target tensor the latter is in number of elements after
+  // The global offset of the local shard is slice offset plus the computed
+  // offset in the target tensor. The latter is in number of elements after
   // slicing, which means we need to multiply it by stride
   auto targetOff =
       easyI64(loc, builder, slcOffs[dim]) +
@@ -264,8 +264,6 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
       mlir::getMixedValues(op.getStaticStrides(), op.getStrides(), builder);
 
   auto loc = op->getLoc();
-  auto zero = easyI64(loc, builder, 0);
-  auto one = easyI64(loc, builder, 1);
   auto rank = slcOffs.size();
   auto splitAxes = splitSharding.getSplitAxes();
   auto mesh = getMesh(op, offsSharding.getMeshAttr(), symbolTableCollection);
@@ -273,7 +271,7 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
 
   auto haloSizes =
       haloSharding.getStaticHaloSizes().empty()
-          ? SmallVector<OpFoldResult>(rank * 2, zero.get())
+          ? SmallVector<OpFoldResult>(rank * 2, builder.getI64IntegerAttr(0))
           : mlir::getMixedValues(haloSharding.getStaticHaloSizes(),
                                  haloSharding.getDynamicHaloSizes(), builder);
 
@@ -286,6 +284,8 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
         builder.create<tensor::FromElementsOp>(loc, shardedDimsOffsets);
   }
 
+  auto zero = easyI64(loc, builder, 0);
+  auto one = easyI64(loc, builder, 1);
   SmallVector<OpFoldResult> lShardOffs, lShardSizes;
   for (auto dim = 0ul; dim < (uint64_t)rank; ++dim) {
     assert(!ShapedType::isDynamic(srcShape[dim]));
