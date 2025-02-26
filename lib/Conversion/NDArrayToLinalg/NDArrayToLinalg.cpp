@@ -296,7 +296,7 @@ struct LinSpaceLowering
                             .create<::mlir::tensor::EmptyOp>(
                                 loc, retArTyp.getShape(), elTyp)
                             .getResult()
-                      : createEmptyTensor(rewriter, loc, retArTyp, {count});
+                      : createEmptyTensor(rewriter, loc, elTyp, {count});
 
     // The loop body fills with values
     // accepting no input, the lambda simply captures start and step
