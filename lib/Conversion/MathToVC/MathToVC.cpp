@@ -20,6 +20,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/Vector/Utils/VectorUtils.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
@@ -121,29 +122,29 @@ struct ElementwiseFloatOnlyMathOpPattern final
   LogicalResult
   matchAndRewrite(MOp op, typename MOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    auto *converter = this->getTypeConverter();
+    auto opType = converter->convertType(op.getType());
     Type opElementType;
-    // Check if the result type is a 1D vector
-    if (auto vecTy = dyn_cast<VectorType>(op.getType())) {
-      if (vecTy.getRank() != 1)
-        return failure();
+    if (auto vecTy = dyn_cast<VectorType>(opType)) {
       opElementType = vecTy.getElementType();
     } else {
       opElementType = op.getType();
     }
     auto loc = op.getLoc();
     auto args = adaptor.getOperands();
+
     // Upconvert or downconvert all the operands' element types to f32
     // Warning message here for the truncation. If we are truncating
     // the value, the result can be different from the original value.
     if (opElementType.getIntOrFloatBitWidth() > 32)
-      emitWarning(op.getLoc(), "Truncation is done on input during conversion, "
-                               "may result in wrong result.\n");
+      emitWarning(loc, "Truncation is done on input during conversion, "
+                       "may result in wrong result.\n");
     llvm::SmallVector<Value> newArgs =
         convertFloatArgsType(args, rewriter.getF32Type(), rewriter);
 
     // Result element type is always f32
     auto newType =
-        convertScalarOrVectorFloatType(op.getType(), rewriter.getF32Type());
+        convertScalarOrVectorFloatType(opType, rewriter.getF32Type());
     std::string resStr = "f32";
     resStr.insert(
         0, ((dyn_cast<VectorType>(newType))
@@ -174,17 +175,19 @@ struct ElementwiseFloatOnlyMathOpPattern final
 // ExpOp conversion pattern, supports both math::exp and math::exp2
 template <typename ExpOp>
 struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
-  ExpOpPattern(MLIRContext *ctx, bool enableHighPrecisionInterimCalculation)
-      : OpConversionPattern<ExpOp>(ctx),
+  ExpOpPattern(const TypeConverter &converter, MLIRContext *ctx,
+               bool enableHighPrecisionInterimCalculation)
+      : OpConversionPattern<ExpOp>(converter, ctx),
         enableHighPrecisionInterimCalculation(
             enableHighPrecisionInterimCalculation) {}
   LogicalResult
   matchAndRewrite(ExpOp op, typename ExpOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto vecTy = dyn_cast<VectorType>(op.getType());
+    auto *converter = this->getTypeConverter();
+    auto vecTy = dyn_cast<VectorType>(converter->convertType(op.getType()));
 
     // Only deal with Exp op with 1-D vector type
-    if (!(vecTy && vecTy.getRank() == 1))
+    if (!vecTy || vecTy.getRank() != 1)
       return failure();
 
     auto loc = op.getLoc();
@@ -210,8 +213,8 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
             rewriter.create<arith::ConstantOp>(loc, interimVectorType, vecAttr);
         auto input = convertFloatArgsType({operands[0]}, rewriter.getF32Type(),
                                           rewriter);
-        auto scaledInputf32 = rewriter.create<arith::MulFOp>(
-            op.getLoc(), input[0], log2eConstVec);
+        auto scaledInputf32 =
+            rewriter.create<arith::MulFOp>(loc, input[0], log2eConstVec);
         auto scaledInput = convertFloatArgsType(
             {scaledInputf32}, vecTy.getElementType(), rewriter);
         args.clear();
@@ -224,7 +227,7 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
             rewriter.create<arith::ConstantOp>(loc, vecTy, vecAttr);
         auto input = operands[0];
         auto scaledInput =
-            rewriter.create<arith::MulFOp>(op.getLoc(), input, log2eConstVec);
+            rewriter.create<arith::MulFOp>(loc, input, log2eConstVec);
         args.clear();
         args.push_back(scaledInput);
       }
@@ -232,8 +235,7 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
     // for large vectors, generate the corresponding VC intrinsic.
     auto funcName = getVCIntrinsicName<ExpOp>();
     funcName += encodeVectorType(rewriter, vecTy).first;
-    auto callOp =
-        createFuncCall(rewriter, loc, funcName, {op.getType()}, args, false);
+    auto callOp = createFuncCall(rewriter, loc, funcName, {vecTy}, args, false);
     rewriter.replaceOp(op, callOp);
     return success();
   }
@@ -249,15 +251,15 @@ private:
 //===----------------------------------------------------------------------===//
 
 void imex::populateMathToVCPatterns(
-    ::mlir::LLVMTypeConverter &typeConverter,
-    ::mlir::RewritePatternSet &patterns,
+    ::mlir::TypeConverter &typeConverter, ::mlir::RewritePatternSet &patterns,
     bool enableHighPrecisionInterimCalculation) {
   // Add patterns
   patterns.add<ElementwiseFloatOnlyMathOpPattern<math::CeilOp>,
                ElementwiseFloatOnlyMathOpPattern<math::FloorOp>>(
-      patterns.getContext());
+      typeConverter, patterns.getContext());
   patterns.add<ExpOpPattern<math::ExpOp>, ExpOpPattern<math::Exp2Op>>(
-      patterns.getContext(), enableHighPrecisionInterimCalculation);
+      typeConverter, patterns.getContext(),
+      enableHighPrecisionInterimCalculation);
 }
 
 //===----------------------------------------------------------------------===//
@@ -267,14 +269,10 @@ void imex::configureMathToVCConversionLegality(
     ::mlir::ConversionTarget &target) {
   // Add legal dialects
   target.addLegalDialect<func::FuncDialect, arith::ArithDialect>();
-  // math.exp and math.exp2 is only converted if they are 1D vectors
+  // math.exp and math.exp2 is converted if they are not working on vectors
   target.addDynamicallyLegalOp<math::ExpOp, math::Exp2Op>([&](Operation *op) {
-    if (auto vecTy = dyn_cast<VectorType>(op->getResult(0).getType())) {
-      if (vecTy.getRank() != 1)
-        return true;
-      return false;
-    }
-    return true;
+    auto vecTy = dyn_cast<VectorType>(op->getResult(0).getType());
+    return !vecTy;
   });
 }
 
@@ -291,9 +289,31 @@ struct MathToVCPass : public imex::impl::ConvertMathToVCBase<MathToVCPass> {
   }
   void runOnOperation() override {
     gpu::GPUModuleOp m = getOperation();
-    LLVMTypeConverter typeConverter(&getContext());
     ConversionTarget target(getContext());
     RewritePatternSet patterns(&getContext());
+
+    TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion([](mlir::VectorType type) {
+      if (!mlir::vector::isLinearizableVector(type))
+        return type;
+      return mlir::VectorType::get(type.getNumElements(), type.getElementType(),
+                                   type.isScalable());
+    });
+
+    auto materializeCast = [&](mlir::OpBuilder &builder, mlir::Type type,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1 || !mlir::isa<mlir::VectorType>(type) ||
+          !mlir::isa<mlir::VectorType>(inputs.front().getType()))
+        return nullptr;
+
+      return builder.create<mlir::vector::ShapeCastOp>(loc, type,
+                                                       inputs.front());
+    };
+    typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
 
     // Add patterns
     imex::populateMathToVCPatterns(

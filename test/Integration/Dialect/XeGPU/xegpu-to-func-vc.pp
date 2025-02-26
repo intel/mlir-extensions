@@ -6,9 +6,12 @@ builtin.module(
     gpu.module(imex-xegpu-hoist-transpose,
         imex-xegpu-apply-vnni-transformation,
         imex-xegpu-optimize-transpose)
+    cse
+    gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true}
+        convert-xegpu-to-vc)
+    cse
     imex-vector-linearize
-    gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true})
-    gpu.module(convert-xegpu-to-vc)
+    canonicalize
     cse
     reconcile-unrealized-casts
     bf16-to-gpu

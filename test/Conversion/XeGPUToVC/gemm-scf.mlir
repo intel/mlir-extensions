@@ -1,4 +1,4 @@
-// RUN: imex-opt -convert-xegpu-to-vc -cse  %s | FileCheck %s --check-prefixes=CHECK,LSC
+// RUN: imex-opt -convert-xegpu-to-vc -cse  %s | FileCheck %s
 
 module @gemm attributes {gpu.container_module} {
     gpu.module @test_kernel {
@@ -31,19 +31,21 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r12:.*]] = vector.insert %[[c1807_i32]], %[[r11]] [7] : i32 into vector<16xi32>
       %4 = xegpu.create_nd_tdesc  %arg2[%2, %3] : memref<1024x1016xf32> -> !xegpu.tensor_desc<8x16xf32>
 
-      //LSC: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf32>
-      //LSC: %[[true:.*]] = arith.constant true
-      //LSC: %[[c0_i8:.*]] = arith.constant 0 : i8
-      //LSC: %[[r13:.*]] = vector.from_elements %[[c0_i8]], %[[c0_i8]] : vector<2xi8>
-      //LSC: %[[c1_i8:.*]] = arith.constant 1 : i8
-      //LSC: %[[c16_i16:.*]] = arith.constant 16 : i16
-      //LSC: %[[c8_i16:.*]] = arith.constant 8 : i16
-      //LSC: %[[c0_i32:.*]] = arith.constant 0 : i32
-      //LSC: %[[CVALUE:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v128f32.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r12]], %[[c0_i32]], %[[c0_i32]], %[[cst_0]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf32>) -> vector<128xf32>
+      //CHECK: %[[cst_0:.*]] = arith.constant dense<0.000000e+00> : vector<128xf32>
+      //CHECK: %[[true:.*]] = arith.constant true
+      //CHECK: %[[c0_i8:.*]] = arith.constant 0 : i8
+      //CHECK: %[[r13:.*]] = vector.from_elements %[[c0_i8]], %[[c0_i8]] : vector<2xi8>
+      //CHECK: %[[c1_i8:.*]] = arith.constant 1 : i8
+      //CHECK: %[[c16_i16:.*]] = arith.constant 16 : i16
+      //CHECK: %[[c8_i16:.*]] = arith.constant 8 : i16
+      //CHECK: %[[c0_i32:.*]] = arith.constant 0 : i32
+      //CHECK: %[[CVALUE:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v128f32.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r12]], %[[c0_i32]], %[[c0_i32]], %[[cst_0]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf32>) -> vector<128xf32>
+      //CHECK: %[[CAST:.*]] = vector.shape_cast %[[CVALUE]] : vector<128xf32> to vector<8x16xf32>
       %5 = xegpu.load_nd %4  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
 
-      // CHECK: %[[SCF_RESULT:.*]] = scf.for {{.*}} iter_args(%[[arg4:.*]] = %[[CVALUE]]) -> (vector<128xf32>)
+      // CHECK: %[[SCF_RESULT:.*]] = scf.for {{.*}} iter_args(%[[arg4:.*]] = %[[CAST]]) -> (vector<8x16xf32>)
       %6 = scf.for %arg3 = %c0 to %c1016 step %c16 iter_args(%arg4 = %5) -> (vector<8x16xf32>) {
+        //CHECK: %[[cast:.*]] = vector.shape_cast %[[arg4]] : vector<8x16xf32> to vector<128xf32>
         //CHECK: %[[intptr_1:.*]] = memref.extract_aligned_pointer_as_index %{{.*}} : memref<1024x1016xf16> -> index
         //CHECK: %[[r18:.*]] = arith.index_castui %[[intptr_1]] : index to i64
         //CHECK: %[[r19:.*]] = vector.insert %[[r18]], %[[cst]] [0] : i64 into vector<8xi64>
@@ -72,12 +74,12 @@ module @gemm attributes {gpu.container_module} {
         //CHECK: %[[r36:.*]] = vector.insert %[[c3855_i32]], %[[r35]] [7] : i32 into vector<16xi32>
         %8 = xegpu.create_nd_tdesc %arg1[%arg3, %3] : memref<1016x1016xf16> -> !xegpu.tensor_desc<16x16xf16>
 
-        //LSC: %[[cst_3:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
-        //LSC: %[[r39:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v128f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r27]], %[[c0_i32]], %[[c0_i32]], %[[cst_3]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf16>) -> vector<128xf16>
+        //CHECK: %[[cst_3:.*]] = arith.constant dense<0.000000e+00> : vector<128xf16>
+        //CHECK: %[[r39:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v128f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r27]], %[[c0_i32]], %[[c0_i32]], %[[cst_3]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf16>) -> vector<128xf16>
         %9 = xegpu.load_nd %7 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 
-        //LSC: %[[cst_4:.*]] = arith.constant dense<0.000000e+00> : vector<256xf16>
-        //LSC: %[[r42:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.vnni.v256f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c16_i16]], %[[r36]], %[[c0_i32]], %[[c0_i32]], %[[cst_4]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<256xf16>) -> vector<256xf16>
+        //CHECK: %[[cst_4:.*]] = arith.constant dense<0.000000e+00> : vector<256xf16>
+        //CHECK: %[[r42:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.vnni.v256f16.v2i8(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c16_i16]], %[[r36]], %[[c0_i32]], %[[c0_i32]], %[[cst_4]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<256xf16>) -> vector<256xf16>
         %10 = xegpu.load_nd %8 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
         //CHECK: %[[r43:.*]] = vector.bitcast %[[r39]] : vector<128xf16> to vector<64xi32>
@@ -86,11 +88,13 @@ module @gemm attributes {gpu.container_module} {
         //CHECK: %[[c8_i32:.*]] = arith.constant 8 : i32
         //CHECK: %[[DPAS_RES:.*]] = func.call @llvm.genx.dpas2.v128f32.v128i32.v64i32(%{{.*}}, %[[r44]], %[[r43]], {{.*}}) : (vector<128xf32>, vector<128xi32>, vector<64xi32>, i32, i32, i32, i32, i32, i32) -> vector<128xf32>
         %11 = xegpu.dpas %9, %10, %arg4 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-        // CHECK: scf.yield %[[DPAS_RES]] : vector<128xf32>
+        //CHECK: %[[DPAS_CAST:.*]] = vector.shape_cast %[[DPAS_RES:.*]] : vector<128xf32> to vector<8x16xf32>
+        // CHECK: scf.yield %[[DPAS_CAST]] : vector<8x16xf32>
         scf.yield %11 : vector<8x16xf32>
       }
+      //CHECK: %[[RES_CAST:.*]] = vector.shape_cast %[[SCF_RESULT]] : vector<8x16xf32> to vector<128xf32>
 
-      // LSC: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f32(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r12]], %[[c0_i32]], %[[c0_i32]], %[[SCF_RESULT]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf32>) -> ()
+      // CHECK: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v128f32(%[[true]], %[[r13]], %[[c1_i8]], %[[c16_i16]], %[[c8_i16]], %[[r12]], %[[c0_i32]], %[[c0_i32]], %[[RES_CAST]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<128xf32>) -> ()
       xegpu.store_nd %6, %4 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }

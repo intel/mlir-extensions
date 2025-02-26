@@ -104,11 +104,12 @@ gpu.module @test_kernel {
 
   //CHECK: gpu.func @sg_store_tile(%[[arg0:.*]]: memref<32x32xf32>)
 	gpu.func @sg_store_tile(%a: memref<32x32xf32>) {
-    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<32x32xf32>
 		%result = arith.constant dense<0.0>: vector<32x32xf32>
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %arg0[%{{.*}}, %{{.*}}] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %[[cst]] {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]}  : vector<32x32xf32> to vector<8x16xf32>
 		%1 = xetile.init_tile %a[0, 0] : memref<32x32xf32> -> !xetile.tile<32x32xf32>
-    //CHECK-COUNT-8: xetile.store_tile %[[cst]],  %{{.*}} : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK-COUNT-8: xetile.store_tile %{{.*}},  %{{.*}} : vector<8x16xf32>, !xetile.tile<8x16xf32>
 		xetile.store_tile %result, %1: vector<32x32xf32>, !xetile.tile<32x32xf32>
     //CHECK: gpu.return
 		gpu.return
@@ -118,10 +119,10 @@ gpu.module @test_kernel {
   //CHECK-SAME: %[[arg0:.*]]: vector<32x32xf16>, %[[arg1:.*]]: vector<32x32xf16>, %[[arg2:.*]]: memref<32x32xf16>
   gpu.func @create_mask(%a: vector<32x32xf16>, %b: vector<32x32xf16>, %c: memref<32x32xf16>) {
     %c32 = arith.constant 32 : index
+    //CHECK: %[[c20:.*]] = arith.constant 20 : index
     %c20 = arith.constant 20 : index
 
-    //CHECK-2D-FOR-LATER: %[[r0:.*]] = vector.constant_mask [8, 20] : vector<8x32xi1>
-    //CHECK: %[[r0:.*]] = vector.constant_mask [1, 20] : vector<1x32xi1>
+    //CHECK-COUNT-32: %{{.*}} = vector.create_mask %{{.*}}, %[[c20]] : vector<1x32xi1>
     %mask = vector.create_mask %c32, %c20 : vector<32x32xi1>
 
     //CHECK-2D-FOR-LATER-COUNT-4: vector.extract_strided_slice %[[arg0]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
@@ -146,12 +147,12 @@ gpu.module @test_kernel {
   //CHECK-SAME: %[[arg0:.*]]: vector<32x32xf16>, %[[arg1:.*]]: vector<32x32xf16>, %[[arg2:.*]]: memref<32x32xf16>
   gpu.func @create_mask_2(%a: vector<32x32xf16>, %b: vector<32x32xf16>, %c: memref<32x32xf16>) {
     %c20 = arith.constant 20 : index
+    // CHECK: %[[c32:.*]] = arith.constant 32 : index
     %c32 = arith.constant 32 : index
     //CHECK-2D-FOR-LATER: %[[r0:.*]] = vector.constant_mask [8, 32] : vector<8x32xi1>
     //CHECK-2D-FOR-LATER: %[[r1:.*]] = vector.constant_mask [4, 32] : vector<8x32xi1>
     //CHECK-2D-FOR-LATER: %[[r2:.*]] = vector.constant_mask [0, 0] : vector<8x32xi1>
-    //CHECK: %[[r0:.*]] = vector.constant_mask [1, 32] : vector<1x32xi1>
-    //CHECK: %[[r1:.*]] = vector.constant_mask [0, 0] : vector<1x32xi1>
+    //CHECK: %{{.*}} = vector.create_mask %{{.*}}, %[[c32]] : vector<1x32xi1>
     %mask = vector.create_mask %c20, %c32 : vector<32x32xi1>
 
     //CHECK-2D-FOR-LATER-COUNT: vector.extract_strided_slice %[[arg0]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
@@ -172,9 +173,9 @@ gpu.module @test_kernel {
   //CHECK: gpu.func @sg_tile_mma(%[[arg0:.*]]: memref<32x32xf16>, %[[arg1:.*]]: memref<32x32xf16>)
   //CHECK-COUNT-2: xetile.init_tile %[[arg0]][{{.*}}] : memref<32x32xf16> -> !xetile.tile<32x16xf16>
   //CHECK-COUNT-2: xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-  //CHECK-COUNT-8: vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
   //CHECK-COUNT-2: xetile.init_tile %[[arg1]][{{.*}}] : memref<32x32xf16> -> !xetile.tile<32x16xf16>
   //CHECK-COUNT-2: xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+  //CHECK-COUNT-8: vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
   //CHECK-COUNT-4: vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
   //CHECK-COUNT-16: xetile.tile_mma %{{.*}}, %{{.*}}{{.*}} : vector<8x16xf16>, vector<16x16xf16>{{.*}} -> vector<8x16xf32>
   gpu.func @sg_tile_mma(%a: memref<32x32xf16>, %b: memref<32x32xf16>) {
@@ -190,22 +191,22 @@ gpu.module @test_kernel {
   // CHECK-LABEL: gpu.func @inner_reduction
   // CHECK-SAME: (%[[arg0:.*]]: memref<128x256xf16>, %[[arg1:.*]]: memref<128x256xf16>)
   gpu.func @inner_reduction(%a: memref<128x256xf16>, %b: memref<128x256xf16>) {
-    //CHECK: %[[c15_i32:.*]] = arith.constant 15 : i32
-    //CHECK: %[[c14_i32:.*]] = arith.constant 14 : i32
-    //CHECK: %[[c13_i32:.*]] = arith.constant 13 : i32
-    //CHECK: %[[c12_i32:.*]] = arith.constant 12 : i32
-    //CHECK: %[[c11_i32:.*]] = arith.constant 11 : i32
-    //CHECK: %[[c10_i32:.*]] = arith.constant 10 : i32
-    //CHECK: %[[c9_i32:.*]] = arith.constant 9 : i32
-    //CHECK: %[[c8_i32:.*]] = arith.constant 8 : i32
-    //CHECK: %[[c7_i32:.*]] = arith.constant 7 : i32
-    //CHECK: %[[c6_i32:.*]] = arith.constant 6 : i32
-    //CHECK: %[[c5_i32:.*]] = arith.constant 5 : i32
-    //CHECK: %[[c4_i32:.*]] = arith.constant 4 : i32
-    //CHECK: %[[c3_i32:.*]] = arith.constant 3 : i32
-    //CHECK: %[[c2_i32:.*]] = arith.constant 2 : i32
-    //CHECK: %[[c1_i32:.*]] = arith.constant 1 : i32
-    //CHECK: %[[c0_i32:.*]] = arith.constant 0 : i32
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<16x1xf16>
+    //CHECK: %[[c15:.*]] = arith.constant 15 : index
+    //CHECK: %[[c14:.*]] = arith.constant 14 : index
+    //CHECK: %[[c13:.*]] = arith.constant 13 : index
+    //CHECK: %[[c12:.*]] = arith.constant 12 : index
+    //CHECK: %[[c11:.*]] = arith.constant 11 : index
+    //CHECK: %[[c10:.*]] = arith.constant 10 : index
+    //CHECK: %[[c9:.*]] = arith.constant 9 : index
+    //CHECK: %[[c8:.*]] = arith.constant 8 : index
+    //CHECK: %[[c7:.*]] = arith.constant 7 : index
+    //CHECK: %[[c6:.*]] = arith.constant 6 : index
+    //CHECK: %[[c5:.*]] = arith.constant 5 : index
+    //CHECK: %[[c4:.*]] = arith.constant 4 : index
+    //CHECK: %[[c3:.*]] = arith.constant 3 : index
+    //CHECK: %[[c2:.*]] = arith.constant 2 : index
+    //CHECK: %[[c1:.*]] = arith.constant 1 : index
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xetile.tile<16x32xf16>
     //CHECK: %[[r1:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<16x32xf16> -> vector<16x32xf16>
@@ -305,56 +306,58 @@ gpu.module @test_kernel {
     //CHECK: %[[r95:.*]] = vector.shuffle %[[r94]], %[[r94]] [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r96:.*]] = vector.shuffle %[[r94]], %[[r94]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r97:.*]] = arith.addf %[[r95]], %[[r96]] : vector<16xf16>
-    //CHECK: %[[r98:.*]] = vector.extractelement %[[r97]][%[[c0_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r98:.*]] = vector.extractelement %[[r97]][%[[c0]] : index] : vector<16xf16>
     //CHECK: %[[r99:.*]] = vector.splat %[[r98]] : vector<1x1xf16>
-    //CHECK: %[[r100:.*]] = vector.extractelement %[[r97]][%[[c1_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r100:.*]] = vector.extractelement %[[r97]][%[[c1]] : index] : vector<16xf16>
     //CHECK: %[[r101:.*]] = vector.splat %[[r100]] : vector<1x1xf16>
-    //CHECK: %[[r102:.*]] = vector.extractelement %[[r97]][%[[c2_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r102:.*]] = vector.extractelement %[[r97]][%[[c2]] : index] : vector<16xf16>
     //CHECK: %[[r103:.*]] = vector.splat %[[r102]] : vector<1x1xf16>
-    //CHECK: %[[r104:.*]] = vector.extractelement %[[r97]][%[[c3_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r104:.*]] = vector.extractelement %[[r97]][%[[c3]] : index] : vector<16xf16>
     //CHECK: %[[r105:.*]] = vector.splat %[[r104]] : vector<1x1xf16>
-    //CHECK: %[[r106:.*]] = vector.extractelement %[[r97]][%[[c4_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r106:.*]] = vector.extractelement %[[r97]][%[[c4]] : index] : vector<16xf16>
     //CHECK: %[[r107:.*]] = vector.splat %[[r106]] : vector<1x1xf16>
-    //CHECK: %[[r108:.*]] = vector.extractelement %[[r97]][%[[c5_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r108:.*]] = vector.extractelement %[[r97]][%[[c5]] : index] : vector<16xf16>
     //CHECK: %[[r109:.*]] = vector.splat %[[r108]] : vector<1x1xf16>
-    //CHECK: %[[r110:.*]] = vector.extractelement %[[r97]][%[[c6_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r110:.*]] = vector.extractelement %[[r97]][%[[c6]] : index] : vector<16xf16>
     //CHECK: %[[r111:.*]] = vector.splat %[[r110]] : vector<1x1xf16>
-    //CHECK: %[[r112:.*]] = vector.extractelement %[[r97]][%[[c7_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r112:.*]] = vector.extractelement %[[r97]][%[[c7]] : index] : vector<16xf16>
     //CHECK: %[[r113:.*]] = vector.splat %[[r112]] : vector<1x1xf16>
-    //CHECK: %[[r114:.*]] = vector.extractelement %[[r97]][%[[c8_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r114:.*]] = vector.extractelement %[[r97]][%[[c8]] : index] : vector<16xf16>
     //CHECK: %[[r115:.*]] = vector.splat %[[r114]] : vector<1x1xf16>
-    //CHECK: %[[r116:.*]] = vector.extractelement %[[r97]][%[[c9_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r116:.*]] = vector.extractelement %[[r97]][%[[c9]] : index] : vector<16xf16>
     //CHECK: %[[r117:.*]] = vector.splat %[[r116]] : vector<1x1xf16>
-    //CHECK: %[[r118:.*]] = vector.extractelement %[[r97]][%[[c10_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r118:.*]] = vector.extractelement %[[r97]][%[[c10]] : index] : vector<16xf16>
     //CHECK: %[[r119:.*]] = vector.splat %[[r118]] : vector<1x1xf16>
-    //CHECK: %[[r120:.*]] = vector.extractelement %[[r97]][%[[c11_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r120:.*]] = vector.extractelement %[[r97]][%[[c11]] : index] : vector<16xf16>
     //CHECK: %[[r121:.*]] = vector.splat %[[r120]] : vector<1x1xf16>
-    //CHECK: %[[r122:.*]] = vector.extractelement %[[r97]][%[[c12_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r122:.*]] = vector.extractelement %[[r97]][%[[c12]] : index] : vector<16xf16>
     //CHECK: %[[r123:.*]] = vector.splat %[[r122]] : vector<1x1xf16>
-    //CHECK: %[[r124:.*]] = vector.extractelement %[[r97]][%[[c13_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r124:.*]] = vector.extractelement %[[r97]][%[[c13]] : index] : vector<16xf16>
     //CHECK: %[[r125:.*]] = vector.splat %[[r124]] : vector<1x1xf16>
-    //CHECK: %[[r126:.*]] = vector.extractelement %[[r97]][%[[c14_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r126:.*]] = vector.extractelement %[[r97]][%[[c14]] : index] : vector<16xf16>
     //CHECK: %[[r127:.*]] = vector.splat %[[r126]] : vector<1x1xf16>
-    //CHECK: %[[r128:.*]] = vector.extractelement %[[r97]][%[[c15_i32]] : i32] : vector<16xf16>
+    //CHECK: %[[r128:.*]] = vector.extractelement %[[r97]][%[[c15]] : index] : vector<16xf16>
     //CHECK: %[[r129:.*]] = vector.splat %[[r128]] : vector<1x1xf16>
-    //CHECK: %[[r130:.*]] = vector.shuffle %[[r99]], %[[r101]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r131:.*]] = vector.shuffle %[[r103]], %[[r105]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r132:.*]] = vector.shuffle %[[r107]], %[[r109]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r133:.*]] = vector.shuffle %[[r111]], %[[r113]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r134:.*]] = vector.shuffle %[[r115]], %[[r117]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r135:.*]] = vector.shuffle %[[r119]], %[[r121]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r136:.*]] = vector.shuffle %[[r123]], %[[r125]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r137:.*]] = vector.shuffle %[[r127]], %[[r129]] [0, 1] : vector<1x1xf16>, vector<1x1xf16>
-    //CHECK: %[[r138:.*]] = vector.shuffle %[[r130]], %[[r131]] [0, 1, 2, 3] : vector<2x1xf16>, vector<2x1xf16>
-    //CHECK: %[[r139:.*]] = vector.shuffle %[[r132]], %[[r133]] [0, 1, 2, 3] : vector<2x1xf16>, vector<2x1xf16>
-    //CHECK: %[[r140:.*]] = vector.shuffle %[[r134]], %[[r135]] [0, 1, 2, 3] : vector<2x1xf16>, vector<2x1xf16>
-    //CHECK: %[[r141:.*]] = vector.shuffle %[[r136]], %[[r137]] [0, 1, 2, 3] : vector<2x1xf16>, vector<2x1xf16>
-    //CHECK: %[[r142:.*]] = vector.shuffle %[[r138]], %[[r139]] [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x1xf16>, vector<4x1xf16>
-    //CHECK: %[[r143:.*]] = vector.shuffle %[[r140]], %[[r141]] [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x1xf16>, vector<4x1xf16>
-    //CHECK: %[[r144:.*]] = vector.shuffle %[[r142]], %[[r143]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x1xf16>, vector<8x1xf16>
-    //CHECK: %[[r145:.*]] = vector.shape_cast %[[r144]] : vector<16x1xf16> to vector<2x8xf16>
-    //CHECK: %[[r146:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xetile.tile<2x8xf16>
-    //CHECK: xetile.store_tile %[[r145]],  %[[r146]] : vector<2x8xf16>, !xetile.tile<2x8xf16>
+
+    //CHECK: %[[r130:.*]] = vector.insert_strided_slice %[[r99]], %[[cst]] {offsets = [0, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r131:.*]] = vector.insert_strided_slice %[[r101]], %[[r130]] {offsets = [1, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r132:.*]] = vector.insert_strided_slice %[[r103]], %[[r131]] {offsets = [2, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r133:.*]] = vector.insert_strided_slice %[[r105]], %[[r132]] {offsets = [3, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r134:.*]] = vector.insert_strided_slice %[[r107]], %[[r133]] {offsets = [4, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r135:.*]] = vector.insert_strided_slice %[[r109]], %[[r134]] {offsets = [5, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r136:.*]] = vector.insert_strided_slice %[[r111]], %[[r135]] {offsets = [6, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r137:.*]] = vector.insert_strided_slice %[[r113]], %[[r136]] {offsets = [7, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r138:.*]] = vector.insert_strided_slice %[[r115]], %[[r137]] {offsets = [8, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r139:.*]] = vector.insert_strided_slice %[[r117]], %[[r138]] {offsets = [9, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r140:.*]] = vector.insert_strided_slice %[[r119]], %[[r139]] {offsets = [10, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r141:.*]] = vector.insert_strided_slice %[[r121]], %[[r140]] {offsets = [11, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r142:.*]] = vector.insert_strided_slice %[[r123]], %[[r141]] {offsets = [12, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r143:.*]] = vector.insert_strided_slice %[[r125]], %[[r142]] {offsets = [13, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r144:.*]] = vector.insert_strided_slice %[[r127]], %[[r143]] {offsets = [14, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r145:.*]] = vector.insert_strided_slice %[[r129]], %[[r144]] {offsets = [15, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
+    //CHECK: %[[r146:.*]] = vector.shape_cast %[[r145]] : vector<16x1xf16> to vector<2x8xf16>
+    //CHECK: %[[r147:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xetile.tile<2x8xf16>
+    //CHECK: xetile.store_tile %[[r146]],  %[[r147]] : vector<2x8xf16>, !xetile.tile<2x8xf16>
     %c0 = arith.constant 0 : index
     %t = xetile.init_tile %a[%c0, %c0] : memref<128x256xf16> -> !xetile.tile<16x32xf16>
     %v = xetile.load_tile %t : !xetile.tile<16x32xf16> -> vector<16x32xf16>
@@ -442,84 +445,95 @@ gpu.module @test_kernel {
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[c32:.*]] = arith.constant 32 : index
     //CHECK: %[[c128:.*]] = arith.constant 128 : index
-    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<32x32xf32>
     //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
     //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c16]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
     //CHECK: %[[r2:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
     //CHECK: %[[r3:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c16]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %[[r4:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r5:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r6:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [8, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [16, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [24, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+
     %c0 = arith.constant 0 : index
     %c32 = arith.constant 32 : index
     %c128 = arith.constant 128 : index
     %cst = arith.constant dense<0.0>: vector<32x32xf32>
   	%1 = xetile.init_tile %a[%c0, %c0] : memref<32x128xf16> -> !xetile.tile<32x32xf16>
   	%2 = xetile.init_tile %b[%c0, %c0] : memref<128x32xf16> -> !xetile.tile<32x32xf16>
-    //CHECK: %[[r4:.*]]:12 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c128]] step %[[c32]] iter_args(%[[arg4:.*]] = %[[r0]], %[[arg5:.*]] = %[[r1]], %[[arg6:.*]] = %[[r2]], %[[arg7:.*]] = %[[r3]], %[[arg8:.*]] = %[[cst]], %[[arg9:.*]] = %[[cst]], %[[arg10:.*]] = %[[cst]], %[[arg11:.*]] = %[[cst]], %[[arg12:.*]] = %[[cst]], %[[arg13:.*]] = %[[cst]], %[[arg14:.*]] = %[[cst]], %[[arg15:.*]] = %[[cst]]) -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>) {
+    //CHECK: %[[r12:.*]]:12 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c128]] step %[[c32]] iter_args(%[[arg4:.*]] = %[[r0]], %[[arg5:.*]] = %[[r1]], %[[arg6:.*]] = %[[r2]], %[[arg7:.*]] = %[[r3]], %[[arg8:.*]] = %[[r4]], %[[arg9:.*]] = %[[r5]], %[[arg10:.*]] = %[[r6]], %[[arg11:.*]] = %[[r7]], %[[arg12:.*]] = %[[r8]], %[[arg13:.*]] = %[[r9]], %[[arg14:.*]] = %[[r10]], %[[arg15:.*]] = %[[r11]]) -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>) {
     %out:3 = scf.for %k = %c0 to %c128 step %c32 iter_args(%a_tile = %1, %b_tile = %2, %c_value = %cst)
         -> (!xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>) {
-      //CHECK: %[[r13:.*]] = xetile.load_tile %[[arg4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-      //CHECK: %[[r14:.*]] = xetile.load_tile %[[arg5]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-      //CHECK: %[[r15:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r16:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r17:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r18:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r19:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r20:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r21:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-      //CHECK: %[[r22:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHECK: %[[r21:.*]] = xetile.load_tile %[[arg4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+      //CHECK: %[[r22:.*]] = xetile.load_tile %[[arg5]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
       //CHECK: %[[r23:.*]] = xetile.load_tile %[[arg6]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
       //CHECK: %[[r24:.*]] = xetile.load_tile %[[arg7]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-      //CHECK: %[[r25:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-      //CHECK: %[[r26:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-      //CHECK: %[[r27:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-      //CHECK: %[[r28:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-      //CHECK: %[[r29:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
-      //CHECK: %[[r30:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
-      //CHECK: %[[r31:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
-      //CHECK: %[[r32:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
-      //CHECK: %[[r33:.*]] = xetile.tile_mma %[[r15]], %[[r25]], %[[arg8]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r34:.*]] = xetile.tile_mma %[[r19]], %[[r26]], %[[r33]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r35:.*]] = xetile.tile_mma %[[r15]], %[[r27]], %[[arg9]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r36:.*]] = xetile.tile_mma %[[r19]], %[[r28]], %[[r35]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r37:.*]] = xetile.tile_mma %[[r16]], %[[r25]], %[[arg10]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r38:.*]] = xetile.tile_mma %[[r20]], %[[r26]], %[[r37]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r39:.*]] = xetile.tile_mma %[[r16]], %[[r27]], %[[arg11]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r40:.*]] = xetile.tile_mma %[[r20]], %[[r28]], %[[r39]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r41:.*]] = xetile.tile_mma %[[r17]], %[[r25]], %[[arg12]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r42:.*]] = xetile.tile_mma %[[r21]], %[[r26]], %[[r41]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r43:.*]] = xetile.tile_mma %[[r17]], %[[r27]], %[[arg13]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r44:.*]] = xetile.tile_mma %[[r21]], %[[r28]], %[[r43]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r45:.*]] = xetile.tile_mma %[[r18]], %[[r25]], %[[arg14]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r46:.*]] = xetile.tile_mma %[[r22]], %[[r26]], %[[r45]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r47:.*]] = xetile.tile_mma %[[r18]], %[[r27]], %[[arg15]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-      //CHECK: %[[r48:.*]] = xetile.tile_mma %[[r22]], %[[r28]], %[[r47]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r25:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
+      //CHECK: %[[r26:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
+      //CHECK: %[[r27:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
+      //CHECK: %[[r28:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
+
+      //CHEECK: %[[r29:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r30:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r31:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r32:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r33:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r34:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r35:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r36:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+      //CHEECK: %[[r37:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+      //CHEECK: %[[r38:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+      //CHEECK: %[[r39:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+      //CHEECK: %[[r40:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+
+      //CHECK: %[[r41:.*]] = xetile.tile_mma %[[r29]], %[[r37]], %[[arg8]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r42:.*]] = xetile.tile_mma %[[r30]], %[[r39]], %[[r41]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r43:.*]] = xetile.tile_mma %[[r29]], %[[r38]], %[[arg9]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r44:.*]] = xetile.tile_mma %[[r30]], %[[r40]], %[[r43]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r45:.*]] = xetile.tile_mma %[[r31]], %[[r37]], %[[arg10]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r46:.*]] = xetile.tile_mma %[[r32]], %[[r39]], %[[r45]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r47:.*]] = xetile.tile_mma %[[r31]], %[[r38]], %[[arg11]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r48:.*]] = xetile.tile_mma %[[r32]], %[[r40]], %[[r47]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r49:.*]] = xetile.tile_mma %[[r33]], %[[r37]], %[[arg12]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r50:.*]] = xetile.tile_mma %[[r34]], %[[r39]], %[[r49]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r51:.*]] = xetile.tile_mma %[[r33]], %[[r38]], %[[arg13]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r52:.*]] = xetile.tile_mma %[[r34]], %[[r40]], %[[r51]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r53:.*]] = xetile.tile_mma %[[r35]], %[[r37]], %[[arg14]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r54:.*]] = xetile.tile_mma %[[r36]], %[[r39]], %[[r53]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r55:.*]] = xetile.tile_mma %[[r35]], %[[r38]], %[[arg15]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+      //CHECK: %[[r56:.*]] = xetile.tile_mma %[[r36]], %[[r40]], %[[r55]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
       %3 = xetile.load_tile %a_tile : !xetile.tile<32x32xf16> -> vector<32x32xf16>
       %4 = xetile.load_tile %b_tile : !xetile.tile<32x32xf16> -> vector<32x32xf16>
       %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32]:  !xetile.tile<32x32xf16>
       %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0]:  !xetile.tile<32x32xf16>
       %c_new_value = xetile.tile_mma %3, %4, %c_value:
         vector<32x32xf16>, vector<32x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
-      //CHECK: scf.yield %[[r29]], %[[r30]], %[[r31]], %[[r32]], %[[r34]], %[[r36]], %[[r38]], %[[r40]], %[[r42]], %[[r44]], %[[r46]], %[[r48]] : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>
+      //CHECK: scf.yield %[[r25]], %[[r26]], %[[r27]], %[[r28]], %[[r42]], %[[r44]], %[[r46]], %[[r48]], %[[r50]], %[[r52]], %[[r54]], %[[r56]] : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>
       scf.yield %a_next_tile, %b_next_tile, %c_new_value : !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>, vector<32x32xf32>
     }
 
-    //CHECK: %[[r5:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r7:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r8:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r9:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r10:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r11:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r12:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r13:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r14:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r15:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r16:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r17:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r18:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r19:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r20:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
   	%c_tile = xetile.init_tile %c[%c0, %c0] : memref<32x32xf32> -> !xetile.tile<32x32xf32>
 
-    //CHECK: xetile.store_tile %[[r4]]#4,  %[[r5]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#5,  %[[r6]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#6,  %[[r7]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#7,  %[[r8]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#8,  %[[r9]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#9,  %[[r10]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#10,  %[[r11]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#11,  %[[r12]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#4,  %[[r13]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#5,  %[[r14]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#6,  %[[r15]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#7,  %[[r16]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#8,  %[[r17]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#9,  %[[r18]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#10,  %[[r19]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#11,  %[[r20]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
     xetile.store_tile %out#2, %c_tile: vector<32x32xf32>, !xetile.tile<32x32xf32>
   	gpu.return
   }
@@ -533,74 +547,88 @@ gpu.module @test_kernel {
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[c32:.*]] = arith.constant 32 : index
     //CHECK: %[[c128:.*]] = arith.constant 128 : index
-    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<8x16xf32>
-    //CHECK: %[[r0]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
-    //CHECK: %[[r1]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c16]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
-    //CHECK: %[[r2]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
-    //CHECK: %[[r3]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c16]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
-    //CHECK: %[[r4]]:12 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c128]] step %[[c32]] iter_args(%[[arg4:.*]] = %[[r0]], %[[arg5:.*]] = %[[r1]], %[[arg6:.*]] = %[[r2]], %[[arg7:.*]] = %[[r3]], %[[arg8:.*]] = %[[cst]], %[[arg9:.*]] = %[[cst]], %[[arg10:.*]] = %[[cst]], %[[arg11:.*]] = %[[cst]], %[[arg12:.*]] = %[[cst]], %[[arg13:.*]] = %[[cst]], %[[arg14:.*]] = %[[cst]], %[[arg15:.*]] = %[[cst]]) -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>) {
-    //CHECK:   %[[r13:.*]] = xetile.load_tile %[[arg4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-    //CHECK:   %[[r14:.*]] = xetile.load_tile %[[arg5]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-    //CHECK:   %[[r15:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r16:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r17:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r18:.*]] = vector.extract_strided_slice %[[r13]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r19:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r20:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r21:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
-    //CHECK:   %[[r22:.*]] = vector.extract_strided_slice %[[r14]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<32x32xf32>
+    //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c16]]] : memref<32x128xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %[[r2:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c0]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
+    //CHECK: %[[r3:.*]] = xetile.init_tile %[[arg1]][%[[c0]], %[[c16]]] : memref<128x32xf16> -> !xetile.tile<32x16xf16>
+
+    //CHECK: %[[r4:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r5:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r6:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [8, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [16, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [24, 16], sizes = [8, 16], strides = [1, 1]} : vector<32x32xf32> to vector<8x16xf32>
+
+
+    //CHECK: %[[r12:.*]]:12 = scf.for %[[arg3:.*]] = %[[c0]] to %[[c128]] step %[[c32]] iter_args(%[[arg4:.*]] = %[[r0]], %[[arg5:.*]] = %[[r1]], %[[arg6:.*]] = %[[r2]], %[[arg7:.*]] = %[[r3]], %[[arg8:.*]] = %[[r4]], %[[arg9:.*]] = %[[r5]], %[[arg10:.*]] = %[[r6]], %[[arg11:.*]] = %[[r7]], %[[arg12:.*]] = %[[r8]], %[[arg13:.*]] = %[[r9]], %[[arg14:.*]] = %[[r10]], %[[arg15:.*]] = %[[r11]]) -> (!xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>) {
+    //CHECK:   %[[r21:.*]] = xetile.load_tile %[[arg4]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+    //CHECK:   %[[r22:.*]] = xetile.load_tile %[[arg5]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
     //CHECK:   %[[r23:.*]] = xetile.load_tile %[[arg6]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
     //CHECK:   %[[r24:.*]] = xetile.load_tile %[[arg7]] : !xetile.tile<32x16xf16> -> vector<32x16xf16>
-    //CHECK:   %[[r25:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-    //CHECK:   %[[r26:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-    //CHECK:   %[[r27:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-    //CHECK:   %[[r28:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-    //CHECK:   %[[r29:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
-    //CHECK:   %[[r30:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
-    //CHECK:   %[[r31:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
-    //CHECK:   %[[r32:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
-    //CHECK:   %[[r33:.*]] = arith.addf %[[arg8]], %[[arg8]] : vector<8x16xf32>
-    //CHECK:   %[[r34:.*]] = arith.addf %[[arg9]], %[[arg9]] : vector<8x16xf32>
-    //CHECK:   %[[r35:.*]] = arith.addf %[[arg10]], %[[arg10]] : vector<8x16xf32>
-    //CHECK:   %[[r36:.*]] = arith.addf %[[arg11]], %[[arg11]] : vector<8x16xf32>
-    //CHECK:   %[[r37:.*]] = arith.addf %[[arg12]], %[[arg12]] : vector<8x16xf32>
-    //CHECK:   %[[r38:.*]] = arith.addf %[[arg13]], %[[arg13]] : vector<8x16xf32>
-    //CHECK:   %[[r39:.*]] = arith.addf %[[arg14]], %[[arg14]] : vector<8x16xf32>
-    //CHECK:   %[[r40:.*]] = arith.addf %[[arg15]], %[[arg15]] : vector<8x16xf32>
-    //CHECK:   %[[r41:.*]] = xetile.tile_mma %[[r15]], %[[r25]], %[[r33]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r42:.*]] = xetile.tile_mma %[[r19]], %[[r26]], %[[r41]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r43:.*]] = xetile.tile_mma %[[r15]], %[[r27]], %[[r34]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r44:.*]] = xetile.tile_mma %[[r19]], %[[r28]], %[[r43]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r45:.*]] = xetile.tile_mma %[[r16]], %[[r25]], %[[r35]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r46:.*]] = xetile.tile_mma %[[r20]], %[[r26]], %[[r45]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r47:.*]] = xetile.tile_mma %[[r16]], %[[r27]], %[[r36]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r48:.*]] = xetile.tile_mma %[[r20]], %[[r28]], %[[r47]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r49:.*]] = xetile.tile_mma %[[r17]], %[[r25]], %[[r37]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r50:.*]] = xetile.tile_mma %[[r21]], %[[r26]], %[[r49]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r51:.*]] = xetile.tile_mma %[[r17]], %[[r27]], %[[r38]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r52:.*]] = xetile.tile_mma %[[r21]], %[[r28]], %[[r51]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r53:.*]] = xetile.tile_mma %[[r18]], %[[r25]], %[[r39]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r54:.*]] = xetile.tile_mma %[[r22]], %[[r26]], %[[r53]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r55:.*]] = xetile.tile_mma %[[r18]], %[[r27]], %[[r40]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   %[[r56:.*]] = xetile.tile_mma %[[r22]], %[[r28]], %[[r55]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK:   scf.yield %[[r29]], %[[r30]], %[[r31]], %[[r32]], %[[r42]], %[[r44]], %[[r46]], %[[r48]], %[[r50]], %[[r52]], %[[r54]], %[[r56]] : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>
+    //CHECK:   %[[r25:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
+    //CHECK:   %[[r26:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c0]], %[[c32]]] : !xetile.tile<32x16xf16>
+    //CHECK:   %[[r27:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
+    //CHECK:   %[[r28:.*]] = xetile.update_tile_offset %[[arg7]], [%[[c32]], %[[c0]]] : !xetile.tile<32x16xf16>
+
+    //CHECK:   %[[r29:.*]] = arith.addf %[[arg8]], %[[arg8]] : vector<8x16xf32>
+    //CHECK:   %[[r30:.*]] = arith.addf %[[arg9]], %[[arg9]] : vector<8x16xf32>
+    //CHECK:   %[[r31:.*]] = arith.addf %[[arg10]], %[[arg10]] : vector<8x16xf32>
+    //CHECK:   %[[r32:.*]] = arith.addf %[[arg11]], %[[arg11]] : vector<8x16xf32>
+    //CHECK:   %[[r33:.*]] = arith.addf %[[arg12]], %[[arg12]] : vector<8x16xf32>
+    //CHECK:   %[[r34:.*]] = arith.addf %[[arg13]], %[[arg13]] : vector<8x16xf32>
+    //CHECK:   %[[r35:.*]] = arith.addf %[[arg14]], %[[arg14]] : vector<8x16xf32>
+    //CHECK:   %[[r36:.*]] = arith.addf %[[arg15]], %[[arg15]] : vector<8x16xf32>
+
+    //CHECK:   %[[r37:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r38:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r39:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r40:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r41:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r42:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [16, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r43:.*]] = vector.extract_strided_slice %[[r21]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r44:.*]] = vector.extract_strided_slice %[[r22]] {offsets = [24, 0], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
+    //CHECK:   %[[r45:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+    //CHECK:   %[[r46:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+    //CHECK:   %[[r47:.*]] = vector.extract_strided_slice %[[r23]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+    //CHECK:   %[[r48:.*]] = vector.extract_strided_slice %[[r24]] {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+
+    //CHECK:   %[[r49:.*]] = xetile.tile_mma %[[r37]], %[[r45]], %[[r29]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r50:.*]] = xetile.tile_mma %[[r38]], %[[r47]], %[[r49]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r51:.*]] = xetile.tile_mma %[[r37]], %[[r46]], %[[r30]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r52:.*]] = xetile.tile_mma %[[r38]], %[[r48]], %[[r51]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r53:.*]] = xetile.tile_mma %[[r39]], %[[r45]], %[[r31]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r54:.*]] = xetile.tile_mma %[[r40]], %[[r47]], %[[r53]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r55:.*]] = xetile.tile_mma %[[r39]], %[[r46]], %[[r32]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r56:.*]] = xetile.tile_mma %[[r40]], %[[r48]], %[[r55]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r57:.*]] = xetile.tile_mma %[[r41]], %[[r45]], %[[r33]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r58:.*]] = xetile.tile_mma %[[r42]], %[[r47]], %[[r57]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r59:.*]] = xetile.tile_mma %[[r41]], %[[r46]], %[[r34]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r60:.*]] = xetile.tile_mma %[[r42]], %[[r48]], %[[r59]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r61:.*]] = xetile.tile_mma %[[r43]], %[[r45]], %[[r35]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r62:.*]] = xetile.tile_mma %[[r44]], %[[r47]], %[[r61]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r63:.*]] = xetile.tile_mma %[[r43]], %[[r46]], %[[r36]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   %[[r64:.*]] = xetile.tile_mma %[[r44]], %[[r48]], %[[r63]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK:   scf.yield %[[r25]], %[[r26]], %[[r27]], %[[r28]], %[[r50]], %[[r52]], %[[r54]], %[[r56]], %[[r58]], %[[r60]], %[[r62]], %[[r64]] : !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, !xetile.tile<32x16xf16>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>
     //CHECK: }
-    //CHECK: %[[r5:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r7:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r8:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r9:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r10:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r11:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: %[[r12:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#4,  %[[r5]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#5,  %[[r6]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#6,  %[[r7]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#7,  %[[r8]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#8,  %[[r9]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#9,  %[[r10]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#10,  %[[r11]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
-    //CHECK: xetile.store_tile %[[r4]]#11,  %[[r12]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: %[[r13:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r14:.*]] = xetile.init_tile %[[arg2]][%[[c0]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r15:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r16:.*]] = xetile.init_tile %[[arg2]][%[[c8]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r17:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r18:.*]] = xetile.init_tile %[[arg2]][%[[c16]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r19:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c0]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: %[[r20:.*]] = xetile.init_tile %[[arg2]][%[[c24]], %[[c16]]] : memref<32x32xf32> -> !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#4,  %[[r13]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#5,  %[[r14]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#6,  %[[r15]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#7,  %[[r16]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#8,  %[[r17]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#9,  %[[r18]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#10,  %[[r19]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
+    //CHECK: xetile.store_tile %[[r12]]#11,  %[[r20]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
     %c0 = arith.constant 0 : index
     %c32 = arith.constant 32 : index
     %c128 = arith.constant 128 : index
@@ -625,44 +653,20 @@ gpu.module @test_kernel {
   //CHECK-LABEL: gpu.func @sglevel_reduction_broadcast_dim_0
   //CHECK-SAME: (%[[arg0:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_reduction_broadcast_dim_0(%a: memref<1024x1024xf16>) {
-
     //CHECK: %[[c24:.*]] = arith.constant 24 : index
     //CHECK: %[[c16:.*]] = arith.constant 16 : index
     //CHECK: %[[c8:.*]] = arith.constant 8 : index
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<32x64xf16>
     //CHECK: %[[c32:.*]] = arith.constant 32 : index
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
     //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c32]]] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
     //CHECK: %[[r2:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
     //CHECK: %[[r3:.*]] = xetile.load_tile %[[r1]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
     //CHECK-COUNT-62: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<1x32xf16>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
 
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<1024x1024xf16> -> !xetile.tile<8x32xf16>
     //CHECK-COUNT-8: xetile.store_tile %{{.*}},  %{{.*}} : vector<8x32xf16>, !xetile.tile<8x32xf16>
@@ -689,8 +693,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c32]]] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
     //CHECK: %[[r2:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
     //CHECK: %[[r3:.*]] = xetile.load_tile %[[r1]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
 
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<1x32xf16>
     //CHECK: %{{.*}} = vector.shape_cast %{{.*}} : vector<1x32xf16> to vector<32xf16>
@@ -749,7 +752,6 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<1x32xf16>
     //CHECK: %{{.*}} = vector.shape_cast %{{.*}} : vector<1x32xf16> to vector<32xf16>
 
-
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
@@ -799,84 +801,13 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
-
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-
-
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29, 32, 33, 36, 37, 40, 41, 44, 45, 48, 49, 52, 53, 56, 57, 60, 61] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31, 34, 35, 38, 39, 42, 43, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29, 32, 33, 36, 37, 40, 41, 44, 45, 48, 49, 52, 53, 56, 57, 60, 61] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31, 34, 35, 38, 39, 42, 43, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
-
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[{{.*}} : i32] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[{{.*}} : index] : vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
 
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][{{.*}}] : memref<1024x1024xf16> -> !xetile.tile<8x32xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
     //CHECK-COUNT-8: xetile.store_tile %{{.*}},  %{{.*}} : vector<8x32xf16>, !xetile.tile<8x32xf16>
     %1 = xetile.init_tile %a[0, 0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
     %2 = xetile.load_tile %1: !xetile.tile<32x64xf16> -> vector<32x64xf16>
@@ -891,44 +822,6 @@ gpu.module @test_kernel {
   //CHECK-LABEL: gpu.func @sglevel_reduction_broadcast_transpose
   //CHECK-SAME(%[[arg0:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_reduction_broadcast_transpose(%a: memref<1024x1024xf16>) {
-    //CHECK: %[[c56:.*]] = arith.constant 56 : index
-    //CHECK: %[[c48:.*]] = arith.constant 48 : index
-    //CHECK: %[[c40:.*]] = arith.constant 40 : index
-    //CHECK: %[[c24:.*]] = arith.constant 24 : index
-    //CHECK: %[[c16:.*]] = arith.constant 16 : index
-    //CHECK: %[[c8:.*]] = arith.constant 8 : index
-    //CHECK: %[[c31_i32:.*]] = arith.constant 31 : i32
-    //CHECK: %[[c30_i32:.*]] = arith.constant 30 : i32
-    //CHECK: %[[c29_i32:.*]] = arith.constant 29 : i32
-    //CHECK: %[[c28_i32:.*]] = arith.constant 28 : i32
-    //CHECK: %[[c27_i32:.*]] = arith.constant 27 : i32
-    //CHECK: %[[c26_i32:.*]] = arith.constant 26 : i32
-    //CHECK: %[[c25_i32:.*]] = arith.constant 25 : i32
-    //CHECK: %[[c24_i32:.*]] = arith.constant 24 : i32
-    //CHECK: %[[c23_i32:.*]] = arith.constant 23 : i32
-    //CHECK: %[[c22_i32:.*]] = arith.constant 22 : i32
-    //CHECK: %[[c21_i32:.*]] = arith.constant 21 : i32
-    //CHECK: %[[c20_i32:.*]] = arith.constant 20 : i32
-    //CHECK: %[[c19_i32:.*]] = arith.constant 19 : i32
-    //CHECK: %[[c18_i32:.*]] = arith.constant 18 : i32
-    //CHECK: %[[c17_i32:.*]] = arith.constant 17 : i32
-    //CHECK: %[[c16_i32:.*]] = arith.constant 16 : i32
-    //CHECK: %[[c15_i32:.*]] = arith.constant 15 : i32
-    //CHECK: %[[c14_i32:.*]] = arith.constant 14 : i32
-    //CHECK: %[[c13_i32:.*]] = arith.constant 13 : i32
-    //CHECK: %[[c12_i32:.*]] = arith.constant 12 : i32
-    //CHECK: %[[c11_i32:.*]] = arith.constant 11 : i32
-    //CHECK: %[[c10_i32:.*]] = arith.constant 10 : i32
-    //CHECK: %[[c9_i32:.*]] = arith.constant 9 : i32
-    //CHECK: %[[c8_i32:.*]] = arith.constant 8 : i32
-    //CHECK: %[[c7_i32:.*]] = arith.constant 7 : i32
-    //CHECK: %[[c6_i32:.*]] = arith.constant 6 : i32
-    //CHECK: %[[c5_i32:.*]] = arith.constant 5 : i32
-    //CHECK: %[[c4_i32:.*]] = arith.constant 4 : i32
-    //CHECK: %[[c3_i32:.*]] = arith.constant 3 : i32
-    //CHECK: %[[c2_i32:.*]] = arith.constant 2 : i32
-    //CHECK: %[[c1_i32:.*]] = arith.constant 1 : i32
-    //CHECK: %[[c0_i32:.*]] = arith.constant 0 : i32
     //CHECK: %[[c32:.*]] = arith.constant 32 : index
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
@@ -936,270 +829,231 @@ gpu.module @test_kernel {
     //CHECK: %[[r2:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
     //CHECK: %[[r3:.*]] = xetile.load_tile %[[r1]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
     //CHECK: %[[r4:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r5:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r6:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [4, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [5, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [6, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [7, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r12:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [8, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r13:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [9, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r14:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [10, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r15:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [11, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r16:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [12, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r17:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [13, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r18:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [14, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r19:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [15, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r20:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [16, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r21:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [17, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r22:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [18, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r23:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [19, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r24:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [20, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r25:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [21, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r26:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [22, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r27:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [23, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r28:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [24, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r29:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [25, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r30:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [26, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r31:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [27, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r32:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [28, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r33:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [29, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r34:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [30, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r35:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [31, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r36:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r37:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r38:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r39:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r40:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [4, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r41:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [5, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r42:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [6, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r43:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [7, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r44:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [8, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r45:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [9, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r46:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [10, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r47:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [11, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r48:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [12, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r49:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [13, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r50:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [14, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r51:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [15, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r52:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [16, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r53:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [17, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r54:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [18, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r55:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [19, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r56:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [20, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r57:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [21, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r58:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [22, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r59:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [23, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r60:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [24, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r61:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [25, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r62:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [26, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r63:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [27, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r64:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [28, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r65:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [29, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r66:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [30, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r5:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r6:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r12:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [4, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r13:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [4, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r14:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [5, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r15:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [5, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r16:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [6, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r17:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [6, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r18:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [7, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r19:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [7, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r20:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [8, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r21:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [8, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r22:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [9, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r23:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [9, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r24:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [10, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r25:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [10, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r26:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [11, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r27:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [11, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r28:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [12, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r29:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [12, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r30:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [13, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r31:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [13, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r32:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [14, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r33:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [14, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r34:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [15, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r35:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [15, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r36:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [16, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r37:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [16, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r38:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [17, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r39:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [17, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r40:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [18, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r41:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [18, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r42:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [19, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r43:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [19, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r44:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [20, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r45:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [20, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r46:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [21, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r47:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [21, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r48:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [22, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r49:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [22, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r50:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [23, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r51:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [23, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r52:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [24, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r53:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [24, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r54:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [25, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r55:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [25, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r56:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [26, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r57:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [26, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r58:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [27, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r59:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [27, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r60:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [28, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r61:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [28, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r62:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [29, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r63:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [29, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r64:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [30, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r65:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [30, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r66:.*]] = vector.extract_strided_slice %[[r2]] {offsets = [31, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
     //CHECK: %[[r67:.*]] = vector.extract_strided_slice %[[r3]] {offsets = [31, 0], sizes = [1, 32], strides = [1, 1]} : vector<32x32xf16> to vector<1x32xf16>
-    //CHECK: %[[r68:.*]] = arith.addf %4, %36 : vector<1x32xf16>
-    //CHECK: %[[r69:.*]] = vector.shape_cast %68 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r70:.*]] = arith.addf %5, %37 : vector<1x32xf16>
-    //CHECK: %[[r71:.*]] = vector.shape_cast %70 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r72:.*]] = arith.addf %6, %38 : vector<1x32xf16>
-    //CHECK: %[[r73:.*]] = vector.shape_cast %72 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r74:.*]] = arith.addf %7, %39 : vector<1x32xf16>
-    //CHECK: %[[r75:.*]] = vector.shape_cast %74 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r76:.*]] = arith.addf %8, %40 : vector<1x32xf16>
-    //CHECK: %[[r77:.*]] = vector.shape_cast %76 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r78:.*]] = arith.addf %9, %41 : vector<1x32xf16>
-    //CHECK: %[[r79:.*]] = vector.shape_cast %78 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r80:.*]] = arith.addf %10, %42 : vector<1x32xf16>
-    //CHECK: %[[r81:.*]] = vector.shape_cast %80 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r82:.*]] = arith.addf %11, %43 : vector<1x32xf16>
-    //CHECK: %[[r83:.*]] = vector.shape_cast %82 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r84:.*]] = arith.addf %12, %44 : vector<1x32xf16>
-    //CHECK: %[[r85:.*]] = vector.shape_cast %84 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r86:.*]] = arith.addf %13, %45 : vector<1x32xf16>
-    //CHECK: %[[r87:.*]] = vector.shape_cast %86 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r88:.*]] = arith.addf %14, %46 : vector<1x32xf16>
-    //CHECK: %[[r89:.*]] = vector.shape_cast %88 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r90:.*]] = arith.addf %15, %47 : vector<1x32xf16>
-    //CHECK: %[[r91:.*]] = vector.shape_cast %90 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r92:.*]] = arith.addf %16, %48 : vector<1x32xf16>
-    //CHECK: %[[r93:.*]] = vector.shape_cast %92 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r94:.*]] = arith.addf %17, %49 : vector<1x32xf16>
-    //CHECK: %[[r95:.*]] = vector.shape_cast %94 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r96:.*]] = arith.addf %18, %50 : vector<1x32xf16>
-    //CHECK: %[[r97:.*]] = vector.shape_cast %96 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r98:.*]] = arith.addf %19, %51 : vector<1x32xf16>
-    //CHECK: %[[r99:.*]] = vector.shape_cast %98 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r100:.*]] = arith.addf %20, %52 : vector<1x32xf16>
-    //CHECK: %[[r101:.*]] = vector.shape_cast %100 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r102:.*]] = arith.addf %21, %53 : vector<1x32xf16>
-    //CHECK: %[[r103:.*]] = vector.shape_cast %102 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r104:.*]] = arith.addf %22, %54 : vector<1x32xf16>
-    //CHECK: %[[r105:.*]] = vector.shape_cast %104 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r106:.*]] = arith.addf %23, %55 : vector<1x32xf16>
-    //CHECK: %[[r107:.*]] = vector.shape_cast %106 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r108:.*]] = arith.addf %24, %56 : vector<1x32xf16>
-    //CHECK: %[[r109:.*]] = vector.shape_cast %108 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r110:.*]] = arith.addf %25, %57 : vector<1x32xf16>
-    //CHECK: %[[r111:.*]] = vector.shape_cast %110 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r112:.*]] = arith.addf %26, %58 : vector<1x32xf16>
-    //CHECK: %[[r113:.*]] = vector.shape_cast %112 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r114:.*]] = arith.addf %27, %59 : vector<1x32xf16>
-    //CHECK: %[[r115:.*]] = vector.shape_cast %114 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r116:.*]] = arith.addf %28, %60 : vector<1x32xf16>
-    //CHECK: %[[r117:.*]] = vector.shape_cast %116 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r118:.*]] = arith.addf %29, %61 : vector<1x32xf16>
-    //CHECK: %[[r119:.*]] = vector.shape_cast %118 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r120:.*]] = arith.addf %30, %62 : vector<1x32xf16>
-    //CHECK: %[[r121:.*]] = vector.shape_cast %120 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r122:.*]] = arith.addf %31, %63 : vector<1x32xf16>
-    //CHECK: %[[r123:.*]] = vector.shape_cast %122 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r124:.*]] = arith.addf %32, %64 : vector<1x32xf16>
-    //CHECK: %[[r125:.*]] = vector.shape_cast %124 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r126:.*]] = arith.addf %33, %65 : vector<1x32xf16>
-    //CHECK: %[[r127:.*]] = vector.shape_cast %126 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r128:.*]] = arith.addf %34, %66 : vector<1x32xf16>
-    //CHECK: %[[r129:.*]] = vector.shape_cast %128 : vector<1x32xf16> to vector<32xf16>
-    //CHECK: %[[r130:.*]] = arith.addf %35, %67 : vector<1x32xf16>
-    //CHECK: %[[r131:.*]] = vector.shape_cast %130 : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r68:.*]] = arith.addf %[[r4]], %[[r5]] : vector<1x32xf16>
+    //CHECK: %[[r69:.*]] = vector.shape_cast %[[r68]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r70:.*]] = arith.addf %[[r6]], %[[r7]] : vector<1x32xf16>
+    //CHECK: %[[r71:.*]] = vector.shape_cast %[[r70]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r72:.*]] = arith.addf %[[r8]], %[[r9]] : vector<1x32xf16>
+    //CHECK: %[[r73:.*]] = vector.shape_cast %[[r72]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r74:.*]] = arith.addf %[[r10]], %[[r11]] : vector<1x32xf16>
+    //CHECK: %[[r75:.*]] = vector.shape_cast %[[r74]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r76:.*]] = arith.addf %[[r12]], %[[r13]] : vector<1x32xf16>
+    //CHECK: %[[r77:.*]] = vector.shape_cast %[[r76]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r78:.*]] = arith.addf %[[r14]], %[[r15]] : vector<1x32xf16>
+    //CHECK: %[[r79:.*]] = vector.shape_cast %[[r78]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r80:.*]] = arith.addf %[[r16]], %[[r17]] : vector<1x32xf16>
+    //CHECK: %[[r81:.*]] = vector.shape_cast %[[r80]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r82:.*]] = arith.addf %[[r18]], %[[r19]] : vector<1x32xf16>
+    //CHECK: %[[r83:.*]] = vector.shape_cast %[[r82]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r84:.*]] = arith.addf %[[r20]], %[[r21]] : vector<1x32xf16>
+    //CHECK: %[[r85:.*]] = vector.shape_cast %[[r84]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r86:.*]] = arith.addf %[[r22]], %[[r23]] : vector<1x32xf16>
+    //CHECK: %[[r87:.*]] = vector.shape_cast %[[r86]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r88:.*]] = arith.addf %[[r24]], %[[r25]] : vector<1x32xf16>
+    //CHECK: %[[r89:.*]] = vector.shape_cast %[[r88]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r90:.*]] = arith.addf %[[r26]], %[[r27]] : vector<1x32xf16>
+    //CHECK: %[[r91:.*]] = vector.shape_cast %[[r90]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r92:.*]] = arith.addf %[[r28]], %[[r29]] : vector<1x32xf16>
+    //CHECK: %[[r93:.*]] = vector.shape_cast %[[r92]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r94:.*]] = arith.addf %[[r30]], %[[r31]] : vector<1x32xf16>
+    //CHECK: %[[r95:.*]] = vector.shape_cast %[[r94]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r96:.*]] = arith.addf %[[r32]], %[[r33]] : vector<1x32xf16>
+    //CHECK: %[[r97:.*]] = vector.shape_cast %[[r96]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r98:.*]] = arith.addf %[[r34]], %[[r35]] : vector<1x32xf16>
+    //CHECK: %[[r99:.*]] = vector.shape_cast %[[r98]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r100:.*]] = arith.addf %[[r36]], %[[r37]] : vector<1x32xf16>
+    //CHECK: %[[r101:.*]] = vector.shape_cast %[[r100]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r102:.*]] = arith.addf %[[r38]], %[[r39]] : vector<1x32xf16>
+    //CHECK: %[[r103:.*]] = vector.shape_cast %[[r102]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r104:.*]] = arith.addf %[[r40]], %[[r41]] : vector<1x32xf16>
+    //CHECK: %[[r105:.*]] = vector.shape_cast %[[r104]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r106:.*]] = arith.addf %[[r42]], %[[r43]] : vector<1x32xf16>
+    //CHECK: %[[r107:.*]] = vector.shape_cast %[[r106]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r108:.*]] = arith.addf %[[r44]], %[[r45]] : vector<1x32xf16>
+    //CHECK: %[[r109:.*]] = vector.shape_cast %[[r108]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r110:.*]] = arith.addf %[[r46]], %[[r47]] : vector<1x32xf16>
+    //CHECK: %[[r111:.*]] = vector.shape_cast %[[r110]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r112:.*]] = arith.addf %[[r48]], %[[r49]] : vector<1x32xf16>
+    //CHECK: %[[r113:.*]] = vector.shape_cast %[[r112]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r114:.*]] = arith.addf %[[r50]], %[[r51]] : vector<1x32xf16>
+    //CHECK: %[[r115:.*]] = vector.shape_cast %[[r114]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r116:.*]] = arith.addf %[[r52]], %[[r53]] : vector<1x32xf16>
+    //CHECK: %[[r117:.*]] = vector.shape_cast %[[r116]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r118:.*]] = arith.addf %[[r54]], %[[r55]] : vector<1x32xf16>
+    //CHECK: %[[r119:.*]] = vector.shape_cast %[[r118]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r120:.*]] = arith.addf %[[r56]], %[[r57]] : vector<1x32xf16>
+    //CHECK: %[[r121:.*]] = vector.shape_cast %[[r120]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r122:.*]] = arith.addf %[[r58]], %[[r59]] : vector<1x32xf16>
+    //CHECK: %[[r123:.*]] = vector.shape_cast %[[r122]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r124:.*]] = arith.addf %[[r60]], %[[r61]] : vector<1x32xf16>
+    //CHECK: %[[r125:.*]] = vector.shape_cast %[[r124]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r126:.*]] = arith.addf %[[r62]], %[[r63]] : vector<1x32xf16>
+    //CHECK: %[[r127:.*]] = vector.shape_cast %[[r126]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r128:.*]] = arith.addf %[[r64]], %[[r65]] : vector<1x32xf16>
+    //CHECK: %[[r129:.*]] = vector.shape_cast %[[r128]] : vector<1x32xf16> to vector<32xf16>
+    //CHECK: %[[r130:.*]] = arith.addf %[[r66]], %[[r67]] : vector<1x32xf16>
+    //CHECK: %[[r131:.*]] = vector.shape_cast %[[r130]] : vector<1x32xf16> to vector<32xf16>
     //CHECK: %[[r132:.*]] = vector.shuffle %[[r69]], %[[r71]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r133:.*]] = vector.shuffle %[[r69]], %[[r71]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r134:.*]] = arith.addf %132, %133 : vector<32xf16>
+    //CHECK: %[[r134:.*]] = arith.addf %[[r132]], %[[r133]] : vector<32xf16>
     //CHECK: %[[r135:.*]] = vector.shuffle %[[r73]], %[[r75]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r136:.*]] = vector.shuffle %[[r73]], %[[r75]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r137:.*]] = arith.addf %135, %136 : vector<32xf16>
+    //CHECK: %[[r137:.*]] = arith.addf %[[r135]], %[[r136]] : vector<32xf16>
     //CHECK: %[[r138:.*]] = vector.shuffle %[[r77]], %[[r79]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r139:.*]] = vector.shuffle %[[r77]], %[[r79]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r140:.*]] = arith.addf %138, %139 : vector<32xf16>
+    //CHECK: %[[r140:.*]] = arith.addf %[[r138]], %[[r139]] : vector<32xf16>
     //CHECK: %[[r141:.*]] = vector.shuffle %[[r81]], %[[r83]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r142:.*]] = vector.shuffle %[[r81]], %[[r83]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r143:.*]] = arith.addf %141, %142 : vector<32xf16>
+    //CHECK: %[[r143:.*]] = arith.addf %[[r141]], %[[r142]] : vector<32xf16>
     //CHECK: %[[r144:.*]] = vector.shuffle %[[r85]], %[[r87]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r145:.*]] = vector.shuffle %[[r85]], %[[r87]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r146:.*]] = arith.addf %144, %145 : vector<32xf16>
+    //CHECK: %[[r146:.*]] = arith.addf %[[r144]], %[[r145]] : vector<32xf16>
     //CHECK: %[[r147:.*]] = vector.shuffle %[[r89]], %[[r91]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r148:.*]] = vector.shuffle %[[r89]], %[[r91]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r149:.*]] = arith.addf %147, %148 : vector<32xf16>
+    //CHECK: %[[r149:.*]] = arith.addf %[[r147]], %[[r148]] : vector<32xf16>
     //CHECK: %[[r150:.*]] = vector.shuffle %[[r93]], %[[r95]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r151:.*]] = vector.shuffle %[[r93]], %[[r95]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r152:.*]] = arith.addf %150, %151 : vector<32xf16>
+    //CHECK: %[[r152:.*]] = arith.addf %[[r150]], %[[r151]] : vector<32xf16>
     //CHECK: %[[r153:.*]] = vector.shuffle %[[r97]], %[[r99]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r154:.*]] = vector.shuffle %[[r97]], %[[r99]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r155:.*]] = arith.addf %153, %154 : vector<32xf16>
+    //CHECK: %[[r155:.*]] = arith.addf %[[r153]], %[[r154]] : vector<32xf16>
     //CHECK: %[[r156:.*]] = vector.shuffle %[[r101]], %[[r103]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r157:.*]] = vector.shuffle %[[r101]], %[[r103]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r158:.*]] = arith.addf %156, %157 : vector<32xf16>
+    //CHECK: %[[r158:.*]] = arith.addf %[[r156]], %[[r157]] : vector<32xf16>
     //CHECK: %[[r159:.*]] = vector.shuffle %[[r105]], %[[r107]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r160:.*]] = vector.shuffle %[[r105]], %[[r107]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r161:.*]] = arith.addf %159, %160 : vector<32xf16>
+    //CHECK: %[[r161:.*]] = arith.addf %[[r159]], %[[r160]] : vector<32xf16>
     //CHECK: %[[r162:.*]] = vector.shuffle %[[r109]], %[[r111]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r163:.*]] = vector.shuffle %[[r109]], %[[r111]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r164:.*]] = arith.addf %162, %163 : vector<32xf16>
+    //CHECK: %[[r164:.*]] = arith.addf %[[r162]], %[[r163]] : vector<32xf16>
     //CHECK: %[[r165:.*]] = vector.shuffle %[[r113]], %[[r115]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r166:.*]] = vector.shuffle %[[r113]], %[[r115]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r167:.*]] = arith.addf %165, %166 : vector<32xf16>
+    //CHECK: %[[r167:.*]] = arith.addf %[[r165]], %[[r166]] : vector<32xf16>
     //CHECK: %[[r168:.*]] = vector.shuffle %[[r117]], %[[r119]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r169:.*]] = vector.shuffle %[[r117]], %[[r119]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r170:.*]] = arith.addf %168, %169 : vector<32xf16>
+    //CHECK: %[[r170:.*]] = arith.addf %[[r168]], %[[r169]] : vector<32xf16>
     //CHECK: %[[r171:.*]] = vector.shuffle %[[r121]], %[[r123]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r172:.*]] = vector.shuffle %[[r121]], %[[r123]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r173:.*]] = arith.addf %171, %172 : vector<32xf16>
+    //CHECK: %[[r173:.*]] = arith.addf %[[r171]], %[[r172]] : vector<32xf16>
     //CHECK: %[[r174:.*]] = vector.shuffle %[[r125]], %[[r127]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r175:.*]] = vector.shuffle %[[r125]], %[[r127]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r176:.*]] = arith.addf %174, %175 : vector<32xf16>
+    //CHECK: %[[r176:.*]] = arith.addf %[[r174]], %[[r175]] : vector<32xf16>
     //CHECK: %[[r177:.*]] = vector.shuffle %[[r129]], %[[r131]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r178:.*]] = vector.shuffle %[[r129]], %[[r131]] [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r179:.*]] = arith.addf %177, %178 : vector<32xf16>
+    //CHECK: %[[r179:.*]] = arith.addf %[[r177]], %[[r178]] : vector<32xf16>
     //CHECK: %[[r180:.*]] = vector.shuffle %[[r134]], %[[r137]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r181:.*]] = vector.shuffle %[[r134]], %[[r137]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r182:.*]] = arith.addf %180, %181 : vector<32xf16>
+    //CHECK: %[[r182:.*]] = arith.addf %[[r180]], %[[r181]] : vector<32xf16>
     //CHECK: %[[r183:.*]] = vector.shuffle %[[r140]], %[[r143]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r184:.*]] = vector.shuffle %[[r140]], %[[r143]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r185:.*]] = arith.addf %183, %184 : vector<32xf16>
+    //CHECK: %[[r185:.*]] = arith.addf %[[r183]], %[[r184]] : vector<32xf16>
     //CHECK: %[[r186:.*]] = vector.shuffle %[[r146]], %[[r149]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r187:.*]] = vector.shuffle %[[r146]], %[[r149]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r188:.*]] = arith.addf %186, %187 : vector<32xf16>
+    //CHECK: %[[r188:.*]] = arith.addf %[[r186]], %[[r187]] : vector<32xf16>
     //CHECK: %[[r189:.*]] = vector.shuffle %[[r152]], %[[r155]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r190:.*]] = vector.shuffle %[[r152]], %[[r155]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r191:.*]] = arith.addf %189, %190 : vector<32xf16>
+    //CHECK: %[[r191:.*]] = arith.addf %[[r189]], %[[r190]] : vector<32xf16>
     //CHECK: %[[r192:.*]] = vector.shuffle %[[r158]], %[[r161]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r193:.*]] = vector.shuffle %[[r158]], %[[r161]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r194:.*]] = arith.addf %192, %193 : vector<32xf16>
+    //CHECK: %[[r194:.*]] = arith.addf %[[r192]], %[[r193]] : vector<32xf16>
     //CHECK: %[[r195:.*]] = vector.shuffle %[[r164]], %[[r167]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r196:.*]] = vector.shuffle %[[r164]], %[[r167]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r197:.*]] = arith.addf %195, %196 : vector<32xf16>
+    //CHECK: %[[r197:.*]] = arith.addf %[[r195]], %[[r196]] : vector<32xf16>
     //CHECK: %[[r198:.*]] = vector.shuffle %[[r170]], %[[r173]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r199:.*]] = vector.shuffle %[[r170]], %[[r173]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r200:.*]] = arith.addf %198, %199 : vector<32xf16>
+    //CHECK: %[[r200:.*]] = arith.addf %[[r198]], %[[r199]] : vector<32xf16>
     //CHECK: %[[r201:.*]] = vector.shuffle %[[r176]], %[[r179]] [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38, 39, 48, 49, 50, 51, 52, 53, 54, 55] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r202:.*]] = vector.shuffle %[[r176]], %[[r179]] [8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31, 40, 41, 42, 43, 44, 45, 46, 47, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r203:.*]] = arith.addf %201, %202 : vector<32xf16>
+    //CHECK: %[[r203:.*]] = arith.addf %[[r201]], %[[r202]] : vector<32xf16>
     //CHECK: %[[r204:.*]] = vector.shuffle %[[r182]], %[[r185]] [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r205:.*]] = vector.shuffle %[[r182]], %[[r185]] [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r206:.*]] = arith.addf %204, %205 : vector<32xf16>
+    //CHECK: %[[r206:.*]] = arith.addf %[[r204]], %[[r205]] : vector<32xf16>
     //CHECK: %[[r207:.*]] = vector.shuffle %[[r188]], %[[r191]] [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r208:.*]] = vector.shuffle %[[r188]], %[[r191]] [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r209:.*]] = arith.addf %207, %208 : vector<32xf16>
+    //CHECK: %[[r209:.*]] = arith.addf %[[r207]], %[[r208]] : vector<32xf16>
     //CHECK: %[[r210:.*]] = vector.shuffle %[[r194]], %[[r197]] [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r211:.*]] = vector.shuffle %[[r194]], %[[r197]] [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r212:.*]] = arith.addf %210, %211 : vector<32xf16>
+    //CHECK: %[[r212:.*]] = arith.addf %[[r210]], %[[r211]] : vector<32xf16>
     //CHECK: %[[r213:.*]] = vector.shuffle %[[r200]], %[[r203]] [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42, 43, 48, 49, 50, 51, 56, 57, 58, 59] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r214:.*]] = vector.shuffle %[[r200]], %[[r203]] [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31, 36, 37, 38, 39, 44, 45, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r215:.*]] = arith.addf %213, %214 : vector<32xf16>
+    //CHECK: %[[r215:.*]] = arith.addf %[[r213]], %[[r214]] : vector<32xf16>
     //CHECK: %[[r216:.*]] = vector.shuffle %[[r206]], %[[r209]] [0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29, 32, 33, 36, 37, 40, 41, 44, 45, 48, 49, 52, 53, 56, 57, 60, 61] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r217:.*]] = vector.shuffle %[[r206]], %[[r209]] [2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31, 34, 35, 38, 39, 42, 43, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r218:.*]] = arith.addf %216, %217 : vector<32xf16>
+    //CHECK: %[[r218:.*]] = arith.addf %[[r216]], %[[r217]] : vector<32xf16>
     //CHECK: %[[r219:.*]] = vector.shuffle %[[r212]], %[[r215]] [0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29, 32, 33, 36, 37, 40, 41, 44, 45, 48, 49, 52, 53, 56, 57, 60, 61] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r220:.*]] = vector.shuffle %[[r212]], %[[r215]] [2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31, 34, 35, 38, 39, 42, 43, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r221:.*]] = arith.addf %219, %220 : vector<32xf16>
+    //CHECK: %[[r221:.*]] = arith.addf %[[r219]], %[[r220]] : vector<32xf16>
     //CHECK: %[[r222:.*]] = vector.shuffle %[[r218]], %[[r221]] [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r223:.*]] = vector.shuffle %[[r218]], %[[r221]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
-    //CHECK: %[[r224:.*]] = arith.addf %222, %223 : vector<32xf16>
-
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : i32] : vector<32xf16>
+    //CHECK: %[[r224:.*]] = arith.addf %[[r222]], %[[r223]] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
 
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
+    //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [32, 8], strides = [1, 1]} : vector<32x64xf16> to vector<32x8xf16>
 
     //CHECK-COUNT-8: %{{.*}} = xetile.transpose %{{.*}}, [1, 0] : vector<32x8xf16> -> vector<8x32xf16>
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<1024x1024xf16> -> !xetile.tile<8x32xf16>
@@ -1231,30 +1085,9 @@ gpu.module @test_kernel {
     //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<8x32xf16> to vector<1x32xf16>
     //CHECK-COUNT-62: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<1x32xf16>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
+
     %4 = xetile.reduction <add>, %3 [0]: vector<32x64xf16> -> vector<1x64xf16>
     %5 = xetile.broadcast %4 [0]: vector<1x64xf16> -> vector<32x64xf16>
     //CHECK-COUNT-8: %{{.*}} = arith.divf %{{.*}}, %{{.*}} : vector<8x32xf16>
@@ -1274,8 +1107,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r1:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c32]]] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
     //CHECK: %[[r2:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
     //CHECK: %[[r3:.*]] = xetile.load_tile %[[r1]] : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.extract_strided_slice %[[r3]] {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x32xf16> to vector<8x32xf16>
     //CHECK-COUNT-8: %{{.*}} = math.exp %{{.*}} : vector<8x32xf16>
     //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [1, 32], strides = [1, 1]} : vector<8x32xf16> to vector<1x32xf16>
 
@@ -1299,33 +1131,11 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : i32] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
 
     //CHECK-COUNT-8: %{{.*}} = arith.divf %{{.*}}, %{{.*}} : vector<8x32xf16>
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<1024x1024xf16> -> !xetile.tile<8x32xf16>
@@ -1345,16 +1155,10 @@ gpu.module @test_kernel {
   //CHECK-SAME(%[[arg0:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_softmax_transpose(%a: memref<1024x1024xf16>) {
 
-
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : i32] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
-
-    //CHECK-COUNT-16: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x8xf16>, vector<1x8xf16>
-    //CHECK-COUNT-8: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x8xf16>, vector<2x8xf16>
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x8xf16>, vector<4x8xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x8xf16>, vector<8x8xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16x8xf16>, vector<16x8xf16>
-
+    //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [32, 8], strides = [1, 1]} : vector<32x64xf16> to vector<32x8xf16>
     //CHECK-COUNT-8: %{{.*}} = arith.divf %{{.*}}, %{{.*}} : vector<32x8xf16>
     //CHECK-COUNT-8: %{{.*}} = xetile.transpose %{{.*}}, [1, 0] : vector<32x8xf16> -> vector<8x32xf16>
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}, %{{.*}}] : memref<1024x1024xf16> -> !xetile.tile<8x32xf16>
@@ -1483,9 +1287,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r5:.*]] = xetile.transpose %[[r3]], [1, 0] : vector<16x1xf32> -> vector<1x16xf32>
     %3 = xetile.transpose %2, [1, 0] : vector<32x1xf32> -> vector<1x32xf32>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x16xf32>, vector<1x16xf32>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x16xf32>, vector<4x16xf32>
+    //CHECK-COUNT-128: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x16xf32> into vector<64x32xf32>
     %4 = xetile.broadcast %3 [0] : vector<1x32xf32> -> vector<64x32xf32>
 
     //CHECK-COUNT-16: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<256x384xf32> -> !xetile.tile<8x16xf32>
@@ -1504,17 +1306,77 @@ gpu.module @test_kernel {
     %2 = xetile.load_tile %1 {padding = 0.000000e+00 : f32} : !xetile.tile<1x32xf16> -> vector<1x32xf16>
     %3 = xetile.transpose %2, [1, 0] : vector<1x32xf16> -> vector<32x1xf16>
 
-    //CHECK-COUNT-32: %{{.*}} = vector.extract_strided_slice %[[r2]] {offsets = [{{.*}}, 0], sizes = [1, 1], strides = [1, 1]} : vector<32x1xf16> to vector<1x1xf16>
-
-    //CHECK: %{{.*}} = vector.extract %{{.*}}[0, 0] : f16 from vector<1x1xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[0, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[1, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[2, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[3, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[4, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[5, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[6, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[7, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[8, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[9, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[10, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[11, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[12, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[13, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[14, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[15, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[16, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[17, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[18, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[19, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[20, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[21, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[22, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[23, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[24, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[25, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[26, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[27, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[28, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[29, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[30, 0] : f16 from vector<32x1xf16>
+    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.extract %{{.*}}[31, 0] : f16 from vector<32x1xf16>
     //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
 
-    //CHECK-COUNT-4: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1] : vector<1x32xf16>, vector<1x32xf16>
-    //CHECK-COUNT-2: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3] : vector<2x32xf16>, vector<2x32xf16>
-    //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x32xf16>, vector<4x32xf16>
+    //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
     %4 = xetile.broadcast %3 [1] : vector<32x1xf16> -> vector<32x64xf16>
+
     //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}, %{{.*}}] : memref<384x256xf16> -> !xetile.tile<8x32xf16>
     %5 = xetile.init_tile %arg1[0, 0] : memref<384x256xf16> -> !xetile.tile<32x64xf16>
+    //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
     //CHECK-COUNT-8: xetile.store_tile %{{.*}},  %{{.*}} : vector<8x32xf16>, !xetile.tile<8x32xf16>
     xetile.store_tile %4, %5 : vector<32x64xf16>, !xetile.tile<32x64xf16>
     gpu.return
@@ -1523,7 +1385,7 @@ gpu.module @test_kernel {
   //CHECK-LABEL: gpu.func @sg_loadgather
   //CHECK-SAME: %[[arg0:.*]]: memref<1024xf16>, %[[arg1:.*]]: vector<4x32xindex>
   gpu.func @sg_loadgather(%a: memref<1024xf16>, %indices: vector<4x32xindex>) {
-    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<1x32xi1>
+    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<4x32xi1>
     //CHECK: %[[r0:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
     //CHECK: %[[r1:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
     //CHECK: %[[r2:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
@@ -1532,10 +1394,14 @@ gpu.module @test_kernel {
     //CHECK: %[[r5:.*]] = xetile.init_tile %[[arg0]], %[[r1]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
     //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg0]], %[[r2]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
     //CHECK: %[[r7:.*]] = xetile.init_tile %[[arg0]], %[[r3]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
-    //CHECK: %[[r8:.*]] = xetile.load %[[r4]], %[[cst]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
-    //CHECK: %[[r9:.*]] = xetile.load %[[r5]], %[[cst]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
-    //CHECK: %[[r10:.*]] = xetile.load %[[r6]], %[[cst]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
-    //CHECK: %[[r11:.*]] = xetile.load %[[r7]], %[[cst]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
+    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r12:.*]] = xetile.load %[[r4]], %[[r8]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
+    //CHECK: %[[r13:.*]] = xetile.load %[[r5]], %[[r9]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
+    //CHECK: %[[r14:.*]] = xetile.load %[[r6]], %[[r10]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
+    //CHECK: %[[r15:.*]] = xetile.load %[[r7]], %[[r11]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf16>
     %mask = arith.constant dense<1> : vector<4x32xi1>
     %1 = xetile.init_tile %a, %indices : memref<1024xf16>, vector<4x32xindex> -> !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>
     %2 = xetile.load %1, %mask : !xetile.tile<4x32xf16, #xetile.tile_attr<scattered = true>>, vector<4x32xi1> -> vector<4x32xf16>
@@ -1545,9 +1411,9 @@ gpu.module @test_kernel {
   //CHECK-LABEL: gpu.func @sg_storescatter
   //CHECK-SAME: %[[arg0:.*]]: memref<1024xf16>, %[[arg1:.*]]: vector<4x32xindex>
   gpu.func @sg_storescatter(%a: memref<1024xf16>, %indices: vector<4x32xindex>) {
-    //CHECK: %[[cst:.*]] = arith.constant dense<4.200000e+01> : vector<1x32xf16>
-    //CHECK: %[[cst_0:.*]] = arith.constant dense<true> : vector<1x32xi1>
-    //CHECK: %[[cst_1:.*]] = arith.constant dense<1> : vector<1x32xindex>
+    //CHECK: %[[cst:.*]] = arith.constant dense<1> : vector<4x32xindex>
+    //CHECK: %[[cst_0:.*]] = arith.constant dense<true> : vector<4x32xi1>
+    //CHECK: %[[cst_1:.*]] = arith.constant dense<4.200000e+01> : vector<4x32xf16>
     //CHECK: %[[r0:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
     //CHECK: %[[r1:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
     //CHECK: %[[r2:.*]] = vector.extract_strided_slice %[[arg1]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
@@ -1556,18 +1422,38 @@ gpu.module @test_kernel {
     //CHECK: %[[r5:.*]] = xetile.init_tile %[[arg0]], %[[r1]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
     //CHECK: %[[r6:.*]] = xetile.init_tile %[[arg0]], %[[r2]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
     //CHECK: %[[r7:.*]] = xetile.init_tile %[[arg0]], %[[r3]] : memref<1024xf16>, vector<1x32xindex> -> !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>
-    //CHECK: xetile.store %[[cst]], %[[r4]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r5]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r6]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r7]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: %[[r8:.*]] = xetile.update_tile_offset %[[r4]], %[[cst_1]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
-    //CHECK: %[[r9:.*]] = xetile.update_tile_offset %[[r5]], %[[cst_1]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
-    //CHECK: %[[r10:.*]] = xetile.update_tile_offset %[[r6]], %[[cst_1]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
-    //CHECK: %[[r11:.*]] = xetile.update_tile_offset %[[r7]], %[[cst_1]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
-    //CHECK: xetile.store %[[cst]], %[[r8]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r9]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r10]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
-    //CHECK: xetile.store %[[cst]], %[[r11]], %[[cst_0]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: %[[r8:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r9:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r12:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r13:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r14:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r15:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: xetile.store %[[r8]], %[[r4]], %[[r12]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r9]], %[[r5]], %[[r13]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r10]], %[[r6]], %[[r14]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r11]], %[[r7]], %[[r15]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: %[[r16:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
+    //CHECK: %[[r17:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
+    //CHECK: %[[r18:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
+    //CHECK: %[[r19:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xindex> to vector<1x32xindex>
+    //CHECK: %[[r20:.*]] = xetile.update_tile_offset %[[r4]], %[[r16]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
+    //CHECK: %[[r21:.*]] = xetile.update_tile_offset %[[r5]], %[[r17]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
+    //CHECK: %[[r22:.*]] = xetile.update_tile_offset %[[r6]], %[[r18]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
+    //CHECK: %[[r23:.*]] = xetile.update_tile_offset %[[r7]], %[[r19]] : !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xindex>
+    //CHECK: %[[r24:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r25:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r26:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r27:.*]] = vector.extract_strided_slice %[[cst_1]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xf16> to vector<1x32xf16>
+    //CHECK: %[[r28:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [0, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r29:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [1, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r30:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [2, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: %[[r31:.*]] = vector.extract_strided_slice %[[cst_0]] {offsets = [3, 0], sizes = [1, 32], strides = [1, 1]} : vector<4x32xi1> to vector<1x32xi1>
+    //CHECK: xetile.store %[[r24]], %[[r20]], %[[r28]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r25]], %[[r21]], %[[r29]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r26]], %[[r22]], %[[r30]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
+    //CHECK: xetile.store %[[r27]], %[[r23]], %[[r31]] : vector<1x32xf16>, !xetile.tile<1x32xf16, #xetile.tile_attr<scattered = true>>, vector<1x32xi1>
     %offsets = arith.constant dense<1> : vector<4x32xindex>
     %mask = arith.constant dense<1> : vector<4x32xi1>
     %data = arith.constant dense<42.0> : vector<4x32xf16>
@@ -1582,8 +1468,8 @@ gpu.module @test_kernel {
   //CHECK-SAME: %[[arg0:.*]]: memref<*xf32>, %[[arg1:.*]]: memref<*xf32>, %[[arg2:.*]]: memref<*xf32>
   gpu.func @add_kernel(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>) {
 
+    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<1x32xi1>
     //CHECK: %[[c1024:.*]] = arith.constant 1024 : index
-    //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<1x16xi1>
     //CHECK: %[[cast:.*]] = memref.cast %[[arg0]] : memref<*xf32> to memref<?xf32>
     //CHECK: %[[cast_0:.*]] = memref.cast %[[arg1]] : memref<*xf32> to memref<?xf32>
     //CHECK: %[[cast_1:.*]] = memref.cast %[[arg2]] : memref<*xf32> to memref<?xf32>
@@ -1594,18 +1480,28 @@ gpu.module @test_kernel {
     //CHECK: %[[r3:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
     //CHECK: %[[r4:.*]] = xetile.init_tile %[[cast]], %[[r2]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
     //CHECK: %[[r5:.*]] = xetile.init_tile %[[cast]], %[[r3]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
-    //CHECK: %[[r6:.*]] = xetile.load %[[r4]], %[[cst]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
-    //CHECK: %[[r7:.*]] = xetile.load %[[r5]], %[[cst]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
-    //CHECK: %[[r8:.*]] = xetile.init_tile %[[cast_0]], %[[r2]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
-    //CHECK: %[[r9:.*]] = xetile.init_tile %[[cast_0]], %[[r3]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
-    //CHECK: %[[r10:.*]] = xetile.load %[[r8]], %[[cst]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
-    //CHECK: %[[r11:.*]] = xetile.load %[[r9]], %[[cst]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
-    //CHECK: %[[r12:.*]] = arith.addf %[[r6]], %[[r10]] : vector<1x16xf32>
-    //CHECK: %[[r13:.*]] = arith.addf %[[r7]], %[[r11]] : vector<1x16xf32>
-    //CHECK: %[[r14:.*]] = xetile.init_tile %[[cast_1]], %[[r2]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
-    //CHECK: %[[r15:.*]] = xetile.init_tile %[[cast_1]], %[[r3]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
-    //CHECK: xetile.store %[[r12]], %[[r14]], %[[cst]] : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1>
-    //CHECK: xetile.store %[[r13]], %[[r15]], %[[cst]] : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1>
+    //CHECK: %[[r6:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xi1> to vector<1x16xi1>
+    //CHECK: %[[r7:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xi1> to vector<1x16xi1>
+    //CHECK: %[[r8:.*]] = xetile.load %[[r4]], %[[r6]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    //CHECK: %[[r9:.*]] = xetile.load %[[r5]], %[[r7]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+
+    //CHECK: %[[r10:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
+    //CHECK: %[[r11:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
+    //CHECK: %[[r12:.*]] = xetile.init_tile %[[cast_0]], %[[r10]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
+    //CHECK: %[[r13:.*]] = xetile.init_tile %[[cast_0]], %[[r11]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
+    //CHECK: %[[r14:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xi1> to vector<1x16xi1>
+    //CHECK: %[[r15:.*]] = vector.extract_strided_slice %[[cst]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xi1> to vector<1x16xi1>
+    //CHECK: %[[r16:.*]] = xetile.load %[[r12]], %[[r14]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    //CHECK: %[[r17:.*]] = xetile.load %[[r13]], %[[r15]] : !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    //CHECK: %[[r18:.*]] = arith.addf %[[r8]], %[[r16]] : vector<1x16xf32>
+    //CHECK: %[[r19:.*]] = arith.addf %[[r9]], %[[r17]] : vector<1x16xf32>
+
+    //CHECK: %[[r20:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
+    //CHECK: %[[r21:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
+    //CHECK: %[[r22:.*]] = xetile.init_tile %[[cast_1]], %[[r20]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
+    //CHECK: %[[r23:.*]] = xetile.init_tile %[[cast_1]], %[[r21]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
+    //CHECK: xetile.store %[[r18]], %[[r22]], %[[r24]] : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1>
+    //CHECK: xetile.store %[[r19]], %[[r23]], %[[r25]] : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>, vector<1x16xi1>
 
     %cst = arith.constant dense<true> : vector<1x32xi1>
     %c1024 = arith.constant 1024 : index
@@ -1651,6 +1547,30 @@ gpu.module @test_kernel {
     //CHECK-COUNT-2: xetile.store_tile {{.*}} : vector<16x16xf16>, !xetile.tile<16x16xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
     %2 = xetile.init_tile %transpose[16, 32] : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
     xetile.store_tile %1,  %2 : vector<16x32xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+    gpu.return
+  }
+
+  gpu.func @mma_with_scattered_load_store(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>) {
+    %cst = arith.constant dense<[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]> : vector<1x16xindex>
+    %idx = xetile.broadcast %cst [0] : vector<1x16xindex> -> vector<16x16xindex>
+    %mask = arith.constant dense<true> : vector<16x16xi1>
+    %cast = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+    %cast_2 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+    %cast_3 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %a_tile = xetile.init_tile %cast, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: %{{.*}} = xetile.load {{.*}} : !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    %a = xetile.load %a_tile, %mask : !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1> -> vector<16x16xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %b_tile = xetile.init_tile %cast_2, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: %{{.*}} = xetile.load {{.*}} : !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1> -> vector<1x16xf32>
+    %b = xetile.load %b_tile, %mask : !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1> -> vector<16x16xf32>
+    //CHECK-COUNT-4: %{{.*}} = xetile.tile_mma {{.*}} : vector<8x8xf32>, vector<8x16xf32>{{.*}} -> vector<8x16xf32>
+    %mma = xetile.tile_mma %a, %b : vector<16x16xf32>, vector<16x16xf32> -> vector<16x16xf32>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %c_tile = xetile.init_tile %cast_3, %idx : memref<?xf32>, vector<16x16xindex> -> !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: xetile.store {{.*}} : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1>
+    xetile.store %mma, %c_tile, %mask : vector<16x16xf32>, !xetile.tile<16x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<16x16xi1>
     gpu.return
   }
 

@@ -109,4 +109,22 @@ enum LSC_OP {
   LSC_INVALID = 0xFFFFFFFF,
 };
 
+enum class GenPrecision : unsigned char {
+  INVALID = 0,
+
+  U1 = 1,
+  S1 = 2,
+  U2 = 3,
+  S2 = 4,
+  U4 = 5,
+  S4 = 6,
+  U8 = 7,
+  S8 = 8,
+  BF16 = 9,  // bfloat16 (s:1, e:8, m:7)
+  FP16 = 10, // half (1, 5, 10)
+  BF8 = 11,  // bfloat8 (1, 5, 2)
+  TF32 = 12, // TensorFloat (1, 8, 10), 19 bits
+  TOTAL_NUM
+};
+
 #endif // LSC_INTRINSIC_ENUMS_H

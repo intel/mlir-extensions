@@ -6,6 +6,7 @@
 gpu.module @test_kernel {
 
     //CHECK: gpu.func @test_gemm(%[[arg0:.*]]: memref<128x128xf16, 3>, %[[arg1:.*]]: memref<128x128xf16, 3>, %[[arg2:.*]]: memref<128x128xf32>) {
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<16x16xf16>
     //CHECK: %[[c8:.*]] = arith.constant 8 : index
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[c16:.*]] = arith.constant 16 : index
@@ -23,13 +24,13 @@ gpu.module @test_kernel {
     //CHECK: %[[r8:.*]] = xetile.load_tile %[[arg4]] {padding = 0.000000e+00 : f32} : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<8x16xf16>
     //CHECK: %[[r9:.*]] = xetile.load_tile %[[arg5]] {padding = 0.000000e+00 : f32} : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<8x16xf16>
     //CHECK: %[[r10:.*]] = xetile.load_tile %[[arg6]] {padding = 0.000000e+00 : f32} : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>> -> vector<8x16xf16>
-    //CHECK: %[[r11:.*]] = vector.shuffle %[[r9]], %[[r10]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<8x16xf16>, vector<8x16xf16>
-    //CHECK: %[[r12:.*]] = xetile.tile_mma %[[r8]], %[[r11]], %[[arg7]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
-    //CHECK: %[[r13:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c16]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
-    //CHECK: %[[r14:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c16]], %[[c0]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
-    //CHECK: %[[r15:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c16]], %[[c0]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
-    //CHECK: scf.yield %[[r13]], %[[r14]], %[[r15]], %[[r12]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, vector<8x16xf32>
-    //CHECK: }
+    //CHECK: %[[r11:.*]] = vector.insert_strided_slice %[[r9]], %[[cst]] {offsets = [0, 0], strides = [1, 1]} : vector<8x16xf16> into vector<16x16xf16>
+    //CHECK: %[[r12:.*]] = vector.insert_strided_slice %[[r10]], %[[r11]] {offsets = [8, 0], strides = [1, 1]} : vector<8x16xf16> into vector<16x16xf16>
+    //CHECK: %[[r13:.*]] = xetile.tile_mma %[[r8]], %[[r12]], %[[arg7]] : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
+    //CHECK: %[[r14:.*]] = xetile.update_tile_offset %[[arg4]], [%[[c0]], %[[c16]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    //CHECK: %[[r15:.*]] = xetile.update_tile_offset %[[arg5]], [%[[c16]], %[[c0]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    //CHECK: %[[r16:.*]] = xetile.update_tile_offset %[[arg6]], [%[[c16]], %[[c0]]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>
+    //CHECK: scf.yield %[[r14]], %[[r15]], %[[r16]], %[[r13]] : !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, !xetile.tile<8x16xf16, #xetile.tile_attr<memory_space = 3 : i64>>, vector<8x16xf32>
     //CHECK: xetile.store_tile %[[r7]]#3,  %[[r2]] : vector<8x16xf32>, !xetile.tile<8x16xf32>
 
 

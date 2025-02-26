@@ -84,15 +84,6 @@ applyVnniTransform(mlir::OpBuilder &builder,
 // 16, 32, and 64 are only available if simdLanes == 1.
 llvm::SmallVector<int> getSupportedChunkSizes(int simdlanes);
 
-using PackFuncTy = std::function<mlir::TypedValue<mlir::VectorType>(
-    mlir::Value, mlir::Value, mlir::Location, mlir::OpBuilder &)>;
-
-// A wrapper function to merge small vectors into a big one. It takes a
-// range of mlir::Value objects with mlir::VectorType, and merge them
-// into a big vector using the provided transformation function.
-mlir::Value packVectorsWith(mlir::ValueRange ins, PackFuncTy op,
-                            mlir::Location loc, mlir::OpBuilder &builder);
-
 // Combine vectors vertically while keeping the logical data layout.
 // As an example, given two vectors (2x4xf16) p and q, it will merge
 // them in to a 4x4xf16 vector.
@@ -104,18 +95,6 @@ mlir::Value packVectorsWith(mlir::ValueRange ins, PackFuncTy op,
 mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
                                          mlir::Location loc,
                                          mlir::OpBuilder &builder);
-
-// merge vectors horizontally while keep the logical data layout.
-// 1 2 3 4   +    10 11 12   =   1 2 3 4 10 11 12
-// 5 6 7 8        13 14 15       5 6 7 8 13 14 15
-// since there is no direct op in mlir exists, we will
-// using ShapeCast and Shuffle to mimic it. It comes with
-// cost of complex shuffle masks. the mask for the above one
-// will be like this: 0 1 2 3  8  9 10
-//                    4 5 6 7 11 12 13
-mlir::TypedValue<mlir::VectorType> concat(mlir::Value lhs, mlir::Value rhs,
-                                          mlir::Location loc,
-                                          mlir::OpBuilder &builder);
 
 // It checks each GPUFuncOp in the module to see
 // whether they have arguments and outputs with

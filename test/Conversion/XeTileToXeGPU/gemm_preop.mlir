@@ -62,7 +62,7 @@ module attributes {gpu.container_module} {
         %27 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %28 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         xegpu.compile_hint
-        //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+        //CHECK-COUNT-8: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
         //CHECK-COUNT-8: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<8x16xf16>
         %29 = arith.addf %27, %27 : vector<32x32xf16>
         xegpu.compile_hint
@@ -70,6 +70,7 @@ module attributes {gpu.container_module} {
         %31 = xetile.update_tile_offset %arg6, [%c0,  %c32] : !xetile.tile<32x32xf16>
         xegpu.compile_hint
 
+        //CHECK-COUNT-4: {{.*}} = vector.extract_strided_slice {{.*}} {offsets = [{{.*}}], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
         // CHECK-COUNT-16: {{.*}} = xegpu.dpas {{.*}}, {{.*}}, {{.*}} : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
         %32 = xetile.tile_mma %29, %28, %arg7 : vector<32x32xf16>, vector<32x32xf16>, vector<32x32xf32> -> vector<32x32xf32>
         xegpu.compile_hint

@@ -53,7 +53,6 @@
 #define DEBUG_TYPE "xetile-blocking"
 
 using namespace mlir;
-using namespace llvm;
 using namespace imex;
 namespace imex {
 #define GEN_PASS_DEF_XETILEBLOCKING
@@ -74,26 +73,26 @@ namespace imex {
 namespace Blocking {
 
 template <typename SourceOp, typename AnalysisT>
-class RewriteXeTileOp : public mlir::OpRewritePattern<SourceOp> {
+class RewriteXeTileOp : public OpRewritePattern<SourceOp> {
 public:
   using OpPatternRewriter = typename mlir::PatternRewriter;
 
-  RewriteXeTileOp(mlir::MLIRContext *context, AnalysisT &analysis)
-      : mlir::OpRewritePattern<SourceOp>(context), analysis(analysis) {}
+  RewriteXeTileOp(MLIRContext *context, AnalysisT &analysis)
+      : OpRewritePattern<SourceOp>(context), analysis(analysis) {}
 
 protected:
   AnalysisT &analysis;
 };
 
 template <template <typename> class TraitType, typename AnalysisT>
-class RewriteOpWithTrait : public mlir::OpTraitRewritePattern<TraitType> {
+class RewriteOpWithTrait : public OpTraitRewritePattern<TraitType> {
 public:
   using OpPatternRewriter = typename mlir::PatternRewriter;
 
-  RewriteOpWithTrait(mlir::MLIRContext *context, AnalysisT &analysis,
+  RewriteOpWithTrait(MLIRContext *context, AnalysisT &analysis,
                      PatternBenefit benefit = 1)
-      : mlir::OpTraitRewritePattern<TraitType>(context, benefit),
-        analysis(analysis) {}
+      : OpTraitRewritePattern<TraitType>(context, benefit), analysis(analysis) {
+  }
 
 protected:
   AnalysisT &analysis;
@@ -103,158 +102,131 @@ static const char *const packAttrName = "__xetile_blocking_pack__";
 static const char *const unpackAttrName = "__xetile_blocking_unpack__";
 static const char *const blockAttrName = "__xetile_blocking_inner_block__";
 
-static mlir::Value addUnpackOp(mlir::ValueRange srcs, mlir::Type destTy,
-                               llvm::ArrayRef<int64_t> innerBlock,
-                               mlir::Location loc,
-                               mlir::PatternRewriter &rewriter) {
-  auto attr = mlir::NamedAttribute(rewriter.getStringAttr(unpackAttrName),
-                                   rewriter.getUnitAttr());
-  auto innerBlkAttr =
-      mlir::NamedAttribute(rewriter.getStringAttr(blockAttrName),
-                           rewriter.getDenseI64ArrayAttr(innerBlock));
-  auto castOp = rewriter.create<mlir::UnrealizedConversionCastOp>(
-      loc, destTy, srcs,
-      llvm::ArrayRef<mlir::NamedAttribute>({attr, innerBlkAttr}));
-  return castOp.getResult(0);
+// emulate the the unpack behavior using insert_strided_slice for VectorType
+// values and unrealized_conversion_cast for TileType values.
+static Value addUnpackOp(ValueRange srcs, Type destTy,
+                         llvm::ArrayRef<int64_t> innerBlock, Location loc,
+                         PatternRewriter &rewriter) {
+  if (auto vecTy = dyn_cast<VectorType>(destTy)) {
+    assert(vecTy.getRank() == 2 && innerBlock.size() == 2 &&
+           "Expecting innerBlock size to match the rank of destTy.");
+    auto shape = vecTy.getShape();
+    auto zeroAttr = rewriter.getZeroAttr(vecTy.getElementType());
+
+    Value result = rewriter.create<arith::ConstantOp>(
+        loc, vecTy, DenseElementsAttr::get(vecTy, zeroAttr));
+    int64_t idx = 0;
+    for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
+      for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
+        result = rewriter.create<vector::InsertStridedSliceOp>(
+            loc, srcs[idx++], result, llvm::ArrayRef<int64_t>({i, j}),
+            llvm::ArrayRef<int64_t>({1, 1}));
+      }
+    }
+    return result;
+
+  } else if (isa<xetile::TileType>(destTy)) {
+    auto attr = NamedAttribute(rewriter.getStringAttr(unpackAttrName),
+                               rewriter.getUnitAttr());
+    auto innerBlkAttr =
+        NamedAttribute(rewriter.getStringAttr(blockAttrName),
+                       rewriter.getDenseI64ArrayAttr(innerBlock));
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+        loc, destTy, srcs,
+        llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
+    return castOp.getResult(0);
+  }
+
+  llvm_unreachable("Unexpected destTy.");
+  return Value();
 }
 
-static mlir::ValueRange addPackOp(mlir::Value src, mlir::TypeRange destTypes,
-                                  llvm::ArrayRef<int64_t> innerBlock,
-                                  mlir::Location loc,
-                                  mlir::PatternRewriter &rewriter) {
-  auto attr = mlir::NamedAttribute(rewriter.getStringAttr(packAttrName),
-                                   rewriter.getUnitAttr());
-  auto innerBlkAttr =
-      mlir::NamedAttribute(rewriter.getStringAttr(blockAttrName),
-                           rewriter.getDenseI64ArrayAttr(innerBlock));
-  auto castOp = rewriter.create<mlir::UnrealizedConversionCastOp>(
-      loc, destTypes, src,
-      llvm::ArrayRef<mlir::NamedAttribute>({attr, innerBlkAttr}));
-  return castOp.getResults();
-}
+// emulate the the pack behavior using extract_strided_slice for VectorType
+// values and unrealized_conversion_cast for TileType values.
+static llvm::SmallVector<Value> addPackOp(Value src, TypeRange destTypes,
+                                          llvm::ArrayRef<int64_t> innerBlock,
+                                          Location loc,
+                                          PatternRewriter &rewriter) {
+  if (auto vecTy = dyn_cast<VectorType>(src.getType())) {
+    assert(vecTy.getRank() == 2 && innerBlock.size() == 2 &&
+           "Expecting innerBlock size to match the rank of src.");
+    auto shape = vecTy.getShape();
+    llvm::SmallVector<Value> results;
+    for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
+      for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
+        auto slice = rewriter.create<vector::ExtractStridedSliceOp>(
+            loc, src, llvm::ArrayRef<int64_t>({i, j}), innerBlock,
+            llvm::ArrayRef<int64_t>({1, 1}));
+        results.push_back(slice);
+      }
+    }
+    return results;
+  } else if (isa<xetile::TileType>(src.getType())) {
+    auto attr = NamedAttribute(rewriter.getStringAttr(packAttrName),
+                               rewriter.getUnitAttr());
+    auto innerBlkAttr =
+        NamedAttribute(rewriter.getStringAttr(blockAttrName),
+                       rewriter.getDenseI64ArrayAttr(innerBlock));
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+        loc, destTypes, src,
+        llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
+    return castOp.getResults();
+  }
 
-static bool isPackOp(mlir::UnrealizedConversionCastOp castOp) {
-  if (!castOp)
-    return false;
-  bool isVec = llvm::all_of(castOp->getResultTypes(), [](mlir::Type ty) {
-    return mlir::isa<mlir::VectorType>(ty);
-  });
-  isVec &= llvm::all_of(castOp->getOperandTypes(), [](mlir::Type ty) {
-    return mlir::isa<mlir::VectorType>(ty);
-  });
-  auto attr = castOp->getAttrOfType<mlir::UnitAttr>(packAttrName);
-  return isVec && bool(attr);
-}
-
-static bool isUnpackOp(mlir::UnrealizedConversionCastOp castOp) {
-  if (!castOp)
-    return false;
-  bool isVec = llvm::all_of(castOp->getResultTypes(), [](mlir::Type ty) {
-    return mlir::isa<mlir::VectorType>(ty);
-  });
-  isVec &= llvm::all_of(castOp->getOperandTypes(), [](mlir::Type ty) {
-    return mlir::isa<mlir::VectorType>(ty);
-  });
-  auto attr = castOp->getAttrOfType<mlir::UnitAttr>(unpackAttrName);
-  return isVec && bool(attr);
-}
-
-static std::pair<mlir::DenseI64ArrayAttr, mlir::DenseI64ArrayAttr>
-getGridAndBlockSizes(mlir::UnrealizedConversionCastOp castOp) {
-  assert((isUnpackOp(castOp) || isPackOp(castOp)) &&
-         "Expecting unpack or pack op.");
-  auto innerBlkSizes =
-      castOp->getAttrOfType<mlir::DenseI64ArrayAttr>(blockAttrName);
-  llvm::ArrayRef<int64_t> shape;
-  if (isUnpackOp(castOp))
-    shape = mlir::dyn_cast<mlir::ShapedType>(castOp->getResult(0).getType())
-                .getShape();
-
-  if (isPackOp(castOp))
-    shape = mlir::dyn_cast<mlir::ShapedType>(castOp->getOperand(0).getType())
-                .getShape();
-
-  auto grids = mlir::DenseI64ArrayAttr::get(
-      castOp.getContext(),
-      {shape[0] / innerBlkSizes[0], shape[1] / innerBlkSizes[1]});
-  return {grids, innerBlkSizes};
-}
-
-// Check that lowerUnpackOrPack will be able to evenly combine/split the input
-// grid into the output grid.
-static bool isUnpackPackCompatible(mlir::UnrealizedConversionCastOp unpackOp,
-                                   mlir::UnrealizedConversionCastOp packOp) {
-
-  if (!isUnpackOp(unpackOp) || !isPackOp(packOp))
-    return false;
-
-  auto [inGrids, inBlkSizes] = Blocking::getGridAndBlockSizes(unpackOp);
-  auto [outGrids, outBlkSizes] = Blocking::getGridAndBlockSizes(packOp);
-
-  if (inBlkSizes[0] < outBlkSizes[0] && inGrids[0] % outGrids[0] != 0)
-    return false;
-  if (inBlkSizes[0] > outBlkSizes[0] && outGrids[0] % inGrids[0] != 0)
-    return false;
-  if (inBlkSizes[1] < outBlkSizes[1] && inGrids[1] % outGrids[1] != 0)
-    return false;
-  if (inBlkSizes[1] > outBlkSizes[1] && outGrids[1] % inGrids[1] != 0)
-    return false;
-
-  return true;
+  llvm_unreachable("Unexpected src type.");
+  return ValueRange();
 }
 
 // Create a BinOp on lhs and rhs based on the CombiningKind.
-static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
-                               mlir::Value lhs, mlir::Value rhs,
-                               mlir::Location &loc,
-                               mlir::PatternRewriter &rewriter) {
+static Value createBinOp(vector::CombiningKind kind, Value lhs, Value rhs,
+                         Location &loc, PatternRewriter &rewriter) {
   assert(lhs.getType() == rhs.getType() && "Expecting same type.");
-  auto elemTy = mlir::getElementTypeOrSelf(lhs);
+  auto elemTy = getElementTypeOrSelf(lhs);
   // ADD and MUL are defined for both Integers and Floats,
   // need to generate code based on element data type.
-  if (kind == mlir::vector::CombiningKind::ADD) {
-    if (mlir::isa<mlir::FloatType>(elemTy)) {
-      return rewriter.create<mlir::arith::AddFOp>(loc, lhs, rhs);
+  if (kind == vector::CombiningKind::ADD) {
+    if (isa<FloatType>(elemTy)) {
+      return rewriter.createOrFold<arith::AddFOp>(loc, lhs, rhs);
     }
-    if (mlir::isa<mlir::IntegerType>(elemTy)) {
-      return rewriter.create<mlir::arith::AddIOp>(loc, lhs, rhs);
+    if (isa<IntegerType>(elemTy)) {
+      return rewriter.createOrFold<arith::AddIOp>(loc, lhs, rhs);
     }
   }
 
-  if (kind == mlir::vector::CombiningKind::MUL) {
-    if (mlir::isa<mlir::FloatType>(elemTy)) {
-      return rewriter.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+  if (kind == vector::CombiningKind::MUL) {
+    if (isa<FloatType>(elemTy)) {
+      return rewriter.createOrFold<arith::MulFOp>(loc, lhs, rhs);
     }
-    if (mlir::isa<mlir::IntegerType>(elemTy)) {
-      return rewriter.create<mlir::arith::MulIOp>(loc, lhs, rhs);
+    if (isa<IntegerType>(elemTy)) {
+      return rewriter.createOrFold<arith::MulIOp>(loc, lhs, rhs);
     }
   }
 
   switch (kind) {
   // the following are for ints only
-  case mlir::vector::CombiningKind::MINUI:
-    return rewriter.create<mlir::arith::MinUIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MINSI:
-    return rewriter.create<mlir::arith::MinSIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MAXUI:
-    return rewriter.create<mlir::arith::MaxUIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MAXSI:
-    return rewriter.create<mlir::arith::MaxSIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::AND:
-    return rewriter.create<mlir::arith::AndIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::OR:
-    return rewriter.create<mlir::arith::OrIOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::XOR:
-    return rewriter.create<mlir::arith::XOrIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MINUI:
+    return rewriter.createOrFold<arith::MinUIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MINSI:
+    return rewriter.createOrFold<arith::MinSIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MAXUI:
+    return rewriter.createOrFold<arith::MaxUIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MAXSI:
+    return rewriter.createOrFold<arith::MaxSIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::AND:
+    return rewriter.createOrFold<arith::AndIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::OR:
+    return rewriter.createOrFold<arith::OrIOp>(loc, lhs, rhs);
+  case vector::CombiningKind::XOR:
+    return rewriter.createOrFold<arith::XOrIOp>(loc, lhs, rhs);
   // the following are for floats only
-  case mlir::vector::CombiningKind::MINNUMF:
-    return rewriter.create<mlir::arith::MinNumFOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MAXNUMF:
-    return rewriter.create<mlir::arith::MaxNumFOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MINIMUMF:
-    return rewriter.create<mlir::arith::MinimumFOp>(loc, lhs, rhs);
-  case mlir::vector::CombiningKind::MAXIMUMF:
-    return rewriter.create<mlir::arith::MaximumFOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MINNUMF:
+    return rewriter.createOrFold<arith::MinNumFOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MAXNUMF:
+    return rewriter.createOrFold<arith::MaxNumFOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MINIMUMF:
+    return rewriter.createOrFold<arith::MinimumFOp>(loc, lhs, rhs);
+  case vector::CombiningKind::MAXIMUMF:
+    return rewriter.createOrFold<arith::MaximumFOp>(loc, lhs, rhs);
   default:
     llvm_unreachable("Unexpected CombiningKind.");
     return lhs;
@@ -267,17 +239,17 @@ static mlir::Value createBinOp(mlir::vector::CombiningKind kind,
 // `sources` is a vector of values with type of vector<1x16xf16>, organized
 // as grid [32, 2]. So this function will perform 31 reduction operations
 // on grid[:, 0], and grid[:, 1] respectively
-static llvm::SmallVector<mlir::Value>
-lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> grid,
-                    mlir::vector::CombiningKind kind, mlir::Location loc,
-                    mlir::PatternRewriter &rewriter) {
-  llvm::SmallVector<mlir::Value> results;
+static llvm::SmallVector<Value>
+lowerOuterReduction(ValueRange sources, llvm::ArrayRef<int64_t> grid,
+                    vector::CombiningKind kind, Location loc,
+                    PatternRewriter &rewriter) {
+  llvm::SmallVector<Value> results;
   for (auto j = 0; j < grid[1]; j++) {
     auto val = sources[j];
     for (auto i = 1; i < grid[0]; i++) {
       val = createBinOp(kind, val, sources[i * grid[1] + j], loc, rewriter);
     }
-    auto shapedTy = mlir::dyn_cast<mlir::ShapedType>(val.getType());
+    auto shapedTy = dyn_cast<ShapedType>(val.getType());
     // needs one reduction is block size is not 1 for the reduction dim.
     if (shapedTy && shapedTy.getDimSize(0) != 1) {
       auto shape = shapedTy.getShape().vec();
@@ -300,7 +272,7 @@ lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> grid,
 // simple vector arithmetic operations are issued, we will get 32 vectors of
 // vector<16xf16>, each vector<16xf16> represents the partial reduction result
 // of each row. To perform redcution on dim 3, it uses two vector shuffles
-/// to shuffle values from two conjuction rows. For example, given
+// to shuffle values from two conjuction rows. For example, given
 // row1 = [a0, a1, ..., a15], and  row2 = [b0, b1, ..., b15]. It will shuffle
 // the vector into row1' = [a0, .., a7, b0, ..., b7],
 // row2' = [a8, ..., a15, b8, ..., b15], and then perform the vector arith op
@@ -309,11 +281,10 @@ lowerOuterReduction(mlir::ValueRange sources, llvm::ArrayRef<int64_t> grid,
 // are the partial results of row2.  This process will be repeated until get the
 // final result, such that each element in c represents a final reduction result
 // of a row.
-static llvm::SmallVector<mlir::Value>
-lowerInnerReductionWithIntraVectorShuffles(
-    mlir::ValueRange sources, mlir::Type elemTy, llvm::ArrayRef<int64_t> grid,
-    llvm::ArrayRef<int64_t> block, mlir::vector::CombiningKind kind,
-    mlir::Location loc, mlir::PatternRewriter &rewriter) {
+static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
+    ValueRange sources, Type elemTy, llvm::ArrayRef<int64_t> grid,
+    llvm::ArrayRef<int64_t> block, vector::CombiningKind kind, Location loc,
+    PatternRewriter &rewriter) {
 
   auto isPowerOfTwo = [](auto n) { return (n & (n - 1)) == 0; };
 
@@ -345,15 +316,15 @@ lowerInnerReductionWithIntraVectorShuffles(
   // Stage 1: vector<ixjx1xnxf16> equals to a grid of ixj of vector<1xnxf16>
   // after lowering to xegpu. This stage performs j-1 reduction operations on
   // j dim of the grid, the result is a vector of vector<ixnxf16>.
-  llvm::SmallVector<mlir::Value> intermediates(grid[0]);
+  llvm::SmallVector<Value> intermediates(grid[0]);
   for (auto i = 0; i < grid[0]; i++) {
     auto val = sources[i * grid[1]];
     for (auto j = 1; j < grid[1]; j++) {
       val = createBinOp(kind, val, sources[i * grid[1] + j], loc, rewriter);
     }
     // cast the result of e.g., vector<1x16xf16> into vector<16xf16>
-    auto targetTy = mlir::VectorType::get({block[1]}, elemTy);
-    val = rewriter.create<mlir::vector::ShapeCastOp>(loc, targetTy, val);
+    auto targetTy = VectorType::get({block[1]}, elemTy);
+    val = rewriter.create<vector::ShapeCastOp>(loc, targetTy, val);
     intermediates[i] = val;
   }
 
@@ -393,9 +364,9 @@ lowerInnerReductionWithIntraVectorShuffles(
       auto v1 = workList[i];
       auto v2 = workList[i + 1];
       auto shuffleOp1 =
-          rewriter.create<mlir::vector::ShuffleOp>(loc, v1, v2, masks.first);
+          rewriter.create<vector::ShuffleOp>(loc, v1, v2, masks.first);
       auto shuffleOp2 =
-          rewriter.create<mlir::vector::ShuffleOp>(loc, v1, v2, masks.second);
+          rewriter.create<vector::ShuffleOp>(loc, v1, v2, masks.second);
       auto reduce = createBinOp(kind, shuffleOp1, shuffleOp2, loc, rewriter);
       intermediates.push_back(reduce);
     }
@@ -413,9 +384,9 @@ lowerInnerReductionWithIntraVectorShuffles(
       partialRowAggSize /= 2;
       auto [vecUpperMask, vecLowerMask] =
           genShuffleMasks(partialRowAggSize, currentAggVecSize);
-      auto shuffleOp1 = rewriter.create<mlir::vector::ShuffleOp>(
+      auto shuffleOp1 = rewriter.create<vector::ShuffleOp>(
           loc, toFinalize, toFinalize, vecUpperMask);
-      auto shuffleOp2 = rewriter.create<mlir::vector::ShuffleOp>(
+      auto shuffleOp2 = rewriter.create<vector::ShuffleOp>(
           loc, toFinalize, toFinalize, vecLowerMask);
       toFinalize = createBinOp(kind, shuffleOp1, shuffleOp2, loc, rewriter);
     } while (partialRowAggSize != 1);
@@ -424,101 +395,12 @@ lowerInnerReductionWithIntraVectorShuffles(
   return intermediates;
 }
 
-// a unified function lowering Unpack and Pack ops.
-static llvm::SmallVector<mlir::Value>
-lowerUnpackOrPack(mlir::ValueRange inputs, mlir::DenseI64ArrayAttr inBlkSizes,
-                  mlir::DenseI64ArrayAttr outBlkSizes,
-                  mlir::DenseI64ArrayAttr inGrids,
-                  mlir::DenseI64ArrayAttr outGrids, mlir::Location loc,
-                  mlir::OpBuilder &builder) {
-  // handle based on the dim0, and save results into intermediates
-  llvm::SmallVector<mlir::Value> intermediates(outGrids[0] * inGrids[1]);
-  if (inBlkSizes[0] == outBlkSizes[0]) { // do nothing
-    intermediates = inputs;
-  } else if (inBlkSizes[0] < outBlkSizes[0]) { // stack on dim 0
-    // `nums` small vectors will be stacked into one big vector
-    auto nums = inGrids[0] / outGrids[0];
-    llvm::SmallVector<mlir::Value> valSet;
-    for (auto j = 0; j < inGrids[1]; j++) {
-      for (auto i = 0; i < inGrids[0]; i++) {
-        auto idx = i * inGrids[1] + j;
-        valSet.push_back(inputs[idx]);
-        if (valSet.size() == static_cast<size_t>(nums)) {
-          auto newOp = packVectorsWith(valSet, stack, loc, builder);
-          intermediates[i / nums * inGrids[1] + j] = newOp;
-          valSet.clear();
-        }
-      }
-    }
-  } else {
-    // do extract on dim0 using vector::ExtractStridedSliceOp
-    // intermediates.resize(outGrids[0] * inGrids[1]);
-    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], inBlkSizes[1]});
-
-    // each vector will be horizonally cut into `nums` subvectors
-    auto nums = outGrids[0] / inGrids[0];
-    llvm::SmallVector<int64_t> strides({1, 1});
-    for (auto i = 0; i < inGrids[0]; i++) {
-      for (auto j = 0; j < inGrids[1]; j++) {
-        auto startPos = i * nums * inGrids[1] + j;
-        auto v = inputs[i * inGrids[1] + j];
-        for (auto k = 0; k < nums; k++) {
-          llvm::SmallVector<int64_t> offsets({k * blkSizes[0], 0});
-          auto newOp = builder.create<mlir::vector::ExtractStridedSliceOp>(
-              loc, v, offsets, blkSizes, strides);
-          auto idx = startPos + k * inGrids[1];
-          intermediates[idx] = newOp;
-        }
-      }
-    }
-  }
-
-  // handle intermediates based on the dim1, and save results into newOps
-  llvm::SmallVector<mlir::Value> newOps;
-  llvm::SmallVector<int64_t> interGrids = {outGrids[0], inGrids[1]};
-  if (inBlkSizes[1] == outBlkSizes[1]) {
-    // do nothing since they have the same size
-    newOps = intermediates;
-  } else if (inBlkSizes[1] < outBlkSizes[1]) {
-    // doing concat since blkSZ of input vector is smaller
-    // `nums` of small vectors will be concated into a big one
-    size_t nums = inGrids[1] / outGrids[1];
-    llvm::SmallVector<mlir::Value> valSet;
-    for (auto i = 0; i < interGrids[0]; i++) {
-      for (auto j = 0; j < interGrids[1]; j++) {
-        valSet.push_back(intermediates[i * interGrids[1] + j]);
-        if (valSet.size() == nums) {
-          auto newOp = packVectorsWith(valSet, concat, loc, builder);
-          newOps.push_back(newOp);
-          valSet.clear();
-        }
-      }
-    }
-  } else { // doing extract on dim 1
-    llvm::SmallVector<int64_t> blkSizes({outBlkSizes[0], outBlkSizes[1]});
-    llvm::SmallVector<int64_t> strides({1, 1});
-    auto nums = outGrids[1] / interGrids[1];
-    for (auto i = 0; i < interGrids[0]; i++) {
-      for (auto j = 0; j < interGrids[1]; j++) {
-        auto v = intermediates[i * interGrids[1] + j];
-        for (int64_t k = 0; k < nums; k++) {
-          llvm::SmallVector<int64_t> offsets({0, k * blkSizes[1]});
-          auto newOp = builder.create<mlir::vector::ExtractStridedSliceOp>(
-              loc, v, offsets, blkSizes, strides);
-          newOps.push_back(newOp);
-        }
-      }
-    }
-  }
-  return newOps;
-}
-
-static llvm::SmallVector<mlir::Type>
-convertTypes(mlir::ShapedType type, llvm::ArrayRef<int64_t> blockSize) {
+static llvm::SmallVector<Type> convertTypes(ShapedType type,
+                                            llvm::ArrayRef<int64_t> blockSize) {
   auto newTy = type.clone(blockSize, type.getElementType());
   auto size = std::accumulate(blockSize.begin(), blockSize.end(), 1,
                               std::multiplies<int64_t>());
-  return llvm::SmallVector<mlir::Type>(type.getNumElements() / size, newTy);
+  return llvm::SmallVector<Type>(type.getNumElements() / size, newTy);
 }
 
 // clang-format off
@@ -532,56 +414,54 @@ convertTypes(mlir::ShapedType type, llvm::ArrayRef<int64_t> blockSize) {
 // clang-format on
 
 class RewriteArithConstantOp
-    : public RewriteXeTileOp<mlir::arith::ConstantOp, BlockingAnalysis> {
+    : public RewriteXeTileOp<arith::ConstantOp, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<mlir::arith::ConstantOp,
-                        BlockingAnalysis>::RewriteXeTileOp;
-  mlir::LogicalResult
-  matchAndRewrite(mlir::arith::ConstantOp op,
-                  mlir::PatternRewriter &rewriter) const override {
+  using RewriteXeTileOp<arith::ConstantOp, BlockingAnalysis>::RewriteXeTileOp;
+  LogicalResult matchAndRewrite(arith::ConstantOp op,
+                                PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     bool allUsersAreUnrealizedCastOp =
         llvm::all_of(op->getUsers(), [](auto user) {
-          auto castOp = llvm::dyn_cast<mlir::UnrealizedConversionCastOp>(user);
+          auto castOp = llvm::dyn_cast<UnrealizedConversionCastOp>(user);
           auto packAttr = user->getAttr(packAttrName);
           return castOp && packAttr;
         });
     // currently only handles the case where the constant op is used by
     // an unrealized cast op.
     if (allUsersAreUnrealizedCastOp) {
-      auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
+      auto value = llvm::dyn_cast<DenseElementsAttr>(op.getValue());
       if (!value || value.getType().getRank() != 2)
-        return mlir::failure();
+        return failure();
 
       auto blockSize = analysis.getDefBlockSize(op.getResult());
       if (!blockSize)
-        return mlir::failure();
+        return failure();
 
       auto shape = value.getType().getShape();
       auto elemTy = value.getType().getElementType();
-      auto newTy = mlir::VectorType::get(blockSize.asArrayRef(), elemTy);
-      auto values = value.getValues<mlir::Attribute>();
+      auto newTy = VectorType::get(blockSize.asArrayRef(), elemTy);
+      auto values = value.getValues<Attribute>();
 
-      llvm::SmallVector<mlir::Value> newOps;
+      llvm::SmallVector<Value> newOps;
       for (auto i = 0; i < shape[0]; i += blockSize[0]) {
         for (auto j = 0; j < shape[1]; j += blockSize[1]) {
-          llvm::SmallVector<mlir::Attribute> subValues;
+          llvm::SmallVector<Attribute> subValues;
           for (auto x = 0; x < blockSize[0]; x++) {
             for (auto y = 0; y < blockSize[1]; y++) {
               subValues.push_back(values[(i + x) * shape[1] + j + y]);
             }
           }
-          auto subValue = mlir::DenseElementsAttr::get(newTy, subValues);
-          auto newOp = rewriter.create<mlir::arith::ConstantOp>(loc, subValue);
+          auto subValue = DenseElementsAttr::get(newTy, subValues);
+          auto newOp = rewriter.create<arith::ConstantOp>(loc, subValue);
           newOps.push_back(newOp);
         }
       }
       auto castOp = addUnpackOp(newOps, value.getType(), blockSize.asArrayRef(),
                                 loc, rewriter);
       rewriter.replaceOp(op, castOp);
-      return mlir::success();
+      return success();
     }
-    return mlir::failure();
+    return failure();
   }
 };
 
@@ -592,9 +472,8 @@ class RewriteInitTileOp
 public:
   using RewriteXeTileOp<xetile::InitTileOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::InitTileOp op,
-                  mlir::PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::InitTileOp op,
+                                PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto ctx = op.getContext();
     auto tileTy = op.getType();
@@ -604,11 +483,11 @@ public:
     // skip it if there is no valid blockSize available, or the
     // tile is already with the target size.
     if (!blockSize || shape == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     // handle scattered tiles.
-    if (tileTy.getScatterAttr() == mlir::BoolAttr::get(ctx, true)) {
+    if (tileTy.getScatterAttr() == BoolAttr::get(ctx, true)) {
       auto indices = op.getIndices();
       assert(indices && "indices is missing.");
       auto indicesTy = indices.getType();
@@ -620,9 +499,9 @@ public:
                                   blockSize.asArrayRef(), loc, rewriter);
 
       for (auto [t, i] : llvm::zip(convertedTileTypes, subIndices)) {
-        llvm::SmallVector<mlir::Value> operands({op.getSource(), i});
+        llvm::SmallVector<Value> operands({op.getSource(), i});
         auto newOp = rewriter.create<xetile::InitTileOp>(
-            loc, mlir::TypeRange({t}), operands, op->getAttrs());
+            loc, TypeRange({t}), operands, op->getAttrs());
         newOps.push_back(newOp);
       }
     } else { // handle blocked tiles
@@ -633,17 +512,17 @@ public:
           {shape[0] / blockSize[0], shape[1] / width});
       auto mixedOffsets = op.getMixedOffsets();
 
-      auto addi = [&](mlir::OpFoldResult a, int64_t b) -> mlir::Value {
-        if (mlir::isa<mlir::Attribute>(a)) {
-          auto attr = llvm::cast<mlir::Attribute>(a);
+      auto addi = [&](OpFoldResult a, int64_t b) -> Value {
+        if (isa<Attribute>(a)) {
+          auto attr = llvm::cast<Attribute>(a);
           auto sum =
               rewriter.getIndexAttr(llvm::cast<IntegerAttr>(attr).getInt() + b);
-          return rewriter.create<mlir::arith::ConstantOp>(loc, sum);
+          return rewriter.create<arith::ConstantOp>(loc, sum);
         } else {
-          auto aV = llvm::cast<mlir::Value>(a);
-          auto bV = rewriter.create<mlir::arith::ConstantOp>(
-              loc, rewriter.getIndexAttr(b));
-          return rewriter.create<mlir::arith::AddIOp>(loc, aV, bV);
+          auto aV = llvm::cast<Value>(a);
+          auto bV =
+              rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
+          return rewriter.createOrFold<arith::AddIOp>(loc, aV, bV);
         }
       };
 
@@ -651,8 +530,8 @@ public:
       // dimensions, and keep the first n-2 dimensions as is.
       int64_t x = mixedOffsets.size() - 2;
       int64_t y = mixedOffsets.size() - 1;
-      mlir::OpFoldResult oldX = mixedOffsets[x];
-      mlir::OpFoldResult oldY = mixedOffsets[y];
+      OpFoldResult oldX = mixedOffsets[x];
+      OpFoldResult oldY = mixedOffsets[y];
 
       for (int64_t i = 0; i < grids[0]; i++) {
         for (int64_t j = 0; j < grids[1]; j++) {
@@ -660,9 +539,9 @@ public:
           auto subOffY = width * j;
           mixedOffsets[x] = addi(oldX, subOffX);
           mixedOffsets[y] = addi(oldY, subOffY);
-          llvm::SmallVector<mlir::Value> offsets;
+          llvm::SmallVector<Value> offsets;
           llvm::SmallVector<int64_t> constOffsets;
-          mlir::dispatchIndexOpFoldResults(mixedOffsets, offsets, constOffsets);
+          dispatchIndexOpFoldResults(mixedOffsets, offsets, constOffsets);
           auto constOffsetsAttr = rewriter.getDenseI64ArrayAttr(constOffsets);
           auto newOp = rewriter.create<xetile::InitTileOp>(
               loc, newTileTy, op.getSource(), offsets, op.getSizes(),
@@ -675,7 +554,7 @@ public:
     auto castOp =
         addUnpackOp(newOps, tileTy, blockSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -687,9 +566,8 @@ public:
   using RewriteXeTileOp<xetile::PrefetchTileOp,
                         BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::PrefetchTileOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::PrefetchTileOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto tile = op.getTile();
     auto tileTy = tile.getType();
@@ -703,12 +581,12 @@ public:
                                     blockSize.asArrayRef(), loc, rewriter);
 
     for (auto t : convertedTiles) {
-      rewriter.create<xetile::PrefetchTileOp>(loc, mlir::TypeRange(), t,
+      rewriter.create<xetile::PrefetchTileOp>(loc, TypeRange(), t,
                                               op->getAttrs());
     }
 
     rewriter.eraseOp(op);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -719,9 +597,8 @@ class RewriteLoadTileOp
 public:
   using RewriteXeTileOp<xetile::LoadTileOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::LoadTileOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::LoadTileOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto tile = op.getSource();
     auto tileTy = tile.getType();
@@ -735,10 +612,10 @@ public:
     auto convertedTiles = addPackOp(tile, convertedTileTypes,
                                     blockSize.asArrayRef(), loc, rewriter);
 
-    auto vecTy = ::mlir::VectorType::get(blockSize.asArrayRef(),
-                                         tileTy.getElementType());
+    auto vecTy =
+        VectorType::get(blockSize.asArrayRef(), tileTy.getElementType());
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     for (auto t : convertedTiles) {
       auto newOp =
           rewriter.create<xetile::LoadTileOp>(loc, vecTy, t, op->getAttrs());
@@ -749,7 +626,7 @@ public:
                               rewriter);
 
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -760,9 +637,8 @@ class RewriteStoreTileOp
 public:
   using RewriteXeTileOp<xetile::StoreTileOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::StoreTileOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::StoreTileOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto value = op.getValue();
     auto valTy = value.getType();
@@ -787,7 +663,7 @@ public:
                                            op.getL3HintAttr());
     }
     rewriter.eraseOp(op);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -799,9 +675,8 @@ public:
   using RewriteXeTileOp<xetile::LoadGatherOp,
                         BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::LoadGatherOp op,
-                  PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::LoadGatherOp op,
+                                PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto mask = op.getMask();
     auto tile = op.getTile();
@@ -810,7 +685,7 @@ public:
 
     auto blockSize = analysis.getUseBlockSize(tile, op->getOpOperand(0));
     if (!blockSize || type.getShape() == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
     auto convertedTileTypes = convertTypes(type, blockSize.asArrayRef());
     auto convertedMaskTypes =
@@ -820,8 +695,8 @@ public:
                            loc, rewriter);
     auto masks = addPackOp(mask, convertedMaskTypes, blockSize.asArrayRef(),
                            loc, rewriter);
-    auto newValueTy = mlir::VectorType::get(blockSize.asArrayRef(), elemTy);
-    llvm::SmallVector<mlir::Value> newOps;
+    auto newValueTy = VectorType::get(blockSize.asArrayRef(), elemTy);
+    llvm::SmallVector<Value> newOps;
     for (auto [t, m] : llvm::zip(tiles, masks)) {
       auto newOp = rewriter.create<xetile::LoadGatherOp>(
           loc, newValueTy, t, m, op.getPaddingAttr(), op.getL1HintAttr(),
@@ -832,7 +707,7 @@ public:
     auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
                               rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -844,9 +719,8 @@ public:
   using RewriteXeTileOp<xetile::StoreScatterOp,
                         BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::StoreScatterOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::StoreScatterOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto value = op.getValue();
     auto tile = op.getTile();
@@ -857,7 +731,7 @@ public:
 
     if (!blockSize || tileTy.getShape() == blockSize.asArrayRef() ||
         blockSize != analysis.getUseBlockSize(tile, op->getOpOperand(1)))
-      return mlir::failure();
+      return failure();
 
     auto convertedValTypes =
         convertTypes(value.getType(), blockSize.asArrayRef());
@@ -880,7 +754,7 @@ public:
     }
 
     rewriter.eraseOp(op);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -889,9 +763,8 @@ class RewriteAtomicRMWOp
 public:
   using RewriteXeTileOp<xetile::AtomicRMWOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::AtomicRMWOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::AtomicRMWOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto value = op.getValue();
     auto valTy = value.getType();
@@ -910,11 +783,10 @@ public:
     auto convertedTiles = addPackOp(tile, convertedTileTypes,
                                     blockSize.asArrayRef(), loc, rewriter);
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     for (auto [v, t] : llvm::zip(convertedValues, convertedTiles)) {
-      auto valTy = mlir::dyn_cast<mlir::VectorType>(v.getType());
-      auto vecTy =
-          ::mlir::VectorType::get(valTy.getShape(), valTy.getElementType());
+      auto valTy = dyn_cast<VectorType>(v.getType());
+      auto vecTy = VectorType::get(valTy.getShape(), valTy.getElementType());
       auto newOp =
           rewriter.create<xetile::AtomicRMWOp>(loc, vecTy, op.getKind(), v, t);
       newOps.push_back(newOp);
@@ -922,7 +794,7 @@ public:
     auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
                               rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -934,9 +806,8 @@ public:
   using RewriteXeTileOp<xetile::UpdateTileOffsetOp,
                         BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::UpdateTileOffsetOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::UpdateTileOffsetOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto tile = op.getTile();
     auto tileTy = tile.getType();
@@ -945,16 +816,16 @@ public:
 
     auto blockSize = analysis.getDefBlockSize(tile);
     if (!blockSize || shape == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
     auto convertedTileTypes = convertTypes(tileTy, blockSize.asArrayRef());
     auto convertedTiles = addPackOp(tile, convertedTileTypes,
                                     blockSize.asArrayRef(), loc, rewriter);
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
 
     // handle scattered tiles.
-    if (tileTy.getScatterAttr() == mlir::BoolAttr::get(ctx, true)) {
+    if (tileTy.getScatterAttr() == BoolAttr::get(ctx, true)) {
       auto indices = op.getIndices();
       assert(indices && "indices is missing.");
       auto indicesTy = indices.getType();
@@ -980,7 +851,7 @@ public:
     auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
                               rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -991,9 +862,8 @@ class RewriteTileMMAOp
 public:
   using RewriteXeTileOp<xetile::TileMMAOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::TileMMAOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::TileMMAOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto resultTy = op.getResult().getType();
 
@@ -1003,7 +873,7 @@ public:
 
     assert(a && b && "a operand or b operand is (are) missing.\n");
 
-    auto getBlockingSize = [&](mlir::Value val, int pos) -> Block {
+    auto getBlockingSize = [&](Value val, int pos) -> Block {
       if (!val)
         return Block();
       return analysis.getUseBlockSize(val, op->getOpOperand(pos));
@@ -1016,12 +886,12 @@ public:
     auto bBlockSize = getBlockingSize(op.getB(), 1);
     auto cBlockSize = getBlockingSize(op.getC(), 2);
 
-    llvm::SmallVector<mlir::Value> aVals, bVals, cVals;
-    auto pack = [&](mlir::TypedValue<mlir::VectorType> val,
+    llvm::SmallVector<Value> aVals, bVals, cVals;
+    auto pack = [&](TypedValue<VectorType> val,
                     llvm::ArrayRef<int64_t> blockSize) {
       auto type = val.getType();
       if (type.getShape() == blockSize)
-        return llvm::SmallVector<mlir::Value>({val});
+        return llvm::SmallVector<Value>({val});
       auto convertedTypes = convertTypes(type, blockSize);
       auto values = addPackOp(val, convertedTypes, blockSize, loc, rewriter);
       return llvm::to_vector(values);
@@ -1041,25 +911,26 @@ public:
     // be skipped if every operand got an invalid blocking size or the
     // original shape is the same with the blocking size.
     if (aVals.size() <= 1 && bVals.size() <= 1 && cVals.size() <= 1)
-      return mlir::failure();
+      return failure();
 
     uint64_t M = aShape[0] / aBlockSize[0];
     uint64_t K = aShape[1] / aBlockSize[1];
     uint64_t N = bShape[1] / bBlockSize[1];
 
-    auto vecTy = ::mlir::VectorType::get({aBlockSize[0], bBlockSize[1]},
-                                         resultTy.getElementType());
-    mlir::SmallVector<mlir::Value> newOps;
+    int64_t dBlockSize[2] = {aBlockSize[0], bBlockSize[1]};
+
+    auto vecTy = VectorType::get(dBlockSize, resultTy.getElementType());
+    SmallVector<Value> newOps;
 
     for (uint64_t i = 0; i < M; i++) {
       for (uint64_t j = 0; j < N; j++) {
-        mlir::Value tmpC;
+        Value tmpC;
         if (c)
           tmpC = cVals[i * N + j]; // init with acc
         for (uint64_t k = 0; k < K; k++) {
           auto aVec = aVals[i * K + k];
           auto bVec = bVals[k * N + j];
-          llvm::SmallVector<mlir::Value> operands({aVec, bVec});
+          llvm::SmallVector<Value> operands({aVec, bVec});
           if (tmpC)
             operands.push_back(tmpC);
           tmpC = rewriter.create<xetile::TileMMAOp>(loc, vecTy, operands,
@@ -1068,10 +939,9 @@ public:
         newOps.push_back(tmpC);
       }
     }
-    auto castOp =
-        addUnpackOp(newOps, resultTy, Block().asArrayRef(), loc, rewriter);
+    auto castOp = addUnpackOp(newOps, resultTy, dBlockSize, loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -1096,9 +966,8 @@ class RewriteTileReductionOp
 public:
   using RewriteXeTileOp<xetile::ReductionOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::ReductionOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::ReductionOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto src = op.getSource();
     auto srcTy = src.getType();
@@ -1118,7 +987,7 @@ public:
 
     int64_t grid[2] = {shape[0] / blkSize[0], shape[1] / blkSize[1]};
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     if (dims[0] == 0) {
       newOps =
           lowerOuterReduction(convertedSrcs, grid, op.getKind(), loc, rewriter);
@@ -1129,14 +998,14 @@ public:
           rewriter);
 
       for (auto v : intermediates) {
-        auto resultTy = mlir::VectorType::get({1, 1}, elemTy);
+        auto resultTy = VectorType::get({1, 1}, elemTy);
         for (auto i = 0; i < blkSize[1]; i++) {
-          auto pos = rewriter.create<mlir::arith::ConstantOp>(
-              loc, rewriter.getI32IntegerAttr(i));
+          auto pos =
+              rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(i));
           auto extractOp =
-              rewriter.create<mlir::vector::ExtractElementOp>(loc, v, pos);
-          auto splatOp = rewriter.create<mlir::vector::SplatOp>(
-              op.getLoc(), resultTy, extractOp);
+              rewriter.create<vector::ExtractElementOp>(loc, v, pos);
+          auto splatOp = rewriter.create<vector::SplatOp>(op.getLoc(), resultTy,
+                                                          extractOp);
           newOps.push_back(splatOp);
         }
       }
@@ -1149,7 +1018,7 @@ public:
         addUnpackOp(newOps, op.getType(), blkSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
 
-    return mlir::success();
+    return success();
   }
 };
 
@@ -1160,9 +1029,8 @@ class RewriteTileBroadcastOp
 public:
   using RewriteXeTileOp<xetile::BroadcastOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::BroadcastOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::BroadcastOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto src = op.getSource();
     auto srcTy = src.getType();
@@ -1188,7 +1056,7 @@ public:
     int64_t resultGrid[2] = {resTy.getShape()[0] / resBlkSize[0],
                              resTy.getShape()[1] / resBlkSize[1]};
 
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     if (dims[0] == 0) {
       // clang-format off
       // broadcast along the first dim, we simply need to replicate the source.
@@ -1226,23 +1094,23 @@ public:
       //           ...
       //   31: | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> | vector<1x16xf16> |
       // clang-format on
-      auto dstTy = mlir::VectorType::get(resBlkSize.asArrayRef(), elemTy);
+      auto dstTy = VectorType::get(resBlkSize.asArrayRef(), elemTy);
       for (auto src : convertedSrcs) {
-        auto ty = mlir::dyn_cast<mlir::VectorType>(src.getType());
+        auto ty = dyn_cast<VectorType>(src.getType());
         assert(ty && ty.getNumElements() == 1 &&
                "Expecting a <1x1xelemty> vector type.");
-        auto ext = rewriter.create<mlir::vector::ExtractOp>(
+        auto ext = rewriter.create<vector::ExtractOp>(
             loc, src, llvm::ArrayRef<int64_t>({0, 0}));
-        auto splatOp = rewriter.create<mlir::vector::SplatOp>(loc, dstTy, ext);
+        auto splatOp = rewriter.create<vector::SplatOp>(loc, dstTy, ext);
         newOps.append(resultGrid[1], splatOp);
       }
     } else {
-      return mlir::failure();
+      return failure();
     }
     auto castOp =
         addUnpackOp(newOps, resTy, resBlkSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -1252,9 +1120,8 @@ class RewriteTileTransposeOp
     : public RewriteXeTileOp<xetile::TransposeOp, BlockingAnalysis> {
   using RewriteXeTileOp<xetile::TransposeOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(xetile::TransposeOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(xetile::TransposeOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto input = op.getVector();
     auto inputTy = input.getType();
@@ -1264,17 +1131,17 @@ class RewriteTileTransposeOp
     auto resultShape = resultTy.getShape();
 
     auto permutation = op.getPermutation();
-    if (permutation != mlir::ArrayRef<int64_t>({1, 0}))
+    if (permutation != ArrayRef<int64_t>({1, 0}))
       return rewriter.notifyMatchFailure(op, "Unsupported permutation");
 
     auto inBlockSize = analysis.getUseBlockSize(input, op->getOpOperand(0));
     auto outBlockSize = analysis.getDefBlockSize(result);
     if (!inBlockSize || !outBlockSize || inShape == inBlockSize.asArrayRef() ||
         resultShape == outBlockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
     auto elemTy = inputTy.getElementType();
 
-    auto newDstTy = mlir::VectorType::get(outBlockSize.asArrayRef(), elemTy);
+    auto newDstTy = VectorType::get(outBlockSize.asArrayRef(), elemTy);
 
     auto convertedInputTypes = convertTypes(inputTy, inBlockSize.asArrayRef());
     auto convertedResultTypes =
@@ -1285,20 +1152,20 @@ class RewriteTileTransposeOp
 
     int64_t grids[2] = {resultShape[0] / outBlockSize[0],
                         resultShape[1] / outBlockSize[1]};
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     for (auto i : llvm::seq<int64_t>(0, grids[0])) {
       for (auto j : llvm::seq<int64_t>(0, grids[1])) {
         int64_t idx = i + grids[0] * j;
-        mlir::Value arg = convertedInputs[idx];
-        mlir::Value res = rewriter.create<xetile::TransposeOp>(
-            loc, newDstTy, arg, permutation);
+        Value arg = convertedInputs[idx];
+        Value res = rewriter.create<xetile::TransposeOp>(loc, newDstTy, arg,
+                                                         permutation);
         newOps.push_back(res);
       }
     }
     auto castOp =
         addUnpackOp(newOps, resultTy, outBlockSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -1306,51 +1173,50 @@ class RewriteTileTransposeOp
 // same ops on smaller vector size.
 // TODO: replace it with upstream unroll pattern in vector dialect.
 class RewriteVectorizableOp
-    : public RewriteOpWithTrait<mlir::OpTrait::Vectorizable, BlockingAnalysis> {
+    : public RewriteOpWithTrait<OpTrait::Vectorizable, BlockingAnalysis> {
 public:
   using RewriteOpWithTrait::RewriteOpWithTrait;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::Operation *op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(Operation *op,
+                                OpPatternRewriter &rewriter) const override {
     if (op->getNumResults() != 1)
       return rewriter.notifyMatchFailure(op, "op must have 1 result");
 
     auto res = op->getResult(0);
-    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+    auto resType = dyn_cast<VectorType>(res.getType());
     if (!resType || resType.getRank() != 2)
-      return mlir::failure();
+      return failure();
 
     auto resShape = resType.getShape();
     auto blockSize =
         analysis.getUseBlockSize(op->getOperand(0), op->getOpOperand(0));
 
     if (!blockSize || resShape == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
     auto elemTy = resType.getElementType();
-    auto newTy = mlir::VectorType::get(blockSize.asArrayRef(), elemTy);
+    auto newTy = VectorType::get(blockSize.asArrayRef(), elemTy);
 
     Location loc = op->getLoc();
-    llvm::SmallVector<mlir::ValueRange> newOperands;
+    llvm::SmallVector<llvm::SmallVector<Value>> newOperands;
     for (auto opr : op->getOperands()) {
-      auto oprTy = mlir::dyn_cast<mlir::VectorType>(opr.getType());
+      auto oprTy = dyn_cast<VectorType>(opr.getType());
       if (!oprTy || oprTy.getRank() != 2)
-        newOperands.emplace_back(opr);
+        newOperands.push_back({opr});
       auto convertedTypes = convertTypes(oprTy, blockSize.asArrayRef());
       auto convertedValues =
           addPackOp(opr, convertedTypes, blockSize.asArrayRef(), loc, rewriter);
       newOperands.push_back(convertedValues);
     }
 
-    mlir::OpBuilder::InsertionGuard g(rewriter);
+    OpBuilder::InsertionGuard g(rewriter);
 
     int64_t grids[2] = {resShape[0] / blockSize[0], resShape[1] / blockSize[1]};
-    llvm::SmallVector<mlir::Value> newOps;
+    llvm::SmallVector<Value> newOps;
     for (int64_t i = 0; i < grids[0]; i++) {
       for (int64_t j = 0; j < grids[1]; j++) {
         int64_t idx = i * grids[1] + j;
-        llvm::SmallVector<mlir::Value> operands;
+        llvm::SmallVector<Value> operands;
         for (auto valRange : newOperands) {
           if (valRange.size() == 1)
             operands.push_back(valRange[0]);
@@ -1358,10 +1224,10 @@ public:
             operands.push_back(valRange[idx]);
         }
         if (operands.size() != op->getNumOperands())
-          return mlir::failure();
-        mlir::OperationState opState(loc, op->getName(), operands,
-                                     mlir::TypeRange(newTy), op->getAttrs(),
-                                     op->getSuccessors());
+          return failure();
+
+        OperationState opState(loc, op->getName(), operands, TypeRange(newTy),
+                               op->getAttrs(), op->getSuccessors());
         auto newOp = rewriter.create(opState);
         newOps.push_back(newOp->getResult(0));
       }
@@ -1371,7 +1237,7 @@ public:
         addUnpackOp(newOps, resType, blockSize.asArrayRef(), loc, rewriter);
 
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -1379,14 +1245,12 @@ public:
 // to be replaced with a set of new arguments with smaller size
 // TODO: Can we replace this pattern to match with RegionBranchOpInterface?
 // It may improve the generality of the pattern.
-class RewriteSCFForOp
-    : public RewriteXeTileOp<mlir::scf::ForOp, BlockingAnalysis> {
+class RewriteSCFForOp : public RewriteXeTileOp<scf::ForOp, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<mlir::scf::ForOp, BlockingAnalysis>::RewriteXeTileOp;
+  using RewriteXeTileOp<scf::ForOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ForOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(scf::ForOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto initArgs = op.getInitArgs();
     auto regionArgs = op.getRegionIterArgs();
@@ -1404,11 +1268,11 @@ public:
     // preprocess the init args by adding pack ops if necessary,
     // and build the SignatureConversion for region arguments.
     auto origArgCount = op.getNumRegionIterArgs();
-    mlir::TypeConverter::SignatureConversion argConversion(origArgCount);
-    llvm::SmallVector<mlir::Value> convertedInitArgs;
+    TypeConverter::SignatureConversion argConversion(origArgCount);
+    llvm::SmallVector<Value> convertedInitArgs;
     for (auto [i, v] : llvm::enumerate(initArgs)) {
       auto blockSZ = blockSZs[i];
-      auto type = mlir::dyn_cast<mlir::ShapedType>(v.getType());
+      auto type = dyn_cast<ShapedType>(v.getType());
       if (!blockSZ || !type || type.getShape() == blockSZ.asArrayRef()) {
         argConversion.addInputs(i, v.getType());
         convertedInitArgs.push_back(v);
@@ -1423,17 +1287,17 @@ public:
 
     // no change is needed if convertedInitArgs is the same as current ones.
     if (llvm::equal(convertedInitArgs, initArgs))
-      return mlir::failure();
+      return failure();
 
-    auto newOp = rewriter.create<mlir::scf::ForOp>(
-        loc, op.getLowerBound(), op.getUpperBound(), op.getStep(),
-        convertedInitArgs);
-    mlir::Block *newBlock = newOp.getBody();
+    auto newOp =
+        rewriter.create<scf::ForOp>(loc, op.getLowerBound(), op.getUpperBound(),
+                                    op.getStep(), convertedInitArgs);
+    auto *newBlock = newOp.getBody();
     // remove the terminator of the new block
     if (newBlock->mightHaveTerminator())
       rewriter.eraseOp(newBlock->getTerminator());
 
-    llvm::SmallVector<mlir::Value> castArgs;
+    llvm::SmallVector<Value> castArgs;
     if (auto inductionVals = newOp.getLoopInductionVars())
       castArgs = inductionVals.value();
 
@@ -1456,7 +1320,7 @@ public:
     rewriter.restoreInsertionPoint(savedIP);
     rewriter.mergeBlocks(op.getBody(), newBlock, castArgs);
 
-    llvm::SmallVector<mlir::Value> castResults;
+    llvm::SmallVector<Value> castResults;
     auto convertedResults = newOp.getResults();
     for (unsigned i = 0; i < origArgCount; i++) {
       auto inputMap = argConversion.getInputMapping(i);
@@ -1471,25 +1335,24 @@ public:
     }
 
     rewriter.replaceOp(op, castResults);
-    return mlir::success();
+    return success();
   }
 };
 
 // Update the SCF Yield op when its operands have being blocked and and needs
 // to be replaced with a set of new values with smaller size
 class RewriteSCFYieldOp
-    : public RewriteXeTileOp<mlir::scf::YieldOp, BlockingAnalysis> {
+    : public RewriteXeTileOp<scf::YieldOp, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<mlir::scf::YieldOp, BlockingAnalysis>::RewriteXeTileOp;
+  using RewriteXeTileOp<scf::YieldOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::YieldOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(scf::YieldOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    llvm::SmallVector<mlir::Value> convertedResults;
+    llvm::SmallVector<Value> convertedResults;
     for (auto res : op.getResults()) {
       auto blockSZ = analysis.getDefBlockSize(res);
-      auto type = mlir::dyn_cast<mlir::ShapedType>(res.getType());
+      auto type = dyn_cast<ShapedType>(res.getType());
       if (blockSZ && type && type.getShape() != blockSZ.asArrayRef()) {
         auto newTypes = convertTypes(type, blockSZ.asArrayRef());
         auto values =
@@ -1500,55 +1363,54 @@ public:
       }
     }
     if (llvm::equal(convertedResults, op.getResults()))
-      return mlir::failure();
-    rewriter.replaceOpWithNewOp<mlir::scf::YieldOp>(op, convertedResults);
-    return mlir::success();
+      return failure();
+    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, convertedResults);
+    return success();
   }
 };
 
 // Rewrite a create_mask op on big vector size into multiple create_mask ops
 // on smaller vector size.
 class RewriteCreateMaskOp
-    : public RewriteXeTileOp<mlir::vector::CreateMaskOp, BlockingAnalysis> {
+    : public RewriteXeTileOp<vector::CreateMaskOp, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<mlir::vector::CreateMaskOp,
+  using RewriteXeTileOp<vector::CreateMaskOp,
                         BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::vector::CreateMaskOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(vector::CreateMaskOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto res = op.getResult();
     auto resTy = res.getType();
     auto shape = resTy.getShape();
     auto blockSize = analysis.getDefBlockSize(res);
     if (!blockSize || shape == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
     auto operands = op.getOperands();
 
-    auto sub = [&](mlir::Value a, int64_t b) -> mlir::Value {
-      auto ofr = mlir::getAsOpFoldResult(a);
-      if (auto cst = mlir::getConstantIntValue(ofr)) {
+    auto sub = [&](Value a, int64_t b) -> Value {
+      auto ofr = getAsOpFoldResult(a);
+      if (auto cst = getConstantIntValue(ofr)) {
         auto val = std::max<int64_t>(*cst - b, 0);
-        auto attr = rewriter.getIndexAttr(val);
-        return rewriter.create<mlir::arith::ConstantOp>(loc, attr);
+        return rewriter.create<arith::ConstantOp>(loc,
+                                                  rewriter.getIndexAttr(val));
       } else {
-        auto bV = rewriter.create<mlir::arith::ConstantOp>(
-            loc, rewriter.getIndexAttr(b));
-        return rewriter.create<mlir::arith::SubIOp>(loc, a, bV);
+        auto bV =
+            rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
+        return rewriter.createOrFold<arith::SubIOp>(loc, a, bV);
       }
     };
 
     auto elemTy = resTy.getElementType();
-    auto newTy = mlir::VectorType::get(blockSize.asArrayRef(), elemTy);
-    llvm::SmallVector<mlir::Value> newOps;
-    mlir::Value x = operands[0];
+    auto newTy = VectorType::get(blockSize.asArrayRef(), elemTy);
+    llvm::SmallVector<Value> newOps;
+    Value x = operands[0];
     for (int64_t i = 0; i < shape[0]; i += blockSize[0]) {
-      mlir::Value y = operands[1];
+      Value y = operands[1];
       for (int64_t j = 0; j < shape[1]; j += blockSize[1]) {
-        auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
-            loc, newTy, mlir::ValueRange({x, y}));
+        auto newOp = rewriter.create<vector::CreateMaskOp>(loc, newTy,
+                                                           ValueRange({x, y}));
         newOps.push_back(newOp);
         y = sub(y, blockSize[1]);
       }
@@ -1557,44 +1419,42 @@ public:
     auto castOp =
         addUnpackOp(newOps, resTy, blockSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 
 // Rewrite a splat op on big vector size into multiple splat ops
 // on smaller vector size.
 class RewriteSplatOp
-    : public RewriteXeTileOp<mlir::vector::SplatOp, BlockingAnalysis> {
+    : public RewriteXeTileOp<vector::SplatOp, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<mlir::vector::SplatOp,
-                        BlockingAnalysis>::RewriteXeTileOp;
+  using RewriteXeTileOp<vector::SplatOp, BlockingAnalysis>::RewriteXeTileOp;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::vector::SplatOp op,
-                  OpPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(vector::SplatOp op,
+                                OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto res = op.getAggregate();
     auto resTy = res.getType();
     auto shape = resTy.getShape();
     auto blockSize = analysis.getDefBlockSize(res);
     if (!blockSize || resTy.getRank() != 2 || shape == blockSize.asArrayRef())
-      return mlir::failure();
+      return failure();
 
     auto newTy =
-        mlir::VectorType::get(blockSize.asArrayRef(), resTy.getElementType());
-    auto newOp = rewriter.create<mlir::vector::SplatOp>(
-        loc, newTy, op->getOperands(), op->getAttrs());
+        VectorType::get(blockSize.asArrayRef(), resTy.getElementType());
+    auto newOp = rewriter.create<vector::SplatOp>(loc, newTy, op->getOperands(),
+                                                  op->getAttrs());
     auto numOps = resTy.getNumElements() / newTy.getNumElements();
-    llvm::SmallVector<mlir::Value> newOps(numOps, newOp);
+    llvm::SmallVector<Value> newOps(numOps, newOp);
     auto castOp =
         addUnpackOp(newOps, resTy, blockSize.asArrayRef(), loc, rewriter);
     rewriter.replaceOp(op, castOp);
-    return mlir::success();
+    return success();
   }
 };
 } // namespace Blocking
 
-void populateXeTileBlockingPatterns(mlir::RewritePatternSet &patterns,
+void populateXeTileBlockingPatterns(RewritePatternSet &patterns,
                                     BlockingAnalysis &analysis) {
   patterns.insert<
       Blocking::RewriteArithConstantOp, Blocking::RewriteInitTileOp,
@@ -1621,17 +1481,16 @@ public:
     }
   }
 
-  mlir::LogicalResult
-  initializeOptions(mlir::StringRef options,
-                    mlir::function_ref<mlir::LogicalResult(const llvm::Twine &)>
-                        errorHandler) override {
+  LogicalResult initializeOptions(
+      StringRef options,
+      function_ref<LogicalResult(const llvm::Twine &)> errorHandler) override {
     if (failed(Pass::initializeOptions(options, errorHandler)))
-      return mlir::failure();
+      return failure();
     if (device == "pvc")
       uArchInterface = std::make_shared<imex::XePVCuArch>();
     else
       return errorHandler(llvm::Twine("Invalid device: ") + device);
-    return mlir::success();
+    return success();
   }
 
   void runOnOperation() override {
@@ -1649,115 +1508,37 @@ public:
     }
 
     BlockingAnalysis analysis(uArchInterface);
-    if (mlir::failed(analysis.run(mod)))
+    if (failed(analysis.run(mod)))
       return signalPassFailure();
 
     LLVM_DEBUG(analysis.printAnalysisResult());
 
-    mlir::MLIRContext &context = getContext();
+    MLIRContext &context = getContext();
 
-    mlir::GreedyRewriteConfig config;
+    GreedyRewriteConfig config;
     config.strictMode = GreedyRewriteStrictness::ExistingOps;
     // ops inside regions, e.g., body of scf.for, needs to be processed
     // before the op (e.g., scf.for) containing the region; otherwise
     // the blocking analysis result for region args will be destroyed
     // after scf.for is updated, leading to their users cannot be updated
     // correctly.
-    mod.walk([&](mlir::Region *region) {
+    mod.walk([&](Region *region) {
       config.scope = region;
-      mlir::RewritePatternSet patterns(&context);
+      RewritePatternSet patterns(&context);
       populateXeTileBlockingPatterns(patterns, analysis);
-      llvm::SmallVector<mlir::Operation *> ops;
-      region->walk([&](mlir::Operation *op) {
+      llvm::SmallVector<Operation *> ops;
+      region->walk([&](Operation *op) {
         if (op->getParentRegion() == region)
           ops.push_back(op);
       });
-      if (mlir::failed(
-              mlir::applyOpPatternsGreedily(ops, std::move(patterns), config)))
+      if (failed(applyOpPatternsGreedily(ops, std::move(patterns), config)))
         return signalPassFailure();
     });
 
-    // run CSE and Canonicalizer again to remove identical packOps,
-    // and fold pack/unpack ops with the same block size.
-    mlir::PassManager pm(&context);
-    pm.addPass(mlir::createCanonicalizerPass());
-    pm.addPass(mlir::createCSEPass());
-    if (mlir::failed(pm.run(mod)))
-      return signalPassFailure();
-
-    // Resolve unfoldable Unpack and Pack Ops
-    mod.walk([&](mlir::UnrealizedConversionCastOp castOp) {
-      // remove dead castOp.
-      if (castOp->use_empty()) {
-        castOp.erase();
-        return mlir::WalkResult::advance();
-      }
-
-      mlir::OpBuilder builder(castOp);
-      auto context = castOp.getContext();
-
-      // handle unpack op
-      if (Blocking::isUnpackOp(castOp)) {
-        auto user = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(
-            *castOp->user_begin());
-
-        auto [inGrids, inBlkSizes] = Blocking::getGridAndBlockSizes(castOp);
-        mlir::DenseI64ArrayAttr outBlkSizes, outGrids;
-
-        // if unpack op is used by a pack op,
-        if (castOp->hasOneUse() && Blocking::isPackOp(user) &&
-            Blocking::isUnpackPackCompatible(castOp, user)) {
-          std::tie(outGrids, outBlkSizes) =
-              Blocking::getGridAndBlockSizes(user);
-        } else {
-          auto outTy =
-              mlir::dyn_cast<mlir::ShapedType>(castOp->getResult(0).getType());
-          outGrids = mlir::DenseI64ArrayAttr::get(context, {1, 1});
-          outBlkSizes = mlir::DenseI64ArrayAttr::get(context, outTy.getShape());
-        }
-
-        builder.setInsertionPointAfter(castOp);
-        auto newOps = Blocking::lowerUnpackOrPack(
-            castOp.getInputs(), inBlkSizes, outBlkSizes, inGrids, outGrids,
-            castOp.getLoc(), builder);
-        if (newOps.size() == 1) {
-          castOp->getResult(0).replaceAllUsesWith(newOps[0]);
-        } else {
-          for (auto [n, c] : llvm::zip_equal(newOps, user->getResults()))
-            c.replaceAllUsesWith(n);
-        }
-        return mlir::WalkResult::advance();
-      }
-
-      // handle pack op
-      if (Blocking::isPackOp(castOp)) {
-        auto opr = castOp->getOperand(0)
-                       .getDefiningOp<mlir::UnrealizedConversionCastOp>();
-        // should be handled as a pair of unpack and pack op in above.
-        if (Blocking::isUnpackOp(opr) && opr->hasOneUse() &&
-            Blocking::isUnpackPackCompatible(opr, castOp))
-          return mlir::WalkResult::advance();
-
-        auto inTy =
-            mlir::dyn_cast<mlir::ShapedType>(castOp->getOperand(0).getType());
-        auto inGrids = mlir::DenseI64ArrayAttr::get(context, {1, 1});
-        auto inBlkSizes =
-            mlir::DenseI64ArrayAttr::get(context, inTy.getShape());
-        auto [outGrids, outBlkSizes] = Blocking::getGridAndBlockSizes(castOp);
-        auto newOps = Blocking::lowerUnpackOrPack(
-            castOp.getInputs(), inBlkSizes, outBlkSizes, inGrids, outGrids,
-            castOp.getLoc(), builder);
-        for (auto [n, c] : llvm::zip_equal(newOps, castOp->getResults()))
-          c.replaceAllUsesWith(n);
-      }
-      return mlir::WalkResult::advance();
-    });
-
-    // remove dead castOp.
-    mod.walk([&](mlir::UnrealizedConversionCastOp castOp) {
-      if (castOp->use_empty())
-        castOp.erase();
-    });
+    // aggressive folding ops, such as unpack and pack buildin castop for
+    // TileType, to simplify the code. It also reorders some constant ops, which
+    // make writing test cases easier.
+    (void)applyPatternsGreedily(mod, FrozenRewritePatternSet());
   }
 
 private:
@@ -1765,7 +1546,7 @@ private:
 };
 
 /// Create a pass
-std::unique_ptr<::mlir::Pass>
+std::unique_ptr<::Pass>
 createXeTileBlockingPass(const std::string &deviceName) {
   return std::make_unique<XeTileBlockingPass>(deviceName);
 }

@@ -81,11 +81,17 @@ static imex::xetile::TileType addScatterAttr(imex::xetile::TileType tileTy) {
 
 struct InitTileOpPattern final
     : public mlir::OpRewritePattern<imex::xetile::InitTileOp> {
+public:
+  llvm::DenseSet<mlir::Value> &convertToScatteredType;
+
   InitTileOpPattern(mlir::MLIRContext *context,
-                    std::shared_ptr<imex::XeuArchInterface> uArch)
-      : OpRewritePattern<imex::xetile::InitTileOp>(context) {
+                    std::shared_ptr<imex::XeuArchInterface> uArch,
+                    llvm::DenseSet<mlir::Value> &map)
+      : OpRewritePattern<imex::xetile::InitTileOp>(context),
+        convertToScatteredType(map) {
     uArchInterface = uArch;
   }
+
   mlir::LogicalResult
   matchAndRewrite(imex::xetile::InitTileOp initTileOp,
                   mlir::PatternRewriter &rewriter) const override {
@@ -130,8 +136,12 @@ struct InitTileOpPattern final
     auto conf = config.value();
     isValidPitch = (pitchNumBytes >= conf.minPitch) &&
                    (pitchNumBytes % conf.pitchMultiple == 0);
-    // If memspace is not SLM and pitch is valid, no need to rewrite
-    if (!isSLM && isValidPitch) {
+
+    bool convertToScatter =
+        convertToScatteredType.contains(initTileOp.getResult());
+    // If memspace is not SLM, pitch is valid, and no tile type conversion
+    // to scatter is needed, then no need to rewrite
+    if (!isSLM && isValidPitch && !convertToScatter) {
       return mlir::failure();
     }
     bool mayNeedMask = (pitchNumElems % tileTy.getShape().back() != 0);
@@ -142,14 +152,18 @@ struct InitTileOpPattern final
     // memspace is SLM, but can be hanled with optimal SLM accesses,
     // no need to rewrite too, but the shape of all uses (init_tile) of
     // the SLM must support optimal SLM accesses.
-    auto isSupportedOptimalSLMAccessForAllUsers = [&](mlir::Value value) {
-      for (mlir::Operation *u : value.getUsers()) {
-        auto init = mlir::dyn_cast<imex::xetile::InitTileOp>(u);
-        if (!init || !imex::isSupportedOptimalSLMAccess(init.getType()))
-          return false;
-      }
-      return true;
-    };
+    std::function<bool(mlir::Value)> isSupportedOptimalSLMAccessForAllUsers =
+        [&](mlir::Value value) {
+          bool res = true;
+          for (mlir::Operation *u : value.getUsers()) {
+            if (auto init = mlir::dyn_cast<imex::xetile::InitTileOp>(u))
+              res &= imex::isSupportedOptimalSLMAccess(init.getType());
+
+            if (auto trans = mlir::dyn_cast<mlir::memref::TransposeOp>(u))
+              res &= isSupportedOptimalSLMAccessForAllUsers(trans);
+          }
+          return res;
+        };
     auto src = initTileOp.getSource();
     if (isSLM && isSupportedOptimalSLMAccessForAllUsers(src)) {
       return mlir::failure();
@@ -446,9 +460,86 @@ struct SCFForOpPattern final : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   }
 };
 
+// This function traverses backwards through loop-carried dependencies in SCF
+//  `for` loops to find the original (pre-loop) value.
+mlir::Value getDefiningInitOp(mlir::Value val) {
+  while (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(val)) {
+    if (auto forOp = mlir::dyn_cast<mlir::scf::ForOp>(
+            blockArg.getOwner()->getParentOp())) {
+      // Get the index of blockArg in the region
+      unsigned argIndex = blockArg.getArgNumber();
+
+      // Ensure the block argument belongs to iter_args, not the induction
+      // variable
+      unsigned numIterArgs = forOp.getInitArgs().size();
+      unsigned firstIterArgIdx =
+          forOp.getRegion().getArguments().size() - numIterArgs;
+
+      if (argIndex >= firstIterArgIdx) {
+        val =
+            forOp.getInitArgs()[argIndex - firstIterArgIdx]; // Corrected index
+      } else {
+        break; // If it's not an iter_arg, stop traversal
+      }
+    } else {
+      break;
+    }
+  }
+  return val;
+}
+
+// Helper function to find an InitTileOp that leads to a given mlir::Value
+mlir::Operation *findInitializeOp(mlir::Value val) {
+  llvm::SmallVector<mlir::Value, 4> worklist{val};
+  llvm::DenseSet<mlir::Value> visited;
+
+  while (!worklist.empty()) {
+    mlir::Value current = worklist.pop_back_val();
+    if (!current || !visited.insert(current).second)
+      continue; // Avoid cycles
+
+    // Handle scf.for iter_args
+    if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(current)) {
+      current = getDefiningInitOp(current);
+    }
+
+    // Check if the defining operation is an InitTileOp
+    if (mlir::Operation *defOp = current.getDefiningOp()) {
+      if (llvm::isa<imex::xetile::InitTileOp>(defOp))
+        return defOp;
+      for (mlir::Value operand : defOp->getOperands()) {
+        worklist.push_back(operand);
+      }
+    }
+  }
+  return nullptr;
+}
+
+static void
+analyzeAtomicRMWOp(mlir::Operation *op,
+                   llvm::DenseSet<mlir::Value> &convertToScatteredType) {
+
+  op->walk([&](imex::xetile::AtomicRMWOp atomicrmwOp) -> mlir::WalkResult {
+    auto tileTy = atomicrmwOp.getTile().getType();
+    if (tileTy.getScatterAttr()) {
+      return mlir::WalkResult::advance();
+    }
+    mlir::Value tile = atomicrmwOp->getOperand(1);
+
+    mlir::Operation *initializeOp = findInitializeOp(tile);
+    if (!initializeOp)
+      return mlir::failure();
+
+    // At this point, we have a candidate def-use chain for optimization.
+    convertToScatteredType.insert(initializeOp->getResult(0));
+    return mlir::WalkResult::advance();
+  });
+}
+
 class XeTileBlockOpFallbackPass final
     : public imex::impl::XeTileBlockOpFallbackBase<XeTileBlockOpFallbackPass> {
 public:
+  llvm::DenseSet<mlir::Value> convertToScatteredType;
   XeTileBlockOpFallbackPass() {
     uArchInterface = std::make_shared<imex::XePVCuArch>();
   }
@@ -480,14 +571,15 @@ public:
       op->emitOpError("Can not get GPU Arch Definition for given Arch param");
       return signalPassFailure();
     }
-
+    analyzeAtomicRMWOp(op, convertToScatteredType);
     mlir::RewritePatternSet patterns(context);
     mlir::GreedyRewriteConfig config;
     config.enableRegionSimplification =
         mlir::GreedySimplifyRegionLevel::Disabled;
     config.useTopDownTraversal = true;
     config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
-    patterns.add<InitTileOpPattern>(context, uArchInterface);
+    patterns.add<InitTileOpPattern>(context, uArchInterface,
+                                    convertToScatteredType);
     patterns.add<LoadTileOpPattern, StoreTileOpPattern,
                  UpdateTileOffsetOpPattern, SCFForOpPattern>(context);
     if (failed(applyPatternsGreedily(op, std::move(patterns), config))) {

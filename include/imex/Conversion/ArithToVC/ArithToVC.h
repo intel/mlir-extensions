@@ -40,8 +40,7 @@ namespace imex {
 #include "imex/Conversion/Passes.h.inc"
 
 void populateArithToVCPatterns(
-    ::mlir::LLVMTypeConverter &typeConverter,
-    ::mlir::RewritePatternSet &patterns,
+    ::mlir::TypeConverter &typeConverter, ::mlir::RewritePatternSet &patterns,
     bool enableHighPrecisionInterimCalculation = false);
 void configureArithToVCConversionLegality(::mlir::ConversionTarget &target);
 std::unique_ptr<::mlir::OperationPass<::mlir::gpu::GPUModuleOp>>

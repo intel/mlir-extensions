@@ -1,20 +1,20 @@
-From 910b158b0e1c97a8e75906086c7dce25a63afa50 Mon Sep 17 00:00:00 2001
-From: izamyati <igor.zamyatin@intel.com>
-Date: Fri, 25 Oct 2024 16:11:59 -0500
-Subject: [PATCH 1/1] xegpu temporary downstream defintion changes and
+From 062672a88a4d1274c4b52f1db66965f2bf4d32c7 Mon Sep 17 00:00:00 2001
+From: nbpatel <nishant.b.patel@intel.com>
+Date: Wed, 19 Feb 2025 18:54:23 +0000
+Subject: [PATCH] xegpu temporary downstream defintion changes and
  vectortoxegpu patch
 
 ---
- mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td      | 6 ++++++
+ mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td      | 7 +++++++
  mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp | 2 ++
- mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp              | 2 +-
- 3 files changed, 9 insertions(+), 1 deletion(-)
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp              | 3 ++-
+ 3 files changed, 11 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index 239ce0aa8e00..812d2d167297 100644
+index a2bfa721f251..8e65b302f0d1 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -302,6 +302,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [AllElementTypesMatch<["value", "Tensor
+@@ -307,6 +307,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [AllElementTypesMatch<["value", "Tensor
    let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
@@ -22,7 +22,15 @@ index 239ce0aa8e00..812d2d167297 100644
                         OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint);
-@@ -871,4 +872,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
+@@ -783,6 +784,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas", [Pure, AllElementTypesMatch<["lhs", "rhs"]>]
+ }
+
+ def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", [Pure,
++      MemoryEffects<[MemWrite]>,
+       AllElementTypesMatch<["tensorDesc", "value", "result"]>,
+       AllShapesMatch<["tensorDesc", "value", "result"]>]> {
+   let summary = "Atomic ready-modify-write operation on the TensorDesc. ";
+@@ -875,4 +877,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
    let extraClassDeclaration = extraBaseClassDeclaration;
  }
 
@@ -33,10 +41,10 @@ index 239ce0aa8e00..812d2d167297 100644
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-index 215e1b1b8745..c05a9e2b86f5 100644
+index dc4ee4e926bb..be68edf45eee 100644
 --- a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
 +++ b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-@@ -199,6 +199,7 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
+@@ -202,6 +202,7 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
      xegpu::CachePolicyAttr hint = nullptr;
      auto loadOp = rewriter.create<xegpu::LoadNdOp>(
          loc, vecTy, ndDesc, /*packed=*/nullptr, transposeAttr,
@@ -44,7 +52,7 @@ index 215e1b1b8745..c05a9e2b86f5 100644
          /*l1_hint=*/hint,
          /*l2_hint=*/hint, /*l3_hint=*/hint);
      rewriter.replaceOp(readOp, loadOp);
-@@ -265,6 +266,7 @@ struct LoadLowering : public OpRewritePattern<vector::LoadOp> {
+@@ -271,6 +272,7 @@ struct LoadLowering : public OpRewritePattern<vector::LoadOp> {
      xegpu::CachePolicyAttr hint = nullptr;
      auto loadNdOp = rewriter.create<xegpu::LoadNdOp>(
          loc, vecTy, ndDesc, /*packed=*/nullptr, /*transpose=*/nullptr,
@@ -53,7 +61,7 @@ index 215e1b1b8745..c05a9e2b86f5 100644
          /*l2_hint=*/hint, /*l3_hint=*/hint);
      rewriter.replaceOp(loadOp, loadNdOp);
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 5bd3c370e385..898e8564e3fe 100644
+index 15c435f1fa25..75186252979e 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -70,6 +70,7 @@ static bool isWriteHintOrNone(const CachePolicyAttr &attr) {
@@ -64,7 +72,7 @@ index 5bd3c370e385..898e8564e3fe 100644
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
 
-@@ -237,7 +237,7 @@ LogicalResult LoadNdOp::verify() {
+@@ -297,7 +298,7 @@ LogicalResult LoadNdOp::verify() {
        emitWarning("Invalid transpose attr. It is ignored.");
    }
 
