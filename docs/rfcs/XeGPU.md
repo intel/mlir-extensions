@@ -17,8 +17,8 @@ Below is a summary.
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
 |create_tdesc	| operation ::= xegpu.create_tdesc $base_addr, $offset attr-dict : type($base_addr), type($offset) -> type($tdesc)	| %scatter_tdesc = xegpu.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc<16 x bf16, #xegpu.scatter_tdesc_attr<memory_space=slm>> |
-|load_gather	| operation ::= xegpu.load_gather $tdesc, $mask attr-dict : type($tdesc), type($mask) -> type($res)	| %result = xegpu.load_gather %scatter_tdesc, %mask {L1 = cached, L2 = uncached, transpose} : tensor_desc<16x8xbf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x16xbf16> |
-|store_scatter	| operation ::= xegpu.store_scatter $value, $tdesc, $mask attr-dict : type($value), type($tdesc), type($mask)	| xegpu.store_scatter %value, %scatter_tdesc, %mask {L1 = cached, L2 = uncached} : vector<16xbf16>, tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> |
+|load	| operation ::= xegpu.load $tdesc, $mask attr-dict : type($tdesc), type($mask) -> type($res)	| %result = xegpu.load %scatter_tdesc, %mask {L1 = cached, L2 = uncached, transpose} : tensor_desc<16x8xbf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x16xbf16> |
+|store	| operation ::= xegpu.store $value, $tdesc, $mask attr-dict : type($value), type($tdesc), type($mask)	| xegpu.store %value, %scatter_tdesc, %mask {L1 = cached, L2 = uncached} : vector<16xbf16>, tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> |
 |update_offset	| operation ::= xegpu.update_offset $tdesc, $delta : type($tdesc), type($delta) -> type($tdesc)	| %tdesc_updated = xegpu.update_offset %tdesc, %offsets: tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xindex> -> tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>> |
 |Prefetch	| operation ::= xegpu.prefetch $tdesc attr-dict : type($tdesc) 	| xegpu.prefetch %scatter_tdesc1 {L1 = cached, L2 = uncached} : tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>> |
 |atomic_rmw	| operation ::= xegpu.atomic_rmw $kind, $value, $tdesc, $mask attr-dict : type($value), type($tdesc), type($mask) 	| %ret_value = xegpu.atomic_rmw “addf”, %value, %scatter_mem2, %mask : vector<16xbf16>, tensor_desc<16xbf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> |
@@ -35,7 +35,7 @@ Below is a summary.
 |fence	| operation ::= xegpu.fence attr-dict | xegpu.fence {scope = gpu, memory_kind = global} |
 
 The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to
-multiple XeGPU ops.  For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load_gather operations. Compared with the
+multiple XeGPU ops.  For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load operations. Compared with the
 XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.
 
 XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need a tensor descriptor to
@@ -244,11 +244,11 @@ as shown in the following example.
 		uint64, vector<16xindex> into tensor_desc<16x8xuint16, #tdesc_attr>
 ```
 
-`load_gather` (aka. load) load data per each work item. The output vector size is consistent with the subgroup size,
+`load` moves data from memory to register per each work item. The output vector size is consistent with the subgroup size,
 as the output describes the data being loaded at the subgroup level.
 
 ```mlir
-  %result0 = xegpu.load_gather %scatter_tdesc0, %mask {L1_hint = cached, L2_hint = uncached} :
+  %result0 = xegpu.load %scatter_tdesc0, %mask {L1_hint = cached, L2_hint = uncached} :
         	  tensor_desc<16xuint8, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> into vector<16xuint8>
 ```
 
@@ -257,24 +257,24 @@ The transpose attribute must be present to explicitly describe the transpose eff
 
 ```mlir
   #tdesc_attr = #xegpu.scatter_tdesc_attr<memory_space=slm, chunk_size=8>
-  %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose} :
+  %result = xegpu.load %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose} :
           tensor_desc<16x8xbf16, #tdesc_attr>, vector<16xi1> -> vector<8x16xbf16>
 ```
 The mask operand masks simd lanes (a.k.a offsets) by setting corresponding position to 0, so that it is safe to pass out-of-boundary
 addresses/offsets as long as they are masked. There is no modification to the result vector registers for the masked SIMD lanes. For
 tensor_desc with `chunk_size` attribute, the mask applies to the first dimension in memory and not the second dimension (Chunk Size).
 
-Load_gather is a slightly higher level operation than native hardware instruction. When the hardware performs load_gather, it may load
+`load` is a slightly higher level operation than native hardware instruction. When the hardware performs a load, it may load
 each low-precision element to a uint32. In this case, the lowering uses an additional instruction to further gather the value from the
-registers to fully-packed vectors. Load_gather returns a vector of uint8 fully packed. The data type being loaded could be uint8, uint16,
+registers to fully-packed vectors. `Load` returns a vector of uint8 fully packed. The data type being loaded could be uint8, uint16,
 uint32, uint64.
 
-`store_scatter` (aka. store) stores data to the memory specified by tensor_desc.
+`store` moves data from register to the memory specified by tensor_desc.
 ```mlir
-xegpu.store_scatter %value, %scatter_tdesc1, %mask :
+xegpu.store %value, %scatter_tdesc1, %mask :
      	 vector<16xuint16>, vector<16xi1>, tensor_desc<16xuint16, #xegpu.scatter_tdesc_attr<>>
 ```
-Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_space` can be applied to `store_scatter`. Similar to `load_gather`,
+Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_space` can be applied to `store`. Similar to `load`,
 when the `chunk_size` of `tensor_desc` is specified, the `value` is a 2D vector with the shape of [chunk_size, subgroup_size].
 
 `prefetch` prefetches data from the memory specified by tensor_desc.
@@ -458,7 +458,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
   %scatter_tdesc = xegpu.create_tdesc, %src_addr, %offsets:
 		uint64, vector<16xindex> into tensor_desc<16xfp32, #scatter_attr, #sg_map_t>
 
-  %result = xegpu.load_gather %scatter_tdesc, %mask {L1 = cached, L2 = uncached} :
+  %result = xegpu.load %scatter_tdesc, %mask {L1 = cached, L2 = uncached} :
           tensor_desc<16xfp32, #tdesc_attr, #sg_map_t>, vector<1xi1> -> vector<1xfp32>
 ```
 
@@ -470,7 +470,7 @@ The example below illustrates how each work item loads 4 fp32 data elements with
 		{chunk_size=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
 
-  %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
+  %result = xegpu.load %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
           tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<1xi1> -> vector<4x1xfp32>
 ```
 
@@ -482,7 +482,7 @@ The load with chunk_size pack the low-precision data to 32-bit data using wi_dat
 		{chunk_size=4} :
 		uint64, vector<16xindex> into tensor_desc<16x8xbf16, #scatter_attr, #sg_map_t>
 
-  %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
+  %result = xegpu.load %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
           tensor_desc<16x8xbf16, #tdesc_attr, #sg_map_t>, vector<1xi1> -> vector<4x2xbf16>
 ```
 
@@ -679,7 +679,7 @@ An example on how to load a 2D block, perform dpas, and store back to memory.
 ```
 
 ## sg_map use case - regular load:
-An example on how to perform transpose using load_gather with chunk_size in SIMT flavor.
+An example on how to perform transpose using load with chunk_size in SIMT flavor.
 
 ```mlir
 
@@ -689,7 +689,7 @@ An example on how to perform transpose using load_gather with chunk_size in SIMT
 		{chunk_size=4} :
 		uint64, vector<16xindex> into tensor_desc<16x4xfp32, #scatter_attr, #sg_map_t>
 
-  %result = xegpu.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
+  %result = xegpu.load %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0]} :
           tensor_desc<16x4xfp32, #tdesc_attr, #sg_map_t>, vector<16xi1> -> vector<4x1xfp32>
 
   #sg_map = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
