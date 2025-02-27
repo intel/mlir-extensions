@@ -1,6 +1,6 @@
 add_imex_dialect_library(IMEXNDArrayTransforms
-  NDArrayDist.cpp
   AddGPURegions.cpp
+  CoalesceShardOps.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/NDArray
@@ -12,5 +12,4 @@ add_imex_dialect_library(IMEXNDArrayTransforms
   MLIRIR
   MLIRPass
   IMEXNDArrayDialect
-  IMEXDistDialect
 )

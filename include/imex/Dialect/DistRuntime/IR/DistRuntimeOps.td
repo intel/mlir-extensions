@@ -58,9 +58,6 @@ def DistRuntime_Dialect : Dialect {
 
   //  We use the default parser/printer which handles registered types
   let useDefaultTypePrinterParser = true;
-
-  // to be defined by the lowerer
-  let hasConstantMaterializer = 1;
 }
 
 // common base class for types in DistRuntime dialect.
@@ -101,96 +98,6 @@ def AsyncOpInterface : OpInterface<"AsyncOpInterface"> {
 class DistRuntime_Op<string mnemonic, list<Trait> traits = []> :
     Op<DistRuntime_Dialect, mnemonic, traits>;
 
-def TeamSizeOp : DistRuntime_Op<"team_size", [Pure]> {
-  let summary = "Get number of members in given team";
-  let description = [{
-    Operation that returns the number of team members of a given team.
-  }];
-  let arguments = (ins AnyAttr:$team);
-  let results = (outs Index);
-  let builders = [
-    OpBuilder<(ins "::mlir::Attribute":$team), [{
-      build($_builder, $_state, $_builder.getIndexType(), team);
-    }]>,
-  ];
-  // to be defined by the lowerer
-  let hasFolder = 1;
-}
-
-def TeamMemberOp : DistRuntime_Op<"team_member", [Pure]> {
-  let summary = "Get member of given team";
-  let description = [{
-    Operation that returns the member of the given team that the caller
-    represents. Members of a team are represented as Index types.
-  }];
-  let arguments = (ins AnyAttr:$team);
-  let results = (outs Index);
-  let builders = [
-    OpBuilder<(ins "::mlir::Attribute":$team), [{
-      build($_builder, $_state, $_builder.getIndexType(), team);
-    }]>,
-  ];
-  // to be defined by the lowerer
-  let hasFolder = 1;
-}
-
-def AllReduceOp : DistRuntime_Op<"allreduce", []> {
-  let summary = "Inplace allreduce";
-  let description = [{
-    Operation that performs an in-place all-reduce with a given operation.
-    The shape of the data argument must be identical for all members of the team.
-    Reduction happens for each element of the argument over all team members.
-    The meaning of the 'op' attribute is defined by the lowering passes.
-  }];
-  // reduction operation and local tensor
-  let arguments = (ins AnyAttr:$op, AnyMemRef:$data);
-}
-
-def GetHaloOp : DistRuntime_Op<"get_halo",
-    [SameVariadicOperandSize, DeclareOpInterfaceMethods<AsyncOpInterface>]> {
-  let summary = "Get left and right halos";
-  let description = [{
-    For a given, distributed array, compute and return the left and right
-    halo as implied by the locally owned data and requested bounding box.
-
-    Data that is not locally owned will be provided in the left or right
-    halo, depending on if the data is from before or after the local part
-    in the first dimension of the global array. Hence it is possible that
-    one or both returned halos are empty.
-
-    The local data is not modified.
-
-    Arguments:
-
-    - `local`: the locally owned data
-    - `gShape`: the global shape of the distributed array
-    - `lOffsets`: the offset of the local data within the global array
-    - `bbOffsets`: the offsets of the requested data part
-    - `bbSizes`: the shape of the requested data part
-    - `team`: the distributed team owning the distributed array
-    - `key` [optional]: a statically assigned id for the given operation (to allow caching)
-
-    `gShape`, `lOffsets`, `bbOffsets` and `bbSizes` are variadic arguments
-    with same size `r` where `r` is the rank of the global array (e.g., one
-    number for each dimension of the global array).
-
-    Returns an `AsyncHandle`, the left and the right halo.
-  }];
-  let arguments = (ins AnyType:$local, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
-                       Variadic<Index>:$bbOffsets, Variadic<Index>:$bbSizes,
-                       AnyAttr:$team, DefaultValuedAttr<I64Attr, "-1L">:$key);
-  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$lHalo, AnyType:$rHalo);
-
-  let builders = [
-    // auto-deduce return type
-    OpBuilder<(ins "::mlir::Value":$local, "::mlir::ValueRange":$gShape, "::mlir::ValueRange":$lOffsets,
-                   "::mlir::ValueRange":$bbOffsets, "::mlir::ValueRange":$bbSizes,
-                   "::mlir::ValueRange":$lHSizes, "::mlir::ValueRange":$rHSizes,
-                   "::mlir::Attribute":$team, CArg<"int64_t", "-1L">:$key)>
-  ];
-  let hasCanonicalizer = 1;
-}
-
 def CopyReshapeOp : DistRuntime_Op<"copy_reshape",
     [Pure, DeclareOpInterfaceMethods<AsyncOpInterface>, AttrSizedOperandSegments]> {
   let summary = "Copy adequate data from input to a new reshaped output";
@@ -213,9 +120,9 @@ def CopyReshapeOp : DistRuntime_Op<"copy_reshape",
     `ngShape`, `nlOffsets` are variadic arguments with same size `ro` where `ro` is the rank of the global output array (e.g., one number for each dimension of the global output array).
   }];
   let arguments = (ins AnyAttr:$team,
-                       AnyType:$lArray, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
+                       AnyRankedTensor:$lArray, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
                        Variadic<Index>:$ngShape, Variadic<Index>:$nlOffsets, Variadic<Index>:$nlShape);
-  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
     $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_g_shape` $ngShape `n_offs` $nlOffsets `n_shape` $nlShape attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];
@@ -253,13 +160,13 @@ def CopyPermuteOp : DistRuntime_Op<"copy_permute",
     `ngShape`, `nlOffsets` are variadic arguments with same size `ro` where `ro` is the rank of the global output array (e.g., one number for each dimension of the global output array).
   }];
   let arguments = (ins AnyAttr:$team,
-                       AnyType:$lArray,
+                       AnyRankedTensor:$lArray,
                        Variadic<Index>:$gShape,
                        Variadic<Index>:$lOffsets,
                        Variadic<Index>:$nlOffsets,
                        Variadic<Index>:$nlShape,
                        DenseI64ArrayAttr:$axes);
-  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$nlArray);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
     $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_offs` $nlOffsets `n_shape` $nlShape `axes` $axes attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];

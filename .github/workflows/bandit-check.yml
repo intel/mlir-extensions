@@ -1,11 +1,7 @@
 name: Bandit Check
+
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '5 23 * * 1'
-  push:
-    paths:
-      - .github/workflows/bandit-check.yml
+  - workflow_dispatch
 
 permissions: read-all
 

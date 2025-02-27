@@ -1,0 +1,29 @@
+name: Nightly CI
+on:
+  workflow_dispatch:
+  schedule:
+#   - cron: '0 0 * * *' # every 24 hrs
+    - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
+jobs:
+  invoke-sync:
+    name: Invoke Sync
+    uses: ./.github/workflows/sync.yml
+    secrets: inherit
+
+  invoke-cpu-tests:
+    needs: invoke-sync
+    name: Invoke main Build_CPU Workflow
+    uses: ./.github/workflows/build_cpu.yml
+    secrets: inherit
+
+  invoke-gpu-tests:
+    needs: invoke-sync
+    name: Invoke main Build_GPU Workflow
+    uses: ./.github/workflows/build_gpu.yml
+    secrets: inherit
+
+  invoke-gpu-fs-sim-tests:
+    needs: invoke-sync
+    name: Invoke Build_GPU_FS_Sim Workflow
+    uses: ./.github/workflows/build_gpu-fs-sim.yml
+    secrets: inherit

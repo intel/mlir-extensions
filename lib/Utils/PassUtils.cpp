@@ -28,7 +28,6 @@ namespace imex {
 /// @return new index ::mlir::Value with given Value
 ::mlir::Value createIndex(const ::mlir::Location &loc,
                           ::mlir::OpBuilder &builder, int64_t val) {
-  assert(val != ::mlir::ShapedType::kDynamic);
   auto attr = builder.getIndexAttr(val);
   return builder.create<::mlir::arith::ConstantOp>(loc, attr);
 }
@@ -67,6 +66,9 @@ namespace imex {
   if (vTyp == intTyp) {
     return val;
   }
+  if (intTyp.getIntOrFloatBitWidth() == vTyp.getIntOrFloatBitWidth()) {
+    return builder.create<::mlir::arith::BitcastOp>(loc, intTyp, val);
+  }
   return builder.create<::mlir::UnrealizedConversionCastOp>(loc, intTyp, val)
       .getResult(0);
 }
@@ -90,13 +92,13 @@ namespace imex {
       // all index cases
       return createIndexCast(loc, builder, val, dTyp);
     }
-    // int to int
-    val = toSignedInt(loc, builder, val);
     // intermediate type if converting to uint, dtyp otherwise
     auto iTyp = (dTyp.isUnsignedInteger())
                     ? builder.getIntegerType(dTyp.getIntOrFloatBitWidth())
                     : dTyp;
     if (bitExtend) {
+      // int to int
+      val = toSignedInt(loc, builder, val);
       // extend bits
       if (vTyp.isUnsignedInteger()) {
         val = builder.createOrFold<::mlir::arith::ExtUIOp>(loc, iTyp, val);
@@ -105,7 +107,10 @@ namespace imex {
       }
     } else {
       // truncate bits
-      val = builder.createOrFold<::mlir::arith::TruncIOp>(loc, iTyp, val);
+      val = convertSignedness(
+          loc, builder, val,
+          builder.getIntegerType(val.getType().getIntOrFloatBitWidth()));
+      val = builder.create<::mlir::arith::TruncIOp>(loc, iTyp, val);
     }
     // cast return type to uint if needed
     return convertSignedness(loc, builder, val, dTyp);
@@ -214,17 +219,18 @@ int64_t getSizeFromValues(const ::mlir::ValueRange &sizes) {
 }
 
 /// combine dynamic and static sizes (as used by SubviewOps) into a
-/// single ValueRange (vecotr of values)
+/// single ValueRange (vector of values)
 ::imex::ValVec getMixedAsValues(const ::mlir::Location &loc,
                                 ::mlir::OpBuilder &builder,
                                 const ::mlir::ValueRange &dyns,
-                                ::llvm::ArrayRef<int64_t> statics) {
+                                ::llvm::ArrayRef<int64_t> statics, bool asI64) {
   ::imex::ValVec out;
   auto dyn = dyns.begin();
   for (auto s : statics) {
     out.emplace_back(::mlir::ShapedType::isDynamic(s)
                          ? *(dyn++)
-                         : createIndex(loc, builder, s));
+                         : (asI64 ? createInt(loc, builder, s)
+                                  : createIndex(loc, builder, s)));
   }
   return out;
 }

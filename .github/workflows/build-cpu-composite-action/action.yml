@@ -1,0 +1,40 @@
+name: "CPU Build composite action"
+description: "Checks out repo, build and run cpu tests"
+inputs:
+  build_root:  # id of input
+    description: 'build_root'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu
+  home_dir:  # id of input
+    description: 'home_dir'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout MLIR
+      shell: bash
+      run: |
+        cd ${{ inputs.build_root }}
+        if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
+        cd ${{ inputs.build_root }}/llvm-project
+        git reset --hard HEAD
+        export LLVM_SHA=`cat ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
+        git fetch --prune
+        git checkout $LLVM_SHA || exit 1
+        if [ -d "${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+
+    - name: Setup IMEX and run tests
+      shell: bash
+      run: |
+        cd ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions || exit 1
+        cmake -S ${{ inputs.build_root }}/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. || exit 1
+        set -o pipefail
+        cmake --build build --target check-imex | tee build/tests.txt
+
+    - name: Upload tests.txt
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: tests.txt
+        path: ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
