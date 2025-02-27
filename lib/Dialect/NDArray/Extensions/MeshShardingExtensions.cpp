@@ -664,6 +664,7 @@ struct LinspaceShardingInterface
     // finally create local linspace
     auto retType = RankedTensorType::get({ShapedType::kDynamic}, elTyp,
                                          retArType.getEncoding());
+    lSz = createCast(loc, builder, lSz, builder.getIndexType());
     auto res = builder.create<::imex::ndarray::LinSpaceOp>(loc, retType, start,
                                                            stop, lSz, false);
     // update mapping
