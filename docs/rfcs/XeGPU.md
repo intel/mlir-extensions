@@ -2,7 +2,9 @@
 
 ## Summary
 The XeGPU dialect provides an abstraction that closely models Xe instructions to support high-performance GEMM code generation.
-The matrix instructions at this level exactly match the hardware instructions’ semantics including the matrix sizes.
+The XeGPU operations are designed to support tile based programming. The same set of operations work at multiple levels, including workgroup, subgroup, and work item.
+The workgroup level operation can be decomposed and unrolled to multipel XeGPU operations at subgroup level, which can be further decomposed to work item level.
+Along the way, the tensor size is partitioned to smaller size, and the subgroup and work item level XeGPU operations exactly match the hardware instructions’ semantics including the matrix sizes.
 The lowering and optimizations built on top of the XeGPU dialect are target-specific.
 
 ## Proposal
@@ -11,6 +13,9 @@ in the MLIR gradual lowering. XeGPU dialect works with MLIR memref and vector ty
 XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIR-V dialect, for example, DPAS and 2D block
 load and store. In some cases, one XeGPU op may lower to a sequence of instructions for a dedicated and performance-critical function.
 For example, create_tdesc is mapped to a fixed sequence of instructions to create an address description.
+
+The operation definition is general and works for workgroup, subgroup, or work item level. When working at workgroup level, the operation must 
+attach `wg_map` attribute, and work item level operation must attach `sg_map` attribute. 
 
 Below is a summary.
 
@@ -33,10 +38,6 @@ Below is a summary.
 |nbarrier_arrive	| operation ::= xegpu.nbarrier_arrive $nbarrier : type($nbarrier) | xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier |
 |nbarrier_wait	| operation ::= xegpu.nbarrier_wait $nbarrier : type($nbarrier) | xegpu.nbarrier_wait %nbarrier : !xegpu.nbarrier |
 |fence	| operation ::= xegpu.fence attr-dict | xegpu.fence {scope = gpu, memory_kind = global} |
-
-The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to
-multiple XeGPU ops.  For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load operations. Compared with the
-XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.
 
 XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need a tensor descriptor to
 describe the addresses/offsets to a data block. The descriptor is used for load/store/prefetch, and then updated for reuse with the
@@ -488,7 +489,7 @@ The load with chunk_size pack the low-precision data to 32-bit data using wi_dat
 
 User must use legal sg_map value for the WI data distribution for certain operations on PVC and ARC. It includes load_nd/store_nd, load/store with chunk_size, and DPAS.
 
-## Rules of sg_map setting for load and store on PVC and ARC
+**Rules of sg_map setting for load and store on PVC and ARC**
 The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on PVC. Not using the sg_map value defined here leads to undefined behavior.
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
@@ -643,9 +644,7 @@ users must use for the WI data distribution of 1D block load and regular load wi
   #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
 ```
 
-
-
-## sg_map use case - 2D load
+**sg_map use case - 2D load**
 
 An example on how to load a 2D block, perform dpas, and store back to memory.
 
@@ -678,7 +677,7 @@ An example on how to load a 2D block, perform dpas, and store back to memory.
 
 ```
 
-## sg_map use case - regular load:
+**sg_map use case - regular load**
 An example on how to perform transpose using load with chunk_size in SIMT flavor.
 
 ```mlir
@@ -700,6 +699,153 @@ An example on how to perform transpose using load with chunk_size in SIMT flavor
                 vector<4xfp32>, tensor_desc<64xfp32, #tdesc_attr>
 
 ```
+
+## Workgroup level XeGPU Operations
+
+By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler as the loop nest level for subgroup and work item level can be removed. To eanble XeGPU operate the workgroup level, `wg_map` attribute is introduced to specify how the data is distributed across subgroups. `wg_mmap` enables tensor compiler to express the cooperative operation among subgroups by specifying a `wg_mapping` to parition data among subgroups without modifying the IR representation other required when using loop nest IR. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critial preformance knobs.   
+
+**Attribute xegpu.wg_map**
+xegpu.wg_map specifies how a ND tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of two parameters:
+  * sg_layout: Defines the ND arrangement of subgroups within the workgroup.
+  * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition. 
+
+When a wg_map attribute is attached to a tensor descriptor, load/store/dpas will operate at the workgroup level. The wg_map attribute must be specified when creating the tensor descriptor.
+
+**Constraints**
+
+Given these definitions:
+```mlir
+sg_data_size = sg_data[0] × sg_data[1]
+workgroup_size = sg_layout[0] × sg_layout[1]
+tensor_size = tensor_desc[0] × tensor_desc[1]
+```
+
+the following conditions must hold:
+
+* workgroup_size must represent the number of subgroups in a workgroup for a kernel.
+* tensor_desc[0] must be evenly divisible by sg_layout[0] × sg_data[0], or vice versa.
+* tensor_desc[1] must be evenly divisible by sg_layout[1] × sg_data[1], or vice versa.
+
+**distribution rule**
+
+The wg_tile is distributed to sg_data x sg_layout in a round-robin fashion. If sg_data[i] x sg_layout[i] < wg_tile[i], we have data left after all subgroups are assigned for the first round. In this case, we continue to assign the rest data starting from the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] >= wg_tile[i], we may have already used up all the data before all subgroups are assigned. In this case, we wrap around the wg_tile and continue the assignment, and the rest subgroups along that dimension share the same data.
+
+data_index_i = sg_id_in_wg_x % (tensor[i]/sg_data[i])
+data_index_j = sg_id_in_wg_x % (tensor[j]/sg_data[j])
+sg_data_assigned[data_index_i, data_index_j] = (tensor[i]/sg_data[i], tensor[j]/sg_data[j], sg_data[i], sg_data[j])
+
+
+**Resulting WI Data Fragment**
+
+Each work item’s fragment of the distributed tensor is represented by a 2D vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2D vector will be further lowered to a 1D “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
+
+**Examples of workgroup distribution with wg_map**
+
+over the lowering process so that the user can tune for optimal performance.
+
+Below is an example.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
+   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, order = [0, 1]>
+
+   %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #tile_attr>
+```
+Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. The tile created by init_tile is a workgroup-level tile. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. When mapping sg_layout to linear subgroup id, sg_layout is always mapped to subgroup id in row-major ordering. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
+
+
+
+For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping for sg_layout [2,2]:
+
+| subgroup tensor	| 2D subgroup id	|  Linearized subgroup id
+| :---   | :----   | :----   |
+| [  0:31, 0:127] | [0, 0] , [0, 1] | 0 , 1 |
+| [ 32:63, 0:127] | [1, 0] , [1, 1] | 2 , 3 |
+| [ 64:95, 0:127] | [0, 0] , [0, 1] | 0 , 1 |
+| [96:127, 0:127] | [1, 0] , [1, 1] | 2 , 3 |
+
+With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type.
+
+The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTile operations as illustrated below. The attribute applies only to the output value of each operation. The input values `xetile.wg_map` are determined by their respective defining operations.
+| Ops	| Syntax	| Example |
+| :---   | :----   | :--- |
+|tile_mma	| operation ::= xetile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = xetile.tile_mma %vector_a, %vector_b, %vector_c {#mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
+|transpose	| operation ::= xetile.transpose attr_dict $vec : type($vec) -> type($res)	 | %vector_a = xetile.transpose %vector_b {#mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
+|reduction	| operation ::= xetile.reduction $kind $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.reduction <add> %vector_b [1] {#mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
+|broadcast	| operation ::= xetile.broadcast $src attr_dict : type($value) -> type($res)	 | %vector_a = xetile.broadcast %vector_b  [0] {#mp_a}: vector<1x32xfloat> into vector<64x32xfloat>  |
+|convert_layout	| operation ::= xetile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.convert_layout %vector_b {#mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
+
+With the `wg_map` attribute attached for the output vector, `tile_mma` does a matrix multiplication at a work group level vector.
+```mlir
+   #wg_map_d = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+
+   %vector_d = xetile.tile_mma %vector_a, %vector_b, %vector_c {#wg_map_d}:
+     vector<256x256xfloat>, vector<256x32xbf16>, vector<32x256xbf16>
+	   into vector<256x256xfloat>
+```
+The `wg_map` attribute of input vector operands can be derived from the wg_map_d. They must have the same sg_layout, and sg_data for m and n dimenion must be same as wg_map_d, and sg_data for k dimension must be same as operand A and B. These attributes may be retrieved from their producer ops, and the retrieved attributes must be consistent with the derived ones. Below is the derived wg_map for the three vector operands in the example above.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]> //wg_map for %vector_a
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]> //wg_map for %vector_b
+   #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]> //wg_map for %vector_c
+```
+
+`reduction` with `wg_map` does the reduction over a workgroup level vector.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
+   %vector_a = xetile.reduction <add> %vector_b [1] {#wg_map_a}: vector<256x128xfloat> into vector<256x1xfloat>
+```
+`reduction_size` attribute is used to support paritial reduction.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [1, 32]>
+   %vector_a = math.exp %input {#wg_map_a} : vector<256x128xf32>
+   %vector_b = xetile.reduction <add> %vector_a [0] {$reduction_size = [32]}  {#wg_map_b}: vector<256x128xfloat> into vector<8x128xfloat>
+```
+
+The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_layout must be same, sg_data for the dimension being reduced must be same as the input vector, and the other dimension must be same as the wg_map_a. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
+```mlir
+   #wg_map_b = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>  //wg_map for %vector_b
+```
+
+`broadcast` with `wg_map` attribute broadcast at workgroup level.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 256]>
+   %vector_a = xetile.broadcast %vector_b [1] {#wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
+```
+The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_layout must be same, sg_data for the dimension being broadcast must be "1", and the other dimension must be same as the wg_map_a. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
+```mlir
+   #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>  //wg_map for %vector_b
+```
+
+`transpose` with `wg_map` attribute transpose a workgroup level vector.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
+   %vector_a = xetile.transpose %vector_b {#wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
+```
+
+The `wg_map` attribute of the input vector can be derived from the wg_map_a. The two dimension of sg_layout and sg_data must be swapped. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
+```mlir
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>  //wg_map for %vector_b
+```
+The transpose can be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming column_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
+
+An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
+
+`convert_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
+
+Example with the wg_map specified for both input and output operands.
+```mlir
+   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
+   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
+   %vector_a = xetile.convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+```
+Example without the wg_map specified for the input operand.
+```mlir
+   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
+   %vector_a = xetile.convert_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
+```
+The convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
+
 
 ## Notes
 
