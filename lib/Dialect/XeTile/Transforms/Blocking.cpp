@@ -77,8 +77,9 @@ class RewriteXeTileOp : public OpRewritePattern<SourceOp> {
 public:
   using OpPatternRewriter = typename mlir::PatternRewriter;
 
-  RewriteXeTileOp(MLIRContext *context, AnalysisT &analysis)
-      : OpRewritePattern<SourceOp>(context), analysis(analysis) {}
+  RewriteXeTileOp(MLIRContext *context, AnalysisT &analysis,
+                  PatternBenefit benefit = 1)
+      : OpRewritePattern<SourceOp>(context, benefit), analysis(analysis) {}
 
 protected:
   AnalysisT &analysis;
@@ -93,6 +94,20 @@ public:
                      PatternBenefit benefit = 1)
       : OpTraitRewritePattern<TraitType>(context, benefit), analysis(analysis) {
   }
+
+protected:
+  AnalysisT &analysis;
+};
+
+template <typename SourceOp, typename AnalysisT>
+class RewriteOpInterface : public OpInterfaceRewritePattern<SourceOp> {
+public:
+  using OpPatternRewriter = typename mlir::PatternRewriter;
+
+  RewriteOpInterface(MLIRContext *context, AnalysisT &analysis,
+                     PatternBenefit benefit = 1)
+      : OpInterfaceRewritePattern<SourceOp>(context, benefit),
+        analysis(analysis) {}
 
 protected:
   AnalysisT &analysis;
@@ -1201,12 +1216,14 @@ public:
     llvm::SmallVector<llvm::SmallVector<Value>> newOperands;
     for (auto opr : op->getOperands()) {
       auto oprTy = dyn_cast<VectorType>(opr.getType());
-      if (!oprTy || oprTy.getRank() != 2)
+      if (!oprTy || oprTy.getRank() != 2) {
         newOperands.push_back({opr});
-      auto convertedTypes = convertTypes(oprTy, blockSize.asArrayRef());
-      auto convertedValues =
-          addPackOp(opr, convertedTypes, blockSize.asArrayRef(), loc, rewriter);
-      newOperands.push_back(convertedValues);
+      } else {
+        auto convertedTypes = convertTypes(oprTy, blockSize.asArrayRef());
+        auto convertedValues = addPackOp(opr, convertedTypes,
+                                         blockSize.asArrayRef(), loc, rewriter);
+        newOperands.push_back(convertedValues);
+      }
     }
 
     OpBuilder::InsertionGuard g(rewriter);
@@ -1241,130 +1258,181 @@ public:
   }
 };
 
-// Update the SCF forOp when it has arguments being blocked and and needs
-// to be replaced with a set of new arguments with smaller size
-// TODO: Can we replace this pattern to match with RegionBranchOpInterface?
-// It may improve the generality of the pattern.
-class RewriteSCFForOp : public RewriteXeTileOp<scf::ForOp, BlockingAnalysis> {
+// a helper function to convert operands and results (or type). It captures
+// the major code structure of the conversion, while there are slightly
+// differences for the actual conversion of operands and results (or type).
+template <typename T, typename IfLambda, typename ElseLambda>
+static void convertOperandsOrResults(T container,
+                                     llvm::ArrayRef<Block> blockSZs,
+                                     IfLambda ifLambda, ElseLambda elseLambda) {
+  for (auto [i, item] : llvm::enumerate(container)) {
+    auto type = dyn_cast<ShapedType>(item.getType());
+    auto blockSZ = blockSZs[i].asArrayRef();
+    if (type && type.getShape() != blockSZ) {
+      ifLambda(i, item, type, blockSZ);
+    } else {
+      elseLambda(i, item);
+    }
+  }
+}
+
+class RewriteRegionBranchOp
+    : public RewriteOpInterface<RegionBranchOpInterface, BlockingAnalysis> {
 public:
-  using RewriteXeTileOp<scf::ForOp, BlockingAnalysis>::RewriteXeTileOp;
-
-  LogicalResult matchAndRewrite(scf::ForOp op,
+  using RewriteOpInterface<RegionBranchOpInterface,
+                           BlockingAnalysis>::RewriteOpInterface;
+  LogicalResult matchAndRewrite(RegionBranchOpInterface iface,
                                 OpPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto initArgs = op.getInitArgs();
-    auto regionArgs = op.getRegionIterArgs();
-    auto results = op.getResults();
-    llvm::SmallVector<Block> blockSZs;
+    auto loc = iface.getLoc();
+    mlir::Operation *op = iface.getOperation();
 
-    // We use region args as anchor. PackOps will be inserted if ncessary
-    // for each init args, and UnpackOps will be inserted for each argument
-    // and result.
-    for (auto arg : regionArgs) {
-      auto argBlock = analysis.getDefBlockSize(arg);
-      blockSZs.push_back(argBlock);
-    }
-
-    // preprocess the init args by adding pack ops if necessary,
-    // and build the SignatureConversion for region arguments.
-    auto origArgCount = op.getNumRegionIterArgs();
-    TypeConverter::SignatureConversion argConversion(origArgCount);
-    llvm::SmallVector<Value> convertedInitArgs;
-    for (auto [i, v] : llvm::enumerate(initArgs)) {
-      auto blockSZ = blockSZs[i];
-      auto type = dyn_cast<ShapedType>(v.getType());
-      if (!blockSZ || !type || type.getShape() == blockSZ.asArrayRef()) {
-        argConversion.addInputs(i, v.getType());
-        convertedInitArgs.push_back(v);
-      } else {
-        auto newTypes = convertTypes(type, blockSZ.asArrayRef());
-        argConversion.addInputs(i, newTypes);
-        auto values =
-            addPackOp(v, newTypes, blockSZ.asArrayRef(), loc, rewriter);
-        convertedInitArgs.append(values.begin(), values.end());
-      }
-    }
-
-    // no change is needed if convertedInitArgs is the same as current ones.
-    if (llvm::equal(convertedInitArgs, initArgs))
+    // only support for ops with SingleBlock region and has loop now
+    if (!op->hasTrait<OpTrait::SingleBlock>())
       return failure();
 
-    auto newOp =
-        rewriter.create<scf::ForOp>(loc, op.getLowerBound(), op.getUpperBound(),
-                                    op.getStep(), convertedInitArgs);
-    auto *newBlock = newOp.getBody();
-    // remove the terminator of the new block
-    if (newBlock->mightHaveTerminator())
-      rewriter.eraseOp(newBlock->getTerminator());
+    // an Op implementing RegionBranchOpInterface could have more than one entry
+    // successor regions. For example, for scf.for, it has two entry successor
+    // regions. one is the loop body, and the other one the scf.for op itself
+    // (isParent). for the first case, the getSuccessorInputs returns region
+    // BlockArguments, and for the sencond case, it returns the scf.for op
+    // results, which is taken as inputs to the region too.
+    // getEntrySuccessorOperands is equivalent to getInitArgs for SCF::ForOp
+    llvm::SmallVector<RegionSuccessor> successors;
+    iface.getSuccessorRegions(RegionBranchPoint::parent(), successors);
 
-    llvm::SmallVector<Value> castArgs;
-    if (auto inductionVals = newOp.getLoopInductionVars())
-      castArgs = inductionVals.value();
+    // the region iter arguments will be used as the anchor if it is a loop,
+    // otherwise, the op results will be used as the anchor.
+    // TODO: is it safe to assume that first is always the entry successor?
+    auto anchor =
+        iface.hasLoop() ? successors[0].getSuccessorInputs() : op->getResults();
 
-    auto savedIP = rewriter.saveInsertionPoint();
+    // Collect blockSZ for each value and check whether they need a rewrite
+    bool toChange = false;
+    llvm::SmallVector<Block> blockSZs;
+    llvm::for_each(anchor, [&](Value val) {
+      auto type = dyn_cast<ShapedType>(val.getType());
+      auto block = analysis.getDefBlockSize(val);
+      blockSZs.push_back(block);
+      toChange |= block && type && type.getShape() != block.asArrayRef();
+    });
+
+    // Skip if no need to rewrite
+    if (!toChange)
+      return failure();
+
+    auto defaultIP = rewriter.saveInsertionPoint();
     PatternRewriter::InsertionGuard g(rewriter);
-    rewriter.setInsertionPointToStart(newBlock);
-    // create unpackOp for converted region arguments if necessary.
-    auto convertedArgs = newOp.getRegionIterArgs();
-    for (unsigned i = 0; i < origArgCount; i++) {
-      auto inputMap = argConversion.getInputMapping(i);
-      if (!inputMap || inputMap->size == 1) {
-        castArgs.push_back(convertedArgs[inputMap->inputNo]);
-      } else {
-        auto arg = addUnpackOp(
-            convertedArgs.slice(inputMap->inputNo, inputMap->size),
-            regionArgs[i].getType(), blockSZs[i].asArrayRef(), loc, rewriter);
-        castArgs.push_back(arg);
-      }
-    }
-    rewriter.restoreInsertionPoint(savedIP);
-    rewriter.mergeBlocks(op.getBody(), newBlock, castArgs);
 
+    for (auto s : successors) { // convert the terminator
+      if (s.isParent())
+        continue;
+      Region *r = s.getSuccessor();
+      auto terminator = r->front().getTerminator();
+      llvm::SmallVector<Value> convertedOperands;
+      rewriter.setInsertionPoint(terminator);
+      convertOperandsOrResults(
+          terminator->getOperands(), blockSZs,
+          [&](int64_t i, Value v, ShapedType type,
+              llvm::ArrayRef<int64_t> blockSZ) {
+            auto newTypes = convertTypes(type, blockSZ);
+            auto newOprs = addPackOp(v, newTypes, blockSZ, loc, rewriter);
+            convertedOperands.append(newOprs.begin(), newOprs.end());
+          },
+          [&](int64_t i, Value v) { convertedOperands.push_back(v); });
+
+      terminator->setOperands(convertedOperands);
+    }
+
+    // convert BlockArguments and Inits if it is a loop, otherwise original
+    // inputs will used
+    llvm::SmallVector<Value> convertedOperands(op->getOperands());
+    if (iface.hasLoop()) {
+      RegionSuccessor s = successors[0];
+      Region *r = s.getSuccessor();
+      rewriter.setInsertionPointToStart(&r->front());
+      auto arguments = llvm::to_vector(s.getSuccessorInputs());
+      convertOperandsOrResults(
+          llvm::ArrayRef<Value>(arguments), blockSZs,
+          [&](int64_t i, Value arg, ShapedType type,
+              llvm::ArrayRef<int64_t> blockSZ) {
+            auto newTypes = convertTypes(type, blockSZ);
+            llvm::SmallVector<Location> locs(newTypes.size(), arg.getLoc());
+            llvm::SmallVector<Value> newArgs;
+            llvm::for_each(r->addArguments(newTypes, locs),
+                           [&](BlockArgument b) { newArgs.push_back(b); });
+            auto cast = addUnpackOp(newArgs, type, blockSZ, loc, rewriter);
+            arg.replaceAllUsesWith(cast);
+          },
+          [&](int64_t i, Value arg) {
+            auto newArg = r->addArgument(arg.getType(), arg.getLoc());
+            arg.replaceAllUsesWith(newArg);
+          });
+
+      // cleanup the old arguments, it has to done in reverse order
+      for (auto v : llvm::reverse(arguments)) {
+        auto arg = dyn_cast<BlockArgument>(v);
+        if (arg && arg.use_empty())
+          r->eraseArgument(arg.getArgNumber());
+      }
+
+      // convert the Inits
+      rewriter.setInsertionPoint(op);
+
+      auto inits = iface.getEntrySuccessorOperands(s);
+      convertedOperands.pop_back_n(inits.size());
+      convertOperandsOrResults(
+          inits, blockSZs,
+          [&](int64_t i, Value init, ShapedType type,
+              llvm::ArrayRef<int64_t> blockSZ) {
+            auto newTypes = convertTypes(type, blockSZ);
+            auto newInits = addPackOp(init, newTypes, blockSZ, loc, rewriter);
+            convertedOperands.append(newInits.begin(), newInits.end());
+          },
+          [&](int64_t i, Value init) { convertedOperands.push_back(init); });
+    }
+
+    // convert result types
+    TypeConverter::SignatureConversion resultTypes(op->getNumResults());
+    convertOperandsOrResults(
+        op->getResults(), blockSZs,
+        [&](int64_t i, Value v, ShapedType type,
+            llvm::ArrayRef<int64_t> blockSZ) {
+          auto newTypes = convertTypes(type, blockSZ);
+          resultTypes.addInputs(i, newTypes);
+        },
+        [&](int64_t i, Value v) { resultTypes.addInputs(i, v.getType()); });
+
+    rewriter.restoreInsertionPoint(defaultIP);
+
+    // create a new op to reveal the changes of operands and results
+    OperationState opState(loc, op->getName(), convertedOperands,
+                           resultTypes.getConvertedTypes(), op->getAttrs(),
+                           op->getSuccessors());
+    for (auto s : successors) {
+      if (s.isParent())
+        continue;
+      Region *newRegion = opState.addRegion();
+      Region *oldRegion = s.getSuccessor();
+      newRegion->takeBody(*oldRegion);
+    }
+    auto newOp = rewriter.create(opState);
+
+    // add unpack ops for the results
+    auto convertedResults = newOp->getResults();
     llvm::SmallVector<Value> castResults;
-    auto convertedResults = newOp.getResults();
-    for (unsigned i = 0; i < origArgCount; i++) {
-      auto inputMap = argConversion.getInputMapping(i);
+    for (auto [i, res] : llvm::enumerate(op->getResults())) {
+      auto inputMap = resultTypes.getInputMapping(i);
       if (!inputMap || inputMap->size == 1) {
         castResults.push_back(convertedResults[inputMap->inputNo]);
       } else {
-        auto res = addUnpackOp(
+        auto cast = addUnpackOp(
             convertedResults.slice(inputMap->inputNo, inputMap->size),
-            results[i].getType(), blockSZs[i].asArrayRef(), loc, rewriter);
-        castResults.push_back(res);
+            res.getType(), blockSZs[i].asArrayRef(), loc, rewriter);
+        castResults.push_back(cast);
       }
     }
 
     rewriter.replaceOp(op, castResults);
-    return success();
-  }
-};
-
-// Update the SCF Yield op when its operands have being blocked and and needs
-// to be replaced with a set of new values with smaller size
-class RewriteSCFYieldOp
-    : public RewriteXeTileOp<scf::YieldOp, BlockingAnalysis> {
-public:
-  using RewriteXeTileOp<scf::YieldOp, BlockingAnalysis>::RewriteXeTileOp;
-
-  LogicalResult matchAndRewrite(scf::YieldOp op,
-                                OpPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    llvm::SmallVector<Value> convertedResults;
-    for (auto res : op.getResults()) {
-      auto blockSZ = analysis.getDefBlockSize(res);
-      auto type = dyn_cast<ShapedType>(res.getType());
-      if (blockSZ && type && type.getShape() != blockSZ.asArrayRef()) {
-        auto newTypes = convertTypes(type, blockSZ.asArrayRef());
-        auto values =
-            addPackOp(res, newTypes, blockSZ.asArrayRef(), loc, rewriter);
-        convertedResults.append(values.begin(), values.end());
-      } else {
-        convertedResults.push_back(res);
-      }
-    }
-    if (llvm::equal(convertedResults, op.getResults()))
-      return failure();
-    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, convertedResults);
     return success();
   }
 };
@@ -1463,9 +1531,9 @@ void populateXeTileBlockingPatterns(RewritePatternSet &patterns,
       Blocking::RewriteStoreScatterOp, Blocking::RewriteUpdateTileOffsetOp,
       Blocking::RewriteTileMMAOp, Blocking::RewriteTileReductionOp,
       Blocking::RewriteTileBroadcastOp, Blocking::RewriteTileTransposeOp,
-      Blocking::RewriteVectorizableOp, Blocking::RewriteSCFForOp,
-      Blocking::RewriteSCFYieldOp, Blocking::RewriteCreateMaskOp,
-      Blocking::RewriteAtomicRMWOp>(patterns.getContext(), analysis);
+      Blocking::RewriteVectorizableOp, Blocking::RewriteRegionBranchOp,
+      Blocking::RewriteCreateMaskOp, Blocking::RewriteAtomicRMWOp>(
+      patterns.getContext(), analysis);
 }
 
 // Lowers XeTile to blocked layout with high-dim vector
