@@ -26,6 +26,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -687,7 +688,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
                            memref::MemRefDialect, vector::VectorDialect,
-                           spirv::SPIRVDialect>();
+                           ub::UBDialect, spirv::SPIRVDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
 
     // TODO: can we change it to addDynamicLegalOp?

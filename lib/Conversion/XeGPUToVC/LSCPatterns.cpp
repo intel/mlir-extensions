@@ -22,6 +22,7 @@
 #include "mlir/Pass/PassManager.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -1203,7 +1204,7 @@ public:
     Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32Ty = VectorType::get(16, i32Type);
-    Value undef = rewriter.create<mlir::spirv::UndefOp>(loc, v16i32Ty);
+    Value undef = rewriter.create<mlir::ub::PoisonOp>(loc, v16i32Ty);
     Value src0 = undef;
     if (op.getValue()) {
       src0 = op.getValue();
