@@ -706,12 +706,20 @@ By allowing XeGPU operating on workgroup level data size, it provides a concise 
 
 **Attribute xegpu.wg_map**
 
-`wg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of two parameters:
+`wg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of three parameters:
   * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimension can up to 3d array. 
   * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition.
   * sg_order: The dimension order used to linearize n-d subgroup ids to 1-d. The first dimension in the sg_order list is the fastest-changing dimension. 
 
 Given a 3-d sg_layout with and dimension sizes as dim_0, dim_1, dim_2, sg_order[2, 1, 0] maps subgroup thread [x, y, z] to linear subgroup thread [z + dim_2*y + dim_2*dim_1*x ], sg_order[1, 2, 0] maps to [y + dim_2*z + dim_2*dim_1*x].
+
+Example of linerized subgourp id regarding order[1, 0] vs. order [0, 1]. 
+| sg_layout[4, 4] | order[1, 0] | order[0, 1]
+| :----   | :----   |  :----   |
+| [0, 0], [0, 1], [0, 2], [0, 3] | 0 , 1, 2, 3 | 0, 4, 8, 12 |
+| [1, 0], [1, 1], [1, 2], [1, 3] | 4 , 5 , 6, 7| 1, 5, 9, 13 |
+| [2, 0], [2, 1], [2, 2], [2, 3] | 8, 9, 10 , 11 | 2, 6, 10, 14 |
+| [3, 0], [3, 1], [3, 2], [3, 3] | 12 , 13, 14, 15 | 3, 7, 11, 15 |
 
 When a wg_map attribute is attached to a tensor descriptor, load/store/dpas will operate at the workgroup level. The wg_map attribute must be specified when creating the tensor descriptor.
 
