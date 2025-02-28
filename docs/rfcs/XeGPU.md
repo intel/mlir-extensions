@@ -825,6 +825,192 @@ The example below represent the `wg_map` conversion with  unrealized_conversion_
 ```
 The `wg_map` conversion can be lowered to storing and loading from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to shared local memory with the #wg_map_b and 2) use wg_map_a mapping to load the data from shared local memory.
 
+## Appendix 1 - Code examples for work group level XeGPU using wg_map attribute
+
+## Appendix 1.1 Simple Gemm with prefetch
+The first example shows a simple gemm. It demonstrates the different wg_map we used for prefetch and load.
+```mlir
+Pseudo code for simple gemm
+C[4096, 4096] = matmul (A[4096, 4096], B[4096, 4096])
+```
+
+```mlir
+#mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
+#mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_b_pfh = #wg_map<sg_layout=[4,8], sg_data=[8,32]>
+#mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b> // sg_layout=[8,4], sg_data=[32,64]
+       %1p = create_nd_tdesc %a[%i, %c96] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = create_nd_tdesc %b[%c96, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_pfh> // sg_layout=[4,8]
+
+       %3 = create_nd_tdesc %c[%i, %j] : memref<4096x4096xf32> -> tensor_desc<256x256xf32, #mp_c>           // sg_layout=[32, 1]
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           %4  = load_nd %1 : tensor_desc<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
+           %10 = load_nd %2  : tensor_desc<32x256xf16 #mp_b> -> vector<32x256xf16>                // sg_layout=[8,4], sg_data=[32,64]
+          
+           prefetch_nd %1 : tensor_desc<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
+           prefetch_nd %2  : tensor_desc<32x256xf16, #mp_a_pfh>                                    // sg_layout=[4,8]
+           %6 = dpas %4, %10 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_nd_offset%1, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a>
+           %2 = update_nd_offset%2, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b>
+           %1p = update_nd_offset%1p, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a_pft>
+           %2p = update_nd_offset%2p, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b_pft>
+         } 
+         store_nd %3, %6: (tensor_desc<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 4]
+    } 
+  }
+```
+## Appendix 1.2 Gemm with transpose, broadcast, and reduction
+The second example contains transpose, broadcast, and reduction.
+```mlir
+Pseduo code for the original problem.
+C[4096, 4096] = matmul (A[4096, 4096], BT[4096, 4096]) + broad_cast(bcast[4096], dim=0)
+Reduce[4096] = reduce_add(C[4096, 4096], dim=1)
+```
+
+```mlir
+#mp_a     = #wg_map<sg_layout=[8,4], sg_data=[32,32]>
+#mp_a_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
+#mp_b     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_bt    = #wg_map<sg_layout=[4,8], sg_data=[64,32]>
+#mp_bt_pfh = #wg_map<sg_layout=[32,1], sg_data=[8,32]>
+#mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+
+#mp_bcast = #wg_map<sg_layout=[8, 4], sg_data=[1,64]>
+#mp_reduce= #wg_map<sg_layout=[32, 1], sg_data=[8, 1]>
+#mp_reduce2= #wg_map<sg_layout=[32, 1], sg_data=[8, 256]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %bcast: memref<4096xf32>
+       %res: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = create_nd_tdesc %bt[%j, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_bt> // sg_layout=[4,8], sg_data=[64,32]
+       %1p = create_nd_tdesc %a[%i, %c192] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = create_nd_tdesc %bt[%j, %c192] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_bt_pfh> // sg_layout=[32,1]
+
+       %bcast'= memref.cast %bcast: memref<4096xf32> -> memref<1x4096xf32>
+       %7 = create_nd_tdesc %bcast'[%j] : memref<1x4096xf32> -> tensor_desc<1x256xf32, #mp_bast>           // sg_layout=[4, 8], sg_data=[1,32]
+
+       %res'= memref.cast %res: memref<4096xf32> -> memref<4096x1xf32>
+       %3 = create_nd_tdesc %res'[%i] : memref<4096x1xf32> -> tensor_desc<256x1xf32, #mp_reduce>           // sg_layout=[32, 1]
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           %4  = load_nd %1 : tensor_desc<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
+           %10 = load_nd %2  : tensor_desc<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
+           %5  = vector.transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+
+           prefetch_nd %1 : tensor_desc<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
+           prefetch_nd %2  : tensor_desc<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
+           %6 = dpas %4, %5 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_nd_offset%1, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a>
+           %2 = update_nd_offset%2, %c0, %c32 :  tensor_desc<256x32xf16, #mp_bt>
+           %1p = update_nd_offset%1p, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a_pft>
+           %2p = update_nd_offset%2p, %c32, %c0 :  tensor_desc<256x32xf16, #mp_bt_pft>
+         } 
+
+         %12  = load_nd %7  : tensor_desc<256xf32, #mp_bcast> -> vector<256xf16>                          // sg_layout=[32], sg_data=[64]
+         %13 = broadcast {#mp_bcast #mp_c} %12 [0]: vector<256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4], sg_data=[32,64]
+         %14 = add %6, %13 : vector<256x256xf32>
+         %15 = convert_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
+         %16 = vector.reduction {#mp_reduce2 #mp_reduce} <add> %15 [1]: vector<256x256xf32> => vector<256xf32>  // sg_layout=[32]
+         store_nd %3, %7: (tensor_desc<256xf32, #mp_reduce>, vector<256xf32>)                               // sg_layout=[32]
+    } 
+  }
+```
+
+## Appendix 1.3 Gemm implementation with two cache levels
+For GPU support high-performance prefetch through two level of caches.
+```mlir
+#mp_a = #wg_map<sg_layout=[8,4], sg_data=[64,32]>
+#mp_b = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
+#mp_c = #wg_map<sg_layout=[8,4], sg_data=[64,64]>
+
+#mp_a_copl2 = #wg_map<sg_layout=[32,1], sg_data=[16,128]>
+#mp_b_copl2 = #wg_map< sg_layout=[16,2], sg_data=[8,128]>
+
+#mp_a_copl1 = #wg_map<sg_layout=[32,1], sg_data=[16,32]>
+#mp_b_copl1 = #wg_map< sg_layout=[4, 8], sg_data=[8,32]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+   scf.for %i = %c0 to %c4096 step %c256 {
+     scf.for %j = %c0 to %c4096 step %c256 {
+        %a1_l2 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x128xf16, #mp_a_copl2>
+        %b1_l2 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<128x256xf16, #mp_b_copl2>
+        %a2_l2 = create_nd_tdesc %a[%i, %c256] : memref<4096x4096xf16> -> tensor_desc<512x128xf16, #mp_a_copl2>
+        %b2_l2 = create_nd_tdesc %b[%c256, %j] : memref<4096x4096xf16> -> tensor_desc<128x256xf16, #mp_b_copl2>
+
+        prefetch_nd %a1_l2 locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+        prefetch_nd %b1_l2 locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+	prefetch_nd %a2_l2 locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+        prefetch_nd %b2_l2 locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+        %a2_l2’ = update_nd_offset%a2_l2, %c0, %c32 :  tensor_desc<512x128xf16, #mp_b_copl2>
+        %b2_l2’ = update_nd_offset%b2_l2, %c32, %c0 :  tensor_desc<128x256xf16, #mp_b_copl2>
+
+        %a1_l1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b1_l1 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a2_l1 = create_nd_tdesc %a[%i, %c32] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b2_l1 = create_nd_tdesc %b[%c32, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a3_l1 = create_nd_tdesc %a[%i, %c64] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b3_l1 = create_nd_tdesc %b[%c64, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a4_l1 = create_nd_tdesc %a[%i, %c96] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b4_l1 = create_nd_tdesc %b[%c96, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+
+        prefetch_nd %a1_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b1_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a2_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b2_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a3_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b3_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a4_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b4_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        %a4_l1’ = update_nd_offset% a4_l1, %c0, %c128 :  tensor_desc<512x32xf16, #mp_a_copl1>
+        %b4_l1’ = update_nd_offset% b4_l1, %c128, %c0 :  tensor_desc<32x256xf16, #mp_b_copl1>
+
+        %a1_load = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a>
+        %b1_load = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b>
+
+        %c_tile = create_nd_tdesc %c[%i, %j] : memref<4096x4096xf32> -> tensor_desc<512x256xf32, #mp_c>
+
+        scf.for %k= %c0 to %c4096 step %c32 {
+            %a1_r = load_nd %a1_load : tensor_desc<256x32xf16  #mp_a > -> vector<512x32xf16>
+            %b1_r = load_nd %b1_load  : tensor_desc<32x256xf16 #mp_b> -> vector<32x256xf16>
+
+            Scf.if (%k %4 == 0) {
+                gpu.barrier
+                prefetch_nd %a2_l2’ locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+                prefetch_nd %b2_l2’ locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+                %a2_l2’ = update_nd_offset%a2_l2’, %c0, %c128 :  tensor_desc<512x128xf16, #mp_a_copl2>
+                %b2_l2’ = update_nd_offset%b2_l2’, %c128, %c0 :  tensor_desc<128x256xf16, #mp_b_copl2>
+            }
+            prefetch_nd %a4_l1’ locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+            prefetch_nd %b4_l1’ locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+            %a4_l1’ = update_nd_offset%a4_l1’, %c0, %c32 :  tensor_desc<512x32xf16, #mp_a_copl1>
+            %b4_l1’ = update_nd_offset%b4_l1’, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b_copl1>
+
+            %a1_load = update_nd_offset%a1_load, %c0, %c32 :  tensor_desc<512x32xf16, #mp_a>
+            %a2_load = update_nd_offset%b1_load, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b>
+
+            %6 = dpas %a1_r, %b1_r {#mp_a #mp_b #mp_c} : (vector<512x32xf16>, vector<32x256xf16>) -> vector<512x256xf32>
+        }
+       store_nd %c_tile, %6: (tensor_desc<512x256xf32, #mp_c>, vector<512x256xf32>)
+     }
+   }
+}
+```
 
 ## Notes
 
