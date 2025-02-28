@@ -814,14 +814,14 @@ For `transpose`, the values in `wg_map` must be swapped for the two dimensions b
    %vector_a = vector.transpose %vector_b {#wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
 ```
 
-`wg_layout` may be assinged for certain operation before the workgroup layout propagation, for example, the cooperative load pass may specify `wg_layout` for certain load to be cooperated. In this case, the propagation may insert an operation to express the conversion of one `wg_map` to the other.
+`wg_map` may be assinged for certain operation before the workgroup layout propagation, for example, the cooperative load pass may specify `wg_map` for certain load to be cooperated. In this case, the propagation may insert an operation to express the conversion of one `wg_map` to the other.
 
-The example below represent the `wg_map` conversion with  unrealized_conversion_cast. 
+`convert_layout` is introduced to represent the `wg_map` conversion. 
 
 ```mlir
    #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order = [1, 0]>  // used for cooperative load/prefetch
    #wg_map_a = #xegpu.wg_map<sg_layout = [32, 1], sg_data = [8, 256], sg_order = [1, 0]> // used as mma's input matrix A
-   %vector_a = unrealized_conversion_cast %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+   %vector_a = xegpu.convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
 The `wg_map` conversion can be lowered to storing and loading from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to shared local memory with the #wg_map_b and 2) use wg_map_a mapping to load the data from shared local memory.
 
@@ -886,7 +886,8 @@ Reduce[4096] = reduce_add(C[4096, 4096], dim=1)
 #mp_c     = #wg_map<sg_layout=[8,4], sg_data=[32,64]>
 
 #mp_bcast = #wg_map<sg_layout=[8, 4], sg_data=[1,64]>
-#mp_reduce= #wg_map<sg_layout=[32, 1], sg_data=[8, 1]>
+#mp_bcast2 = #wg_map<sg_layout=[32], sg_data=[8]>
+#mp_reduce= #wg_map<sg_layout=[32], sg_data=[8]>
 #mp_reduce2= #wg_map<sg_layout=[32, 1], sg_data=[8, 256]>
 
 func.func @test_gemm(%a : memref<4096x4096xf16>,
@@ -920,11 +921,12 @@ func.func @test_gemm(%a : memref<4096x4096xf16>,
            %2p = update_nd_offset%2p, %c32, %c0 :  tensor_desc<256x32xf16, #mp_bt_pft>
          } 
 
-         %12  = load_nd %7  : tensor_desc<256xf32, #mp_bcast> -> vector<256xf16>                          // sg_layout=[32], sg_data=[64]
-         %13 = broadcast {#mp_bcast #mp_c} %12 [0]: vector<256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4], sg_data=[32,64]
+         %12  = load_nd %7  : tensor_desc<256xf32, #mp_bcast2> -> vector<256xf16>                // sg_layout=[32], sg_data=[8]
+         %12' = convert_layout {#mp_bcast2 #mp_bcast} %12 :  vector<256x256xf32>		 // sg_layout=[32] -> sg_layout=[8, 4]
+         %13 = vector.broadcast {#mp_c} %12' [0]: vector<256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4], sg_data=[32,64]
          %14 = add %6, %13 : vector<256x256xf32>
-         %15 = convert_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32, 1]
-         %16 = vector.reduction {#mp_reduce2 #mp_reduce} <add> %15 [1]: vector<256x256xf32> => vector<256xf32>  // sg_layout=[32]
+         %14' = convert_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32]
+         %16 = vector.reduction {#mp_reduce2 #mp_reduce} <add> %14' [1]: vector<256x256xf32> => vector<256xf32>  // sg_layout=[32]
          store_nd %3, %7: (tensor_desc<256xf32, #mp_reduce>, vector<256xf32>)                               // sg_layout=[32]
     } 
   }
