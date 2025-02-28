@@ -705,6 +705,7 @@ An example on how to perform transpose using load with chunk_size in SIMT flavor
 By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler instead of multiple level nested loop IR for subgroup and work item level operation. To enable XeGPU operate the workgroup level, we introduce `wg_map` attribute to specify how the data is distributed across subgroups. `wg_map` enables tensor compiler to express the cooperative operation among subgroups by specifying a `wg_map` to partition data among subgroups without modifying the IR representation other required when using loop nest IR. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critical performance knobs.
 
 **Attribute xegpu.wg_map**
+
 `wg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of two parameters:
   * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimension can up to 3d array. 
   * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition.
@@ -735,7 +736,7 @@ The tensor_desc is distributed to sg_data x sg_layout along each dimension in a 
 
 **Resulting WI Data Fragment**
 
-The distributed tensor for each subgroup has the same dimension as work group level tensor. 
+The distributed tensor for each subgroup has the same dimension as the work group level tensor. 
 
 **Examples of workgroup distribution with wg_map**
 
@@ -754,9 +755,9 @@ The table below shows the result tensor for each subgroup thread and its linear 
 | [ 64:95, 0:127] | [0, 0], [0, 1] | 0 , 1 |
 | [ 96:127, 0:127] | [1, 0], [1, 1] | 2 , 3 |
 
-Similarly to `sg_map`, the `wg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the the `wg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `wg_map` attribute propagation can be performance from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
+Similarly to `sg_map`, the `wg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `wg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `wg_map` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
 
-For `dpas`, the `wg_map` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimenion as output, and `sg_data` for k dimension must be same as operand A and B. `sg_order` must be same as output.
+For `dpas`, the `wg_map` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimension as output, and `sg_data` for k dimension must be same as operand A and B. `sg_order` must be same as output.
 ```mlir
    #wg_map_d = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order=[1, 0]>
 
@@ -770,7 +771,7 @@ For `dpas`, the `wg_map` attribute of input operands must have the same `sg_layo
    #wg_map_c = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order=[1, 0]> //wg_map for %vector_c
 ```
 
-For `reduction`,  `wg_map` of the input operand hads an additional dimension to represent the dimension being reduced.  `sg_layout` must be same and the new dimension as `1`. The new dimension of `sg_data` must be same as the input tensor size, and the other dimension must be same as the output's `wg_map`. The new dimension of `sg_order` should not change the existing ordering specified by the output's `wg_map`.
+For `reduction`,  `wg_map` of the input operand has an additional dimension to represent the dimension being reduced.  `sg_layout` must be the same and the new dimension as `1`. The new dimension of `sg_data` must be the same as the input tensor size, and the other dimension must be the same as the output's `wg_map`. The new dimension of `sg_order` should not change the existing ordering specified by the output's `wg_map`.
 
 ```mlir
    #wg_map_a = #xegpu.wg_map<sg_layout = [32], sg_data = [8], sg_order=[0]>
