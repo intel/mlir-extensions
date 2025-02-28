@@ -702,12 +702,15 @@ An example on how to perform transpose using load with chunk_size in SIMT flavor
 
 ## Workgroup level XeGPU Operations
 
-By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler as the loop nest level for subgroup and work item level can be removed. To eanble XeGPU operate the workgroup level, `wg_map` attribute is introduced to specify how the data is distributed across subgroups. `wg_mmap` enables tensor compiler to express the cooperative operation among subgroups by specifying a `wg_mapping` to parition data among subgroups without modifying the IR representation other required when using loop nest IR. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critial preformance knobs.   
+By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler instead of multiple level nested loop IR for subgroup and work item level operation. To enable XeGPU operate the workgroup level, we introduce `wg_map` attribute to specify how the data is distributed across subgroups. `wg_map` enables tensor compiler to express the cooperative operation among subgroups by specifying a `wg_map` to partition data among subgroups without modifying the IR representation other required when using loop nest IR. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critical performance knobs.
 
 **Attribute xegpu.wg_map**
-xegpu.wg_map specifies how a ND tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of two parameters:
-  * sg_layout: Defines the ND arrangement of subgroups within the workgroup.
-  * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition. 
+`wg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of two parameters:
+  * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimension can up to 3d array. 
+  * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition.
+  * sg_order: The dimension order used to linearize n-d subgroup ids to 1-d. The first dimension in the sg_order list is the fastest-changing dimension. 
+
+Given a 3-d sg_layout with and dimension sizes as dim_0, dim_1, dim_2, sg_order[2, 1, 0] maps subgroup thread [x, y, z] to linear subgroup thread [z + dim_2*y + dim_2*dim_1*x ], sg_order[1, 2, 0] maps to [y + dim_2*z + dim_2*dim_1*x].
 
 When a wg_map attribute is attached to a tensor descriptor, load/store/dpas will operate at the workgroup level. The wg_map attribute must be specified when creating the tensor descriptor.
 
@@ -723,128 +726,104 @@ tensor_size = tensor_desc[0] × tensor_desc[1]
 the following conditions must hold:
 
 * workgroup_size must represent the number of subgroups in a workgroup for a kernel.
-* tensor_desc[0] must be evenly divisible by sg_layout[0] × sg_data[0], or vice versa.
-* tensor_desc[1] must be evenly divisible by sg_layout[1] × sg_data[1], or vice versa.
+* tensor_desc[0] must be either evenly divisible by sg_layout[0] × sg_data[0], or vice versa.
+* tensor_desc[1] must be either evenly divisible by sg_layout[1] × sg_data[1], or vice versa.
 
 **distribution rule**
 
-The wg_tile is distributed to sg_data x sg_layout in a round-robin fashion. If sg_data[i] x sg_layout[i] < wg_tile[i], we have data left after all subgroups are assigned for the first round. In this case, we continue to assign the rest data starting from the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] >= wg_tile[i], we may have already used up all the data before all subgroups are assigned. In this case, we wrap around the wg_tile and continue the assignment, and the rest subgroups along that dimension share the same data.
-
-data_index_i = sg_id_in_wg_x % (tensor[i]/sg_data[i])
-data_index_j = sg_id_in_wg_x % (tensor[j]/sg_data[j])
-sg_data_assigned[data_index_i, data_index_j] = (tensor[i]/sg_data[i], tensor[j]/sg_data[j], sg_data[i], sg_data[j])
-
+The tensor_desc is distributed to sg_data x sg_layout along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < tensor_desc[i], we have data left after all subgroups are assigned for the first round, we continue to assign the rest data starting from the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] > tensor_desc[i], we may have already used up all the data before all subgroups are assigned. In this case, we wrap around the tensor data and continue the assignment, and the rest subgroups along that dimension share the same data.
 
 **Resulting WI Data Fragment**
 
-Each work item’s fragment of the distributed tensor is represented by a 2D vector (e.g., a SPIR-V or LLVM vector) with the shape [n_distribution_units, wi_data_size]. The result 2D vector will be further lowered to a 1D “SIMT-flavored” vector, such as a SPIR-V vector or LLVM vector, as the elements in the inner dimension being packed to a single packed data unit.
+The distributed tensor for each subgroup has the same dimension as work group level tensor. 
 
 **Examples of workgroup distribution with wg_map**
 
-over the lowering process so that the user can tune for optimal performance.
+The workgroup creates a tensor descriptor [128, 128] and distributes to 4 subgroups with `sg_layout` [2,2], and each subgroup gets `sg_data` [32,128]. The first dimension is split and distributed to subgroups in two rounds, and the second dimension is assigned as whole to multiple subgroup threads.
 
-Below is an example.
 ```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
-   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, order = [0, 1]>
-
-   %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #tile_attr>
+   #wg_map_a = #xegpu.wg_map<sg_layout = [2, 2], sg_data = [32, 128], sg_order = [1, 0]>
+   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xf16> -> tensor_desc<128x128xf16, #wg_map_a>
 ```
-Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. The tile created by init_tile is a workgroup-level tile. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. When mapping sg_layout to linear subgroup id, sg_layout is always mapped to subgroup id in row-major ordering. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
+The table below shows the result tensor for each subgroup thread and its linear subgroup thread id.
 
-
-
-For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping for sg_layout [2,2]:
-
-| subgroup tensor	| 2D subgroup id	|  Linearized subgroup id
+| subgroup tensor	| 2D subgroup id	| Linearized subgroup id
 | :---   | :----   | :----   |
-| [  0:31, 0:127] | [0, 0] , [0, 1] | 0 , 1 |
-| [ 32:63, 0:127] | [1, 0] , [1, 1] | 2 , 3 |
-| [ 64:95, 0:127] | [0, 0] , [0, 1] | 0 , 1 |
-| [96:127, 0:127] | [1, 0] , [1, 1] | 2 , 3 |
+| [ 0:31, 0:127] | [0, 0], [0, 1] | 0 , 1 |
+| [ 32:63, 0:127] | [1, 0], [1, 1] | 2 , 3 |
+| [ 64:95, 0:127] | [0, 0], [0, 1] | 0 , 1 |
+| [ 96:127, 0:127] | [1, 0], [1, 1] | 2 , 3 |
 
-With the `xetile.wg_map` attribute being included in the tile data type, the tile memory related operations (xxx_tile) can be distributed to subgroup. The vector based operations (tile_xxx) requires extra handling, since we can't attatch the the `xetile.wg_map` attribute to MLIR vector data type.
+Similarly to `sg_map`, the `wg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the the `wg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `wg_map` attribute propagation can be performance from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
 
-The proposal is to attach the `xetile.wg_map` attribute to the vector based XeTile operations as illustrated below. The attribute applies only to the output value of each operation. The input values `xetile.wg_map` are determined by their respective defining operations.
-| Ops	| Syntax	| Example |
-| :---   | :----   | :--- |
-|tile_mma	| operation ::= xetile.tile_mma $matA, $matB, $matC attr_dict: type($matA), type($matB), type($matC)-> type($res)	 | %vector_c = xetile.tile_mma %vector_a, %vector_b, %vector_c {#mp_c} : vector<64x32xbf16>, vector<32x128xbf16>, vector<64x128xfloat> into vector<64x128xfloat>  |
-|transpose	| operation ::= xetile.transpose attr_dict $vec : type($vec) -> type($res)	 | %vector_a = xetile.transpose %vector_b {#mp_a}: vector<64x32xfloat> into vector<32x64xfloat>  |
-|reduction	| operation ::= xetile.reduction $kind $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.reduction <add> %vector_b [1] {#mp_a}: vector<64x32xfloat> into vector<64x1xfloat>  |
-|broadcast	| operation ::= xetile.broadcast $src attr_dict : type($value) -> type($res)	 | %vector_a = xetile.broadcast %vector_b  [0] {#mp_a}: vector<1x32xfloat> into vector<64x32xfloat>  |
-|convert_layout	| operation ::= xetile.conv_layout $src attr_dict: type($value) -> type($res)	 | %vector_a = xetile.convert_layout %vector_b {#mp_a} : vector<256x256xfloat> into vector<256x256xfloat>  |
-
-With the `wg_map` attribute attached for the output vector, `tile_mma` does a matrix multiplication at a work group level vector.
+For `dpas`, the `wg_map` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimenion as output, and `sg_data` for k dimension must be same as operand A and B. `sg_order` must be same as output.
 ```mlir
-   #wg_map_d = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>
+   #wg_map_d = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order=[1, 0]>
 
-   %vector_d = xetile.tile_mma %vector_a, %vector_b, %vector_c {#wg_map_d}:
+   %vector_d = xegpu.dpas %vector_a, %vector_b, %vector_c {#wg_map_d}:
      vector<256x256xfloat>, vector<256x32xbf16>, vector<32x256xbf16>
 	   into vector<256x256xfloat>
-```
-The `wg_map` attribute of input vector operands can be derived from the wg_map_d. They must have the same sg_layout, and sg_data for m and n dimenion must be same as wg_map_d, and sg_data for k dimension must be same as operand A and B. These attributes may be retrieved from their producer ops, and the retrieved attributes must be consistent with the derived ones. Below is the derived wg_map for the three vector operands in the example above.
-```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]> //wg_map for %vector_a
-   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]> //wg_map for %vector_b
-   #wg_map_c = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]> //wg_map for %vector_c
+
+   //derived wg_map for input operands
+   #wg_map_a = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 32], sg_order=[1, 0]> //wg_map for %vector_a
+   #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order=[1, 0]> //wg_map for %vector_b
+   #wg_map_c = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order=[1, 0]> //wg_map for %vector_c
 ```
 
-`reduction` with `wg_map` does the reduction over a workgroup level vector.
+For `reduction`,  `wg_map` of the input operand hads an additional dimension to represent the dimension being reduced.  `sg_layout` must be same and the new dimension as `1`. The new dimension of `sg_data` must be same as the input tensor size, and the other dimension must be same as the output's `wg_map`. The new dimension of `sg_order` should not change the existing ordering specified by the output's `wg_map`.
+
 ```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>
-   %vector_a = xetile.reduction <add> %vector_b [1] {#wg_map_a}: vector<256x128xfloat> into vector<256x1xfloat>
-```
-`reduction_size` attribute is used to support paritial reduction.
-```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 32]>
-   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [1, 32]>
-   %vector_a = math.exp %input {#wg_map_a} : vector<256x128xf32>
-   %vector_b = xetile.reduction <add> %vector_a [0] {$reduction_size = [32]}  {#wg_map_b}: vector<256x128xfloat> into vector<8x128xfloat>
+   #wg_map_a = #xegpu.wg_map<sg_layout = [32], sg_data = [8], sg_order=[0]>
+   %vector_a = vector.multi_reduction <add> %vector_b, %cst_0 [1] {#wg_map_a}: vector<256x128xfloat> into vector<256xfloat>
+   
+   //derived wg_map for input operand
+   #wg_map_b = #xegpu.wg_map<sg_layout = [32, 1], sg_data = [8, 128], sg_order=[1, 0]>
 ```
 
-The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_layout must be same, sg_data for the dimension being reduced must be same as the input vector, and the other dimension must be same as the wg_map_a. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
+The rule also applies to reduction from 3d to 2d.
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>  //wg_map for %vector_b
+   #wg_map_a = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [1, 32], sg_order=[1, 0]>
+   %%vector_a = vector.multi_reduction <add>, %vector_b, %cst_0 [1] {#wg_map_a}: vector<8x32x128xf32> to vector<8x128xf32>
+
+   //derived wg_map for input operand
+   #wg_map_b = #xegpu.wg_map<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], sg_order=[2, 1, 0]>
 ```
 
-`broadcast` with `wg_map` attribute broadcast at workgroup level.
+For `shape_cast`, it first determines the dimensions being reduced or expanded. The input's `wg_map` needs to expand or reduce the value accordingly for related dimension in `sg_layout` and `sg_data`. `sg_order` should be consistent between input and output.
 ```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 256]>
-   %vector_a = xetile.broadcast %vector_b [1] {#wg_map_a}: vector<256x1xfloat> into vector<256x256xfloat>
-```
-The `wg_map` attribute of the input vector can be derived from the wg_map_a. sg_layout must be same, sg_data for the dimension being broadcast must be "1", and the other dimension must be same as the wg_map_a. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
-```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [16, 1], sg_data = [16, 1]>  //wg_map for %vector_b
+   wg_map_a = #xegpu.wg_map<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], sg_order=[2, 1, 0] >
+   %vector_a = vector.shape_cast %vector_b {#wg_map_a} : vector<256x128xf32> to vector<8x32x128xf32>
+
+   //derived wg_map for input operand
+   #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 32], sg_order=[1, 0]>
 ```
 
-`transpose` with `wg_map` attribute transpose a workgroup level vector.
+For `broadcast`, `wg_map` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut wg_map and must be removed for the input operand. The corresponding dimension in `sg_data` and `sg_order` must be removed also.
+
 ```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
-   %vector_a = xetile.transpose %vector_b {#wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
+   #wg_map_a = #xegpu.wg_map<sg_layout = [16, 1], sg_data = [16, 256]>
+   %vector_a = vector.broadcast %vector_b [1] {#wg_map_a}: vector<256xfloat> into vector<256x256xfloat>
+
+   //derived wg_map for input operand
+   #wg_map_b = #xegpu.wg_map<sg_layout = [16], sg_data = [16]>
 ```
 
-The `wg_map` attribute of the input vector can be derived from the wg_map_a. The two dimension of sg_layout and sg_data must be swapped. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the derived one. Below is the derived wg_map for the input vector in the example above.
+For `transpose`, the values in `wg_map` must be swapped for the two dimensions being transposed, including `sg_layout`, `sg_data`, and `sg_order`.
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [64, 32]>  //wg_map for %vector_b
+   #wg_map_a = #xegpu.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
+   %vector_a = vector.transpose %vector_b {#wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
 ```
-The transpose can be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming column_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
 
-An optimization is to analyze the load op which produces %vector_b, carefully arrange its mapping so that each subgroup thread loads its corresponding subgroup tile, and then either combine transpose function to the load op or do an in-register transpose.
+`wg_layout` may be assinged for certain operation before the workgroup layout propagation, for example, the cooperative load pass may specify `wg_layout` for certain load to be cooperated. In this case, the propagation may insert an operation to express the conversion of one `wg_map` to the other.
 
-`convert_layout` with `wg_map` attributes remaps the workgroup level vector to subgroup threads. The second `wg_map` attribute is optional and describes the input operand. The input vector's wg_map attribute may be retrieved from its producer op, and the retrieved attribute must be consistent with the second `wg_map` attribute if it is present.
+The example below represent the `wg_map` conversion with  unrealized_conversion_cast. 
 
-Example with the wg_map specified for both input and output operands.
 ```mlir
-   #wg_map_b = #xetile.wg_map<sg_layout = [8, 4], sg_data = [32, 64]>  // used for cooperative load/prefetch
-   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = xetile.convert_layout %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+   #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order = [1, 0]>  // used for cooperative load/prefetch
+   #wg_map_a = #xegpu.wg_map<sg_layout = [32, 1], sg_data = [8, 256], sg_order = [1, 0]> // used as mma's input matrix A
+   %vector_a = unrealized_conversion_cast %vector_b {#wg_map_a #wg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
 ```
-Example without the wg_map specified for the input operand.
-```mlir
-   #wg_map_a = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 256]> // used as mma's input matrix A
-   %vector_a = xetile.convert_layout %vector_b {#wg_map_a}: vector<256x256xfloat> into vector<256x256xfloat>
-```
-The convert_layout could be implemented by saving and restoring from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to to shared memory with the #wg_map_b mapping assuming row_major and 2) use wg_map_a mapping to load the data from shared memory to vector assuming same row_major. To support this, we relax the restriction of tile_load and tile_store so that they can load 2D from share local memory.
+The `wg_map` conversion can be lowered to storing and loading from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to shared local memory with the #wg_map_b and 2) use wg_map_a mapping to load the data from shared local memory.
 
 
 ## Notes
