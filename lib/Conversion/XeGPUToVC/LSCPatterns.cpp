@@ -22,8 +22,8 @@
 #include "mlir/Pass/PassManager.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>

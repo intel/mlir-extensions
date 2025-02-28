@@ -18,6 +18,7 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
@@ -36,7 +37,6 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVTypes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 #include <mlir/Dialect/XeGPU/IR/XeGPU.h>
-#include "mlir/Dialect/UB/IR/UBOps.h"
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Matchers.h>
 #include <mlir/Support/LLVM.h>
@@ -298,7 +298,8 @@ struct PoisonOpLowering final : mlir::OpConversionPattern<mlir::ub::PoisonOp> {
 };
 
 void populateUBToSPIRVConversionPatterns(
-    const mlir::SPIRVTypeConverter &converter, mlir::RewritePatternSet &patterns) {
+    const mlir::SPIRVTypeConverter &converter,
+    mlir::RewritePatternSet &patterns) {
   patterns.add<PoisonOpLowering>(converter, patterns.getContext());
 }
 
