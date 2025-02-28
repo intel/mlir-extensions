@@ -20,7 +20,7 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[c1_i16:.*]] = arith.constant 1 : i16
       //CHECK: %[[c0_i32:.*]] = arith.constant 0 : i32
       //CHECK: %[[c3_i8:.*]] = arith.constant 3 : i8
-      //CHECK: %[[undef:.*]] = spirv.Undef : vector<16xi32>
+      //CHECK: %[[undef:.*]] = ub.poison : vector<16xi32>
       //CHECK: %[[r3:.*]] = vector.bitcast %[[cst_0]] : vector<16xf32> to vector<16xi32>
       //CHECK: %[[r4:.*]] = func.call @llvm.genx.lsc.xatomic.stateless.v16i32.v16i1.v16i64(
       //CHECK-SAME: %[[cst]], %[[c19_i8]], %[[c1_i8]], %[[c1_i8]], %[[c1_i16]], %[[c0_i32]], %[[c3_i8]],
