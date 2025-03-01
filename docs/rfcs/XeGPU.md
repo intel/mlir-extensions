@@ -707,19 +707,19 @@ By allowing XeGPU operating on workgroup level data size, it provides a concise 
 **Attribute xegpu.wg_map**
 
 `wg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. wg_map consists of three parameters:
-  * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimension can up to 3d array. 
+  * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimensions can be a 3d array as [dim_0, dim_1, dim_2]. 
   * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition.
   * sg_order: The dimension order used to linearize n-d subgroup ids to 1-d. The first dimension in the sg_order list is the fastest-changing dimension. 
-
-Given a 3-d sg_layout with and dimension sizes as dim_0, dim_1, dim_2, sg_order[2, 1, 0] maps subgroup thread [x, y, z] to linear subgroup thread [z + dim_2*y + dim_2*dim_1*x ], sg_order[1, 2, 0] maps to [y + dim_2*z + dim_2*dim_1*x].
 
 Example of linerized subgourp id regarding order[1, 0] vs. order [0, 1]. 
 | sg_layout[4, 4] | order[1, 0] | order[0, 1]
 | :----   | :----   |  :----   |
-| [0, 0], [0, 1], [0, 2], [0, 3] | 0 , 1, 2, 3 | 0, 4, 8, 12 |
-| [1, 0], [1, 1], [1, 2], [1, 3] | 4 , 5 , 6, 7| 1, 5, 9, 13 |
+| [0, 0], [0, 1], [0, 2], [0, 3] | 0, 1, 2, 3 | 0, 4, 8, 12 |
+| [1, 0], [1, 1], [1, 2], [1, 3] | 4, 5 , 6, 7| 1, 5, 9, 13 |
 | [2, 0], [2, 1], [2, 2], [2, 3] | 8, 9, 10 , 11 | 2, 6, 10, 14 |
-| [3, 0], [3, 1], [3, 2], [3, 3] | 12 , 13, 14, 15 | 3, 7, 11, 15 |
+| [3, 0], [3, 1], [3, 2], [3, 3] | 12, 13, 14, 15 | 3, 7, 11, 15 |
+
+For a subgroup threads in 3-d sg_layout [dim_0, dim_1, dim_2], sg_order[2, 1, 0] maps a subgroup thread with 3-d index [x, y, z] to a linear subgroup thread index [z + dim_2*y + dim_2*dim_1*x ], sg_order[1, 2, 0] maps to [y + dim_2*z + dim_2*dim_1*x].
 
 When a wg_map attribute is attached to a tensor descriptor, load/store/dpas will operate at the workgroup level. The wg_map attribute must be specified when creating the tensor descriptor.
 
@@ -732,7 +732,7 @@ workgroup_size = sg_layout[0] × sg_layout[1]
 tensor_size = tensor_desc[0] × tensor_desc[1]
 ```
 
-the following conditions must hold:
+The following conditions must hold:
 
 * workgroup_size must represent the number of subgroups in a workgroup for a kernel.
 * tensor_desc[0] must be either evenly divisible by sg_layout[0] × sg_data[0], or vice versa.
@@ -763,7 +763,7 @@ The table below shows the result tensor for each subgroup thread and its linear 
 | [ 64:95, 0:127] | [0, 0], [0, 1] | 0 , 1 |
 | [ 96:127, 0:127] | [1, 0], [1, 1] | 2 , 3 |
 
-Similarly to `sg_map`, the `wg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `wg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `wg_map` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
+The `wg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `wg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `wg_map` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
 
 For `dpas`, the `wg_map` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimension as output, and `sg_data` for k dimension must be same as operand A and B. `sg_order` must be same as output.
 ```mlir
@@ -810,22 +810,25 @@ For `shape_cast`, it first determines the dimensions being reduced or expanded. 
 For `broadcast`, `wg_map` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut wg_map and must be removed for the input operand. The corresponding dimension in `sg_data` and `sg_order` must be removed also.
 
 ```mlir
-   #wg_map_a = #xegpu.wg_map<sg_layout = [16, 1], sg_data = [16, 256]>
+   #wg_map_a = #xegpu.wg_map<sg_layout = [16, 1], sg_data = [16, 256], sg_order=[1, 0]>
    %vector_a = vector.broadcast %vector_b [1] {#wg_map_a}: vector<256xfloat> into vector<256x256xfloat>
 
    //derived wg_map for input operand
-   #wg_map_b = #xegpu.wg_map<sg_layout = [16], sg_data = [16]>
+   #wg_map_b = #xegpu.wg_map<sg_layout = [16], sg_data = [16], sg_order=[1, 0]>
 ```
 
 For `transpose`, the values in `wg_map` must be swapped for the two dimensions being transposed, including `sg_layout`, `sg_data`, and `sg_order`.
 ```mlir
-   #wg_map_a = #xegpu.wg_map<sg_layout = [4, 8], sg_data = [32, 64]>
+   #wg_map_a = #xegpu.wg_map<sg_layout = [4, 8], sg_data = [32, 64], sg_order=[1, 0]>
    %vector_a = vector.transpose %vector_b {#wg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
+
+   //derived wg_map for input operand
+   #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [64, 32], sg_order=[0, 1]>
 ```
 
 `wg_map` may be assinged for certain operation before the workgroup layout propagation, for example, the cooperative load pass may specify `wg_map` for certain load to be cooperated. In this case, the propagation may insert an operation to express the conversion of one `wg_map` to the other.
 
-`convert_layout` is introduced to represent the `wg_map` conversion. 
+`convert_layout` is introduced to convert two inconsistent `wg_map`. 
 
 ```mlir
    #wg_map_b = #xegpu.wg_map<sg_layout = [8, 4], sg_data = [32, 64], sg_order = [1, 0]>  // used for cooperative load/prefetch
