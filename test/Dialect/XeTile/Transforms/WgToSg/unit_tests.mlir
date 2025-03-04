@@ -6,15 +6,22 @@ gpu.module @test_arith_extf {
         %tile = xetile.init_tile %arg0[%c0, %c0] : memref<128x32xf16> -> !xetile.tile<128x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
         %load_tile = xetile.load_tile %tile : !xetile.tile<128x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xf16>
         //CHECK: arith.extf {{%.*}} : vector<32x32xf16> to vector<32x32xf32>
-        //CHECK: arith.truncf {{%.*}} : vector<32x32xf32> to vector<32x32xf16>
         //CHECK: arith.fptosi {{%.*}} : vector<32x32xf16> to vector<32x32xi16>
         //CHECK: arith.fptoui {{%.*}} : vector<32x32xf16> to vector<32x32xi16>
         //CHECK: arith.bitcast {{%.*}} : vector<32x32xf16> to vector<32x32xi16>
         %extf = arith.extf %load_tile {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf16> to vector<128x32xf32>
-        %trucf = arith.truncf %extf {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf32> to vector<128x32xf16>
         %fptosi = arith.fptosi %load_tile {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf16> to vector<128x32xi16>
         %fptoui = arith.fptoui %load_tile {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf16> to vector<128x32xi16>
         %bitcast = arith.bitcast %load_tile {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf16> to vector<128x32xi16>
+        gpu.return
+    }
+
+     gpu.func @test_truncf(%arg0: memref<128x32xf32>) {
+        %c0 = arith.constant 0 : index
+        %tile = xetile.init_tile %arg0[%c0, %c0] : memref<128x32xf32> -> !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        %load_tile = xetile.load_tile %tile : !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xf32>
+        //CHECK: arith.truncf {{%.*}} : vector<32x32xf32> to vector<32x32xf16>
+        %trucf = arith.truncf %load_tile {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf32> to vector<128x32xf16>
         gpu.return
     }
 
