@@ -617,9 +617,9 @@ void BlockingAnalysisImpl::visitTileMMAOp(
 
   auto mmaSize = getMMASize(op.getElementType(), aPrecision, bPrecision,
                             cPrecision, dPrecision);
-
-  auto blockSizeForA =
-      BlockingRequests(mmaSize[0], mmaSize[1], op->getOpOperand(0));
+  auto M = op.getAType().getShape()[0];
+  auto blkM = getDivisorInRange(M, 1, mmaSize[0]);
+  auto blockSizeForA = BlockingRequests(blkM, mmaSize[1], op->getOpOperand(0));
   auto blockSizeForB =
       BlockingRequests(mmaSize[1], mmaSize[2], op->getOpOperand(1));
 
@@ -627,13 +627,13 @@ void BlockingAnalysisImpl::visitTileMMAOp(
   propagateIfChanged(operands[1], operands[1]->join(blockSizeForB));
   if (C) {
     auto blockSizeForC =
-        BlockingRequests(mmaSize[0], mmaSize[2], op->getOpOperand(2));
+        BlockingRequests(blkM, mmaSize[2], op->getOpOperand(2));
     propagateIfChanged(operands[2], operands[2]->join(blockSizeForC));
   }
 
   // update the def block size for the result value
   BlockingRequests &def = getLatticeElement(op.getOutput())->getValue();
-  def.updateDefBlock(Block(mmaSize[0], mmaSize[2]));
+  def.updateDefBlock(Block(blkM, mmaSize[2]));
 }
 
 void BlockingAnalysisImpl::visitReductionOp(
