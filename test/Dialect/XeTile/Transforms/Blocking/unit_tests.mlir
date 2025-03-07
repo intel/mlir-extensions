@@ -1646,4 +1646,31 @@ gpu.module @test_kernel {
     gpu.return
   }
 
+  //-----
+  //CHECK-LABEL: gpu.func @small_gemm
+  //CHECK-SAME: (%[[arg0:.*]]: memref<4x32xf16>, %[[arg1:.*]]: memref<32x32xf16>, %[[arg2:.*]]: memref<4x32xf32>)
+  gpu.func @small_gemm(%arg0: memref<4x32xf16>, %arg1: memref<32x32xf16>, %arg2: memref<4x32xf32>) {
+    //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<4x32xf32>
+    %cst = arith.constant dense<0.000000e+00> : vector<4x32xf32>
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg0]][{{.*}}] : memref<4x32xf16> -> !xetile.tile<4x16xf16>
+    %0 = xetile.init_tile %arg0[0, 0] : memref<4x32xf16> -> !xetile.tile<4x32xf16>
+    //CHECK-COUNT-4: %{{.*}} = xetile.init_tile %[[arg1]][{{.*}}] : memref<32x32xf16> -> !xetile.tile<16x16xf16>
+    %1 = xetile.init_tile %arg1[0, 0] : memref<32x32xf16> -> !xetile.tile<32x32xf16>
+    //CHECK-COUNT-2: %{{.*}} = xetile.load_tile {{.*}} : !xetile.tile<4x16xf16> -> vector<4x16xf16>
+    %2 = xetile.load_tile %0 : !xetile.tile<4x32xf16> -> vector<4x32xf16>
+    //CHECK-COUNT-4: %{{.*}} = xetile.load_tile {{.*}} : !xetile.tile<16x16xf16> -> vector<16x16xf16>
+    %3 = xetile.load_tile %1 : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+    //CHECK-COUNT-4: %{{.*}} = xetile.transpose %{{.*}}, [1, 0] : vector<16x16xf16> -> vector<16x16xf16>
+    %4 = xetile.transpose %3, [1, 0] : vector<32x32xf16> -> vector<32x32xf16>
+    //CHECK-COUNT-2: %{{.*}} = vector.extract_strided_slice %[[cst]] {offsets = [{{.*}}], sizes = [4, 16], strides = [1, 1]} : vector<4x32xf32> to vector<4x16xf32>
+    //CHECK-COUNT-4: %{{.*}} = xetile.tile_mma {{.*}} : vector<4x16xf16>, vector<16x16xf16>, vector<4x16xf32> -> vector<4x16xf32>
+    %5 = xetile.tile_mma %2, %4, %cst : vector<4x32xf16>, vector<32x32xf16>, vector<4x32xf32> -> vector<4x32xf32>
+    //CHECK-COUNT-2: %{{.*}} = xetile.init_tile %[[arg2]][{{.*}}] : memref<4x32xf32> -> !xetile.tile<4x16xf32>
+    %6 = xetile.init_tile %arg2[0, 0] : memref<4x32xf32> -> !xetile.tile<4x32xf32>
+    //CHECK-COUNT-2: xetile.store_tile %{{.*}},  %{{.*}} : vector<4x16xf32>, !xetile.tile<4x16xf32>
+    xetile.store_tile %5,  %6 : vector<4x32xf32>, !xetile.tile<4x32xf32>
+    gpu.return
+  }
+
+
 }
