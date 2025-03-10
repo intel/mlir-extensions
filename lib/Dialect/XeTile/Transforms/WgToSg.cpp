@@ -101,18 +101,29 @@ public:
     // get the subgroup Id
     auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
     auto indexType = rewriter.getIndexType();
+    auto sgLayoutDimXConst = createIndexConstant(indexType, sgLayout[0]);
     auto sgLayoutDimYConst = createIndexConstant(indexType, sgLayout[1]);
-    auto sgDataDimYConst = createIndexConstant(indexType, sgTileShape[0]);
-    auto sgDataDimXConst = createIndexConstant(indexType, sgTileShape[1]);
+    auto sgDataDimXConst = createIndexConstant(indexType, sgTileShape[0]);
+    auto sgDataDimYConst = createIndexConstant(indexType, sgTileShape[1]);
 
     // The sgID is a linear (1D) id. Convert it to 2D to get the x and y
     // coordinates of sg
-    // row = i / cols
-    // col =  i % cols
-    auto sgIdY =
-        rewriter.create<mlir::index::DivUOp>(loc, sgID, sgLayoutDimYConst);
-    auto sgIdX =
-        rewriter.create<mlir::index::RemUOp>(loc, sgID, sgLayoutDimYConst);
+    // row = i / cols or i / rows if col_major
+    // col =  i % cols or i % rows if col_major
+    mlir::Value sgIdX;
+    mlir::Value sgIdY;
+
+    if (sgLayoutMap.find(op.getResult()) != sgLayoutMap.end()) {
+      sgIdY =
+          rewriter.create<mlir::index::DivUOp>(loc, sgID, sgLayoutDimXConst);
+      sgIdX =
+          rewriter.create<mlir::index::RemUOp>(loc, sgID, sgLayoutDimXConst);
+    } else {
+      sgIdY =
+          rewriter.create<mlir::index::DivUOp>(loc, sgID, sgLayoutDimYConst);
+      sgIdX =
+          rewriter.create<mlir::index::RemUOp>(loc, sgID, sgLayoutDimYConst);
+    }
 
     llvm::SmallVector<mlir::Value> offsets;
     auto staticOffsets = op.getStaticOffsets();
@@ -127,8 +138,8 @@ public:
     }
 
     mlir::Value source = op.getSource();
-    mlir::SmallVector<mlir::OpFoldResult> globalOffsetsX; // cols
-    mlir::SmallVector<mlir::OpFoldResult> globalOffsetsY; // rows
+    mlir::SmallVector<mlir::OpFoldResult> globalOffsetsX; // rows
+    mlir::SmallVector<mlir::OpFoldResult> globalOffsetsY; // cols
     mlir::SmallVector<mlir::SmallVector<mlir::OpFoldResult>> offsetPermutations;
 
     // Calculate the global offsets for tiles using the sgData and sgLayout
@@ -160,20 +171,20 @@ public:
     auto it = sgLayoutMap.find(op.getResult());
     if (it != sgLayoutMap.end()){
      assert((sgLayoutMap[op->getResult(0)] == std::array<int, 2>{0, 1}));
-     calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
-                           sgLayout[0], sgDataDimYConst, sgIdX, offsets[offsets.size() - 2]);
-     calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
-                           sgLayout[1], sgDataDimXConst, sgIdY, offsets[offsets.size() - 1]);
+     calculateGlobalOffsets(globalOffsetsX, wgTileShape[0], sgTileShape[0],
+                           sgLayout[0], sgDataDimXConst, sgIdX, offsets[offsets.size() - 2]);
+     calculateGlobalOffsets(globalOffsetsY, wgTileShape[1], sgTileShape[1],
+                           sgLayout[1], sgDataDimYConst, sgIdY, offsets[offsets.size() - 1]);
     }
     else {
-    calculateGlobalOffsets(globalOffsetsY, wgTileShape[0], sgTileShape[0],
-                           sgLayout[0], sgDataDimYConst, sgIdY, offsets[offsets.size() - 2]);
-    calculateGlobalOffsets(globalOffsetsX, wgTileShape[1], sgTileShape[1],
-                           sgLayout[1], sgDataDimXConst, sgIdX, offsets[offsets.size() - 1]);
+    calculateGlobalOffsets(globalOffsetsX, wgTileShape[0], sgTileShape[0],
+                           sgLayout[0], sgDataDimXConst, sgIdY, offsets[offsets.size() - 2]);
+    calculateGlobalOffsets(globalOffsetsY, wgTileShape[1], sgTileShape[1],
+                           sgLayout[1], sgDataDimYConst, sgIdX, offsets[offsets.size() - 1]);
     }
     // TODO: check for how to broadcast
-    for (auto y : globalOffsetsY) {
-      for (auto x : globalOffsetsX) {
+    for (auto y : globalOffsetsX) {
+      for (auto x : globalOffsetsY) {
         offsetPermutations.push_back({y, x});
       }
     }
@@ -1034,21 +1045,18 @@ static bool hasMap(mlir::Operation* op){
 
 
 // This function traverses backwards through loop-carried dependencies in SCF
-//  `for` loops to find the original (pre-loop) value.
+// `for` loops to find the original (pre-loop) value.
 static Value getPreLoopValue(Value val) {
   while (auto blockArg = mlir::dyn_cast<BlockArgument>(val)) {
     if (auto forOp = mlir::dyn_cast<scf::ForOp>(blockArg.getOwner()->getParentOp())) {
-      // Get the index of blockArg in the region
       unsigned argIndex = blockArg.getArgNumber();
-
-      // Ensure the block argument belongs to iter_args, not the induction variable
       unsigned numIterArgs = forOp.getInitArgs().size();
       unsigned firstIterArgIdx = forOp.getRegion().getArguments().size() - numIterArgs;
 
       if (argIndex >= firstIterArgIdx) {
-        val = forOp.getInitArgs()[argIndex - firstIterArgIdx];  // Corrected index
+        val = forOp.getInitArgs()[argIndex - firstIterArgIdx]; // Corrected index
       } else {
-        break;  // If it's not an iter_arg, stop traversal
+        break;
       }
     } else {
       break;
@@ -1057,14 +1065,17 @@ static Value getPreLoopValue(Value val) {
   return val;
 }
 
+// Generic function to find all operations of type OpType contributing to a value
 template <typename OpType>
-Operation *findOp(Value val) {
+SmallVector<Operation *> findOps(Value val) {
+  SmallVector<Operation *> matchedOps;
   SmallVector<Value, 4> worklist{val};
   DenseSet<Value> visited;
 
   while (!worklist.empty()) {
     Value current = worklist.pop_back_val();
-    if (!current || !visited.insert(current).second) continue; // Avoid cycles
+    if (!current || !visited.insert(current).second)
+      continue; // Avoid cycles
 
     // Handle scf.for iter_args
     if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(current)) {
@@ -1073,34 +1084,49 @@ Operation *findOp(Value val) {
 
     // Check if the defining operation is of the desired type
     if (Operation *defOp = current.getDefiningOp()) {
-      if (llvm::isa<OpType>(defOp)) return defOp;
+      if (llvm::isa<OpType>(defOp)) matchedOps.push_back(defOp);
       for (Value operand : defOp->getOperands()) {
         worklist.push_back(operand);
       }
     }
   }
-  return nullptr;
+  return matchedOps;
 }
 
+// Analyze transpose operations and track corresponding loads and initOps
 static void analyzeTransposeOps(mlir::Operation *op,
                          llvm::DenseMap<mlir::Value, std::array<int, 2>> &sgLayoutMap) {
 
   op->walk([&](mlir::vector::TransposeOp transposeOp) -> mlir::WalkResult {
     Value transposeInput = transposeOp->getOperand(0);
-    Operation *loadOp = findOp<imex::xetile::LoadTileOp>(transposeInput);
-    if (!loadOp) return mlir::WalkResult::skip();
 
-    // Find corresponding InitializeOp (allowing other ops in between)
-    Value loadSource = loadOp->getOperand(0);
-    Operation *initializeOp = findOp<imex::xetile::InitTileOp>(loadSource);
-    if (!initializeOp) return mlir::WalkResult::skip();
+    // Find all LoadTileOps leading to this transpose
+    SmallVector<Operation *> loadOps = findOps<imex::xetile::LoadTileOp>(transposeInput);
+    if (loadOps.empty())
+      return mlir::WalkResult::skip();
 
-    // At this point, we have a candidate def-use chain for optimization.
-    sgLayoutMap[transposeOp->getResult(0)] = {0, 1};
-    sgLayoutMap[initializeOp->getResult(0)] = {0, 1};
+    for (Operation *loadOp : loadOps) {
+      Value loadSource = loadOp->getOperand(0);
+
+      // Find corresponding InitOps
+      SmallVector<Operation *> initOps = findOps<imex::xetile::InitTileOp>(loadSource);
+      if (initOps.empty())
+        continue;
+
+       sgLayoutMap[transposeOp->getResult(0)] = {0, 1};
+      // Update sgLayoutMap for all relevant initOps
+      for (Operation *initOp : initOps) {
+        // If the tranpose is already present. We need to mark it row major.
+        if (sgLayoutMap.find(initOp->getResult(0)) != sgLayoutMap.end()) {
+          sgLayoutMap.erase(initOp->getResult(0));
+        }
+        else {
+          sgLayoutMap[initOp->getResult(0)] = {0, 1};
+        }
+      }
+    }
     return mlir::WalkResult::advance();
-
- });
+  });
 }
 
 void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns,
