@@ -554,8 +554,8 @@ static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
     }
 
     // profiling using timestamp event privided by level-zero
+    Event tstampEvent(queue->zeContext_, queue->zeDevice_);
     for (int r = 0; r < rounds; r++) {
-      Event event(queue->zeContext_, queue->zeDevice_);
       // Flush the L3 cache (global memory cache).
       if (getenv("IMEX_ENABLE_CACHE_FLUSHING")) {
         int init_val = 0;
@@ -565,21 +565,20 @@ static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
       }
 
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
-                    sharedMemBytes, event.zeEvent, depEvents);
+                    sharedMemBytes, tstampEvent.zeEvent, depEvents);
 
-      CHECK_ZE_RESULT(zeEventHostSynchronize(event.zeEvent, 0));
+      CHECK_ZE_RESULT(zeEventHostSynchronize(tstampEvent.zeEvent, 0));
 
       auto startTime =
-          event.get_profiling_info<imex::profiling::command_start>();
-      auto endTime = event.get_profiling_info<imex::profiling::command_end>();
+          tstampEvent.get_profiling_info<imex::profiling::command_start>();
+      auto endTime =
+          tstampEvent.get_profiling_info<imex::profiling::command_end>();
       auto duration = float(endTime - startTime) / 1000000.0f;
       executionTime += duration;
       if (duration > maxTime)
         maxTime = duration;
       if (duration < minTime)
         minTime = duration;
-
-      CHECK_ZE_RESULT(zeEventDestroy(event.zeEvent));
     }
     deallocDeviceMemory(queue, cache);
     fprintf(stdout,
