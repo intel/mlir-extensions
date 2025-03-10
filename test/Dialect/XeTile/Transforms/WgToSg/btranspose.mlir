@@ -28,6 +28,7 @@ gpu.module @test_gemm_btranspose{
       //CHECK: %[[R2:.*]] = arith.divsi %[[R1]], %c8 : index
       //CHECK: %[[R3:.*]] = arith.remsi %[[R1]], %c8 : index
       //CHECK: %[[R4:.*]] = arith.muli %[[R3]], %[[c256]] : index
+      //CHECK: %[[R5:.*]] = arith.addi {{%.*}}, {{%.*}} : index
 
       //CHECK: %[[R6:.*]] = gpu.subgroup_id : index
       //CHECK: %[[c64:.*]] = arith.constant 64 : index
@@ -57,18 +58,26 @@ gpu.module @test_gemm_btranspose{
       %10 = arith.addi %8, %9 : index
       %11 = xetile.init_tile %arg0[%10, %c0] : memref<16384x12288xf16> -> !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [32, 32]>, memory_space = 0 : i32>>
 
-      //CHECK: %[[R7:.*]] = index.divu %[[R6]], %[[c8]]
-      //CHECK: %[[R8:.*]] = index.remu %[[R6]], %[[c8]]
-      //CHECK: %[[R9:.*]] = index.add %[[R8]], %[[c0]]
-      //CHECK: %[[R10:.*]] = index.remu %[[R9]], %[[c4]]
-      //CHECK: %[[R11:.*]] = index.mul %[[R10]], %[[c64]]
-      //CHECK: %[[R12:.*]] = index.add %[[R4]], %[[R11]]
-      //CHECK: %[[R13:.*]] = index.add %[[R7]], %[[c0]]
-      //CHECK: %[[R14:.*]] = index.remu %[[R13]], %[[c1]]
-      //CHECK: %[[R15:.*]] = index.mul %[[R14]], %[[c32]]
-      //CHECK: %[[R16:.*]] = index.add %[[R15]], %[[c0]]
+      //CHECK: %[[R7:.*]] = index.divu %[[R6]], %[[c4]]
+      //CHECK: %[[R8:.*]] = index.remu %[[R6]], %[[c4]]
+      //CHECK: %[[R9:.*]] = index.add %[[R7]], %[[c0]]
+      //CHECK: %[[R10:.*]] = index.remu %[[R9]], %[[c8]]
+      //CHECK: %[[R11:.*]] = index.mul %[[R10]], %[[c32]]
+      //CHECK: %[[R12:.*]] = index.add %[[R5]], %[[R11]]
+      //CHECK: %[[R13:.*]] = index.add %[[R8]], %[[c0]]
+      //CHECK: %[[R14:.*]] = index.remu %[[R13]], %[[c4]]
+      //CHECK: %[[R15:.*]] = index.mul %[[R14]], %[[c64]]
+      //CHECK: %[[R16:.*]] = index.add %[[R4]], %[[R15]]
 
-      //CHECK: %[[INITTILE:.*]] = xetile.init_tile %[[arg1]][%[[R12]], %[[R16]]] : memref<1536x12288xf16> -> !xetile.tile<64x32xf16>
+      //CHECK: %[[R18:.*]] = index.remu %[[R13]], %[[c1]]
+      //CHECK: %[[R19:.*]] = index.mul %[[R18]], %[[c32]]
+      //CHECK: %[[R20:.*]] = index.add %[[R19]], %[[c0]]
+
+      //CHECK: %[[R22:.*]] = index.remu %[[R9]], %[[c1]]
+      //CHECK: %[[R23:.*]] = index.mul %[[R22]], %[[c32]]
+      //CHECK: %[[R24:.*]] = index.add %[[R23]], %[[c0]]
+
+      //CHECK: %[[INITTILE:.*]] = xetile.init_tile %[[arg1]][%[[R16]], %[[R24]]] : memref<1536x12288xf16> -> !xetile.tile<64x32xf16>
       %12 = xetile.init_tile %arg1[%2, %c0] : memref<1536x12288xf16> -> !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [64, 32]>, memory_space = 0 : i32>>
       %13:2 = scf.for %arg15 = %c0 to %c2 step %c1_1 iter_args(%arg16 = %7, %arg17 = %11) -> (!xetile.tile<256x256xf32, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [32, 64]>, memory_space = 0 : i32>>, !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [32, 32]>, memory_space = 0 : i32>>) {
         %14 = xetile.update_tile_offset %arg17, [%c1024,  %c0] : !xetile.tile<256x32xf16, #xetile.tile_attr<wg_map = <sg_layout = [8, 4], sg_data = [32, 32]>, memory_space = 0 : i32>>
