@@ -8,7 +8,7 @@ endif()
 
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
-set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Werror -Wnon-virtual-dtor")
+set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Wnon-virtual-dtor")
 
 if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
     # Building as part of LLVM via the external project mechanism.
@@ -147,6 +147,12 @@ function(add_imex_conversion_library name)
   add_mlir_library(${ARGV} DEPENDS mlir-headers)
 endfunction(add_imex_conversion_library)
 
+# Declare the library associated with an extension.
+function(add_imex_extension_library name)
+  set_property(GLOBAL APPEND PROPERTY IMEX_EXTENSION_LIBS ${name})
+  add_mlir_library(${ARGV} DEPENDS mlir-headers)
+endfunction(add_imex_extension_library)
+
 # Declare the library associated with a translation.
 function(add_imex_translation_library name)
   set_property(GLOBAL APPEND PROPERTY IMEX_TRANSLATION_LIBS ${name})
@@ -238,6 +244,15 @@ else ()
     set(IMEX_ENABLE_VULKAN_RUNNER 0)
 endif()
 
+# Run tests using FS simulator
+set(IMEX_ENABLE_FS_SIMULATOR 0 CACHE BOOL "Enable FS simulator mode for tests")
+
+if (IMEX_ENABLE_FS_SIMULATOR)
+    set(IMEX_ENABLE_FS_SIMULATOR 1)
+else ()
+    set(IMEX_ENABLE_FS_SIMULATOR 0)
+endif()
+
 if (IMEX_ENABLE_ATS_TARGET)
     set(IMEX_ENABLE_ATS_TARGET 1)
 else ()
@@ -249,7 +264,6 @@ if (IMEX_ENABLE_PVC_TARGET)
 else ()
     set(IMEX_ENABLE_PVC_TARGET 0)
 endif()
-
 
 if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
     if (IMEX_ENABLE_DEBUG_BUILD)

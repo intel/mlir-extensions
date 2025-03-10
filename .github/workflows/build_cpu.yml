@@ -1,0 +1,45 @@
+name: CPU Build
+
+on:
+  pull_request:
+    branches:
+      - main
+      - upstream
+      - 'dist-ndarray'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: [self-hosted, icx]
+    defaults:
+      run:
+        shell: bash -noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect info
+        run: |
+          sh scripts/sysinfo.sh
+
+      - name: Checkout MLIR
+        run: |
+          git clone https://github.com/llvm/llvm-project
+          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          cd llvm-project
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
+
+      - name: Setup IMEX and run tests
+        run: |
+          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a -j 4"
+          cmake --build build --target check-imex | tee build/tests.txt
+
+      - name: Upload tests.txt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests_cpu.txt
+          path: build/tests.txt

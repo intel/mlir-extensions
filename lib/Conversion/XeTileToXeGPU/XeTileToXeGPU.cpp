@@ -484,10 +484,9 @@ public:
     auto [L1, L2, L3] = getCachePolicy(op);
     auto packAttr = UnitAttr();
     auto transAttr = DenseI64ArrayAttr();
-    auto bitWidthAttr = IntegerAttr();
+    // auto bitWidthAttr = IntegerAttr();
     auto ldOp = rewriter.create<xegpu::LoadNdOp>(
-        loc, vecTy, adaptor.getSource(), packAttr, transAttr, bitWidthAttr, L1,
-        L2, L3);
+        loc, vecTy, adaptor.getSource(), packAttr, transAttr, L1, L2, L3);
 
     Value value = ldOp.getResult();
     if (memSpace == xegpu::MemorySpace::SLM) {
@@ -638,8 +637,10 @@ public:
   LogicalResult
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<xegpu::DpasOp>(op, op.getType(), adaptor.getA(),
-                                               adaptor.getB(), adaptor.getC());
+    rewriter.replaceOpWithNewOp<xegpu::DpasOp>(
+        op, op.getType(), adaptor.getA(), adaptor.getB(), adaptor.getC(),
+        ::mlir::xegpu::SGMapAttr(), ::mlir::xegpu::SGMapAttr(),
+        ::mlir::xegpu::SGMapAttr());
     return success();
   }
 };
