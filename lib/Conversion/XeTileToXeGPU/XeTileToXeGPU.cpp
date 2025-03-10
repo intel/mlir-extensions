@@ -457,7 +457,9 @@ public:
   matchAndRewrite(xetile::LoadTileOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto tileTy = op.getSource().getType();
+    auto tileTy = op.getTile().getType();
+    auto arrayLengthAttr = tileTy.getArrayLength();
+    auto arrayLength = arrayLengthAttr ? arrayLengthAttr.getInt() : 1;
     auto memSpaceAttr = convertMemorySpace(tileTy.getMemorySpace());
     auto memSpace =
         memSpaceAttr ? memSpaceAttr.getValue() : xegpu::MemorySpace::Global;
@@ -467,7 +469,7 @@ public:
         isColMajorOrder(tileTy.getOrder()))
       return failure();
 
-    auto vecTy = op.getType();
+    auto vecTy = dyn_cast<VectorType>(op.getType(0));
 
     if (memSpace == xegpu::MemorySpace::SLM) {
       auto elemTy = vecTy.getElementType();
@@ -479,32 +481,43 @@ public:
       if (!isColMajorOrder(tileTy.getOrder())) {
         vecTy = VectorType::get(vecTy.getNumElements() / vnni, elemTy);
       }
+    } else if (arrayLength > 1) {
+      llvm::SmallVector<int64_t> shape({arrayLength});
+      shape.append(vecTy.getShape().begin(), vecTy.getShape().end());
+      vecTy = VectorType::get(shape, vecTy.getElementType());
     }
 
     auto [L1, L2, L3] = getCachePolicy(op);
     auto packAttr = UnitAttr();
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
-    auto ldOp = rewriter.create<xegpu::LoadNdOp>(
-        loc, vecTy, adaptor.getSource(), packAttr, transAttr, bitWidthAttr, L1,
-        L2, L3);
+    auto ldOp = rewriter.create<xegpu::LoadNdOp>(loc, vecTy, adaptor.getTile(),
+                                                 packAttr, transAttr,
+                                                 bitWidthAttr, L1, L2, L3);
 
-    Value value = ldOp.getResult();
+    llvm::SmallVector<Value> results({ldOp.getResult()});
     if (memSpace == xegpu::MemorySpace::SLM) {
       if (!isColMajorOrder(tileTy.getOrder())) {
+        auto value = results.pop_back_val();
         auto elemTy = tileTy.getElementType();
         auto castTy = VectorType::get(tileTy.getNumElements(), elemTy);
         if (castTy != vecTy)
           value = rewriter.create<vector::BitCastOp>(loc, castTy, value);
-        if (castTy != op.getType())
+        if (castTy != op.getType(0))
           value =
-              rewriter.create<vector::ShapeCastOp>(loc, op.getType(), value);
+              rewriter.create<vector::ShapeCastOp>(loc, op.getType(0), value);
+        results.push_back(value);
       } else {
         return failure();
       }
+    } else if (arrayLength > 1) {
+      auto value = results.pop_back_val();
+      for (auto i = 0; i < arrayLength; ++i) {
+        auto extractOp = rewriter.create<vector::ExtractOp>(loc, value, i);
+        results.push_back(extractOp.getResult());
+      }
     }
-
-    rewriter.replaceOp(op, value);
+    rewriter.replaceOp(op, results);
     return success();
   }
 };
@@ -602,32 +615,28 @@ public:
   }
 };
 
-class AtomicRMWOpPattern
-    : public mlir::OpConversionPattern<xetile::AtomicRMWOp> {
+class AtomicRMWOpPattern : public OpConversionPattern<xetile::AtomicRMWOp> {
 public:
-  using mlir::OpConversionPattern<xetile::AtomicRMWOp>::OpConversionPattern;
-  mlir::LogicalResult
+  using OpConversionPattern<xetile::AtomicRMWOp>::OpConversionPattern;
+  LogicalResult
   matchAndRewrite(xetile::AtomicRMWOp op, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
+                  ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto type = op.getValue().getType();
     auto elemTy = type.getElementType();
     auto value = adaptor.getValue();
-    auto valTy = mlir::VectorType::get(type.getNumElements(), elemTy);
-    auto maskTy = mlir::VectorType::get(type.getNumElements(),
-                                        rewriter.getIntegerType(1));
+    auto valTy = VectorType::get(type.getNumElements(), elemTy);
+    auto maskTy =
+        VectorType::get(type.getNumElements(), rewriter.getIntegerType(1));
     llvm::SmallVector<bool> maskValues(type.getNumElements(), true);
-    auto maskAttr = mlir::DenseElementsAttr::get(maskTy, maskValues);
-    mlir::Value mask =
-        rewriter.create<mlir::arith::ConstantOp>(loc, maskTy, maskAttr);
-    value =
-        rewriter.create<mlir::vector::ShapeCastOp>(op.getLoc(), valTy, value);
-    auto atomicrmwOp = rewriter.create<mlir::xegpu::AtomicRMWOp>(
+    auto maskAttr = DenseElementsAttr::get(maskTy, maskValues);
+    Value mask = rewriter.create<arith::ConstantOp>(loc, maskTy, maskAttr);
+    value = rewriter.create<vector::ShapeCastOp>(loc, valTy, value);
+    auto rmwOp = rewriter.create<xegpu::AtomicRMWOp>(
         loc, valTy, op.getKind(), adaptor.getTile(), mask, value);
-    auto v = rewriter.create<mlir::vector::ShapeCastOp>(loc, op.getType(),
-                                                        atomicrmwOp);
+    auto v = rewriter.create<vector::ShapeCastOp>(loc, op.getType(), rmwOp);
     rewriter.replaceOp(op, v);
-    return mlir::success();
+    return success();
   }
 };
 
@@ -998,8 +1007,7 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       } else if (memSpace == xegpu::MemorySpace::Global) {
         // Blocked tile on global memory is lowered to blocked tensor_desc
         // with the same shape.
-        // TODO: update TileType with array_length and use it here.
-        auto arrayLenAttr = IntegerAttr::get(IntegerType::get(context, 64), 1);
+        auto arrayLenAttr = type.getArrayLength();
         auto boundaryCheckAttr = BoolAttr::get(context, true);
         encoding = xegpu::BlockTensorDescAttr::get(
             context, memSpaceAttr, arrayLenAttr, boundaryCheckAttr);

@@ -132,6 +132,7 @@ XePVCuArch::get2DLoadConfig(mlir::Operation *op, int element_data_size,
     }
 
     break;
+  case 19: /* TF32 has 19 bits */
   case 32:
     if (transpose) {
       loadParams = setLoadStoreParams(     1,              32,               1,             8,           {1},                8);

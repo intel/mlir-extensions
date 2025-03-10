@@ -151,19 +151,21 @@ struct LoadTileOpPattern final
   matchAndRewrite(imex::xetile::LoadTileOp loadOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     // if the source type is unchanged, keep the loadOp
-    if (loadOp.getSource().getType() == adaptor.getSource().getType())
+    if (loadOp.getTileType() == adaptor.getTile().getType())
       return mlir::failure();
-    auto newTile = adaptor.getSource();
+    auto newTile = adaptor.getTile();
     auto newTileTy = llvm::cast<imex::xetile::TileType>(newTile.getType());
     mlir::VectorType newVecTy =
         mlir::VectorType::get(newTileTy.getShape(), newTileTy.getElementType());
     // Create a new loadOp.
-    mlir::Value newOp = rewriter.create<imex::xetile::LoadTileOp>(
-        loadOp.getLoc(), newVecTy, newTile);
+    mlir::Value newOp = rewriter
+                            .create<imex::xetile::LoadTileOp>(loadOp.getLoc(),
+                                                              newVecTy, newTile)
+                            .getResult(0);
     // Transpose the output of the load so that we get the return type of the
     // original loadOp
     rewriter.replaceOpWithNewOp<imex::xetile::TransposeOp>(
-        loadOp, loadOp.getType(), newOp, mlir::ArrayRef<int64_t>({1, 0}));
+        loadOp, loadOp.getType(0), newOp, mlir::ArrayRef<int64_t>({1, 0}));
     return mlir::success();
   }
 };
@@ -412,7 +414,8 @@ struct XeTileCanonicalizationPass final
           auto newAttr = imex::xetile::XeTileAttr::get(
               tileTy.getContext(), tileTy.getSgMap(), tileTy.getWgMap(),
               mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
-              tileTy.getMemorySpace(), tileTy.getScatterAttr());
+              tileTy.getArrayLength(), tileTy.getMemorySpace(),
+              tileTy.getScatterAttr());
 
           return imex::xetile::TileType::get(
               swapLastTwoElems(tileTy.getShape()), tileTy.getElementType(),
@@ -445,7 +448,7 @@ struct XeTileCanonicalizationPass final
       // LoadTileOp is legal if it does not consume col-major tiles.
       target.addDynamicallyLegalOp<imex::xetile::LoadTileOp>(
           [&](imex::xetile::LoadTileOp op) {
-            return isValidTile(op.getSource().getType());
+            return isValidTile(op.getTileType());
           });
       // If any iterArg of the forOp is a col-major tile, it is illegal.
       target.addDynamicallyLegalOp<mlir::scf::ForOp>([&](mlir::scf::ForOp op) {

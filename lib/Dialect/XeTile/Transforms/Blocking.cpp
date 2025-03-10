@@ -411,9 +411,22 @@ static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
 }
 
 static llvm::SmallVector<Type> convertTypes(ShapedType type,
-                                            llvm::ArrayRef<int64_t> blockSize) {
-  auto newTy = type.clone(blockSize, type.getElementType());
-  auto size = std::accumulate(blockSize.begin(), blockSize.end(), 1,
+                                            llvm::ArrayRef<int64_t> blockSize,
+                                            IntegerAttr array_length = {}) {
+  auto elemTy = type.getElementType();
+  auto tileTy = dyn_cast<xetile::TileType>(type);
+  Type newTy;
+  if (tileTy && array_length && array_length.getInt() > 1) {
+    auto ctx = tileTy.getContext();
+    auto encoding = xetile::XeTileAttr::get(
+        ctx, tileTy.getSgMap(), tileTy.getWgMap(), tileTy.getOrder(),
+        array_length, tileTy.getMemorySpace(), tileTy.getScatterAttr());
+    newTy = xetile::TileType::get(ctx, blockSize, elemTy, encoding);
+  } else {
+    newTy = type.clone(blockSize, elemTy);
+  }
+  int64_t factor = (tileTy && array_length) ? array_length.getInt() : 1;
+  auto size = std::accumulate(blockSize.begin(), blockSize.end(), factor,
                               std::multiplies<int64_t>());
   return llvm::SmallVector<Type>(type.getNumElements() / size, newTy);
 }
@@ -500,6 +513,7 @@ public:
     if (!blockSize || shape == blockSize.asArrayRef())
       return failure();
 
+    auto blockSZRef = blockSize.asArrayRef();
     llvm::SmallVector<Value> newOps;
     // handle scattered tiles.
     if (tileTy.getScatterAttr() == BoolAttr::get(ctx, true)) {
@@ -507,11 +521,11 @@ public:
       assert(indices && "indices is missing.");
       auto indicesTy = indices.getType();
 
-      auto convertedTileTypes = convertTypes(tileTy, blockSize.asArrayRef());
-      auto newIndicesTypes = convertTypes(indicesTy, blockSize.asArrayRef());
+      auto convertedTileTypes = convertTypes(tileTy, blockSZRef);
+      auto newIndicesTypes = convertTypes(indicesTy, blockSZRef);
 
-      auto subIndices = addPackOp(indices, newIndicesTypes,
-                                  blockSize.asArrayRef(), loc, rewriter);
+      auto subIndices =
+          addPackOp(indices, newIndicesTypes, blockSZRef, loc, rewriter);
 
       for (auto [t, i] : llvm::zip(convertedTileTypes, subIndices)) {
         llvm::SmallVector<Value> operands({op.getSource(), i});
@@ -520,9 +534,21 @@ public:
         newOps.push_back(newOp);
       }
     } else { // handle blocked tiles
-      auto newTileTy = tileTy.clone(blockSize.asArrayRef());
-      // TODO: add array_length support.
-      auto width = blockSize[1];
+      int arrLen = analysis.getArrayLength(op.getTile());
+      auto arrLenAttr = arrLen == 1 ? mlir::IntegerAttr()
+                                    : rewriter.getI64IntegerAttr(arrLen);
+      mlir::Attribute encoding;
+      if (arrLenAttr || tileTy.getEncoding()) {
+        if (!arrLenAttr)
+          encoding = tileTy.getEncoding();
+        else
+          encoding = xetile::XeTileAttr::get(
+              ctx, tileTy.getSgMap(), tileTy.getWgMap(), tileTy.getOrder(),
+              arrLenAttr, tileTy.getMemorySpace(), tileTy.getScatterAttr());
+      }
+      auto newTileTy = xetile::TileType::get(ctx, blockSZRef,
+                                             tileTy.getElementType(), encoding);
+      auto width = arrLen * blockSize[1];
       llvm::SmallVector<int64_t, 2> grids(
           {shape[0] / blockSize[0], shape[1] / width});
       auto mixedOffsets = op.getMixedOffsets();
@@ -566,8 +592,7 @@ public:
         }
       }
     }
-    auto castOp =
-        addUnpackOp(newOps, tileTy, blockSize.asArrayRef(), loc, rewriter);
+    auto castOp = addUnpackOp(newOps, tileTy, blockSZRef, loc, rewriter);
     rewriter.replaceOp(op, castOp);
     return success();
   }
@@ -615,30 +640,31 @@ public:
   LogicalResult matchAndRewrite(xetile::LoadTileOp op,
                                 OpPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto tile = op.getSource();
+    auto tile = op.getTile();
     auto tileTy = tile.getType();
     auto shape = tileTy.getShape();
     auto blockSize = analysis.getUseBlockSize(tile, op->getOpOperand(0));
 
     if (!blockSize || shape == blockSize.asArrayRef())
       return failure();
+    auto blockSizeRef = blockSize.asArrayRef();
+    auto arrayLen = rewriter.getI64IntegerAttr(analysis.getArrayLength(tile));
+    auto convertedTileTypes = convertTypes(tileTy, blockSizeRef, arrayLen);
+    auto convertedTiles =
+        addPackOp(tile, convertedTileTypes, blockSizeRef, loc, rewriter);
 
-    auto convertedTileTypes = convertTypes(tileTy, blockSize.asArrayRef());
-    auto convertedTiles = addPackOp(tile, convertedTileTypes,
-                                    blockSize.asArrayRef(), loc, rewriter);
-
-    auto vecTy =
-        VectorType::get(blockSize.asArrayRef(), tileTy.getElementType());
+    auto vecTy = VectorType::get(blockSizeRef, tileTy.getElementType());
+    llvm::SmallVector<Type> resultTys(arrayLen.getInt(), vecTy);
 
     llvm::SmallVector<Value> newOps;
     for (auto t : convertedTiles) {
-      auto newOp =
-          rewriter.create<xetile::LoadTileOp>(loc, vecTy, t, op->getAttrs());
-      newOps.push_back(newOp);
+      auto newOp = rewriter.create<xetile::LoadTileOp>(loc, resultTys, t,
+                                                       op->getAttrs());
+      newOps.append(newOp.getValues().begin(), newOp.getValues().end());
     }
 
-    auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
-                              rewriter);
+    auto castOp = addUnpackOp(newOps, op.getType(0), blockSize.asArrayRef(),
+                              loc, rewriter);
 
     rewriter.replaceOp(op, castOp);
     return success();
@@ -832,8 +858,9 @@ public:
     auto blockSize = analysis.getDefBlockSize(tile);
     if (!blockSize || shape == blockSize.asArrayRef())
       return failure();
-
-    auto convertedTileTypes = convertTypes(tileTy, blockSize.asArrayRef());
+    auto arrayLen = rewriter.getI64IntegerAttr(analysis.getArrayLength(tile));
+    auto convertedTileTypes =
+        convertTypes(tileTy, blockSize.asArrayRef(), arrayLen);
     auto convertedTiles = addPackOp(tile, convertedTileTypes,
                                     blockSize.asArrayRef(), loc, rewriter);
 
@@ -1309,10 +1336,13 @@ public:
     // Collect blockSZ for each value and check whether they need a rewrite
     bool toChange = false;
     llvm::SmallVector<Block> blockSZs;
+    llvm::SmallVector<IntegerAttr> arrayLengthAttrs;
     llvm::for_each(anchor, [&](Value val) {
-      auto type = dyn_cast<ShapedType>(val.getType());
+      auto arrayLen = rewriter.getI64IntegerAttr(analysis.getArrayLength(val));
+      arrayLengthAttrs.push_back(arrayLen);
       auto block = analysis.getDefBlockSize(val);
       blockSZs.push_back(block);
+      auto type = dyn_cast<ShapedType>(val.getType());
       toChange |= block && type && type.getShape() != block.asArrayRef();
     });
 
@@ -1334,7 +1364,7 @@ public:
           terminator->getOperands(), blockSZs,
           [&](int64_t i, Value v, ShapedType type,
               llvm::ArrayRef<int64_t> blockSZ) {
-            auto newTypes = convertTypes(type, blockSZ);
+            auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
             auto newOprs = addPackOp(v, newTypes, blockSZ, loc, rewriter);
             convertedOperands.append(newOprs.begin(), newOprs.end());
           },
@@ -1355,7 +1385,7 @@ public:
           llvm::ArrayRef<Value>(arguments), blockSZs,
           [&](int64_t i, Value arg, ShapedType type,
               llvm::ArrayRef<int64_t> blockSZ) {
-            auto newTypes = convertTypes(type, blockSZ);
+            auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
             llvm::SmallVector<Location> locs(newTypes.size(), arg.getLoc());
             llvm::SmallVector<Value> newArgs;
             llvm::for_each(r->addArguments(newTypes, locs),
@@ -1384,7 +1414,7 @@ public:
           inits, blockSZs,
           [&](int64_t i, Value init, ShapedType type,
               llvm::ArrayRef<int64_t> blockSZ) {
-            auto newTypes = convertTypes(type, blockSZ);
+            auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
             auto newInits = addPackOp(init, newTypes, blockSZ, loc, rewriter);
             convertedOperands.append(newInits.begin(), newInits.end());
           },
@@ -1397,7 +1427,7 @@ public:
         op->getResults(), blockSZs,
         [&](int64_t i, Value v, ShapedType type,
             llvm::ArrayRef<int64_t> blockSZ) {
-          auto newTypes = convertTypes(type, blockSZ);
+          auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
           resultTypes.addInputs(i, newTypes);
         },
         [&](int64_t i, Value v) { resultTypes.addInputs(i, v.getType()); });
