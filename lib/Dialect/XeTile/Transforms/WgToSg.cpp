@@ -73,7 +73,6 @@ public:
   mlir::LogicalResult
   matchAndRewrite(xetile::InitTileOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     auto loc = op.getLoc();
     auto tileTy = op.getType();
 
@@ -92,14 +91,30 @@ public:
     auto newTileTy =
         imex::xetile::TileType::get({sgTileShape[0], sgTileShape[1]}, elemTy);
 
+    rewriter.setInsertionPoint(op);
+    // get the subgroup Id
+    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
+
+    // Handle the init tile for scatter ops
+    if (tileTy.getScatterAttr() == mlir::BoolAttr::get(op.getContext(), true)) {
+      auto attr = imex::xetile::XeTileAttr::get(
+        op.getContext(), nullptr /*sgMap*/, nullptr /*wgMap*/,
+        mlir::DenseI32ArrayAttr::get(tileTy.getContext(), {1, 0}),
+        tileTy.getMemorySpace(), tileTy.getScatterAttr() /*scatterAttr*/);
+      auto newTileTy =
+        imex::xetile::TileType::get({sgTileShape[0], sgTileShape[1]}, elemTy, attr);
+      auto newInitTileOp = rewriter.create<xetile::InitTileOp>(
+        loc, newTileTy, mlir::cast<mlir::TypedValue<mlir::MemRefType>>(op.getSource()),
+        mlir::cast<mlir::TypedValue<mlir::VectorType>>(adaptor.getIndices()[0]));
+      rewriter.replaceOp(op, newInitTileOp);
+      return mlir::success();
+    }
+
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
       return rewriter.create<mlir::arith::ConstantOp>(loc, type, attr);
     };
 
-    rewriter.setInsertionPoint(op);
-    // get the subgroup Id
-    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
     auto indexType = rewriter.getIndexType();
     auto sgLayoutDimXConst = createIndexConstant(indexType, sgLayout[0]);
     auto sgLayoutDimYConst = createIndexConstant(indexType, sgLayout[1]);
@@ -136,7 +151,6 @@ public:
             op.getLoc(), rewriter.getIndexAttr(staticOffsets[i])));
       }
     }
-
     mlir::Value source = op.getSource();
     mlir::SmallVector<mlir::OpFoldResult> globalOffsetsX; // rows
     mlir::SmallVector<mlir::OpFoldResult> globalOffsetsY; // cols
@@ -165,7 +179,6 @@ public:
             globalOffsets.push_back(globalOffset);
           }
         };
-
     // Look up the map if the init_tile has a layout_order [0, 1]
     // If it does, tranpose the sg ids to get the correct tile.
     auto it = sgLayoutMap.find(op.getResult());
@@ -236,7 +249,6 @@ class WGToSGLoadTileOpPattern : public OpConversionPattern<xetile::LoadTileOp> {
       return mlir::failure();
 
     llvm::SmallVector<::mlir::Value> newLoadOps;
-    llvm::SmallVector<mlir::Type> newResultTypes;
     for (auto src : sources) {
       auto tileTy = llvm::dyn_cast<xetile::TileType>(src.getType());
       auto newResTy =
@@ -245,7 +257,37 @@ class WGToSGLoadTileOpPattern : public OpConversionPattern<xetile::LoadTileOp> {
       auto newLoadOp = rewriter.create<xetile::LoadTileOp>(
           op.getLoc(), newResTy, src, op.getPaddingAttr(), op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       newLoadOps.push_back(newLoadOp);
-      newResultTypes.push_back(newLoadOp.getResult().getType());
+    }
+    rewriter.replaceOpWithMultiple(op, {newLoadOps});
+    return mlir::success();
+  }
+};
+
+class WGToSGLoadGatherOpPattern : public OpConversionPattern<xetile::LoadGatherOp> {
+  using OpConversionPattern<xetile::LoadGatherOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::LoadGatherOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto sources = adaptor.getTile();
+    auto mask = adaptor.getMask();
+    auto res = op.getValue();
+    auto resType = res.getType();
+
+    if (!resType || resType.getRank() != 2)
+      return mlir::failure();
+
+    llvm::SmallVector<::mlir::Value> newLoadOps;
+    for (auto [src, mask] : llvm::zip(sources, mask)) {
+      auto tileTy = llvm::dyn_cast<xetile::TileType>(src.getType());
+      auto newResTy =
+          mlir::VectorType::get({tileTy.getShape()[0], tileTy.getShape()[1]},
+          tileTy.getElementType());
+      auto newLoadOp = rewriter.create<xetile::LoadGatherOp>(
+          op.getLoc(), newResTy, src, mask, op.getPaddingAttr(),
+          op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
+      newLoadOps.push_back(newLoadOp);
     }
     rewriter.replaceOpWithMultiple(op, {newLoadOps});
     return mlir::success();
@@ -303,6 +345,28 @@ class WGToSGStoreTileOpPattern : public OpConversionPattern<xetile::StoreTileOp>
     for (size_t i = 0; i < newValues.size(); i++) {
       rewriter.create<xetile::StoreTileOp>(op.getLoc(), newValues[i],
                                            newDstTiles[i], op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
+    }
+
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+class WGToSGStoreScatterOpPattern : public OpConversionPattern<xetile::StoreScatterOp> {
+  using OpConversionPattern<xetile::StoreScatterOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(xetile::StoreScatterOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto newValues = adaptor.getValue();
+    auto newDstTiles = adaptor.getTile();
+    auto mask = adaptor.getMask();
+
+    for (size_t i = 0; i < newValues.size(); i++) {
+      rewriter.create<xetile::StoreScatterOp>(op.getLoc(), newValues[i],
+                                           newDstTiles[i], mask[i], op.getL1HintAttr(),
+                                           op.getL2HintAttr(), op.getL3HintAttr());
     }
 
     rewriter.eraseOp(op);
@@ -409,7 +473,6 @@ class WGToSGArithConstantOpPattern
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::ConstantOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     auto value = llvm::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
     auto valueType = mlir::dyn_cast<mlir::VectorType>(value.getType());
     auto wgTileShape = valueType.getShape();
@@ -473,7 +536,6 @@ class WGToSGArithConstantOpPattern
       auto newOp = rewriter.create<arith::ConstantOp>(op.getLoc(), newTy, attr);
       newOps.push_back(newOp);
     }
-
     rewriter.replaceOpWithMultiple(op, {newOps});
     return mlir::success();
   }
@@ -870,6 +932,35 @@ class WGToSGVectorShapeCast
   }
 };
 
+class WGToSGVectorCreateMask
+    :public OpConversionPattern<mlir::vector::CreateMaskOp> {
+  using OpConversionPattern<mlir::vector::CreateMaskOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::vector::CreateMaskOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto res = op.getResult();
+    auto resType = mlir::dyn_cast<mlir::VectorType>(res.getType());
+
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto sgData = mapAttr.getSgData();
+    auto newTy = mlir::VectorType::get({sgData[0], sgData[1]},
+                                       resType.getElementType());
+
+    auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
+            op.getLoc(), newTy, adaptor.getOperands());
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
 template <typename Op, int numOperands>
 Op createOp(ConversionPatternRewriter &rewriter, mlir::Location loc,
             llvm::SmallVector<llvm::SmallVector<mlir::Value>> operands, int i) {
@@ -1026,6 +1117,45 @@ class WGToSGElementWiseOpComparisonOpsPattern : public OpConversionPattern<Op> {
   }
 };
 
+class WGToSGArithSelectOpPattern : public OpConversionPattern<mlir::arith::SelectOp> {
+  using OpConversionPattern<mlir::arith::SelectOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::SelectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto newOp = rewriter.create<mlir::arith::SelectOp>(op.getLoc(), adaptor.getCondition(),
+                                 adaptor.getTrueValue(), adaptor.getFalseValue());
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+class WGToSGMathFPowIOpPattern : public OpConversionPattern<mlir::math::FPowIOp> {
+  using OpConversionPattern<mlir::math::FPowIOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::math::FPowIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto mapAttr =
+        llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(op->getAttr("map"));
+    if (!mapAttr) {
+      return mlir::failure();
+    }
+
+    auto newOp = rewriter.create<mlir::math::FPowIOp>(op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+
+
 static bool hasMap(mlir::Operation* op){
   if (llvm::isa<imex::xetile::LoadTileOp>(op)){
     auto tileTy =  mlir::dyn_cast<xetile::TileType>(op->getOperand(0).getType());
@@ -1137,7 +1267,11 @@ void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
                   WGToSGSCFYieldOpPattern, WGToSGVectorBroadcast,
                   WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern,
-                  WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp
+                  WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp,
+                  WGToSGArithSelectOpPattern, WGToSGMathFPowIOpPattern,
+                  WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp,
+                  WGToSGLoadGatherOpPattern, WGToSGStoreScatterOpPattern,
+                  WGToSGVectorCreateMask
                   >(patterns.getContext());
   patterns.insert<WGToSGElementWiseOpSameArgAndResultTypePattern<mlir::math::ExpOp, 1>,
                   WGToSGElementWiseOpSameArgAndResultTypePattern<mlir::math::SqrtOp, 1>,
@@ -1216,6 +1350,14 @@ public:
             return false;
         });
 
+    target.addDynamicallyLegalOp<xetile::LoadGatherOp>(
+        [&](xetile::LoadGatherOp op) -> bool {
+          if (!op.getTile().getType().getWgMap())
+            return true;
+          else
+            return false;
+        });
+
     target.addDynamicallyLegalOp<xetile::TileMMAOp>(
         [&](xetile::TileMMAOp op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
@@ -1228,6 +1370,14 @@ public:
 
     target.addDynamicallyLegalOp<xetile::StoreTileOp>(
         [&](xetile::StoreTileOp op) -> bool {
+          if (!op.getTile().getType().getWgMap())
+            return true;
+          else
+            return false;
+        });
+
+    target.addDynamicallyLegalOp<xetile::StoreScatterOp>(
+        [&](xetile::StoreScatterOp op) -> bool {
           if (!op.getTile().getType().getWgMap())
             return true;
           else
@@ -1274,10 +1424,11 @@ public:
                                  mlir::arith::ExtSIOp, mlir::arith::ExtUIOp, mlir::arith::FPToSIOp,
                                  mlir::arith::FPToUIOp, mlir::arith::UIToFPOp, mlir::arith::SIToFPOp,
                                  mlir::arith::TruncFOp, mlir::arith::TruncIOp, mlir::arith::CmpIOp,
-                                 mlir::arith::CmpFOp,  mlir::arith::IndexCastUIOp,
-                                 mlir::arith::IndexCastOp, mlir::arith::BitcastOp, mlir::vector::TransposeOp,
-                                 mlir::vector::BroadcastOp, mlir::vector::MultiDimReductionOp,
-                                 mlir::vector::ShapeCastOp>(
+                                 mlir::arith::CmpFOp,  mlir::arith::IndexCastUIOp, mlir::arith::SelectOp,
+                                 mlir::math::FPowIOp,mlir::arith::IndexCastOp, mlir::arith::BitcastOp,
+                                 mlir::vector::TransposeOp, mlir::vector::BroadcastOp,
+                                 mlir::vector::MultiDimReductionOp,mlir::vector::ShapeCastOp,
+                                 mlir::vector::CreateMaskOp>(
         [&](mlir::Operation *op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
               op->getAttr("map"));
