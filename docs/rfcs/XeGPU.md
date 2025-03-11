@@ -429,10 +429,10 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
      tensor_desc<16x16xbf16, #sg_map_at> into vector<8x2xbf16>
 ```
 
-`xegpu.sg_map` is also applied to 1D vector load for WI data distribution. When the tensor_desc only specify 1D tensor, `sg_map.wi_layout[0]` and `sg_map.wi_data[0]` must be 1, and they are ignored in the WI distribution. Note that after the distribution, the output vector is shown as a 2d vector, with the inner-dimension used for packing.
+`xegpu.sg_map` can be 1D when applied to 1D vector load for WI data distribution. Note that after the distribution, the output vector is shown as a 2D vector, with the inner-dimension used for packing.
 
 ```mlir
-  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 2]>
+  #sg_map_a = xegpu.sg_map<wi_layout = [16], wi_data = [2]>
   #tdesc_attr1 = !xegpu.block_tdesc_attr<memory_space=slm, boundary_check=false, sg= #sg_map_a>
   %tdesc1 = xegpu.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
@@ -440,7 +440,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
   %vector_a = xegpu.load_nd %tdesc_1:
      tensor_desc<16xbf16, #sg_map_a> into vector<1x2xbf16>
 ```
-`xegpu.sg_map` also applies to 3D vector, which represents the result of 2D block load with array_length.
+`xegpu.sg_map` also applies to 3D vector, by viewing it as a 2D vector by collapsing the second and higher dimensions as one dimension. The example shows the SIMT distribution of the 3D vector as the result of 2D block load with array_length.
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
@@ -448,7 +448,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
      	into tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>, #sg_map_a>
 
   %result = xegpu.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached}:
-          tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16>
+          tensor_desc<8x16xbf16, #xegpu.block_tdesc_attr<array_length=2>> into vector<16x1xbf16> //the SIMD version is 2x8x16xbf16
 ```  
 
 `xegpu.sg_map` is also used to describe the WI data distribution for regular loads. The example below shows that each work item (WI) loads one fp32 data element. The resulting vector <16 x fp32> is loaded and distributed to each WI as <1 x fp32>.
@@ -576,26 +576,30 @@ The sg_map propagation process may encounter operations that require changing th
   %vector_b = vector.bitcast %vector_a :vector<8x1xi16> into vector<8x2xi8>
 ```
 
-Operations such as reduction and broadcast are exception to WI distribution rule. The 1d reduced vector doesn't participate in the WI distribution so that the dimension size doesn't change. The wi_layout must be [1, %subgroup_size], and wi_data must be [1, 1]. The SIMT distribution needs to use different dialect operations since the vector dialect can't express cross-lane semantics.  
-```mlir
+Reduction and broadcast uses default layout. For the 2D vector, the wi_layout must be [1, %subgroup_size], and wi_data must be [1, 1]. For the 1D reduced vector, the wi_layout must be [%subgroup_size], and wi_data must be [1]. 
+The example below shows the SIMT code for cross-lane reduction and broadcast. 
 
+```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
-  #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+  #sg_map_b = xegpu.sg_map<wi_layout = [16], wi_data = 1]>
   //Before WI distribution:  %vector_b = vector.reduction [1] %vector_a {#sg_map_b} :vector<16x16xbf16> into vector<16xbf16>
   %vector_a' = reshape %vector_a :vector<16x1xbf16> into vector<16xbf16>
   %vector_b' = gpu.subgroup_reduce %vector_a' :vector<16xbf16> into vector<16xbf16>
-  %vector_b = reshape %vector_b' :vector<16xbf16> into vector<16x1xbf16>
+  %scalar_b = vector.extract %vector_b', %lane_id :vector<16xbf16> into bf16
+  %vector_b = vector.from %scalar_b: bf16 into vector<1xbf16>
 
-  #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]> //the producer op of vector_a uses #sg_map_a
+  #sg_map_a = xegpu.sg_map<wi_layout = [16], wi_data = [1]> //the producer op of vector_a uses #sg_map_a
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   //Before WI distribution:  %vector_b = vector.broadcast %vector_a {#sg_map_b} :vector<16xbf16> into vector<16x16xbf16>
-  %vector_a' = reshape %vector_a :vector<16x1xbf16> into vector<16xbf16>
-  %cst0 = arith.constant 0 : i32
-  %vector_b', %p = gpu.shuffle idx %vector_a', %cst0, %subgroup_size: vector<16xbf16> into vector<16xbf16>
-  %vector_b = reshape %vector_b' :vector<16xbf16> into vector<16x1xbf16>
+  %vector_b0, %p = gpu.shuffle idx %vector_a, %c0, %subgroup_size: vector<1xbf16> into vector<1xbf16>
+  ...
+  %vector_b15, %p = gpu.shuffle idx %vector_a, %c1, %subgroup_size: vector<1xbf16> into vector<1xbf16>
+  %vector_b = vector.insert_extracted_slice %vector_b0, %vector_b[%c0,%c0] :vector<1xbf16> into vector<16x1xbf16>
+  ...
+  %vector_b = vector.insert_extracted_slice %vector_b15, %vector_b[%c15,%c0] :vector<1xbf16> into vector<16x1xbf16>
 ```
 
-Extract, insert and regular element-wise operations do not modify the sg_map. However, the result of SIMT distribution may have to use different operations.
+Extract, insert and regular element-wise operations do not modify the sg_map.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]> //the producer op of vector_a uses #sg_map_a
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
