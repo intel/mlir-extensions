@@ -440,7 +440,7 @@ The examples below demonstrate how wi_data can be used to model the transpose_bi
   %vector_a = xegpu.load_nd %tdesc_1:
      tensor_desc<16xbf16, #sg_map_a> into vector<1x2xbf16>
 ```
-`xegpu.sg_map` also applies to 3D vector, by viewing it as a 2D vector by collapsing the second and higher dimensions as one dimension. The example shows the SIMT distribution of the 3D vector as the result of 2D block load with array_length.
+`xegpu.sg_map` also applies to 3D vector, by viewing it as a 2D vector and collapsing the second and higher dimensions as one dimension. The example shows the SIMT distribution of the 3D vector as the result of 2D block load with array_length.
 ```mlir
 #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
 %tdesc2 = xegpu.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2
