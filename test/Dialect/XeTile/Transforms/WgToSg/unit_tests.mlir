@@ -95,12 +95,35 @@ gpu.module @test_arith_extf {
 
     gpu.func @test_cmpf_vector(%arg0 : memref<128x32xf32>, %arg1 : memref<128x32xf32>) {
         //CHECK: arith.cmpf ult, {{%.*}}, {{%.*}} : vector<32x32xf32>
+        //CHECK: arith.select {{%.*}}, {{%.*}}, {{%.*}} : vector<32x32xi1>, vector<32x32xf32>
         %c0 = arith.constant 0 : index
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} dense<true> : vector<128x32xi1>
         %tile = xetile.init_tile %arg0[%c0, %c0] : memref<128x32xf32> -> !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
         %load_tile_0 = xetile.load_tile %tile : !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xf32>
         %tile_1 = xetile.init_tile %arg1[%c0, %c0] : memref<128x32xf32> -> !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
         %load_tile_1 = xetile.load_tile %tile : !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xf32>
-        %cmpi = arith.cmpf ult, %load_tile_0, %load_tile_1 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf32>
+        %cmpf = arith.cmpf ult, %load_tile_0, %load_tile_1 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf32>
+        %select = arith.select %cmpf, %load_tile_0, %load_tile_1 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xi1>, vector<128x32xf32>
+        gpu.return
+    }
+
+     gpu.func @test_math_fpowi(%arg0 : memref<128x32xf32>, %arg1 : memref<128x32xi32>) {
+        %c0 = arith.constant 0 : index
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} dense<true> : vector<128x32xi1>
+        %tile = xetile.init_tile %arg0[%c0, %c0] : memref<128x32xf32> -> !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        %load_tile_0 = xetile.load_tile %tile : !xetile.tile<128x32xf32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xf32>
+        %tile_1 = xetile.init_tile %arg1[%c0, %c0] : memref<128x32xi32> -> !xetile.tile<128x32xi32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>>
+        %load_tile_1 = xetile.load_tile %tile_1 : !xetile.tile<128x32xi32, #xetile.tile_attr<wg_map = <sg_layout = [4, 8], sg_data = [32, 32]>, memory_space = 0 : i32, scattered = false>> -> vector<128x32xi32>
+        //CHECK: math.fpowi {{%.*}}, {{%.*}} : vector<32x32xf32>, vector<32x32xi32>
+        %fpowi = math.fpowi %load_tile_0, %load_tile_1 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xf32>, vector<128x32xi32>
+        gpu.return
+    }
+
+    gpu.func @test_create_mask() {
+        %c128 = arith.constant 128 : index
+        %c100 = arith.constant 100 : index
+        //CHECK: vector.create_mask {{%.*}}, {{%.*}} : vector<32x32xi1>
+        %create_mask = vector.create_mask %c128, %c100 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xi1>
         gpu.return
     }
 }
