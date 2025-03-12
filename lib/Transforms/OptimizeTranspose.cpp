@@ -149,7 +149,13 @@ private:
           // If current user is a forOp, we need to get the block argument.
           if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
             auto opArgs = imex::getArgsForOperand(forOp, currOp->getResult(0));
-            assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
+            // UnrollAndJam and CSE may cause the same CreateNdDescOp to be used
+            // multiple times as iterOperand of `forOp`. We do not support such
+            // case, so we just return empty `loadNdOpsFound`.
+            if (opArgs.size() != 1) {
+              loadNdOpsFound.clear();
+              return;
+            }
             auto blockArg = opArgs[0];
             for (auto user : blockArg.getUsers())
               worklist.insert(user);
