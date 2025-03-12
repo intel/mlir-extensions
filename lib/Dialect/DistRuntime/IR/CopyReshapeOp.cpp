@@ -42,8 +42,7 @@ public:
 
     // check input type
     auto nlArray = op.getNlArray();
-    auto nlType =
-        mlir::dyn_cast<::imex::ndarray::NDArrayType>(nlArray.getType());
+    auto nlType = mlir::dyn_cast<::mlir::RankedTensorType>(nlArray.getType());
     if (!nlType) {
       return ::mlir::failure();
     }
@@ -76,8 +75,8 @@ public:
         op.getNlOffsets(), op.getNlShape());
 
     // cast to original types and replace op
-    auto res = rewriter.create<imex::ndarray::CastOp>(op.getLoc(), nlType,
-                                                      newOp.getNlArray());
+    auto res = rewriter.create<mlir::tensor::CastOp>(op.getLoc(), nlType,
+                                                     newOp.getNlArray());
     rewriter.replaceOp(op, {newOp.getHandle(), res});
 
     return ::mlir::success();

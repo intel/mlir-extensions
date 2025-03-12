@@ -457,9 +457,10 @@ if __name__ == '__main__':
     parser.add_argument('--print_debug', '-d', help="print debug info for GPU module (e.g., tile sizes) per test", type=int, default=0)
     parser.add_argument('--validate', '-v', help="if validate=1, then CPU will also perform GEMM and compare the result with GPU's result", type=int, default=0)
     parser.add_argument('--default_tests', '-l', help="if default_tests=1, additionally generates default cases for 4kx4k and 1kx1k GEMMs", type=int, default=0)
+    parser.add_argument('--output_gemm_dir', '-o', help="name of the output folder, default 'generated-gemm'.", type=str, default="generated-gemm")
     args = parser.parse_args()
     # print(parser.format_help())
-    output_dir = f"Generated_GEMM/{args.code_version}"
+    output_dir = f"{args.output_gemm_dir}/{args.code_version}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     else:
@@ -503,7 +504,7 @@ if __name__ == '__main__':
 
     if args.test_csv:
         skipped = []
-        shapes = pd.read_csv(args.test_csv)
+        shapes = pd.read_csv(args.test_csv, comment='#')
         for index, gemm_shapes in shapes.iterrows():
             # Skip large GEMMs when validating on CPU as it takes minutes even for a 4k GEMM
             if args.validate and (gemm_shapes['M'] > 5000 or gemm_shapes['N'] > 5000 or gemm_shapes['K'] > 5000):

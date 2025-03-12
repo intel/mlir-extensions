@@ -239,10 +239,19 @@ template <typename T> struct EasyVal {
   template <
       typename LHS, typename RHS, typename X = T,
       typename std::enable_if<std::is_same<X, bool>::value>::type * = nullptr>
-  EasyVal<typename LHS::CType> select(RHS const &l, LHS const &r) const {
-    return {*_loc, *_builder,
-            _builder->createOrFold<::mlir::arith::SelectOp>(*_loc, _value,
-                                                            l.get(), r.get())};
+  auto select(RHS const &l, LHS const &r) const {
+    if constexpr (std::is_integral<LHS>::value &&
+                  std::is_integral<RHS>::value) {
+      return EasyVal<LHS>(*_loc, *_builder,
+                          _builder->createOrFold<::mlir::arith::SelectOp>(
+                              *_loc, _value, EasyVal<LHS>(*_loc, *_builder, l),
+                              EasyVal<RHS>(*_loc, *_builder, r)));
+    } else if constexpr (!(std::is_integral<LHS>::value &&
+                           std::is_integral<RHS>::value)) {
+      return LHS{*_loc, *_builder,
+                 _builder->createOrFold<::mlir::arith::SelectOp>(
+                     *_loc, _value, l.get(), r.get())};
+    }
   }
 };
 
@@ -272,6 +281,36 @@ inline EasyIdx easyIdx(const mlir::Location &loc, mlir::OpBuilder &builder,
   return llvm::isa<::mlir::Value>(value)
              ? easyIdx(loc, builder, llvm::cast<::mlir::Value>(value))
              : easyIdx(loc, builder,
+                       ::mlir::getConstantIntValue(value).value());
+}
+
+/// Special EasyVal representing an mlir::I64
+/// Do not use constructors, use easyI64(...) below.
+using EasyI64 = EasyVal<int64_t>;
+
+/// Create I64 Value from MLIR value, potentially by casting
+inline EasyI64 easyI64(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                       const ::mlir::Value &value) {
+  return EasyI64(loc, builder,
+                 createCast(loc, builder, value, builder.getI64Type()));
+}
+
+/// Create I64 Value from C++ value
+inline EasyI64 easyI64(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                       int64_t value) {
+  return EasyI64(loc, builder, createInt(loc, builder, value, 64));
+}
+
+/// Create I64 Value from OpFoldResult
+// This is provided as a template because otherwise we get warnings about ISO
+// C++ ambiguity
+template <typename T, typename std::enable_if<std::is_same<
+                          T, ::mlir::OpFoldResult>::value>::type * = nullptr>
+inline EasyI64 easyI64(const mlir::Location &loc, mlir::OpBuilder &builder,
+                       const T &value) {
+  return mlir::isa<mlir::Value>(value)
+             ? easyI64(loc, builder, mlir::isa<::mlir::Value>(value))
+             : easyI64(loc, builder,
                        ::mlir::getConstantIntValue(value).value());
 }
 

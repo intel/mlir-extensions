@@ -1,0 +1,66 @@
+name: GPU Build and run tests on FS simulator
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'dist-ndarray'
+      - imex-embargo
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: [self-hosted, icx, fs-sim]
+    defaults:
+      run:
+        shell: bash -noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Collect info
+        run: |
+          ./scripts/sysinfo.sh
+
+      - name: Checkout MLIR
+        run: |
+          git clone https://github.com/llvm/llvm-project
+          export LLVM_SHA=$(cat build_tools/llvm_version.txt)
+          cd llvm-project
+          git checkout $LLVM_SHA
+          git apply ../build_tools/patches/*.patch
+
+      - name: Setup IMEX and run tests on FS simulator
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+
+          ./scripts/compile.sh -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DIMEX_ENABLE_FS_SIMULATOR=ON -DLLVM_LIT_ARGS="-a --time-tests -j 1 --debug --timeout=1500 --filter=Integration/Dialect/Xe*/*"
+
+          echo WORK_ROOT=$WORK_ROOT | tee -a $GITHUB_ENV
+          export NEO_BINARIES_ROOT="$HOME"/neo
+          (set +o pipefail && cd $WORK_ROOT/fs/scripts && source setup.sh && umd_driver_env_variables_export && run_coral_fs -r -m umd -l) &> fs-sim.log &
+          cmake --build build --target check-static | tee build/tests.txt
+
+      - name: Upload tests.txt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests_gpu-fs-sim.txt
+          path: build/tests.txt
+
+      - name: Upload fs-sim.log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fs-sim.log
+          path: |
+            fs-sim.log
+            ${{ env.WORK_ROOT }}/fs/scripts/tbx*.log

@@ -314,23 +314,27 @@ private:
             ->getResult(0);
 
     // Create the MemRef descriptor.
-    auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
-    auto elemPtrTye = memrefDesc.getElementPtrType();
-    memrefDesc.setAllocatedPtr(
-        rewriter, loc,
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
-    memrefDesc.setAlignedPtr(
-        rewriter, loc,
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
-
+    auto mr = mlir::cast<mlir::MemRefType>(dstType);
     auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+    auto memrefDesc = mlir::MemRefDescriptor::pack(
+        rewriter, loc, *converter, mr,
+        {allocatedPtr, allocatedPtr, zero}); // , shape, strides
+    // auto elemPtrTye = memrefDesc.getElementPtrType();
+    // memrefDesc.setAllocatedPtr(
+    //     rewriter, loc,
+    //     rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye,
+    //     allocatedPtr));
+    // memrefDesc.setAlignedPtr(
+    //     rewriter, loc,
+    //     rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye,
+    //     allocatedPtr));
 
-    memrefDesc.setOffset(rewriter, loc, zero);
-    for (auto i : llvm::seq(0u, static_cast<unsigned>(shape.size()))) {
-      memrefDesc.setSize(rewriter, loc, i, shape[i]);
-      memrefDesc.setStride(rewriter, loc, i, strides[i]);
-    }
+    // memrefDesc.setOffset(rewriter, loc, zero);
+    // for (auto i : llvm::seq(0u, static_cast<unsigned>(shape.size()))) {
+    //   memrefDesc.setSize(rewriter, loc, i, shape[i]);
+    //   memrefDesc.setStride(rewriter, loc, i, strides[i]);
+    // }
 
     mlir::Value resMemref = memrefDesc;
     rewriter.replaceOp(allocOp, resMemref);

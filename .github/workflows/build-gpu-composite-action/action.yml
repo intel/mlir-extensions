@@ -1,0 +1,67 @@
+name: "GPU Build composite action"
+description: "Checks out repo, build and run gpu tests"
+inputs:
+  build_root:  # id of input
+    description: 'build_root'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu
+  home_dir:  # id of input
+    description: 'home_dir'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu/home
+  level_zero_ver:  # id of input
+    description: 'level_zero_ver'
+    required: false
+    default: 'v1.8.1'
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Level Zero
+      shell: bash -l {0}
+      run: |
+        cd ${{ inputs.home_dir }}
+        git clone https://github.com/oneapi-src/level-zero.git
+        cd level-zero
+        git checkout ${{ inputs.level_zero_ver }}
+        cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
+        cmake --build build --target install
+
+    - name: Checkout MLIR
+      shell: bash
+      run: |
+        cd ${{ inputs.build_root }}
+        if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
+          cd ${{ inputs.build_root }}/llvm-project
+        git reset --hard HEAD
+        export LLVM_SHA=`cat ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
+        git fetch --prune
+        git checkout $LLVM_SHA || exit 1
+        if [ -d "${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+
+    - name: Setup IMEX and run tests
+      shell: bash
+      run: |
+        source /opt/intel/oneapi/setvars.sh
+        cd ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions
+        cmake -S ${{ inputs.build_root }}/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=${{ inputs.home_dir }}/level-zero-install/ || exit
+        set -o pipefail
+        cmake --build build --target check-imex | tee build/tests.txt
+
+    #- name: Run perf script
+    #  shell: bash
+    #  run: |
+    #    cd ${{ inputs.home_dir }}/mlir-extensions/scripts
+    #    ./run_perf_test.sh
+
+    - name: Upload tests.txt
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: tests.txt
+        path: ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
+
+    #- name: Upload report.txt
+    # uses: actions/upload-artifact@v3
+    #with:
+    #name: report.txt
+    #path: ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/scripts/report.txt

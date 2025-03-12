@@ -1,0 +1,38 @@
+name: "CPU Build with composite action"
+
+on:
+  pull_request:
+    branches:
+      - dummy
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: cpu1
+    timeout-minutes: 450
+
+    env:
+      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu
+      HOME: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
+
+    steps:
+      - name: Check build root
+        run: |
+          if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+
+      - name: Clear home dir
+        run: |
+          mkdir -p $HOME
+          cd $HOME
+          rm -rf *
+
+      - uses: actions/checkout@v3
+        with:
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          fetch-depth: 0
+          path: ${{env.HOME}}/frameworks.ai.mlir.mlir-extensions
+      - uses: ./build_cpu/home/frameworks.ai.mlir.mlir-extensions/.github/workflows/build-cpu-composite-action
+        with:
+          build_root: ${{env.BUILD_ROOT}}
+          home_dir: ${{env.HOME}}

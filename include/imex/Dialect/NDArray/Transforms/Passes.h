@@ -28,19 +28,10 @@ class RewritePatternSet;
 
 namespace imex {
 
-//===----------------------------------------------------------------------===//
-/// NDArray passes.
-//===----------------------------------------------------------------------===//
-
-/// Create a NDArrayDist pass
-std::unique_ptr<::mlir::Pass> createNDArrayDistPass();
-
-/// Populate the given list with patterns which add Dist-Ops to NDArray ops
-void populateNDArrayDistPatterns(::mlir::LLVMTypeConverter &converter,
-                                 ::mlir::RewritePatternSet &patterns);
-
 /// Create a AddGPURegions pass
 std::unique_ptr<::mlir::Pass> createAddGPURegionsPass();
+/// Create a ShardingCoalesce pass
+std::unique_ptr<::mlir::Pass> createCoalesceShardOpsPass();
 
 #define GEN_PASS_DECL
 #include <imex/Dialect/NDArray/Transforms/Passes.h.inc>
