@@ -110,14 +110,19 @@ mlir::LogicalResult WorkGroupMapAttr::verify(
   return mlir::success();
 }
 
-mlir::LogicalResult
-XeTileAttr::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-                   ::imex::xetile::SubGroupMapAttr sg_map,
-                   xetile::WorkGroupMapAttr wg_map,
-                   mlir::DenseI32ArrayAttr order, mlir::Attribute MemorySpace,
-                   mlir::BoolAttr scattered) {
+mlir::LogicalResult XeTileAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::imex::xetile::SubGroupMapAttr sg_map, xetile::WorkGroupMapAttr wg_map,
+    mlir::DenseI32ArrayAttr order, mlir::IntegerAttr array_length,
+    mlir::Attribute MemorySpace, mlir::BoolAttr scattered) {
+
   if (order != mlir::DenseI32ArrayAttr() && order.size() != 2)
     emitError() << "expect integer array of size 2 for order";
+  if (array_length && array_length.getInt() > 1 && scattered &&
+      scattered.getValue())
+    emitError() << "array_length cannot be used with scattered attribute";
+  if (array_length && array_length.getInt() < 1)
+    emitError() << "expect integer greater than 0 for array_length";
   return mlir::success();
 }
 
