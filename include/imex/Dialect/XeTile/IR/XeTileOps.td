@@ -282,13 +282,12 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments,
 
 }
 
-def XeTile_LoadTileOp : XeTile_Op<"load_tile", [
-        AllElementTypesMatch<["source", "value"]>,
-        AllShapesMatch<["source", "value"]>]> {
+def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
     let summary = "Loads a tile into a register region";
     let description = [{
-        "load_tile" operation loads the values of a tile into a register region with 2D or 4D layout.
-        4D layout is used when the tile is in blocked layout (specified by tile's attributes).
+        "load_tile" operation loads the values of a tile into a register region with 2D layout.
+        If the tile has array_length attribute and its value is larger than 1, then the load will
+        return `array_length` vector values with the same type.
 
         If optional "padding" value is specified, out-of-bounds memory accesses will be padded with the
         specified padding values. This value defaults to "0.0f".
@@ -310,25 +309,29 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", [
         ```
     }];
 
-    let arguments = (ins XeTile: $source,
+    let arguments = (ins XeTile: $tile,
                          OptionalAttr<XeTile_PaddingValueAttr>: $padding,
                          OptionalAttr<XeTile_CacheHintAttr>: $l1_hint,
                          OptionalAttr<XeTile_CacheHintAttr>: $l2_hint,
                          OptionalAttr<XeTile_CacheHintAttr>: $l3_hint);
 
-    let results = (outs XeTile_2DVector: $value);
+    let results = (outs Variadic<XeTile_2DVector>: $values);
 
-    let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `->` type($value)";
+    let assemblyFormat = "$tile attr-dict `:` qualified(type($tile)) `->` type($values)";
 
     let extraClassDeclaration = [{
         // padding value defaults to zero in the appropriate type if its not specified
         mlir::Attribute getPaddingValueOrDefault() {
-            if (llvm::isa<mlir::IntegerType>(getSource().getType().getElementType())) {
+            if (llvm::isa<mlir::IntegerType>(getTileType().getElementType())) {
                 auto int32Zero = mlir::IntegerAttr::get(mlir::IntegerType::get((*this).getContext(), 32), 0);
                 return getPadding().value_or(int32Zero);
             }
             auto float32Zero = mlir::FloatAttr::get(mlir::Float32Type::get((*this).getContext()), 0.0);
             return getPadding().value_or(float32Zero);
+        }
+
+        xetile::TileType getTileType() {
+            return getTile().getType();
         }
     }];
 

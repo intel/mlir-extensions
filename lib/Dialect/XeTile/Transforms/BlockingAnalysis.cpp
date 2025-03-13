@@ -98,6 +98,17 @@ public:
 
   int64_t getNumUniqRequests() const { return getRequests().size(); }
 
+  template <typename OpTy> bool hasOneUserOfType() const {
+    return requests.size() == 1 && mlir::isa<OpTy>(getUser(0));
+  }
+
+  mlir::Operation *getUser(unsigned index) const {
+    assert(index < requests.size() && "Index out of bounds.");
+    auto it = requests.begin();
+    std::advance(it, index);
+    return it->first->getOwner();
+  }
+
   llvm::SmallVector<Block> getRequests() const {
     llvm::SmallDenseSet<Block, 8> reqs;
     for (auto [point, block] : requests)
@@ -106,8 +117,11 @@ public:
   }
 
   void updateDefBlock(Block block) { def = block; }
+  void updateArrayLength(int length) { array_length = length; }
+  int getArrayLength() const { return array_length; }
 
 private:
+  int array_length = 1;
   Block def;
   llvm::DenseMap<mlir::OpOperand *, Block> requests;
 };
@@ -158,23 +172,25 @@ bool BlockingRequests::operator!=(const BlockingRequests &other) const {
 
 BlockingRequests BlockingRequests::meet(const BlockingRequests &lhs,
                                         const BlockingRequests &rhs) {
-  return join(lhs, rhs);
-}
-
-BlockingRequests BlockingRequests::join(const BlockingRequests &lhs,
-                                        const BlockingRequests &rhs) {
   BlockingRequests newReq;
   if (lhs.isInitialized()) {
     for (auto [point, block] : lhs.requests) {
       newReq.requests.try_emplace(point, block);
     }
+    newReq.array_length = lhs.array_length;
   }
   if (rhs.isInitialized()) {
     for (auto [point, block] : rhs.requests) {
       newReq.requests.try_emplace(point, block);
     }
+    newReq.array_length = std::max(newReq.array_length, rhs.array_length);
   }
   return newReq;
+}
+
+BlockingRequests BlockingRequests::join(const BlockingRequests &lhs,
+                                        const BlockingRequests &rhs) {
+  return meet(lhs, rhs);
 }
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -200,6 +216,10 @@ struct BlockingLattice : public mlir::dataflow::Lattice<BlockingRequests> {
       return mlir::ChangeResult::NoChange;
     val = newValue;
     return mlir::ChangeResult::Change;
+  }
+
+  template <typename OpTy> bool hasOneUserOfType() const {
+    return getValue().hasOneUserOfType<OpTy>();
   }
 };
 
@@ -437,10 +457,14 @@ void BlockingAnalysisImpl::visitPrefetchTileOp(
 void BlockingAnalysisImpl::visitLoadTileOp(
     xetile::LoadTileOp op, mlir::ArrayRef<BlockingLattice *> operands,
     mlir::ArrayRef<const BlockingLattice *> results) {
+  // temporary skip the load_tile with multiple results
+  if (op.getValues().size() > 1)
+    return;
 
   // It has users but users' requirements are not available yet.
   // Worth to wait until all users are visited.
-  auto value = op.getValue();
+
+  auto value = op.getValues()[0];
   auto lattice = results[0]->getValue();
   if (!value.use_empty() && !lattice.isInitialized())
     return;
@@ -449,7 +473,8 @@ void BlockingAnalysisImpl::visitLoadTileOp(
   assert(lattice.getNumUniqRequests() <= 1 &&
          "multiple users requesting different blocking sizes.");
 
-  auto tileTy = op.getSource().getType();
+  auto tileTy = op.getTileType();
+  auto shape = tileTy.getShape();
   auto memSpace = tileTy.getMemorySpaceAsInt();
 
   Block block;
@@ -462,7 +487,6 @@ void BlockingAnalysisImpl::visitLoadTileOp(
     // range [minW, maxW]. For dim 0, it will try to get the largest divisor
     // of shape[0] in the range [minH, maxH] that is divisible by rq[0] if
     // there is, otherwise 1,
-    auto shape = tileTy.getShape();
     auto elemTy = tileTy.getElementType();
     auto elemBits = getBitWidth(elemTy);
     bool hasTransposeUser = value.hasOneUse() &&
@@ -491,11 +515,36 @@ void BlockingAnalysisImpl::visitLoadTileOp(
     return; // do nothing if didnot get a valid block size
 
   auto BlockingRequest = BlockingRequests(block, op->getOpOperand(0));
+
+  if (memSpace != 3) {
+    auto computeArrayLength = [&]() -> int {
+      auto elemBits = getBitWidth(tileTy.getElementType());
+      auto config = uArch->get2DLoadConfig(op, elemBits, false, false);
+      if (mlir::succeeded(config) && block) {
+        auto availableArrayLengths = config->array_length;
+        // Do not let an inner block get array_length'ed to blocks
+        // finer than one GRF.
+        if (block[0] * block[1] * elemBits < uArch->getOneGRFSizeBits()) {
+          return 1;
+        }
+        const int maxBlockWidth = std::min<int>(config->restriction, shape[1]);
+        for (auto len : llvm::reverse(availableArrayLengths)) {
+          if (len * block[1] <= maxBlockWidth &&
+              (shape[1] / block[1]) % len == 0) {
+            return len;
+          }
+        }
+      }
+      return 1;
+    };
+    BlockingRequest.updateArrayLength(computeArrayLength());
+  }
+
   // propagate the blocking size to its def op
   propagateIfChanged(operands[0], operands[0]->join(BlockingRequest));
 
   // update the def block size for the result value
-  BlockingRequests &def = getLatticeElement(op.getValue())->getValue();
+  BlockingRequests &def = getLatticeElement(op.getValues()[0])->getValue();
   def.updateDefBlock(block);
 }
 
@@ -908,37 +957,43 @@ void BlockingAnalysis::printAnalysisResult() {
               mlir::isa<xetile::TileType>(inputOpr.getType())) {
             mlir::OpOperand &p = op->getOpOperand(i);
             llvm::dbgs() << "\n   opr[" << i << "]: " << inputOpr
-                         << " --> blkSZ: " << getUseBlockSize(inputOpr, p);
+                         << " --> blkSZ: " << getUseBlockSize(inputOpr, p)
+                         << ", arrayLen: " << getArrayLength(inputOpr);
           }
         }
 
         for (auto [i, res] : llvm::enumerate(op->getResults()))
           llvm::dbgs() << "\n   res[" << i << "]: " << res
-                       << " --> blkSZ: " << getDefBlockSize(res);
+                       << " --> blkSZ: " << getDefBlockSize(res)
+                       << ", arrayLen: " << getArrayLength(res);
         llvm::dbgs() << "\n";
       }
     } else if (auto forOp = mlir::dyn_cast<mlir::scf::ForOp>(op)) {
       llvm::dbgs() << "\nOp: " << op->getName();
       for (auto [i, arg] : llvm::enumerate(forOp.getRegionIterArgs()))
         llvm::dbgs() << "\n   arg[" << i << "]: "
-                     << " --> blkSZ: " << getDefBlockSize(arg);
+                     << " --> blkSZ: " << getDefBlockSize(arg)
+                     << ", arrayLen: " << getArrayLength(arg);
 
       for (auto [i, res] : llvm::enumerate(forOp.getResults()))
         llvm::dbgs() << "\n   res[" << i << "]: "
-                     << " --> blkSZ: " << getDefBlockSize(res);
+                     << " --> blkSZ: " << getDefBlockSize(res)
+                     << ", arrayLen: " << getArrayLength(res);
       llvm::dbgs() << "\n";
     } else if (auto YieldOp = mlir::dyn_cast<mlir::scf::YieldOp>(op)) {
       llvm::dbgs() << "\nOp: " << op->getName();
       for (auto [i, res] : llvm::enumerate(YieldOp.getResults()))
         llvm::dbgs() << "\n   res[" << i << "]: " << res
                      << " --> blkSZ: " << getDefBlockSize(res) << ", "
-                     << getUseBlockSize(res, op->getOpOperand(i));
+                     << getUseBlockSize(res, op->getOpOperand(i))
+                     << ", arrayLen: " << getArrayLength(res);
       llvm::dbgs() << "\n";
     } else if (auto StoreOp = mlir::dyn_cast<xetile::StoreTileOp>(op)) {
       llvm::dbgs() << "\nOp: " << *op;
       for (auto [i, inputOpr] : llvm::enumerate(op->getOperands())) {
         llvm::dbgs() << "\n   opr[" << i << "]: " << inputOpr << " --> blkSZ: "
-                     << getUseBlockSize(inputOpr, op->getOpOperand(i));
+                     << getUseBlockSize(inputOpr, op->getOpOperand(i))
+                     << ", arrayLen: " << getArrayLength(inputOpr);
       }
       llvm::dbgs() << "\n";
     }
@@ -958,6 +1013,13 @@ Block BlockingAnalysis::getDefBlockSize(mlir::Value val) const {
   if (!state)
     return Block();
   return state->getValue().getDefBlock();
+}
+
+int BlockingAnalysis::getArrayLength(mlir::Value val) const {
+  auto *state = solver.lookupState<BlockingLattice>(val);
+  if (!state)
+    return 1;
+  return state->getValue().getArrayLength();
 }
 
 } // namespace imex

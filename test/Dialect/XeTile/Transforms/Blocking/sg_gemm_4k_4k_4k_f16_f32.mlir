@@ -34,20 +34,20 @@ gpu.module @test_kernel {
     //CHECK-COUNT-16: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf32> -> vector<32x16xf32>
     %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<64x128xf32> -> vector<64x128xf32>
 
-    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}] : memref<4096x4096xf16> -> !xetile.tile<32x16xf16>
+    //CHECK-COUNT-8: %{{.*}} = xetile.init_tile %[[arg0]][%{{.*}}] : memref<4096x4096xf16> -> !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>>
     %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<4096x4096xf16> -> !xetile.tile<64x128xf16>
 
-    //CHECK-COUNT-32: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}] : memref<4096x4096xf16> -> !xetile.tile<32x16xf16>
+    //CHECK-COUNT-16: %{{.*}} = xetile.init_tile %[[arg1]][%{{.*}}] : memref<4096x4096xf16> -> !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>>
     %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<4096x4096xf16> -> !xetile.tile<128x128xf16>
 
     //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf32> to vector<8x16xf32>
     %out:3 = scf.for %k = %c0 to %c4096 step %c128
       iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
       -> (!xetile.tile<64x128xf16>, !xetile.tile<128x128xf16>, vector<64x128xf32>) {
-      //CHECK-COUNT-16: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16> -> vector<32x16xf16>
+      //CHECK-COUNT-8: %{{.*}} = xetile.load_tile %{{.*}} : !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>> -> vector<32x16xf16>, vector<32x16xf16>
       %a_value = xetile.load_tile %a_tile : !xetile.tile<64x128xf16> -> vector<64x128xf16>
 
-      //CHECK-COUNT-32: %{{.*}} = xetile.load_tile %{{.*}}: !xetile.tile<32x16xf16> -> vector<32x16xf16>
+      //CHECK-COUNT-16: %{{.*}} = xetile.load_tile %{{.*}}: !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>> -> vector<32x16xf16>, vector<32x16xf16>
       %b_value = xetile.load_tile %b_tile : !xetile.tile<128x128xf16> -> vector<128x128xf16>
 
       //CHECK-COUNT-64: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 16], strides = [1, 1]} : vector<32x16xf16> to vector<8x16xf16>
@@ -57,10 +57,10 @@ gpu.module @test_kernel {
       %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value
         : vector<64x128xf16>, vector<128x128xf16>, vector<64x128xf32> -> vector<64x128xf32>
 
-      //CHECK-COUNT-16: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}] : !xetile.tile<32x16xf16>
+      //CHECK-COUNT-8: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}] : !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>>
       %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c128] : !xetile.tile<64x128xf16>
 
-      //CHECK-COUNT-32: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}] : !xetile.tile<32x16xf16>
+      //CHECK-COUNT-16: %{{.*}} = xetile.update_tile_offset %{{.*}}, [%{{.*}}] : !xetile.tile<32x16xf16, #xetile.tile_attr<array_length = 2 : i64>>
       %b_next_tile = xetile.update_tile_offset %b_tile, [%c128, %c0]
         : !xetile.tile<128x128xf16>
 

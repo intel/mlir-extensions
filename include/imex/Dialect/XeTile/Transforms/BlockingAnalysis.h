@@ -52,6 +52,7 @@ public:
 
   Block getUseBlockSize(mlir::Value val, mlir::OpOperand &point) const;
   Block getDefBlockSize(mlir::Value val) const;
+  int getArrayLength(mlir::Value val) const;
   void printAnalysisResult();
 
 private:
