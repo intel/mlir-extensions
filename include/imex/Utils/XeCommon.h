@@ -153,7 +153,7 @@ public:
 
     op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::LoadTileOp op) {
       Usage[op] = (uint)UsageType::None;
-      llvm::SmallVector<mlir::Value> q({op});
+      llvm::SmallVector<mlir::Value> q(op.getValues());
       while (q.size()) {
         auto curr = q.pop_back_val();
         for (mlir::Operation *user : curr.getUsers()) {

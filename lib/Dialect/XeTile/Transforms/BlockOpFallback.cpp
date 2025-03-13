@@ -284,7 +284,7 @@ struct LoadTileOpPattern final
   mlir::LogicalResult
   matchAndRewrite(imex::xetile::LoadTileOp loadTileOp,
                   mlir::PatternRewriter &rewriter) const override {
-    auto tile = loadTileOp.getSource();
+    auto tile = loadTileOp.getTile();
     auto tileTy = tile.getType();
     if (!tileTy.getScatterAttr()) {
       return mlir::failure();
@@ -296,7 +296,7 @@ struct LoadTileOpPattern final
         loadTileOp.getLoc(),
         mlir::VectorType::get(tileTy.getShape(), rewriter.getI1Type()), one);
     rewriter.replaceOpWithNewOp<imex::xetile::LoadGatherOp>(
-        loadTileOp, loadTileOp.getType(), tile, mask,
+        loadTileOp, loadTileOp.getType(0), tile, mask,
         loadTileOp.getPaddingAttr(), loadTileOp.getL1HintAttr(),
         loadTileOp.getL2HintAttr(), loadTileOp.getL3HintAttr());
     return mlir::success();
