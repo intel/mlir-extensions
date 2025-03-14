@@ -1003,10 +1003,12 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
         // scattered tile can support 2D shape, scattered tensor_desc only
         // support 1D shape.
         auto chunkSizeAttr = IntegerAttr::get(IntegerType::get(context, 64), 1);
-        auto msA = memSpaceAttr ? memSpaceAttr: xegpu::MemorySpaceAttr::get(context, memSpace);
+        auto msA = memSpaceAttr
+                       ? memSpaceAttr
+                       : xegpu::MemorySpaceAttr::get(context, memSpace);
 
-        encoding = xegpu::ScatterTensorDescAttr::get(context, msA,
-                                                     chunkSizeAttr);
+        encoding =
+            xegpu::ScatterTensorDescAttr::get(context, msA, chunkSizeAttr);
         shape.push_back(type.getNumElements());
       } else if (memSpace == xegpu::MemorySpace::Global) {
         // Blocked tile on global memory is lowered to blocked tensor_desc
