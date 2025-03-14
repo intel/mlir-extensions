@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
@@ -607,6 +608,21 @@ struct VectorBitCastOpConversion final
   }
 };
 
+struct UBPoisonOpConversion final
+    : public mlir::OpConversionPattern<mlir::ub::PoisonOp> {
+  using OpConversionPattern::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::ub::PoisonOp poisonOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstTy = getTypeConverter()->convertType(poisonOp.getType());
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(poisonOp, "cannot convert type.");
+
+    rewriter.replaceOpWithNewOp<mlir::ub::PoisonOp>(poisonOp, dstTy);
+    return mlir::success();
+  }
+};
+
 // Linearize the vectors in loop like ops, e.g., scf.for. It needs to
 // update the inits, the block arguments, the yields, and the results.
 struct LoopOpInterfaceConversion final
@@ -737,6 +753,13 @@ struct VectorLinearizePass final
           return op.getType().getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::ub::PoisonOp>(
+        [&](mlir::ub::PoisonOp op) {
+          auto ty = op->getResult(0).getType();
+          auto vecTy = mlir::dyn_cast_or_null<mlir::VectorType>(ty);
+          return vecTy && vecTy.getRank() == 1;
+        });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -747,7 +770,7 @@ struct VectorLinearizePass final
           return (op && op.getAggregate().getType().getRank() == 1);
         });
 
-    patterns.add<VectorExtractStridedSliceConversion,
+    patterns.add<UBPoisonOpConversion, VectorExtractStridedSliceConversion,
                  VectorInsertStridedSliceConversion, VectorShffleOpConversion,
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,

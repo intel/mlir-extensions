@@ -1,7 +1,7 @@
-From 1f270ef0932e583d3d12fa9af7082ddecf8d9546 Mon Sep 17 00:00:00 2001
-From: izamyati <igor.zamyatin@intel.com>
-Date: Tue, 24 Sep 2024 18:19:04 -0500
-Subject: [PATCH] SPIR-V Enable native bf16 support in SPIR-V dialect
+From 653e74b7b14ec8ab3345a94e0083a455ce7ce22f Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Fri, 21 Feb 2025 19:53:56 +0100
+Subject: [PATCH 1/1] SPIR-V Enable native bf16 support in SPIR-V dialect
 
 ---
  .../Dialect/SPIRV/IR/SPIRVArithmeticOps.td    | 10 ++---
@@ -9,10 +9,10 @@ Subject: [PATCH] SPIR-V Enable native bf16 support in SPIR-V dialect
  .../mlir/Dialect/SPIRV/IR/SPIRVCLOps.td       | 10 ++---
  .../mlir/Dialect/SPIRV/IR/SPIRVCastOps.td     | 12 +++---
  mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    |  6 ++-
- mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      | 27 ++++++++++--
+ mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      | 27 +++++++++++--
  .../SPIRV/Deserialization/Deserializer.cpp    | 17 ++++++--
  .../Target/SPIRV/Serialization/Serializer.cpp |  6 ++-
- 8 files changed, 95 insertions(+), 32 deletions(-)
+ 8 files changed, 94 insertions(+), 33 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVArithmeticOps.td
 index 22d5afcd7738..de9e11493793 100644
@@ -64,7 +64,7 @@ index 22d5afcd7738..de9e11493793 100644
 
    let assemblyFormat = "operands attr-dict `:` type($vector1) `->` type($result)";
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index f85381f88af1..a3046afe5e43 100644
+index b01e581e0f15..a4bc5ab967e8 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 @@ -344,6 +344,7 @@ def SPV_KHR_subgroup_rotate                  : I32EnumAttrCase<"SPV_KHR_subgroup
@@ -84,7 +84,7 @@ index f85381f88af1..a3046afe5e43 100644
        SPV_EXT_demote_to_helper_invocation, SPV_EXT_descriptor_indexing,
        SPV_EXT_fragment_fully_covered, SPV_EXT_fragment_invocation_density,
        SPV_EXT_fragment_shader_interlock, SPV_EXT_physical_storage_buffer,
-@@ -1195,6 +1196,22 @@ def SPIRV_C_ShaderClockKHR                              : I32EnumAttrCase<"Shade
+@@ -1196,6 +1197,22 @@ def SPIRV_C_ShaderClockKHR                              : I32EnumAttrCase<"Shade
      Extension<[SPV_KHR_shader_clock]>
    ];
  }
@@ -107,15 +107,15 @@ index f85381f88af1..a3046afe5e43 100644
  def SPIRV_C_FragmentFullyCoveredEXT                     : I32EnumAttrCase<"FragmentFullyCoveredEXT", 5265> {
    list<I32EnumAttrCase> implies = [SPIRV_C_Shader];
    list<Availability> availability = [
-@@ -1493,6 +1510,7 @@ def SPIRV_CapabilityAttr :
+@@ -1494,6 +1511,7 @@ def SPIRV_CapabilityAttr :
        SPIRV_C_RayQueryKHR, SPIRV_C_RayTracingKHR, SPIRV_C_Float16ImageAMD,
        SPIRV_C_ImageGatherBiasLodAMD, SPIRV_C_FragmentMaskAMD, SPIRV_C_StencilExportEXT,
        SPIRV_C_ImageReadWriteLodAMD, SPIRV_C_Int64ImageEXT, SPIRV_C_ShaderClockKHR,
 +      SPIRV_C_BFloat16TypeKHR, SPIRV_C_BFloat16DotProductKHR, SPIRV_C_BFloat16CooperativeMatrixKHR,
-       SPIRV_C_FragmentFullyCoveredEXT, SPIRV_C_MeshShadingNV, SPIRV_C_FragmentDensityEXT,
+       SPIRV_C_FragmentFullyCoveredEXT, SPIRV_C_FragmentDensityEXT,
        SPIRV_C_ShaderNonUniform, SPIRV_C_RuntimeDescriptorArray,
        SPIRV_C_StorageTexelBufferArrayDynamicIndexing, SPIRV_C_RayTracingNV,
-@@ -4187,9 +4205,12 @@ def SPIRV_Bool : TypeAlias<I1, "bool">;
+@@ -4160,9 +4178,12 @@ def SPIRV_Bool : TypeAlias<I1, "bool">;
  def SPIRV_Integer : AnyIntOfWidths<[8, 16, 32, 64]>;
  def SPIRV_Int16 : TypeAlias<I16, "Int16">;
  def SPIRV_Int32 : TypeAlias<I32, "Int32">;
@@ -130,7 +130,7 @@ index f85381f88af1..a3046afe5e43 100644
  // Remove the vector size restriction.
  // Vector type is quite restrictive in SPIR-V.
  // It only allows length of 2, 3, and 4 by default and
-@@ -4198,7 +4219,7 @@ def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
+@@ -4171,7 +4192,7 @@ def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
  // via VectorAnyINTEL capability (SPV_INTEL_vector_compute extension).
  // It allows vector length of 2 to 2^32-1.
  def SPIRV_Vector : VectorOfLengthRangeAndType<[2, 0xFFFFFFFF],
@@ -139,7 +139,7 @@ index f85381f88af1..a3046afe5e43 100644
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
  def SPIRV_AnyPtr : DialectType<SPIRV_Dialect, SPIRV_IsPtrType,
-@@ -4221,14 +4242,14 @@ def SPIRV_AnyStruct : DialectType<SPIRV_Dialect, SPIRV_IsStructType,
+@@ -4194,14 +4215,14 @@ def SPIRV_AnyStruct : DialectType<SPIRV_Dialect, SPIRV_IsStructType,
  def SPIRV_AnySampledImage : DialectType<SPIRV_Dialect, SPIRV_IsSampledImageType,
                                  "any SPIR-V sampled image type">;
 
@@ -156,7 +156,7 @@ index f85381f88af1..a3046afe5e43 100644
      SPIRV_AnyPtr, SPIRV_AnyArray, SPIRV_AnyRTArray, SPIRV_AnyStruct,
      SPIRV_AnyCooperativeMatrix, SPIRV_AnyMatrix, SPIRV_AnySampledImage
    ]>;
-@@ -4796,7 +4817,11 @@ def SPIRV_FPFMM_AllowReassocINTEL : I32BitEnumAttrCaseBit<"AllowReassocINTEL", 1
+@@ -4786,7 +4807,11 @@ def SPIRV_FPFMM_AllowReassocINTEL : I32BitEnumAttrCaseBit<"AllowReassocINTEL", 1
      Capability<[SPIRV_C_FPFastMathModeINTEL]>
    ];
  }
@@ -170,7 +170,7 @@ index f85381f88af1..a3046afe5e43 100644
      SPIRV_BitEnumAttr<"FPFastMathMode", "Indicates a floating-point fast math flag", "fastmath_mode", [
        SPIRV_FPFMM_None, SPIRV_FPFMM_NotNaN, SPIRV_FPFMM_NotInf, SPIRV_FPFMM_NSZ,
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td
-index b5ca27d7d753..703920e42c60 100644
+index 5d086325fa5b..f817449f08bb 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVCLOps.td
 @@ -386,7 +386,7 @@ def SPIRV_CLExpOp : SPIRV_CLUnaryArithmeticOp<"exp", 19, SPIRV_Float> {
@@ -270,10 +270,10 @@ index b05ee0251df5..a5c8aa8fb450 100644
    let summary = [{
      Convert value numerically from one floating-point width to another
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index b4ad5923e975..d477c089732a 100644
+index b35e86a8ee2d..44c5ccff3db1 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -171,8 +171,10 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
+@@ -175,8 +175,10 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
 
    // Check other allowed types
    if (auto t = llvm::dyn_cast<FloatType>(type)) {
@@ -287,10 +287,10 @@ index b4ad5923e975..d477c089732a 100644
      }
    } else if (auto t = llvm::dyn_cast<IntegerType>(type)) {
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index 542c6beba2e4..27bfc1871528 100644
+index 275b5aa507fb..252635687de5 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-@@ -521,7 +521,7 @@ bool ScalarType::classof(Type type) {
+@@ -520,7 +520,7 @@ bool ScalarType::classof(Type type) {
  }
 
  bool ScalarType::isValid(FloatType type) {
@@ -299,7 +299,7 @@ index 542c6beba2e4..27bfc1871528 100644
  }
 
  bool ScalarType::isValid(IntegerType type) {
-@@ -530,6 +530,14 @@ bool ScalarType::isValid(IntegerType type) {
+@@ -529,6 +529,14 @@ bool ScalarType::isValid(IntegerType type) {
 
  void ScalarType::getExtensions(SPIRVType::ExtensionArrayRefVector &extensions,
                                 std::optional<StorageClass> storage) {
@@ -314,7 +314,7 @@ index 542c6beba2e4..27bfc1871528 100644
    // 8- or 16-bit integer/floating-point numbers will require extra extensions
    // to appear in interface storage classes. See SPV_KHR_16bit_storage and
    // SPV_KHR_8bit_storage for more details.
-@@ -548,7 +556,7 @@ void ScalarType::getExtensions(SPIRVType::ExtensionArrayRefVector &extensions,
+@@ -547,7 +555,7 @@ void ScalarType::getExtensions(SPIRVType::ExtensionArrayRefVector &extensions,
      [[fallthrough]];
    case StorageClass::Input:
    case StorageClass::Output:
@@ -323,7 +323,7 @@ index 542c6beba2e4..27bfc1871528 100644
        static const Extension exts[] = {Extension::SPV_KHR_16bit_storage};
        ArrayRef<Extension> ref(exts, std::size(exts));
        extensions.push_back(ref);
-@@ -635,7 +643,20 @@ void ScalarType::getCapabilities(
+@@ -634,7 +642,20 @@ void ScalarType::getCapabilities(
    } else {
      assert(llvm::isa<FloatType>(*this));
      switch (bitwidth) {
@@ -346,10 +346,10 @@ index 542c6beba2e4..27bfc1871528 100644
      case 32:
        break;
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index cccf360b8e21..d38615eed7f1 100644
+index 13efdb5e5a3f..679428c53194 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -817,14 +817,20 @@ LogicalResult spirv::Deserializer::processType(spirv::Opcode opcode,
+@@ -857,14 +857,20 @@ LogicalResult spirv::Deserializer::processType(spirv::Opcode opcode,
      typeMap[operands[0]] = IntegerType::get(context, operands[1], sign);
    } break;
    case spirv::Opcode::OpTypeFloat: {
@@ -374,7 +374,7 @@ index cccf360b8e21..d38615eed7f1 100644
      case 32:
        floatTy = opBuilder.getF32Type();
        break;
-@@ -1330,6 +1336,9 @@ LogicalResult spirv::Deserializer::processConstant(ArrayRef<uint32_t> operands,
+@@ -1371,6 +1377,9 @@ LogicalResult spirv::Deserializer::processConstant(ArrayRef<uint32_t> operands,
      } else if (floatType.isF16()) {
        APInt data(16, operands[2]);
        value = APFloat(APFloat::IEEEhalf(), data);
@@ -385,10 +385,10 @@ index cccf360b8e21..d38615eed7f1 100644
 
      auto attr = opBuilder.getFloatAttr(floatType, value);
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 10e5264bffac..26a8f7bb5fa9 100644
+index 70f69b2e521a..7deb4d600229 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -477,6 +477,9 @@ LogicalResult Serializer::prepareBasicType(
+@@ -529,6 +529,9 @@ LogicalResult Serializer::prepareBasicType(
    if (auto floatType = dyn_cast<FloatType>(type)) {
      typeEnum = spirv::Opcode::OpTypeFloat;
      operands.push_back(floatType.getWidth());
@@ -398,7 +398,7 @@ index 10e5264bffac..26a8f7bb5fa9 100644
      return success();
    }
 
-@@ -965,7 +968,8 @@ uint32_t Serializer::prepareConstantFp(Location loc, FloatAttr floatAttr,
+@@ -1017,7 +1020,8 @@ uint32_t Serializer::prepareConstantFp(Location loc, FloatAttr floatAttr,
      } words = llvm::bit_cast<DoubleWord>(value.convertToDouble());
      encodeInstructionInto(typesGlobalValues, opcode,
                            {typeID, resultID, words.word1, words.word2});
