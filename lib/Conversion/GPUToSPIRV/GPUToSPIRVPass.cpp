@@ -18,7 +18,6 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 
-#include "mlir/Dialect/UB/IR/UBOps.h"
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
@@ -29,6 +28,7 @@
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
+#include <mlir/Conversion/UBToSPIRV/UBToSPIRV.h>
 #include <mlir/Conversion/VectorToSPIRV/VectorToSPIRV.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
@@ -271,38 +271,6 @@ void populateVectorToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
           typeConverter, patterns.getContext());
 }
 
-struct PoisonOpLowering final : mlir::OpConversionPattern<mlir::ub::PoisonOp> {
-  using OpConversionPattern<mlir::ub::PoisonOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::ub::PoisonOp op, OpAdaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    mlir::Type origType = op.getType();
-    // extended upstream check to 1-d vector
-    if (!origType.isIntOrIndexOrFloat() &&
-        (mlir::isa<mlir::VectorType>(origType) &&
-         mlir::dyn_cast<mlir::VectorType>(origType).getRank() > 1))
-      return rewriter.notifyMatchFailure(op, [&](mlir::Diagnostic &diag) {
-        diag << "unsupported type " << origType;
-      });
-
-    mlir::Type resType = getTypeConverter()->convertType(origType);
-    if (!resType)
-      return rewriter.notifyMatchFailure(op, [&](mlir::Diagnostic &diag) {
-        diag << "failed to convert result type " << origType;
-      });
-
-    rewriter.replaceOpWithNewOp<mlir::spirv::UndefOp>(op, resType);
-    return mlir::success();
-  }
-};
-
-void populateUBToSPIRVConversionPatterns(
-    const mlir::SPIRVTypeConverter &converter,
-    mlir::RewritePatternSet &patterns) {
-  patterns.add<PoisonOpLowering>(converter, patterns.getContext());
-}
-
 static bool isGenericVectorTy(mlir::Type type) {
   if (mlir::isa<mlir::spirv::ScalarType>(type))
     return true;
@@ -407,6 +375,7 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::index::populateIndexToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
     mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
+    mlir::ub::populateUBToSPIRVConversionPatterns(typeConverter, patterns);
     // ---------------------------------------
 
     // IMEX GPUToSPIRV extension
@@ -415,7 +384,6 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     // for ub.poison op with vector operand
-    imex::populateUBToSPIRVConversionPatterns(typeConverter, patterns);
     imex::populateVectorToSPIRVPatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))

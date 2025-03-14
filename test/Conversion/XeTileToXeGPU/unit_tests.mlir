@@ -54,15 +54,15 @@ gpu.module @test_kernel {
     //CHECK: %[[cst_0:.*]] = arith.constant dense<{{.*}}> : vector<1x16xindex>
     //CHECK: %[[cst_1:.*]] = arith.constant dense<16> : vector<1x16xindex>
     //CHECK: %[[r0:.*]] = vector.shape_cast %[[cst_0]] : vector<1x16xindex> to vector<16xindex>
-    //CHECK: %[[r1:.*]] = xegpu.create_tdesc %[[arg0]], %[[r0]] : memref<1024xf16>, vector<16xindex> -> !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<chunk_size = 1 : i64>>
+    //CHECK: %[[r1:.*]] = xegpu.create_tdesc %[[arg0]], %[[r0]] : memref<1024xf16>, vector<16xindex> -> !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<>>
     //CHECK: %[[r2:.*]] = vector.shape_cast %[[cst]] : vector<1x16xi1> to vector<16xi1>
-    //CHECK: %[[r3:.*]] = xegpu.load %[[r1]], %[[r2]] {{.*}} : !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf16>
+    //CHECK: %[[r3:.*]] = xegpu.load %[[r1]], %[[r2]] {{.*}} : !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1> -> vector<16xf16>
     //CHECK: %[[r4:.*]] = vector.shape_cast %[[r3]] : vector<16xf16> to vector<1x16xf16>
     //CHECK: %[[r5:.*]] = vector.shape_cast %[[cst_1]] : vector<1x16xindex> to vector<16xindex>
-    //CHECK: %[[r6:.*]] = xegpu.update_offset %[[r1]], %[[r5]] : !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<chunk_size = 1 : i64>>, vector<16xindex>
+    //CHECK: %[[r6:.*]] = xegpu.update_offset %[[r1]], %[[r5]] : !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<>>, vector<16xindex>
     //CHECK: %[[r7:.*]] = vector.shape_cast %[[cst]] : vector<1x16xi1> to vector<16xi1>
     //CHECK: %[[r8:.*]] = vector.shape_cast %[[r4]] : vector<1x16xf16> to vector<16xf16>
-    //CHECK: xegpu.store %[[r8]], %[[r6]], %[[r7]] {{.*}} : vector<16xf16>, !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<chunk_size = 1 : i64>>, vector<16xi1>
+    //CHECK: xegpu.store %[[r8]], %[[r6]], %[[r7]] {{.*}} : vector<16xf16>, !xegpu.tensor_desc<16xf16, #xegpu.scatter_tdesc_attr<>>, vector<16xi1>
     %mask = arith.constant dense<true> : vector<1x16xi1>
     %idx = arith.constant dense<[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]> : vector<1x16xindex>
     %offsets = arith.constant dense<16> : vector<1x16xindex>

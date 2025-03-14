@@ -1,20 +1,19 @@
-From 062672a88a4d1274c4b52f1db66965f2bf4d32c7 Mon Sep 17 00:00:00 2001
-From: nbpatel <nishant.b.patel@intel.com>
-Date: Wed, 19 Feb 2025 18:54:23 +0000
-Subject: [PATCH] xegpu temporary downstream defintion changes and
- vectortoxegpu patch
+From 7790e4776821298f3e97d9b7f11d8d42e84ede59 Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Fri, 21 Feb 2025 19:43:35 +0100
+Subject: [PATCH 1/1] xegpu temporary downstream definition changes and vec
 
 ---
- mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td      | 7 +++++++
+ mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td      | 6 ++++++
  mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp | 2 ++
  mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp              | 3 ++-
- 3 files changed, 11 insertions(+), 1 deletion(-)
+ 3 files changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index a2bfa721f251..8e65b302f0d1 100644
+index 78dfaef97420..80797cd87b82 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -307,6 +307,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [AllElementTypesMatch<["value", "Tensor
+@@ -309,6 +309,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
    let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
@@ -22,18 +21,10 @@ index a2bfa721f251..8e65b302f0d1 100644
                         OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint);
-@@ -783,6 +784,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas", [Pure, AllElementTypesMatch<["lhs", "rhs"]>]
- }
-
- def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", [Pure,
-+      MemoryEffects<[MemWrite]>,
-       AllElementTypesMatch<["tensorDesc", "value", "result"]>,
-       AllShapesMatch<["tensorDesc", "value", "result"]>]> {
-   let summary = "Atomic ready-modify-write operation on the TensorDesc. ";
-@@ -875,4 +877,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
+@@ -881,4 +882,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
    let extraClassDeclaration = extraBaseClassDeclaration;
  }
-
+ 
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
 +  let summary = "prevents the compiler from scheduling.";
 +  let assemblyFormat = [{ attr-dict }];
@@ -41,7 +32,7 @@ index a2bfa721f251..8e65b302f0d1 100644
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-index dc4ee4e926bb..be68edf45eee 100644
+index 61b55c57240c..4f55566ef36b 100644
 --- a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
 +++ b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
 @@ -202,6 +202,7 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
@@ -61,7 +52,7 @@ index dc4ee4e926bb..be68edf45eee 100644
          /*l2_hint=*/hint, /*l3_hint=*/hint);
      rewriter.replaceOp(loadOp, loadNdOp);
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 15c435f1fa25..75186252979e 100644
+index 25dc1f22f043..1f5361abb38e 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -70,6 +70,7 @@ static bool isWriteHintOrNone(const CachePolicyAttr &attr) {
@@ -71,15 +62,16 @@ index 15c435f1fa25..75186252979e 100644
 +         kind == CachePolicy::STREAMING ||
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
-
+ 
 @@ -297,7 +298,7 @@ LogicalResult LoadNdOp::verify() {
-       emitWarning("Invalid transpose attr. It is ignored.");
+       mlir::emitWarning(getLoc()) << "Invalid transpose attr. It is ignored.";
    }
-
+ 
 -  if (getPacked()) {
 +  if (getPacked() || getTransposeBitWidth() == 32) {
      if (tdescTy.getRank() == 2) {
        const int axis = 0;
        auto vnni_factor = valueShape.back();
---
+-- 
 2.34.1
+
