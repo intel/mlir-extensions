@@ -1,7 +1,7 @@
-From d85b86578d10043238608e0277dbabcb5a641e99 Mon Sep 17 00:00:00 2001
-From: "Shahneous Bari, Md Abdullah" <md.abdullah.shahneous.bari@intel.com>
-Date: Thu, 20 Feb 2025 02:23:23 +0000
-Subject: [PATCH 1/2] Add support for VectorAnyINTEL capability.
+From c10fb55e593cff647d3d8835799b3c39d208cfcc Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Fri, 21 Feb 2025 19:20:18 +0100
+Subject: [PATCH 1/1] Add support for VectorAnyINTEL capability
 
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  11 +-
@@ -24,10 +24,10 @@ Subject: [PATCH 1/2] Add support for VectorAnyINTEL capability.
  17 files changed, 322 insertions(+), 69 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index c84677d26a8b..f85381f88af1 100644
+index cafe14046957..b01e581e0f15 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4190,7 +4190,14 @@ def SPIRV_Int32 : TypeAlias<I32, "Int32">;
+@@ -4163,7 +4163,14 @@ def SPIRV_Int32 : TypeAlias<I32, "Int32">;
  def SPIRV_Float32 : TypeAlias<F32, "Float32">;
  def SPIRV_Float : FloatOfWidths<[16, 32, 64]>;
  def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
@@ -43,17 +43,17 @@ index c84677d26a8b..f85381f88af1 100644
                                         [SPIRV_Bool, SPIRV_Integer, SPIRV_Float]>;
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
-@@ -4235,7 +4242,7 @@ class SPIRV_CoopMatrixOfType<list<Type> allowedTypes> :
-     "Cooperative Matrix">;
+@@ -4213,7 +4220,7 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
+     "Matrix">;
 
  class SPIRV_VectorOf<Type type> :
--    VectorOfLengthAndType<[2, 3, 4, 8,16], [type]>;
+-    VectorOfLengthAndType<[2, 3, 4, 8, 16], [type]>;
 +    VectorOfLengthRangeAndType<[2, 0xFFFFFFFF], [type]>;
 
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index e59291030356..359e2f010a6e 100644
+index a18b32253d85..4ba962fbeecc 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
 @@ -643,6 +643,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
@@ -150,10 +150,10 @@ index e59291030356..359e2f010a6e 100644
  // Negative values for `n` index in reverse.
  class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 48be287ef833..4f33e95e6e3e 100644
+index 0cf5f0823be6..92f0319db022 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -187,9 +187,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
+@@ -191,9 +191,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
        parser.emitError(typeLoc, "only 1-D vector allowed but found ") << t;
        return Type();
      }

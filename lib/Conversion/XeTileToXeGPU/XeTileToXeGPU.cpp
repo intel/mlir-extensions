@@ -648,7 +648,9 @@ public:
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<xegpu::DpasOp>(op, op.getType(), adaptor.getA(),
-                                               adaptor.getB(), adaptor.getC());
+                                               adaptor.getB(), adaptor.getC(),
+                                               /*SGMapA, SGMapB, SGMapC*/
+                                               nullptr, nullptr, nullptr);
     return success();
   }
 };
@@ -1001,8 +1003,12 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
         // scattered tile can support 2D shape, scattered tensor_desc only
         // support 1D shape.
         auto chunkSizeAttr = IntegerAttr::get(IntegerType::get(context, 64), 1);
-        encoding = xegpu::ScatterTensorDescAttr::get(context, memSpaceAttr,
-                                                     chunkSizeAttr);
+        auto msA = memSpaceAttr
+                       ? memSpaceAttr
+                       : xegpu::MemorySpaceAttr::get(context, memSpace);
+
+        encoding =
+            xegpu::ScatterTensorDescAttr::get(context, msA, chunkSizeAttr);
         shape.push_back(type.getNumElements());
       } else if (memSpace == xegpu::MemorySpace::Global) {
         // Blocked tile on global memory is lowered to blocked tensor_desc
