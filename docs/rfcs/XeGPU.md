@@ -2,7 +2,9 @@
 
 ## Summary
 The XeGPU dialect provides an abstraction that closely models Xe instructions to support high-performance GEMM code generation.
-The matrix instructions at this level exactly match the hardware instructions’ semantics including the matrix sizes.
+The XeGPU operations are designed to support tile based programming. The same set of operations work at multiple levels, including workgroup, subgroup, and work item.
+The workgroup level operation can be decomposed and unrolled to multiple XeGPU operations at subgroup level, which can be further decomposed to work item level.
+Along the way, the tensor size is partitioned to smaller size, and the subgroup and work item level XeGPU operations exactly match the hardware instructions’ semantics including the matrix sizes.
 The lowering and optimizations built on top of the XeGPU dialect are target-specific.
 
 ## Proposal
@@ -12,7 +14,7 @@ XeGPU operations are introduced when there is a special Xe instruction not model
 load and store. In some cases, one XeGPU op may lower to a sequence of instructions for a dedicated and performance-critical function.
 For example, create_tdesc is mapped to a fixed sequence of instructions to create an address description.
 
-Below is a summary.
+Below is a summary of operation definition. The operation definition is general and works for workgroup, subgroup, or work item level.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
@@ -33,10 +35,6 @@ Below is a summary.
 |nbarrier_arrive	| operation ::= xegpu.nbarrier_arrive $nbarrier : type($nbarrier) | xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier |
 |nbarrier_wait	| operation ::= xegpu.nbarrier_wait $nbarrier : type($nbarrier) | xegpu.nbarrier_wait %nbarrier : !xegpu.nbarrier |
 |fence	| operation ::= xegpu.fence attr-dict | xegpu.fence {scope = gpu, memory_kind = global} |
-
-The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to
-multiple XeGPU ops.  For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load operations. Compared with the
-XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.
 
 XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need a tensor descriptor to
 describe the addresses/offsets to a data block. The descriptor is used for load/store/prefetch, and then updated for reuse with the
@@ -488,7 +486,7 @@ The load with chunk_size pack the low-precision data to 32-bit data using wi_dat
 
 User must use legal sg_map value for the WI data distribution for certain operations on PVC and ARC. It includes load_nd/store_nd, load/store with chunk_size, and DPAS.
 
-## Rules of sg_map setting for load and store on PVC and ARC
+**Rules of sg_map setting for load and store on PVC and ARC**
 The WI data distribution requires the following sg_map for the 2D block load and store to work with DPAS on PVC. Not using the sg_map value defined here leads to undefined behavior.
 ```mlir
 # assert (wi_layout[0] x wi_layout[1] == subgroup_size) // PVC subgroup_size = 16
@@ -643,9 +641,7 @@ users must use for the WI data distribution of 1D block load and regular load wi
   #sg_map_t = xegpu.sg_map<wi_layout = [8, 1], wi_data = [1, 4]>  // for 8-bit data element like uint8, sint8
 ```
 
-
-
-## sg_map use case - 2D load
+**sg_map use case - 2D load**
 
 An example on how to load a 2D block, perform dpas, and store back to memory.
 
@@ -678,7 +674,7 @@ An example on how to load a 2D block, perform dpas, and store back to memory.
 
 ```
 
-## sg_map use case - regular load:
+**sg_map use case - regular load**
 An example on how to perform transpose using load with chunk_size in SIMT flavor.
 
 ```mlir
@@ -699,6 +695,334 @@ An example on how to perform transpose using load with chunk_size in SIMT flavor
   xegpu.store_nd %value, %tdesc2:
                 vector<4xfp32>, tensor_desc<64xfp32, #tdesc_attr>
 
+```
+
+## extending sg_map attributes to support work group level semantic
+
+By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler instead of multiple level nested loop IR for subgroup and work item level operation. To enable XeGPU operate the workgroup level, we introduce `sg_layout` and `sg_data` parameters into `sg_map` attribute to specify how the data is distributed across subgroups. With this extension, `sg_map` enables tensor compiler to express the cooperative operation among subgroups by specifying a `sg_map` to partition data among subgroups without manipulating a nested IR representation. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critical performance knobs.
+
+we also propose to extend the sg_map to cover multiple dimension instead of 2D only and add `order` attribute. 
+
+**Extended xegpu.sg_map**
+
+The extended `sg_map` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. sg_map consists of four parameters:
+  * sg_layout: Defines the n-d arrangement of subgroups within the workgroup. The dimensions can be a 3d array as [dim_0, dim_1, dim_2]. 
+  * sg_data: Specifies the shape of the tensor size for each subgroup after decomposition.
+  * wi_layout: Defines the 2D arrangement of WIs within the subgroup.
+  * wi_data: Specifies the shape of the tensor fragment that each WI loads or stores as a single packed data unit (16/32-bit).
+  * order: The dimension order used to linearize n-d subgroup ids to 1-d. The first dimension in the order list is the fastest-changing dimension.
+
+Example of linerized subgourp id regarding order[1, 0] vs. order [0, 1]. 
+| sg_layout[4, 4] | order[1, 0] | order[0, 1]
+| :----   | :----   |  :----   |
+| [0, 0], [0, 1], [0, 2], [0, 3] | 0, 1, 2, 3 | 0, 4, 8, 12 |
+| [1, 0], [1, 1], [1, 2], [1, 3] | 4, 5 , 6, 7| 1, 5, 9, 13 |
+| [2, 0], [2, 1], [2, 2], [2, 3] | 8, 9, 10 , 11 | 2, 6, 10, 14 |
+| [3, 0], [3, 1], [3, 2], [3, 3] | 12, 13, 14, 15 | 3, 7, 11, 15 |
+
+For a subgroup in 3-d sg_layout [dim_0, dim_1, dim_2], order[2, 1, 0] maps a subgroup with 3-d index [x, y, z] to a linear subgroup index [z + dim_2 * y + dim_2 * dim_1 * x ], order[1, 2, 0] maps to [y + dim_2 * z + dim_2 * dim_1 * x].
+
+When a sg_map attribute is attached to a tensor descriptor, load/store/dpas will operate at the workgroup level. The sg_map attribute must be specified when creating the tensor descriptor.
+
+**Constraints**
+
+Given these definitions:
+```mlir
+sg_data_size = sg_data[0] × sg_data[1]
+workgroup_size = sg_layout[0] × sg_layout[1]
+tensor_size = tensor_desc[0] × tensor_desc[1]
+```
+
+The following conditions must hold:
+
+* workgroup_size must represent the number of subgroups in a workgroup for a kernel.
+* tensor_desc[0] must be either evenly divisible by sg_layout[0] × sg_data[0], or vice versa.
+* tensor_desc[1] must be either evenly divisible by sg_layout[1] × sg_data[1], or vice versa.
+
+**distribution rule**
+
+The tensor_desc is distributed to sg_data x sg_layout along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < tensor_desc[i], there is data left after all subgroups are assigned for the first round, the rest data will wrap around and be assigned to the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] > tensor_desc[i], the data may be used up before all subgroups are assigned. In this case, we broadcast the tensor data to multiple subgroups by repeating the data assignment to the rest subgroups along that dimension until the all subgroups get data.
+
+**Resulting subgroup Data size**
+
+The distributed tensor for each subgroup has the same dimension as the work group level tensor. 
+
+**Examples of workgroup distribution with extended sg_map**
+
+The workgroup creates a tensor descriptor [128, 128] and distributes to 4 subgroups with `sg_layout` [2,2], and each subgroup gets `sg_data` [32,128]. The first dimension is split and distributed to subgroups in two rounds, and the second dimension is assigned as whole to multiple subgroups.
+
+```mlir
+   #sg_map_a = #xegpu.sg_map<sg_layout = [2, 2], sg_data = [32, 128], wi_layout=[1,16], wi_data = [1, 1], order = [1, 0]>
+   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xf16> -> tensor_desc<16x128xf16, #sg_map_a>
+```
+The table below shows the result tensor for each subgroup and its linear subgroup id.
+
+| subgroup tensor	| 2D subgroup id	| Linearized subgroup id
+| :---   | :----   | :----   |
+| [ 0:31, 0:127] | [0, 0], [0, 1] | 0 , 1 |
+| [ 32:63, 0:127] | [1, 0], [1, 1] | 2 , 3 |
+| [ 64:95, 0:127] | [0, 0], [0, 1] | 0 , 1 |
+| [ 96:127, 0:127] | [1, 0], [1, 1] | 2 , 3 |
+
+The `sg_map` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `sg_map` attribute to MLIR vector data type, we attach the attribute to vector type-based operations temporarily within the workgroup distribution pass. The `sg_map` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
+
+For `dpas`, the `sg_map` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimension as output, and `sg_data` for k dimension must be same as operand A and B. `order` must be same as output.
+```mlir
+   #sg_map_d = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 64], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]>
+   %vector_d = xegpu.dpas %vector_a, %vector_b, %vector_c {#sg_map_d}:
+     vector<256x256xfloat>, vector<256x32xbf16>, vector<32x256xbf16>
+	   into vector<256x256xfloat>
+   //derived sg_map for input operands
+   #sg_map_a = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 32], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]> //sg_map for %vector_a
+   #sg_map_b = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 64], wi_layout=[1,16], wi_data = [2, 1], order=[1, 0]> //sg_map for %vector_b
+   #sg_map_c = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 64], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]> //sg_map for %vector_c
+```
+
+For `reduction`,  `sg_map` of the input operand has an additional dimension to represent the dimension being reduced.  `sg_layout` must be the same and the new dimension as `1`. The new dimension of `sg_data` must be the same as the input tensor size, and the other dimension must be the same as the output's `sg_map`. The new dimension of `order` should not change the existing ordering specified by the output's `sg_map`.
+
+```mlir
+   #sg_map_a = #xegpu.sg_map<sg_layout = [32], sg_data = [8], wi_layout=[16], wi_data = [1], order=[0]>
+   %vector_a = vector.multi_reduction <add> %vector_b, %cst_0 [1] {#sg_map_a}: vector<256x128xfloat> into vector<256xfloat>
+   
+   //derived sg_map for input operand
+   #sg_map_b = #xegpu.sg_map<sg_layout = [32, 1], sg_data = [8, 128], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]>
+```
+
+The rule also applies to reduction from 3d to 2d.
+```mlir
+   #sg_map_a = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [1, 32], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]>
+   %%vector_a = vector.multi_reduction <add>, %vector_b, %cst_0 [1] {#sg_map_a}: vector<8x32x128xf32> to vector<8x128xf32>
+
+   //derived sg_map for input operand
+   #sg_map_b = #xegpu.sg_map<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], wi_layout=[1, 1, 16], wi_data = [1, 1, 1], order=[2, 1, 0]>
+```
+
+For `shape_cast`, it first determines the dimensions being reduced or expanded. The input's `sg_map` needs to expand or reduce the value accordingly for related dimension in `sg_layout` and `sg_data`. `order` should be consistent between input and output.
+```mlir
+   sg_map_a = #xegpu.sg_map<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], wi_layout=[1, 1, 16], wi_data = [1, 1, 1], order=[2, 1, 0] >
+   %vector_a = vector.shape_cast %vector_b {#sg_map_a} : vector<256x128xf32> to vector<8x32x128xf32>
+
+   //derived sg_map for input operand
+   #sg_map_b = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 32], wi_layout=[1, 16], wi_data = [1, 1], order=[1, 0]>
+```
+
+For `broadcast`, `sg_map` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut sg_map and must be removed for the input operand. The corresponding dimension in `sg_data` and `order` must be removed also.
+
+```mlir
+   #sg_map_a = #xegpu.sg_map<sg_layout = [16, 1], sg_data = [16, 256], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]>
+   %vector_a = vector.broadcast %vector_b [1] {#sg_map_a}: vector<256xfloat> into vector<256x256xfloat>
+
+   //derived sg_map for input operand
+   #sg_map_b = #xegpu.sg_map<sg_layout = [16], sg_data = [16], wi_layout=[16], wi_data = [1], order=[1, 0]>
+```
+
+For `transpose`, the values in `sg_map` must be swapped for the two dimensions being transposed, including `sg_layout`, `sg_data`, and `order`.
+```mlir
+   #sg_map_a = #xegpu.sg_map<sg_layout = [4, 8], sg_data = [32, 64], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]>
+   %vector_a = vector.transpose %vector_b {#sg_map_a}: vector<512x128xfloat> into vector<128x512xfloat>
+
+   //derived sg_map for input operand
+   #sg_map_b = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [64, 32], wi_layout=[16, 1], wi_data = [1, 1], order=[0, 1]>
+```
+
+`sg_map` may be assinged for certain operation before the workgroup layout propagation, for example, the cooperative load pass may specify `sg_map` for certain load to be cooperated. In this case, the propagation may insert an operation to express the conversion of one `sg_map` to the other.
+
+`convert_layout` is introduced to convert two inconsistent `sg_map`. 
+
+```mlir
+   #sg_map_b = #xegpu.sg_map<sg_layout = [8, 4], sg_data = [32, 64], wi_layout=[16, 1], wi_data = [1, 1], order = [1, 0]>  // used for cooperative load/prefetch
+   #sg_map_a = #xegpu.sg_map<sg_layout = [32, 1], sg_data = [8, 256], wi_layout=[1,16], wi_data = [1, 1], order=[1, 0]> // used as mma's input matrix A
+   %vector_a = xegpu.convert_layout %vector_b {#sg_map_a #sg_map_b}: vector<256x256xfloat> into vector<256x256xfloat>
+```
+The `sg_map` conversion can be lowered to storing and loading from the shared local memory. It can be conceptually viewed as a composition of two operations: 1) store the vector to shared local memory with the #sg_map_b and 2) use sg_map_a mapping to load the data from shared local memory.
+
+## Appendix 1 - Code examples for work group level XeGPU using sg_map attribute
+
+## Appendix 1.1 Simple Gemm with prefetch
+The first example shows a simple gemm. It demonstrates the different sg_map we used for prefetch and load. The sg_map doesn't show wi_layout and wi_data for simplicity.
+```mlir
+Pseudo code for simple gemm
+C[4096, 4096] = matmul (A[4096, 4096], B[4096, 4096])
+```
+
+```mlir
+#mp_a     = #sg_map<sg_layout=[8,4], sg_data=[32,32], order=[1,0]>
+#mp_a_pfh = #sg_map<sg_layout=[32,1], sg_data=[8,32], order=[1,0]>
+#mp_b     = #sg_map<sg_layout=[8,4], sg_data=[32,64], order=[1,0]
+#mp_b_pfh = #sg_map<sg_layout=[4,8], sg_data=[8,32], order=[1,0]>
+#mp_c     = #sg_map<sg_layout=[8,4], sg_data=[32,64], order=[1,0]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b> // sg_layout=[8,4], sg_data=[32,64]
+       %1p = create_nd_tdesc %a[%i, %c96] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = create_nd_tdesc %b[%c96, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_pfh> // sg_layout=[4,8]
+
+       %3 = create_nd_tdesc %c[%i, %j] : memref<4096x4096xf32> -> tensor_desc<256x256xf32, #mp_c>           // sg_layout=[32, 1]
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           %4  = load_nd %1 : tensor_desc<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
+           %10 = load_nd %2  : tensor_desc<32x256xf16 #mp_b> -> vector<32x256xf16>                // sg_layout=[8,4], sg_data=[32,64]
+          
+           prefetch_nd %1 : tensor_desc<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
+           prefetch_nd %2  : tensor_desc<32x256xf16, #mp_a_pfh>                                    // sg_layout=[4,8]
+           %6 = dpas %4, %10 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_nd_offset%1, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a>
+           %2 = update_nd_offset%2, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b>
+           %1p = update_nd_offset%1p, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a_pft>
+           %2p = update_nd_offset%2p, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b_pft>
+         } 
+         store_nd %3, %6: (tensor_desc<256x256xf32, #mp_c>, vector<256x256xf32>)                    // sg_layout=[8, 4]
+    } 
+  }
+```
+## Appendix 1.2 Gemm with transpose, broadcast, and reduction
+The second example contains transpose, broadcast, and reduction. The sg_map doesn't show wi_layout and wi_data for simplicity.
+```mlir
+Pseduo code for the original problem.
+C[4096, 4096] = matmul (A[4096, 4096], BT[4096, 4096]) + broad_cast(bcast[4096], dim=0)
+Reduce[4096] = reduce_add(C[4096, 4096], dim=1)
+```
+
+```mlir
+#mp_a     = #sg_map<sg_layout=[8,4], sg_data=[32,32], order=[1,0]>
+#mp_a_pfh = #sg_map<sg_layout=[32,1], sg_data=[8,32], order=[1,0]>
+#mp_b     = #sg_map<sg_layout=[8,4], sg_data=[32,64], order=[1,0]>
+#mp_bt    = #sg_map<sg_layout=[4,8], sg_data=[64,32], order=[0,1]>
+#mp_bt_pfh = #sg_map<sg_layout=[32,1], sg_data=[8,32], order=[1,0]>
+#mp_c     = #sg_map<sg_layout=[8,4], sg_data=[32,64], order=[1,0]>
+
+#mp_bcast = #sg_map<sg_layout=[8, 4], sg_data=[1,64], order=[1,0]>
+#mp_bcast2 = #sg_map<sg_layout=[32], sg_data=[8], order=[0]>
+#mp_reduce= #sg_map<sg_layout=[32], sg_data=[8], order=[0]>
+#mp_reduce2= #sg_map<sg_layout=[32, 1], sg_data=[8, 256], order=[1,0]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %bcast: memref<4096xf32>
+       %res: memref<4096xf32> ) {
+  scf.for %i = %c0 to %c4096 step %c256 {
+    scf.for %j = %c0 to %c4096 step %c256 {
+       %1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a>   // sg_layout=[8,4], sg_data=[32,32]
+       %2 = create_nd_tdesc %bt[%j, %c0] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_bt> // sg_layout=[4,8], sg_data=[64,32]
+       %1p = create_nd_tdesc %a[%i, %c192] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_a_pfh]>  // sg_layout=[32,1]
+       %2p = create_nd_tdesc %bt[%j, %c192] : memref<4096x4096xf16> -> tensor_desc<256x32xf16, #mp_bt_pfh> // sg_layout=[32,1]
+
+       %bcast'= memref.cast %bcast: memref<4096xf32> -> memref<1x4096xf32>
+       %7 = create_nd_tdesc %bcast'[%j] : memref<1x4096xf32> -> tensor_desc<1x256xf32, #mp_bast>           // sg_layout=[4, 8], sg_data=[1,32]
+
+       %res'= memref.cast %res: memref<4096xf32> -> memref<4096x1xf32>
+       %3 = create_nd_tdesc %res'[%i] : memref<4096x1xf32> -> tensor_desc<256x1xf32, #mp_reduce>           // sg_layout=[32, 1]
+
+       scf.for %k= %c0 to %c4096 step %c32 {
+           %4  = load_nd %1 : tensor_desc<256x32xf16  #mp_a > -> vector<256x32xf16>	             // sg_layout=[8,4], sg_data=[32,32]
+           %10 = load_nd %2  : tensor_desc<256x32xf16 #mp_bt> -> vector<256x32xf16>               // sg_layout=[4,8], sg_data=[64,32]
+           %5  = vector.transpose %10 {#mp_bt #mp_b}: vector<256x32xf16> -> vector<32x256xf16>   // sg_layout=[4,8] -> sg_layout=[8,4]
+
+           prefetch_nd %1 : tensor_desc<256x32xf16, #mp_a_pfh>             			      // sg_layout=[32,1]
+           prefetch_nd %2  : tensor_desc<256x32xf16, #mp_a_pfh>                                    // sg_layout=[32,1]
+           %6 = dpas %4, %5 {#mp_a #mp_b #mp_c} : (vector<256x32xf16>, vector<32x256xf16>) -> vector<256x256xf32> //sg_layout=[8,4]
+           %1 = update_nd_offset%1, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a>
+           %2 = update_nd_offset%2, %c0, %c32 :  tensor_desc<256x32xf16, #mp_bt>
+           %1p = update_nd_offset%1p, %c0, %c32 :  tensor_desc<256x32xf16, #mp_a_pft>
+           %2p = update_nd_offset%2p, %c32, %c0 :  tensor_desc<256x32xf16, #mp_bt_pft>
+         } 
+
+         %12  = load_nd %7  : tensor_desc<256xf32, #mp_bcast2> -> vector<256xf16>                // sg_layout=[32], sg_data=[8]
+         %12' = convert_layout {#mp_bcast2 #mp_bcast} %12 :  vector<256x256xf32>		 // sg_layout=[32] -> sg_layout=[8, 4]
+         %13 = vector.broadcast {#mp_c} %12' [0]: vector<256xf32> => vector<256x256xf32>   	 // sg_layout=[8, 4], sg_data=[32,64]
+         %14 = add %6, %13 : vector<256x256xf32>
+         %14' = convert_layout {#mp_c #mp_reduce2} %14 :  vector<256x256xf32>				   // sg_layout=[8, 4] -> sg_layout=[32]
+         %16 = vector.reduction {#mp_reduce2 #mp_reduce} <add> %14' [1]: vector<256x256xf32> => vector<256xf32>  // sg_layout=[32]
+         store_nd %3, %7: (tensor_desc<256xf32, #mp_reduce>, vector<256xf32>)                               // sg_layout=[32]
+    } 
+  }
+```
+
+## Appendix 1.3 Gemm implementation with two cache levels
+For GPU support high-performance prefetch through two level of caches.
+```mlir
+#mp_a = #sg_map<sg_layout=[8,4], sg_data=[64,32], order=[1,0]>
+#mp_b = #sg_map<sg_layout=[8,4], sg_data=[32,64], order=[1,0]>
+#mp_c = #sg_map<sg_layout=[8,4], sg_data=[64,64], order=[1,0]>
+
+#mp_a_copl2 = #sg_map<sg_layout=[32,1], sg_data=[16,128], order=[1,0]>
+#mp_b_copl2 = #sg_map< sg_layout=[16,2], sg_data=[8,128], order=[1,0]>
+
+#mp_a_copl1 = #sg_map<sg_layout=[32,1], sg_data=[16,32], order=[1,0]>
+#mp_b_copl1 = #sg_map< sg_layout=[4, 8], sg_data=[8,32], order=[1,0]>
+
+func.func @test_gemm(%a : memref<4096x4096xf16>,
+       %b: memref<4096x4096xf16>,
+       %c: memref<4096xf32> ) {
+   scf.for %i = %c0 to %c4096 step %c256 {
+     scf.for %j = %c0 to %c4096 step %c256 {
+        %a1_l2 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x128xf16, #mp_a_copl2>
+        %b1_l2 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<128x256xf16, #mp_b_copl2>
+        %a2_l2 = create_nd_tdesc %a[%i, %c256] : memref<4096x4096xf16> -> tensor_desc<512x128xf16, #mp_a_copl2>
+        %b2_l2 = create_nd_tdesc %b[%c256, %j] : memref<4096x4096xf16> -> tensor_desc<128x256xf16, #mp_b_copl2>
+
+        prefetch_nd %a1_l2 locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+        prefetch_nd %b1_l2 locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+	prefetch_nd %a2_l2 locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+        prefetch_nd %b2_l2 locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+        %a2_l2’ = update_nd_offset%a2_l2, %c0, %c32 :  tensor_desc<512x128xf16, #mp_b_copl2>
+        %b2_l2’ = update_nd_offset%b2_l2, %c32, %c0 :  tensor_desc<128x256xf16, #mp_b_copl2>
+
+        %a1_l1 = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b1_l1 = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a2_l1 = create_nd_tdesc %a[%i, %c32] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b2_l1 = create_nd_tdesc %b[%c32, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a3_l1 = create_nd_tdesc %a[%i, %c64] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b3_l1 = create_nd_tdesc %b[%c64, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+        %a4_l1 = create_nd_tdesc %a[%i, %c96] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a_copl1>
+        %b4_l1 = create_nd_tdesc %b[%c96, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b_copl1>
+
+        prefetch_nd %a1_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b1_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a2_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b2_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a3_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b3_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        prefetch_nd %a4_l1 locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+        prefetch_nd %b4_l1 locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+        %a4_l1’ = update_nd_offset% a4_l1, %c0, %c128 :  tensor_desc<512x32xf16, #mp_a_copl1>
+        %b4_l1’ = update_nd_offset% b4_l1, %c128, %c0 :  tensor_desc<32x256xf16, #mp_b_copl1>
+
+        %a1_load = create_nd_tdesc %a[%i, %c0] : memref<4096x4096xf16> -> tensor_desc<512x32xf16, #mp_a>
+        %b1_load = create_nd_tdesc %b[%c0, %j] : memref<4096x4096xf16> -> tensor_desc<32x256xf16, #mp_b>
+
+        %c_tile = create_nd_tdesc %c[%i, %j] : memref<4096x4096xf32> -> tensor_desc<512x256xf32, #mp_c>
+
+        scf.for %k= %c0 to %c4096 step %c32 {
+            %a1_r = load_nd %a1_load : tensor_desc<256x32xf16  #mp_a > -> vector<512x32xf16>
+            %b1_r = load_nd %b1_load  : tensor_desc<32x256xf16 #mp_b> -> vector<32x256xf16>
+
+            Scf.if (%k %4 == 0) {
+                gpu.barrier
+                prefetch_nd %a2_l2’ locality<2>: tensor_desc<512x128xf16, #mp_a_copl2>
+                prefetch_nd %b2_l2’ locality<2>: tensor_desc<128x256xf16, #mp_b_copl2>
+                %a2_l2’ = update_nd_offset%a2_l2’, %c0, %c128 :  tensor_desc<512x128xf16, #mp_a_copl2>
+                %b2_l2’ = update_nd_offset%b2_l2’, %c128, %c0 :  tensor_desc<128x256xf16, #mp_b_copl2>
+            }
+            prefetch_nd %a4_l1’ locality<3>: tensor_desc<512x32xf16, #mp_a_copl1>
+            prefetch_nd %b4_l1’ locality<3>: tensor_desc<32x256xf16, #mp_b_copl1>
+            %a4_l1’ = update_nd_offset%a4_l1’, %c0, %c32 :  tensor_desc<512x32xf16, #mp_a_copl1>
+            %b4_l1’ = update_nd_offset%b4_l1’, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b_copl1>
+
+            %a1_load = update_nd_offset%a1_load, %c0, %c32 :  tensor_desc<512x32xf16, #mp_a>
+            %a2_load = update_nd_offset%b1_load, %c32, %c0 :  tensor_desc<32x256xf16, #mp_b>
+
+            %6 = dpas %a1_r, %b1_r {#mp_a #mp_b #mp_c} : (vector<512x32xf16>, vector<32x256xf16>) -> vector<512x256xf32>
+        }
+       store_nd %c_tile, %6: (tensor_desc<512x256xf32, #mp_c>, vector<512x256xf32>)
+     }
+   }
+}
 ```
 
 ## Notes
