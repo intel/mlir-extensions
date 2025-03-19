@@ -780,8 +780,7 @@ struct VectorLinearizePass final
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
     mlir::vector::populateVectorTransposeLoweringPatterns(
-        patterns,
-        mlir::vector::VectorTransposeLowering::Shuffle16x16);
+        patterns, mlir::vector::VectorTransposeLowering::Shuffle16x16);
     populateVectorLinearizeTypeConversionsAndLegality(typeConverter, patterns,
                                                       target);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,

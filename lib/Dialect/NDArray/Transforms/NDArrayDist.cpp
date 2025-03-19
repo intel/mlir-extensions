@@ -92,8 +92,9 @@ struct DistOpRWP : public ::mlir::OpRewritePattern<FROM> {
 
 struct DistSubviewOpRWP : public DistOpRWP<::imex::ndarray::SubviewOp> {
   using DistOpRWP<::imex::ndarray::SubviewOp>::DistOpRWP;
-  ::mlir::LogicalResult matchAndRewrite(::imex::ndarray::SubviewOp op,
-               ::mlir::PatternRewriter &rewriter) const override {
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::SubviewOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
     auto empty = ::mlir::ValueRange{};
     rewriter.replaceOpWithNewOp<::imex::dist::SubviewOp>(
         op, op.getType(), op.getSource(), op.getOffsets(), op.getSizes(),
@@ -105,8 +106,9 @@ struct DistSubviewOpRWP : public DistOpRWP<::imex::ndarray::SubviewOp> {
 
 struct DistEWUnyOpRWP : public DistOpRWP<::imex::ndarray::EWUnyOp> {
   using DistOpRWP<::imex::ndarray::EWUnyOp>::DistOpRWP;
-  ::mlir::LogicalResult matchAndRewrite(::imex::ndarray::EWUnyOp op,
-               ::mlir::PatternRewriter &rewriter) const override {
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::EWUnyOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
     auto empty = ::mlir::ValueRange{};
     rewriter.replaceOpWithNewOp<::imex::dist::EWUnyOp>(
         op, op.getType(), op.getOp(), op.getSrc(), empty, empty, empty);
@@ -157,8 +159,9 @@ struct DistInsertSliceOpRWP : public DistOpRWP<::imex::ndarray::InsertSliceOp> {
 struct DistEWBinOpRWP : public DistOpRWP<::imex::ndarray::EWBinOp> {
   using DistOpRWP<::imex::ndarray::EWBinOp>::DistOpRWP;
 
-  ::mlir::LogicalResult matchAndRewrite(::imex::ndarray::EWBinOp op,
-               ::mlir::PatternRewriter &rewriter) const override {
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::EWBinOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
 
     // get inputs and types
     auto loc = op.getLoc();
