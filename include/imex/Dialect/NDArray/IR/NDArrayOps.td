@@ -415,12 +415,17 @@ def ReshapeOp : NDArray_Op<"reshape", []> {
       See Array API.
   }];
 
-  let arguments = (ins AnyRankedTensor:$source, Variadic<Index>:$shape, OptionalAttr<I1Attr>:$copy);
+  let arguments = (ins AnyRankedTensor:$source, Variadic<Index>:$shape, OptionalAttr<BoolAttr>:$copy);
   let results = (outs AnyRankedTensor);
 
   let assemblyFormat = [{
     $source $shape attr-dict `:` qualified(type($source)) `->` qualified(type(results))
   }];
+
+  let builders = [
+    // Build an InsertSliceOp with mixed static and dynamic entries.
+    OpBuilder<(ins "::mlir::Type":$resultType, "::mlir::Value":$source, "::mlir::ValueRange":$shape)>
+  ];
 }
 
 

@@ -43,8 +43,8 @@ static std::vector<int> convertStringToVector(const std::string &str) {
 // If the environment variable "DEBUG_MESH_INDEX" is set, it uses the value
 // from the environment variable. Otherwise, it creates a ProcessMultiIndexOp
 // to get the index.
-static SmallVector<Value>
-getMyMultiIndex(OpBuilder &b, ::mlir::mesh::MeshOp mesh, bool asI64 = false) {
+static SmallVector<Value> getMyMultiIndex(OpBuilder &b, ::MeshOp mesh,
+                                          bool asI64 = false) {
   if (auto envStr = getenv("DEBUG_MESH_INDEX")) {
     auto myIdx = convertStringToVector(envStr);
     if (myIdx.size() < mesh.getShape().size()) {
@@ -73,16 +73,41 @@ getMyMultiIndex(OpBuilder &b, ::mlir::mesh::MeshOp mesh, bool asI64 = false) {
 }
 
 template <typename T>
-auto getBaseShardDimSize(T shard, T numShards, T extend, T one, T zero) {
+T getBaseShardDimSize(T shard, T numShards, T extend, T one, T zero) {
   return extend / numShards +
          shard.sge(numShards - (extend % numShards)).select(one, zero);
 };
 
+template <typename T,
+          typename std::enable_if<std::is_integral<T>::value>::type * = nullptr>
+T getBaseShardDimSize(T shard, T numShards, T extend) {
+  return extend / numShards + (shard >= numShards - (extend % numShards)
+                                   ? static_cast<T>(1)
+                                   : static_cast<T>(0));
+};
+
 template <typename T>
-static auto getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
+static T getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
   return (shard * (extend / numShards)) +
          (shard - (numShards - (extend % numShards))).max(zero);
 };
+
+template <typename T,
+          typename std::enable_if<std::is_integral<T>::value>::type * = nullptr>
+static T getBaseShardDimOff(T shard, T numShards, T extend) {
+  return (shard * (extend / numShards)) +
+         std::max(static_cast<T>(0),
+                  shard - (numShards - (extend % numShards)));
+};
+
+static MeshSharding ShardingFromOption(const ShardingOption &option,
+                                       MLIRContext *ctxt) {
+  SmallVector<MeshAxesAttr> res;
+  for (const auto &v : option.shardingArray) {
+    res.emplace_back(MeshAxesAttr::get(ctxt, v));
+  }
+  return MeshSharding::get(option.mesh, res);
+}
 
 //===----------------------------------------------------------------------===//
 // helpers for ops with offsets/sizes/strides
@@ -97,14 +122,15 @@ getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
   auto aryType = cast<RankedTensorType>(ary.getType());
   // currently no support for dynamic input shapes
   if (!aryType.hasStaticShape())
-    return failure();
+    return op->emitOpError("Dynamic shapes are not supported.");
   auto aryShape = aryType.getShape();
   auto rank = cast<RankedTensorType>(ary.getType()).getRank();
 
   auto aryShardOp = ary.getDefiningOp<mesh::ShardOp>();
   // currently no support for non-sharded source
   if (!aryShardOp)
-    return failure();
+    return op->emitOpError("Exptected a ShardOp on input, got ")
+           << ary.getDefiningOp();
 
   auto offs = op.getStaticOffsets();
   auto sizes = op.getStaticSizes();
@@ -112,21 +138,21 @@ getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
   // currently no support for dynamic subviews
   if (ShapedType::isDynamicShape(offs) || ShapedType::isDynamicShape(sizes) ||
       ShapedType::isDynamicShape(strides))
-    return failure();
+    return op->emitOpError("Dynamic offsets/sizes/strides are not supported");
 
   auto arySharding = aryShardOp.getSharding().getDefiningOp<mesh::ShardingOp>();
   // currently no support for sharding dims sizes on input
   if (!arySharding.getStaticShardedDimsOffsets().empty())
-    return failure();
+    return op->emitOpError(
+        "Sharded dims sizes on input are not supported yet.");
 
   auto mesh = getMesh(arySharding, symbolTable);
   if (!mesh)
-    return failure();
+    return op->emitOpError("Invalid mesh.");
   auto meshShape = mesh.getShape();
   // currently no support for dynamic mesh shape
-  if (llvm::any_of(meshShape,
-                   [](int64_t dim) { return dim == ShapedType::kDynamic; }))
-    return failure();
+  if (ShapedType::isDynamicShape(meshShape))
+    return op->emitOpError("Dynamic mesh shape is not supported.");
 
   auto splitAxes = arySharding.getSplitAxes();
   assert((int64_t)splitAxes.size() <= rank);
@@ -143,13 +169,12 @@ getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
     int64_t splitSz = 1; // number of shards in this dimension
     for (auto i : axes)
       splitSz *= meshShape[i];
-    int64_t shardSz = shardDimension(aryShape[dim], splitSz);
     int64_t pos = offs[dim]; // current position in split tensor dim
-    int64_t mx =
-        sizes[dim]; // max number of elements we assign to current shard
-    for (auto shard = 0; shard < splitSz; ++shard) {
+    int64_t mx = sizes[dim]; // max #elements we assign to current shard
+    for (int64_t shard = 0; shard < splitSz; ++shard) {
       // extract size of overlap of subview with current input shard
-      auto shardStart = shard * shardSz;
+      auto shardStart = getBaseShardDimOff(shard, splitSz, aryShape[dim]);
+      auto shardSz = getBaseShardDimSize(shard, splitSz, aryShape[dim]);
       auto shardEnd = shardStart + shardSz;
       auto num = shardEnd - pos;
       int64_t sz = 0;
@@ -163,6 +188,7 @@ getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
       mx -= sz;
     }
   }
+
   return MeshSharding::get(
       arySharding.getMeshAttr(), arySharding.getSplitAxes().getAxes(),
       arySharding.getPartialAxes().value_or(llvm::ArrayRef<MeshAxis>{}),
@@ -220,8 +246,6 @@ static std::array<Value, 2> getShardSliceOffAndSz(
     auto slcSz = easyI64(loc, builder, slcSizes[dim]);
     resSize = getBaseShardDimSize(myID, numShards, slcSz, one, zero).get();
     resOff = getBaseShardDimOff(myID, numShards, slcSz, zero).get();
-    // resSize = zero.max(slcSz - myOff_).min(mySize_).get();
-    // resOff = myOff_.get();
   }
 
   // The global offset of the local shard is slice offset plus the computed
@@ -231,8 +255,12 @@ static std::array<Value, 2> getShardSliceOffAndSz(
       easyI64(loc, builder, slcOffs[dim]) +
       easyI64(loc, builder, resOff) * easyI64(loc, builder, slcStrides[dim]);
   auto myShardOff = myOff_ - easyI64(loc, builder, haloSizes[haloDim * 2]);
+  // Convert global to local indices. If size is <= 0 off is always set to 0.
+  auto localOff = easyI64(loc, builder, resSize)
+                      .sgt(zero)
+                      .select(targetOff - myShardOff, zero);
 
-  return {createIndexCast(loc, builder, (targetOff - myShardOff).get()),
+  return {createIndexCast(loc, builder, localOff.get()),
           createIndexCast(loc, builder, resSize)};
 }
 
@@ -253,7 +281,8 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
       (!offsSharding.getStaticShardedDimsOffsets().empty() &&
        ShapedType::isDynamicShape(
            offsSharding.getStaticShardedDimsOffsets()))) {
-    return failure();
+    return op->emitOpError("Dynamic sharding dims offsets or halo sizes are "
+                           "not supported yet.");
   }
 
   auto slcOffs =
@@ -374,16 +403,13 @@ struct SubviewShardingInterface
                          const ShardingOption &shardingOption) const {
     auto svop = cast<SubviewOp>(op);
     auto srcShardOp = svop.getSource().getDefiningOp<mesh::ShardOp>();
-    mlir::mesh::MeshSharding srcSharding;
+    MeshSharding srcSharding;
     if (srcShardOp) {
       srcSharding = srcShardOp.getSharding();
     } else {
       LLVM_DEBUG(DBGS() << "no sharding on input, using default\n");
-      SmallVector<MeshAxesAttr> res;
-      for (const auto &v : shardingOption.shardingArray) {
-        res.emplace_back(MeshAxesAttr::get(op->getContext(), v));
-      }
-      srcSharding = mlir::mesh::MeshSharding::get(shardingOption.mesh, res);
+      srcSharding =
+          ShardingFromOption(shardingOption, srcShardOp->getContext());
     }
     maybeInsertSourceShardingAnnotation(srcSharding, op->getOpOperand(0), b);
 
@@ -444,11 +470,7 @@ struct InsertSliceShardingInterface
     }
     maybeInsertSourceShardingAnnotation(srcSharding, op->getOpOperand(1), b);
 
-    SmallVector<MeshAxesAttr> res;
-    for (const auto &v : shardingOption.shardingArray) {
-      res.emplace_back(MeshAxesAttr::get(op->getContext(), v));
-    }
-    auto dstSharding = mlir::mesh::MeshSharding::get(shardingOption.mesh, res);
+    auto dstSharding = ShardingFromOption(shardingOption, op->getContext());
     maybeInsertSourceShardingAnnotation(dstSharding, op->getOpOperand(0), b);
     maybeInsertTargetShardingAnnotation(dstSharding, op->getResult(0), b);
 
@@ -517,11 +539,10 @@ struct InsertSliceShardingInterface
           b.create<scf::YieldOp>(loc, spmdizedOperands[0]);
         });
 
-    auto res = builder.create<mlir::mesh::UpdateHaloOp>(
+    auto res = builder.create<UpdateHaloOp>(
         loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
         dstSharding.getMeshAttr(),
-        mlir::mesh::MeshAxesArrayAttr::get(op->getContext(),
-                                           dstSharding.getSplitAxes()),
+        MeshAxesArrayAttr::get(op->getContext(), dstSharding.getSplitAxes()),
         dstSharding.getDynamicHaloSizes(),
         DenseI64ArrayAttr::get(op->getContext(),
                                dstSharding.getStaticHaloSizes()));
@@ -542,11 +563,7 @@ struct LinspaceShardingInterface
   LogicalResult
   addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
                          const ShardingOption &shardingOption) const {
-    SmallVector<MeshAxesAttr> res;
-    for (const auto &v : shardingOption.shardingArray) {
-      res.emplace_back(MeshAxesAttr::get(op->getContext(), v));
-    }
-    auto sharding = MeshSharding::get(shardingOption.mesh, res);
+    auto sharding = ShardingFromOption(shardingOption, op->getContext());
     maybeInsertTargetShardingAnnotation(sharding, op->getResult(0), b);
 
     return success();
@@ -684,11 +701,53 @@ struct ReshapeShardingInterface
 
   SmallVector<mlir::utils::IteratorType>
   getLoopIteratorTypes(::mlir::Operation *op) const {
-    auto rsop = cast<ReshapeOp>(op);
-    size_t rank = std::max(rsop.getSource().getType().getRank(),
-                           rsop.getResult().getType().getRank());
-    return {rank, utils::IteratorType::parallel};
+    LLVM_DEBUG(DBGS() << "ReshapeShardingInterface::getLoopIteratorTypes\n");
+    assert(op->getNumResults() == 1);
+    auto rank = dyn_cast<ShapedType>(op->getResultTypes()[0]).getRank();
+    return SmallVector<utils::IteratorType>(rank,
+                                            utils::IteratorType::parallel);
   }
+
+  // Currently only replicated input and output sharding is supported.
+  // This covers cases where 0d tensors get reshaped to higher ranks.
+
+  // Return replication option.
+  // FailureOr<ShardingOption>
+  // getShardingOption(::mlir::Operation *op,
+  //                   ArrayRef<MeshSharding> operandShardings,
+  //                   ArrayRef<MeshSharding> resultShardings) const {
+  //   assert(operandShardings.size() >= 1);
+  //   return ShardingOption({}, operandShardings[0].getMeshAttr());
+  // }
+
+  // Add replication sharding for input and result.
+  LogicalResult
+  addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
+                         const ShardingOption &shardingOption) const {
+    // if (shardingOption.shardingArray.size() > 0)
+    //   return op->emitOpError("Only full replication is implemented.");
+
+    // auto sharding = ShardingFromOption(shardingOption, op->getContext());
+    MeshSharding sharding = MeshSharding::get(shardingOption.mesh, {});
+    maybeInsertSourceShardingAnnotation(sharding, op->getOpOperand(0), b);
+    maybeInsertTargetShardingAnnotation(sharding, op->getResult(0), b);
+
+    return success();
+  }
+
+  // Default: replication spmdization
+  // LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value>
+  // spmdizedOperands,
+  //                       ArrayRef<MeshSharding> operandShardings,
+  //                       ArrayRef<MeshSharding> resultShardings,
+  //                       IRMapping &spmdizationMap,
+  //                       SymbolTableCollection &symbolTableCollection,
+  //                       OpBuilder &builder) const {
+  //   return spmdizeFullyReplicatedOperation(op, spmdizedOperands,
+  //   operandShardings,
+  //                            resultShardings, spmdizationMap,
+  //                            symbolTableCollection, builder);
+  // }
 };
 } // namespace
 

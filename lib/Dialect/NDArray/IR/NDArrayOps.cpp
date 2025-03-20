@@ -37,6 +37,15 @@ void NDArrayDialect::initialize() {
       >();
 }
 
+void ReshapeOp::build(::mlir::OpBuilder &odsBuilder,
+                      ::mlir::OperationState &odsState,
+                      ::mlir::Type resultType0, ::mlir::Value source,
+                      ::mlir::ValueRange shape) {
+  odsState.addOperands(source);
+  odsState.addOperands(shape);
+  odsState.addTypes(resultType0);
+}
+
 } // namespace ndarray
 } // namespace imex
 
