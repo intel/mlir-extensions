@@ -44,7 +44,6 @@ int main(int argc, char **argv) {
 
   ::mlir::registerAllGPUToLLVMIRTranslations(registry);
   imex::registerConvertXeVMToLLVMInterface(registry);
-  imex::xevm::registerXeVMTargetInterfaceExternalModels(registry);
 
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));

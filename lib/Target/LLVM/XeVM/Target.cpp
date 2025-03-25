@@ -32,12 +32,14 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 
+#if LLVM_HAS_SPIRV_TARGET
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
 #include "SPIRVTargetMachine.h"
 #pragma GCC diagnostic pop
 
 #include "SPIRVCommandLine.h"
+#endif // LLVM_HAS_SPIRV_TARGET
 
 #include <set>
 
@@ -145,6 +147,7 @@ SpirSerializer::moduleToObject(llvm::Module &llvmModule) {
   // Workaround to enable spirv extensions that are not added to target machine
   // by default.
 
+#if LLVM_HAS_SPIRV_TARGET
   std::set<llvm::SPIRV::Extension::Extension> AllowedExtIds{
       llvm::SPIRV::Extension::Extension::SPV_EXT_shader_atomic_float_add,
       llvm::SPIRV::Extension::Extension::SPV_EXT_shader_atomic_float16_add};
@@ -152,6 +155,7 @@ SpirSerializer::moduleToObject(llvm::Module &llvmModule) {
       static_cast<llvm::SPIRVTargetMachine *>(targetMachine.value());
   const_cast<llvm::SPIRVSubtarget *>(STM->getSubtargetImpl())
       ->initAvailableExtensions(AllowedExtIds);
+#endif // LLVM_HAS_SPIRV_TARGET
 
   //===----------------------------------------------------------------------===//
 

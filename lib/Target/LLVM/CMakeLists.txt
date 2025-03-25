@@ -1,3 +1,10 @@
+if ("SPIRV" IN_LIST LLVM_TARGETS_TO_BUILD)
+  set(SPIRV_LIBS
+    SPIRVCodeGen
+
+  )
+endif()
+
 add_imex_dialect_library(MLIRXeVMTarget
   XeVM/Target.cpp
 
@@ -7,7 +14,7 @@ add_imex_dialect_library(MLIRXeVMTarget
   ${IMEX_SOURCE_DIR}/include/imex/Target/LLVM
 
   LINK_COMPONENTS
-  SPIRVCodeGen
+  ${SPIRV_LIBS}
 
   LINK_LIBS PUBLIC
   MLIRIR
