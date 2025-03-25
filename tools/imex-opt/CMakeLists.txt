@@ -8,6 +8,7 @@ set(LIBS
         ${mlir_dialect_libs}
         ${mlir_conversion_libs}
         ${mlir_extension_libs}
+        MLIRToLLVMIRTranslationRegistration
         ${imex_dialect_libs}
         ${imex_conversion_libs}
         ${imex_extension_libs}

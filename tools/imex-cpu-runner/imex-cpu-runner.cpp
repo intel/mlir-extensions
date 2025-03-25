@@ -36,6 +36,8 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
 
+#include "imex/Target/LLVMIR/Dialect/XeVM/XeVMToLLVMIRTranslation.h"
+
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
   llvm::InitializeNativeTarget();
@@ -44,6 +46,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   mlir::registerAllToLLVMIRTranslations(registry);
+  imex::xevm::registerXeVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry);
 }
