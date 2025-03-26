@@ -6,10 +6,10 @@ add_imex_dialect_library(MLIRXeVMDialect
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/LLVMIR
 
   DEPENDS
-  MLIRGPUCompilationAttrInterfacesIncGen
+  # MLIRGPUCompilationAttrInterfacesIncGen
   MLIRXeVMOpsIncGen
   MLIRXeVMConversionsIncGen
-  intrinsics_gen
+  # intrinsics_gen
 
   LINK_COMPONENTS
   AsmParser
