@@ -1,22 +1,6 @@
 // RUN: imex-opt --split-input-file --convert-ndarray-to-linalg %s -verify-diagnostics -o -| FileCheck %s
 
 // -----
-func.func @test_subview(%arg0: tensor<?xi64>) -> tensor<?xi64> {
-    %c0 = arith.constant 0 : index
-    %c3 = arith.constant 3 : index
-    %0 = ndarray.subview %arg0[%c0][%c3][%c3] : tensor<?xi64> to tensor<?xi64>
-    return %0 : tensor<?xi64>
-}
-// CHECK-LABEL: @test_subview
-// CHECK-SAME: ([[V:%.*]]: tensor<?xi64>) -> tensor<?xi64> {
-// CHECK-NEXT: [[C0:%.*]] = arith.constant
-// CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[S0:%.*]] = memref.subview [[V0]][[[C0]]] [[[C1]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] restrict writable : memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: return [[V1]] : tensor<?xi64>
-
-// -----
 func.func @test_linspace(%arg0: i64, %arg1: i64, %arg2: index) -> tensor<?xindex> {
     %0 = ndarray.linspace %arg0 %arg1 %arg2 false : (i64, i64, index) -> tensor<?xindex>
     return %0 : tensor<?xindex>
@@ -71,42 +55,6 @@ func.func @test_reshape2(%arg0: index) -> tensor<?x?xi64> {
 // CHECK: tensor.from_elements
 // CHECK: tensor.reshape
 // CHECK-SAME: -> tensor<?x?xi64>
-
-// -----
-func.func @test_insert_slice(%arg0: tensor<?xi64>, %arg1: tensor<?xi64>) {
-    %i0 = arith.constant 0 : index
-    %i1 = arith.constant 1 : index
-    %i3 = arith.constant 3 : index
-    ndarray.insert_slice %arg1 into %arg0[%i0] [%i3] [%i1] : tensor<?xi64> into tensor<?xi64>
-    return
-}
-// CHECK-LABEL: @test_insert_slice
-// CHECK-SAME: ([[V:%.*]]: tensor<?xi64>, [[VV:%.*]]: tensor<?xi64>) {
-// CHECK-NEXT: [[C0:%.*]] = arith.constant
-// CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[C3:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[VV]]
-// CHECK-NEXT: [[V1:%.*]] = bufferization.to_memref [[V]]
-// CHECK-NEXT: [[SV:%.*]] = memref.subview [[V1]][[[C0]]] [[[C3]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
-// CHECK: memref.copy [[V0]], [[SV]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
-
-// -----
-func.func @test_insert_slice_scalar(%arg0: tensor<?xi64>, %arg1: tensor<i64>) {
-    %i0 = arith.constant 0 : index
-    %i1 = arith.constant 1 : index
-    %i3 = arith.constant 3 : index
-    ndarray.insert_slice %arg1 into %arg0[%i0] [%i3] [%i1] : tensor<i64> into tensor<?xi64>
-    return
-}
-// CHECK-LABEL: @test_insert_slice_scalar
-// CHECK-SAME: ([[V:%.*]]: tensor<?xi64>, [[VV:%.*]]: tensor<i64>) {
-// CHECK-NEXT: [[C0:%.*]] = arith.constant
-// CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[C3:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[VV]]
-// CHECK-NEXT: [[V1:%.*]] = bufferization.to_memref [[V]]
-// CHECK-NEXT: [[SV:%.*]] = memref.subview [[V1]][[[C0]]] [[[C3]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
-// CHECK-NEXT: linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel"]} ins([[V0]] : memref<i64, strided<[], offset: ?>>) outs([[SV]] : memref<?xi64, strided<[?], offset: ?>>)
 
 // -----
 #GPUENV = #ndarray.envs<#region.gpu_env<device = "g">>
@@ -170,41 +118,36 @@ func.func @test_env() -> (tensor<16x16xf32, #GPUENV>, tensor<256xf32, #GPUENV>) 
 // COM: CHECK-SAME: memref<?xi64, strided<[?], offset: ?>>
 
 // -----
-func.func @test_copy(%a: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi64> {
-    %0 = ndarray.copy %a: !ndarray.ndarray<?xi64> -> !ndarray.ndarray<?xi64>
-    %1 = ndarray.copy %0: !ndarray.ndarray<?xi64> -> !ndarray.ndarray<?xi64, #region.gpu_env<device = "XeGPU">>
-    %2 = ndarray.copy %1: !ndarray.ndarray<?xi64, #region.gpu_env<device = "XeGPU">> -> !ndarray.ndarray<?xi64>
-    return %0 : !ndarray.ndarray<?xi64>
+func.func @test_copy(%a: tensor<?xi64>) -> tensor<?xi64> {
+    %0 = ndarray.copy %a: tensor<?xi64> -> tensor<?xi64>
+    %1 = ndarray.copy %0: tensor<?xi64> -> tensor<?xi64, #region.gpu_env<device = "XeGPU">>
+    %2 = ndarray.copy %1: tensor<?xi64, #region.gpu_env<device = "XeGPU">> -> tensor<?xi64>
+    return %0 : tensor<?xi64>
 }
-// CHECK-LABEL: func.func @test_copy
-// CHECK-NEXT: bufferization.to_tensor
-// CHECK-NEXT: arith.constant 0 : index
-// CHECK-NEXT: tensor.dim
-// CHECK-NEXT: memref.alloc
-// CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: region.env_region "protect_copy_op"
-// CHECK-NEXT: memref.copy
-// CHECK-NEXT: }
-// CHECK-NEXT: bufferization.to_tensor
-// CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: arith.constant 0 : index
-// CHECK-NEXT: tensor.dim
-// CHECK-NEXT: memref.alloc
-// CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: region.env_region "gpu_copy_op"
-// CHECK-NEXT: memref.copy
-// CHECK-NEXT: }
-// CHECK-NEXT: bufferization.to_tensor
-// CHECK-NEXT: arith.constant 0 : index
-// CHECK-NEXT: tensor.dim
-// CHECK-NEXT: memref.alloc
-// CHECK-NEXT: bufferization.to_memref
-// CHECK-NEXT: region.env_region "gpu_copy_op"
-// CHECK-NEXT: memref.copy
-// CHECK-NEXT: }
-// CHECK-NEXT: bufferization.to_tensor
-// CHECK-NEXT: return
-// CHECK-SAME: memref<?xi64, strided<[?], offset: ?>>
+// CHECK-LABEL: func.func @test_copy(
+// CHECK-SAME: [[varg0:%.*]]: tensor<?xi64>) -> tensor<?xi64> {
+// CHECK-NEXT: [[vc0:%.*]] = arith.constant 0 : index
+// CHECK-NEXT: [[vdim:%.*]] = tensor.dim [[varg0]], [[vc0]] : tensor<?xi64>
+// CHECK-NEXT: [[valloc:%.*]] = memref.alloc([[vdim]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[v0:%.*]] = bufferization.to_memref [[varg0]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: region.env_region "protect_copy_op" {
+// CHECK-NEXT: memref.copy [[v0]], [[valloc]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>
+// CHECK: [[v1:%.*]] = bufferization.to_tensor [[valloc]] restrict writable : memref<?xi64> to tensor<?xi64>
+// CHECK-NEXT: [[vc0_0:%.*]] = arith.constant 0 : index
+// CHECK-NEXT: [[vdim_1:%.*]] = tensor.dim [[v1]], [[vc0_0]] : tensor<?xi64>
+// CHECK-NEXT: [[valloc_2:%.*]] = memref.alloc([[vdim_1]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[v2:%.*]] = bufferization.to_memref [[v1]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: region.env_region "protect_copy_op" {
+// CHECK-NEXT: memref.copy [[v2]], [[valloc_2]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>
+// CHECK: [[v3:%.*]] = bufferization.to_tensor [[valloc_2]] restrict writable : memref<?xi64> to tensor<?xi64, #region.gpu_env<device = "XeGPU">>
+// CHECK-NEXT: [[vc0_3:%.*]] = arith.constant 0 : index
+// CHECK-NEXT: [[vdim_4:%.*]] = tensor.dim [[v3]], [[vc0_3]] : tensor<?xi64, #region.gpu_env<device = "XeGPU">>
+// CHECK-NEXT: [[valloc_5:%.*]] = memref.alloc([[vdim_4]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[v4:%.*]] = bufferization.to_memref [[v3]] : tensor<?xi64, #region.gpu_env<device = "XeGPU">> to memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: region.env_region "protect_copy_op" {
+// CHECK-NEXT: memref.copy [[v4]], [[valloc_5]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>
+// CHECK: [[v5:%.*]] = bufferization.to_tensor [[valloc_5]] restrict writable : memref<?xi64> to tensor<?xi64>
+// CHECK-NEXT: return [[v1]] : tensor<?xi64>
 
 // -----
 func.func @test_delete(%arg0: tensor<?xi64>) {

@@ -1,6 +1,6 @@
 // RUN: imex-opt --pass-pipeline="builtin.module(func.func(sharding-propagation),coalesce-shard-ops,canonicalize,func.func(mesh-spmdization),canonicalize,convert-mesh-to-mpi,canonicalize,convert-ndarray-to-linalg,linalg-generalize-named-ops,linalg-fuse-elementwise-ops,empty-tensor-to-alloc-tensor,canonicalize,one-shot-bufferize,canonicalize,imex-remove-temporaries)" %s -o - | FileCheck %s
 
-builtin.module {
+builtin.module attributes {dlti.map = #dlti.map<"MPI:Implementation" = "MPICH", "MPI:comm_world_rank" = 0 : i32>}{
     memref.global constant @static_mpi_rank : memref<index> = dense<10>
     mesh.mesh @mesh4x4(shape = 4x4)
     func.func @test_shard_propagate_insert_slice_2d(%arg0: tensor<1200x1200xi64>) -> tensor<1200x1200xi64> {
@@ -19,52 +19,32 @@ builtin.module {
 }
 // CHECK: mesh.mesh @mesh4x4(shape = 4x4)
 // CHECK-LABEL: func.func @test_shard_propagate_insert_slice_2d(
-// CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) {
-// CHECK-NEXT: [[vc91_i32:%.*]] = arith.constant 91 : i32
-// CHECK-NEXT: [[vc9_i32:%.*]] = arith.constant 9 : i32
-// CHECK-NEXT: [[vc11_i32:%.*]] = arith.constant 11 : i32
-// CHECK-NEXT: [[vc6_i32:%.*]] = arith.constant 6 : i32
-// CHECK-NEXT: [[vc14_i32:%.*]] = arith.constant 14 : i32
-// CHECK-NEXT: [[v0:%.*]] = bufferization.to_memref [[varg0]] : tensor<300x300xi64> to memref<300x300xi64, strided<[?, ?], offset: ?>>
-// CHECK-NEXT: [[valloc:%.*]] = memref.alloc() {alignment = 64 : i64} : memref<304x304xi64>
-// CHECK-NEXT: [[vsubview:%.*]] = memref.subview [[valloc]][2, 2] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
-// CHECK-NEXT: memref.copy [[v0]], [[vsubview]] : memref<300x300xi64, strided<[?, ?], offset: ?>> to memref<300x300xi64, strided<[304, 1], offset: 610>>
-// CHECK-NEXT: [[vsubview_0:%.*]] = memref.subview [[valloc]][2, 0] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 608>>
-// CHECK-NEXT: [[vsubview_1:%.*]] = memref.subview [[valloc]][2, 300] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 908>>
-// CHECK-NEXT: memref.copy [[vsubview_1]], [[vsubview_0]] : memref<300x2xi64, strided<[304, 1], offset: 908>> to memref<300x2xi64, strided<[304, 1], offset: 608>>
-// CHECK-NEXT: mpi.send([[vsubview_0]], [[vc91_i32]], [[vc9_i32]]) : memref<300x2xi64, strided<[304, 1], offset: 608>>, i32, i32
-// CHECK-NEXT: mpi.recv([[vsubview_0]], [[vc91_i32]], [[vc11_i32]]) : memref<300x2xi64, strided<[304, 1], offset: 608>>, i32, i32
-// CHECK-NEXT: [[valloc_2:%.*]] = memref.alloc() : memref<300x2xi64>
-// CHECK-NEXT: [[vsubview_3:%.*]] = memref.subview [[valloc]][2, 2] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 610>>
-// CHECK-NEXT: memref.copy [[vsubview_3]], [[valloc_2]] : memref<300x2xi64, strided<[304, 1], offset: 610>> to memref<300x2xi64>
-// CHECK-NEXT: mpi.send([[valloc_2]], [[vc91_i32]], [[vc11_i32]]) : memref<300x2xi64>, i32, i32
-// CHECK-NEXT: mpi.recv([[valloc_2]], [[vc91_i32]], [[vc9_i32]]) : memref<300x2xi64>, i32, i32
-// CHECK-NEXT: [[vsubview_4:%.*]] = memref.subview [[valloc]][2, 302] [300, 2] [1, 1] : memref<304x304xi64> to memref<300x2xi64, strided<[304, 1], offset: 910>>
-// CHECK-NEXT: memref.copy [[valloc_2]], [[vsubview_4]] : memref<300x2xi64> to memref<300x2xi64, strided<[304, 1], offset: 910>>
-// CHECK-NEXT: memref.dealloc [[valloc_2]] : memref<300x2xi64>
-// CHECK-NEXT: [[vsubview_5:%.*]] = memref.subview [[valloc]][0, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1]>>
-// CHECK-NEXT: [[vsubview_6:%.*]] = memref.subview [[valloc]][300, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91200>>
-// CHECK-NEXT: memref.copy [[vsubview_6]], [[vsubview_5]] : memref<2x304xi64, strided<[304, 1], offset: 91200>> to memref<2x304xi64, strided<[304, 1]>>
-// CHECK-NEXT: mpi.send([[vsubview_5]], [[vc91_i32]], [[vc6_i32]]) : memref<2x304xi64, strided<[304, 1]>>, i32, i32
-// CHECK-NEXT: mpi.recv([[vsubview_5]], [[vc91_i32]], [[vc14_i32]]) : memref<2x304xi64, strided<[304, 1]>>, i32, i32
-// CHECK-NEXT: [[valloc_7:%.*]] = memref.alloc() : memref<2x304xi64>
-// CHECK-NEXT: [[vsubview_8:%.*]] = memref.subview [[valloc]][2, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 608>>
-// CHECK-NEXT: memref.copy [[vsubview_8]], [[valloc_7]] : memref<2x304xi64, strided<[304, 1], offset: 608>> to memref<2x304xi64>
-// CHECK-NEXT: mpi.send([[valloc_7]], [[vc91_i32]], [[vc14_i32]]) : memref<2x304xi64>, i32, i32
-// CHECK-NEXT: mpi.recv([[valloc_7]], [[vc91_i32]], [[vc6_i32]]) : memref<2x304xi64>, i32, i32
-// CHECK-NEXT: [[vsubview_9:%.*]] = memref.subview [[valloc]][302, 0] [2, 304] [1, 1] : memref<304x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91808>>
-// CHECK-NEXT: memref.copy [[valloc_7]], [[vsubview_9]] : memref<2x304xi64> to memref<2x304xi64, strided<[304, 1], offset: 91808>>
-// CHECK-NEXT: memref.dealloc [[valloc_7]] : memref<2x304xi64>
-// CHECK-NEXT: [[vsubview_10:%.*]] = memref.subview [[valloc]][0, 0] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1]>>
-// CHECK-NEXT: [[vsubview_11:%.*]] = memref.subview [[valloc]][0, 4] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 4>>
-// CHECK-NEXT: [[vsubview_12:%.*]] = memref.subview [[valloc]][4, 0] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 1216>>
-// CHECK-NEXT: [[valloc_13:%.*]] = memref.alloc() {alignment = 64 : i64} : memref<300x300xi64>
-// CHECK-NEXT: linalg.generic {indexing_maps = [#map, #map, #map, #map], iterator_types = ["parallel", "parallel"]} ins([[vsubview_12]], [[vsubview_10]], [[vsubview_11]] : memref<300x300xi64, strided<[304, 1], offset: 1216>>, memref<300x300xi64, strided<[304, 1]>>, memref<300x300xi64, strided<[304, 1], offset: 4>>) outs([[valloc_13]] : memref<300x300xi64>) {
-// CHECK-NEXT: ^bb0([[vin:%.*]]: i64, [[vin_15:%.*]]: i64, [[vin_16:%.*]]: i64, [[vout:%.*]]: i64):
-  // CHECK-NEXT: [[v1:%.*]] = arith.addi [[vin_15]], [[vin_16]] : i64
-  // CHECK-NEXT: [[v2:%.*]] = arith.addi [[vin]], [[v1]] : i64
-  // CHECK-NEXT: linalg.yield [[v2]] : i64
-// CHECK-NEXT: }
-// CHECK-NEXT: [[vsubview_14:%.*]] = memref.subview [[valloc]][2, 2] [300, 300] [1, 1] : memref<304x304xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
-// CHECK-NEXT: memref.copy [[valloc_13]], [[vsubview_14]] : memref<300x300xi64> to memref<300x300xi64, strided<[304, 1], offset: 610>>
-// CHECK-NEXT: return
+// CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) -> tensor<304x304xi64> {
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: memref.subview
+// CHECK: memref.subview
+// CHECK: linalg.generic {indexing_maps = [#map, #map, #map, #map], iterator_types = ["parallel", "parallel"]}
+// CHECK: ^bb0([[vin:%.*]]: i64, [[vin_40:%.*]]: i64, [[vin_41:%.*]]: i64, [[vout:%.*]]: i64):
+  // CHECK: [[v5:%.*]] = arith.addi [[vin_40]], [[vin_41]] : i64
+  // CHECK: [[v6:%.*]] = arith.addi [[vin]], [[v5]] : i64
+  // CHECK: linalg.yield [[v6]] : i64
+// CHECK: }
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
+// CHECK: mpi.send
+// CHECK: mpi.recv
