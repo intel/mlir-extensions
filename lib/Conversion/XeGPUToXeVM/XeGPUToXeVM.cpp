@@ -479,7 +479,7 @@ class FenceToXeVMPattern : public OpConversionPattern<xegpu::FenceOp> {
   matchAndRewrite(xegpu::FenceOp op, xegpu::FenceOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    imex::xevm::MemoryScope memScope;
+    imex::xevm::MemoryScope memScope{imex::xevm::MemoryScope::WORKGROUP};
     switch (op.getFenceScope()) {
     case xegpu::FenceScope::Workgroup:
       memScope = imex::xevm::MemoryScope::WORKGROUP;
@@ -489,7 +489,7 @@ class FenceToXeVMPattern : public OpConversionPattern<xegpu::FenceOp> {
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }
-    imex::xevm::AddrSpace addrSpace;
+    imex::xevm::AddrSpace addrSpace{imex::xevm::AddrSpace::GLOBAL};
     switch (op.getMemoryKind()) {
     case xegpu::MemorySpace::Global:
       addrSpace = imex::xevm::AddrSpace::GLOBAL;
