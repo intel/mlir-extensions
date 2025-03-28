@@ -24,8 +24,8 @@ add_imex_dialect_library(MLIRXeVMTarget
   MLIRTargetLLVM
 )
 
-# Ensure SPIRV headers are included
+# Ensure SPIRV headers are included. Warning: references build directory!
 target_include_directories(MLIRXeVMTarget PRIVATE
-  ${LLVM_INCLUDE_DIR}/../lib/Target/SPIRV
+  ${LLVM_MAIN_SRC_DIR}/lib/Target/SPIRV
   ${LLVM_BINARY_DIR}/lib/Target/SPIRV
 )
