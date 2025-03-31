@@ -122,6 +122,12 @@ public:
     if (srcShape.size() != 2) {
       return mlir::failure();
     }
+
+    // Cannot handle sub byte element type
+    if (tileTy.getElementTypeBitWidth() < 8) {
+      return mlir::failure();
+    }
+
     // Check if memspace is SLM
     auto memorySpace = initTileOp.getSourceMemorySpaceAsInt();
     bool isSLM = memorySpace == 3;
