@@ -97,7 +97,7 @@ public:
                   mlir::PatternRewriter &rewriter) const override {
     auto tileTy = initTileOp.getType();
     // Skip if tile is scattered
-    if (tileTy.getScatterAttr()) {
+    if (tileTy.isScattered()) {
       return mlir::failure();
     }
     // Skip 1D tile
@@ -292,7 +292,7 @@ struct LoadTileOpPattern final
                   mlir::PatternRewriter &rewriter) const override {
     auto tile = loadTileOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
@@ -318,7 +318,7 @@ struct StoreTileOpPattern final
                   mlir::PatternRewriter &rewriter) const override {
     auto tile = storeTileOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
@@ -381,7 +381,7 @@ struct UpdateTileOffsetOpPattern final
                   mlir::PatternRewriter &rewriter) const override {
     auto tile = updateTileOffsetOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     // Return if indices are already set
@@ -446,10 +446,10 @@ struct SCFForOpPattern final : public mlir::OpRewritePattern<mlir::scf::ForOp> {
           return rewriter.notifyMatchFailure(scfForOp, "TileType mismatch.");
         }
         auto initTileTy = mlir::dyn_cast<imex::xetile::TileType>(initTy);
-        if (initTileTy.getScatterAttr()) {
+        if (initTileTy.isScattered()) {
           auto argTileTy =
               mlir::dyn_cast<imex::xetile::TileType>(arg.getType());
-          if (argTileTy.getScatterAttr()) {
+          if (argTileTy.isScattered()) {
             continue;
           }
           auto scatterTileTy = addScatterAttr(argTileTy);
@@ -527,7 +527,7 @@ analyzeAtomicRMWOp(mlir::Operation *op,
 
   op->walk([&](imex::xetile::AtomicRMWOp atomicrmwOp) -> mlir::WalkResult {
     auto tileTy = atomicrmwOp.getTile().getType();
-    if (tileTy.getScatterAttr()) {
+    if (tileTy.isScattered()) {
       return mlir::WalkResult::advance();
     }
     mlir::Value tile = atomicrmwOp->getOperand(1);
