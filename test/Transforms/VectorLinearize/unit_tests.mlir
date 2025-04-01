@@ -75,3 +75,103 @@ func.func @gather_memref_2d(%base: memref<?x?xf32>, %v: vector<2x3xindex>, %mask
   %0 = vector.gather %base[%c0, %c1][%v], %mask, %pass_thru : memref<?x?xf32>, vector<2x3xindex>, vector<2x3xi1>, vector<2x3xf32> into vector<2x3xf32>
   return %0 : vector<2x3xf32>
 }
+
+// Test if with nested ops and multiple results
+func.func @test_if_nested() -> (vector<4x2xi32>, vector<2x4xi32>) {
+  %cond = arith.constant 1 : i1
+  %v0 = arith.constant dense<5> : vector<4x2xi32>
+  %v1 = arith.constant dense<6> : vector<2x4xi32>
+  // CHECK: %{{.*}}:2 = scf.if %{{.*}} -> (vector<8xi32>, vector<8xi32>)
+  %r:2 = scf.if %cond -> (vector<4x2xi32>, vector<2x4xi32>) {
+    %mul0 = arith.muli %v0, %v0 : vector<4x2xi32>
+    %add1 = arith.addi %v1, %v1 : vector<2x4xi32>
+    %result1 = arith.subi %add1, %add1 : vector<2x4xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<4x2xi32> to vector<8xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<2x4xi32> to vector<8xi32>
+    // CHECK: scf.yield %{{.*}}, %{{.*}} : vector<8xi32>, vector<8xi32>
+    scf.yield %mul0, %result1 : vector<4x2xi32>, vector<2x4xi32>
+  } else {
+    %sub0 = arith.subi %v0, %v0 : vector<4x2xi32>
+    %mul1 = arith.muli %v1, %v1 : vector<2x4xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<4x2xi32> to vector<8xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<2x4xi32> to vector<8xi32>
+    // CHECK: scf.yield %{{.*}}, %{{.*}} : vector<8xi32>, vector<8xi32>
+    scf.yield %sub0, %mul1 : vector<4x2xi32>, vector<2x4xi32>
+  }
+  // CHECK: vector.shape_cast %{{.*}}#0 : vector<8xi32> to vector<4x2xi32>
+  // CHECK: vector.shape_cast %{{.*}}#1 : vector<8xi32> to vector<2x4xi32>
+  return %r#0, %r#1 : vector<4x2xi32>, vector<2x4xi32>
+}
+
+// Test if with single 2D vector and both branches
+func.func @test_if_single_vector() -> vector<16x1xi32> {
+  %cond = arith.constant 0 : i1
+  %v = arith.constant dense<3> : vector<16x1xi32>
+  // CHECK: %{{.*}} = scf.if %{{.*}} -> (vector<16xi32>)
+  %r = scf.if %cond -> (vector<16x1xi32>) {
+    %add = arith.addi %v, %v : vector<16x1xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<16x1xi32> to vector<16xi32>
+    // CHECK: scf.yield %{{.*}} : vector<16xi32>
+    scf.yield %add : vector<16x1xi32>
+  } else {
+    %sub = arith.subi %v, %v : vector<16x1xi32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<16x1xi32> to vector<16xi32>
+    // CHECK: scf.yield %{{.*}} : vector<16xi32>
+    scf.yield %sub : vector<16x1xi32>
+  }
+  // CHECK: vector.shape_cast %{{.*}} : vector<16xi32> to vector<16x1xi32>
+  return %r : vector<16x1xi32>
+}
+
+func.func @test_if_basic(%arg0: vector<2x4xf32>, %arg1: vector<1x8xf32>) -> (vector<2x4xf32>, vector<1x8xf32>) {
+  // CHECK: %{{.*}} = vector.shape_cast %{{.*}} : vector<1x8xf32> to vector<8xf32>
+  // CHECK: %{{.*}} = vector.shape_cast %{{.*}} : vector<2x4xf32> to vector<8xf32>
+  %0 = vector.shape_cast %arg1 : vector<1x8xf32> to vector<8xf32>
+  %1 = vector.shape_cast %arg0 : vector<2x4xf32> to vector<8xf32>
+  %cond = arith.constant 1 : i1
+  // CHECK: %{{.*}}:2 = scf.if %{{.*}} -> (vector<8xf32>, vector<8xf32>) {
+  %r:2 = scf.if %cond -> (vector<2x4xf32>, vector<1x8xf32>) {
+    %sum0 = arith.addf %arg0, %arg0 : vector<2x4xf32>
+    %sum1 = arith.addf %arg1, %arg1 : vector<1x8xf32>
+    // CHECK: arith.addf %{{.*}}, %{{.*}} : vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<8xf32> to vector<2x4xf32>
+    // CHECK: arith.addf %{{.*}}, %{{.*}} : vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<8xf32> to vector<1x8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<2x4xf32> to vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<1x8xf32> to vector<8xf32>
+    // CHECK: scf.yield %{{.*}}, %{{.*}} : vector<8xf32>, vector<8xf32>
+    scf.yield %sum0, %sum1 : vector<2x4xf32>, vector<1x8xf32>
+  } else {
+    %diff0 = arith.subf %arg0, %arg0 : vector<2x4xf32>
+    %diff1 = arith.subf %arg1, %arg1 : vector<1x8xf32>
+    // CHECK: arith.subf %{{.*}}, %{{.*}} : vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<8xf32> to vector<2x4xf32>
+    // CHECK: arith.subf %{{.*}}, %{{.*}} : vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<8xf32> to vector<1x8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<2x4xf32> to vector<8xf32>
+    // CHECK: vector.shape_cast %{{.*}} : vector<1x8xf32> to vector<8xf32>
+    // CHECK: scf.yield %{{.*}}, %{{.*}} : vector<8xf32>, vector<8xf32>
+    scf.yield %diff0, %diff1 : vector<2x4xf32>, vector<1x8xf32>
+  }
+  // CHECK: vector.shape_cast %{{.*}}#0 : vector<8xf32> to vector<2x4xf32>
+  // CHECK: vector.shape_cast %{{.*}}#1 : vector<8xf32> to vector<1x8xf32>
+  return %r#0, %r#1 : vector<2x4xf32>, vector<1x8xf32>
+}
+
+func.func @test_while() -> vector<2x4xf32> {
+  %v = arith.constant dense<1.0> : vector<2x4xf32>
+  %result = scf.while (%arg0 = %v) : (vector<2x4xf32>) -> vector<2x4xf32> {
+    // CHECK: scf.while (%arg0 = %{{.*}}) : (vector<8xf32>) -> vector<8xf32> {
+    %c0 = arith.constant 0 : i32
+    %cond = arith.cmpi slt, %c0, %c0 : i32
+    scf.condition(%cond) %arg0 : vector<2x4xf32>
+  } do {
+  ^bb0(%arg1: vector<2x4xf32>):
+    // CHECK: ^bb0(%{{.*}}: vector<8xf32>):
+    %add = arith.addf %arg1, %arg1 : vector<2x4xf32>
+    scf.yield %add : vector<2x4xf32>
+    // CHECK: scf.yield %{{.*}} : vector<8xf32>
+  }
+  // CHECK: vector.shape_cast %{{.*}} : vector<8xf32> to vector<2x4xf32>
+  return %result : vector<2x4xf32>
+}
