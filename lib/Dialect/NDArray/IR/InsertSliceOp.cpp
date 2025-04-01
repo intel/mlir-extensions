@@ -80,33 +80,6 @@ void imex::ndarray::InsertSliceOp::build(
 
 namespace {
 
-/// Pattern to rewrite a insert_slice op with constant 0-sized input.
-template <typename InsertOpTy>
-class InsertSliceOpZeroFolder final
-    : public mlir::OpRewritePattern<InsertOpTy> {
-public:
-  using mlir::OpRewritePattern<InsertOpTy>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(InsertOpTy insertSliceOp,
-                  mlir::PatternRewriter &rewriter) const override {
-#if 0 // FIXME
-    auto srcTyp = ::mlir::dyn_cast<mlir::RankedTensorType>(
-        insertSliceOp.getSource().getType());
-    if (srcTyp && hasZeroSize(srcTyp.getShape())) {
-      if (insertSliceOp->getNumResults() == 0) {
-        rewriter.eraseOp(insertSliceOp);
-      } else {
-        assert(insertSliceOp->getNumResults() == 1);
-        rewriter.replaceOp(insertSliceOp, insertSliceOp.getDestination());
-      }
-      return ::mlir::success();
-    }
-#endif
-    return mlir::failure();
-  }
-};
-
 /// Pattern to rewrite a insert_slice op with constant arguments.
 /// Ported from mlir::tensor::InsertSliceOp
 template <typename InsertOpTy>
@@ -217,6 +190,5 @@ struct InsertSliceOpCastFolder final
 void imex::ndarray::InsertSliceOp::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
   results.add<InsertSliceOpConstantArgumentFolder<InsertSliceOp>,
-              InsertSliceOpCastFolder<InsertSliceOp, false>,
-              InsertSliceOpZeroFolder<InsertSliceOp>>(context);
+              InsertSliceOpCastFolder<InsertSliceOp, false>>(context);
 }

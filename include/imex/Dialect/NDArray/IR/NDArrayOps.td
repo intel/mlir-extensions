@@ -24,8 +24,6 @@ include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/Interfaces/DestinationStyleOpInterface.td"
-// include "mlir/Interfaces/ShapedOpInterfaces.td"
-// include "mlir/Interfaces/DestinationStyleOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/CastInterfaces.td"
 
@@ -36,7 +34,7 @@ def NDArray_Dialect : Dialect {
     let summary = "A high-level dialect for parallel tensor operations";
     let description = [{
             The ndarray dialect describes high-lvel operations on arrays.
-            It extends the tenssor and linalg dialects with operations which
+            It extends the tensor and linalg dialects with operations which
             have array specific semantics, like mutating operations.
 
             The dialects differs from tensor dialects in MLIR because it

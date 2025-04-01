@@ -1,4 +1,4 @@
-//===- ShardingInterfaceImpl.cpp ------------------------------------------===//
+//===- BufferizableOpInterfaceImpl.cpp ------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -132,10 +132,6 @@ struct InsertSliceOpInterface
     auto srcRank = mlir::cast<mlir::ShapedType>(srcMemref->getType()).getRank();
 
     if (srcRank == 0) {
-      //  || llvm::all_of(insertSliceOp.getSourceType().getShape(), [](auto dim)
-      //  {
-      //     return dim == 1;
-      //   })) {
       // If the source tensor is basically a scalar, we need to copy the scalar
       // value using a linalg.generic into the view of the destination buffer.
       auto subView = rewriter.create<memref::SubViewOp>(
@@ -147,9 +143,6 @@ struct InsertSliceOpInterface
       auto srcMap =
           ::mlir::AffineMap::get(dstRank, srcRank, {}, rewriter.getContext());
       auto dstMap = rewriter.getMultiDimIdentityMap(dstRank);
-      // Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      // auto scalar = rewriter.create<mlir::memref::LoadOp>(loc, srcMemref,
-      // mlir::SmallVector<Value>(srcRank, zero));
       ::mlir::SmallVector<mlir::utils::IteratorType> iterators(
           dstRank, ::mlir::utils::IteratorType::parallel);
       (void)rewriter.create<::mlir::linalg::GenericOp>(

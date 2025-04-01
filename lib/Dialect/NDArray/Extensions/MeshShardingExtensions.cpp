@@ -1,4 +1,4 @@
-//===- ShardingInterfaceImpl.cpp ------------------------------------------===//
+//===- MeshShardingExtensions.cpp -----------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -18,7 +18,6 @@
 
 #define DEBUG_TYPE "ndarray-sharding-impl"
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE << "]: ")
-// #define DBGS() (std::cerr << "[" DEBUG_TYPE << "]: ")
 
 using namespace mlir;
 using namespace mlir::mesh;
@@ -115,9 +114,11 @@ static MeshSharding ShardingFromOption(const ShardingOption &option,
 
 // Computes result sharding by extending a copy of the input sharding with
 // shard sizes. The shard sizes reflect the sizes resulting from the
-// non-copying subview operation. Requires sharding of input tensor.
+// non-copying subview operation. ShardSizes are represented as relative
+// offsets to the previous shard.
+// Requires sharding of input tensor.
 static FailureOr<MeshSharding>
-getShardedDimsOffsSharding(Value ary, OffsetSizeAndStrideOpInterface op) {
+getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
   SymbolTableCollection symbolTable;
   auto aryType = cast<RankedTensorType>(ary.getType());
   // currently no support for dynamic input shapes
@@ -413,7 +414,7 @@ struct SubviewShardingInterface
     }
     maybeInsertSourceShardingAnnotation(srcSharding, op->getOpOperand(0), b);
 
-    auto sharding = getShardedDimsOffsSharding(svop.getSource(), svop);
+    auto sharding = getShardingWithShardedDimsOffs(svop.getSource(), svop);
     if (failed(sharding))
       return failure();
     maybeInsertTargetShardingAnnotation(sharding.value(), op->getResult(0), b);
@@ -463,7 +464,8 @@ struct InsertSliceShardingInterface
     auto srcRank = svop.getSource().getType().getRank();
 
     if (srcRank > 0) {
-      auto sharding = getShardedDimsOffsSharding(svop.getDestination(), svop);
+      auto sharding =
+          getShardingWithShardedDimsOffs(svop.getDestination(), svop);
       if (failed(sharding))
         return failure();
       srcSharding = sharding.value();
@@ -503,7 +505,7 @@ struct InsertSliceShardingInterface
     } else {
       if (typedOp.getSource().getType().getRank() == 0) {
         auto sharding =
-            getShardedDimsOffsSharding(typedOp.getDestination(), typedOp);
+            getShardingWithShardedDimsOffs(typedOp.getDestination(), typedOp);
         if (failed(sharding)) {
           return failure();
         }
@@ -711,15 +713,6 @@ struct ReshapeShardingInterface
   // Currently only replicated input and output sharding is supported.
   // This covers cases where 0d tensors get reshaped to higher ranks.
 
-  // Return replication option.
-  // FailureOr<ShardingOption>
-  // getShardingOption(::mlir::Operation *op,
-  //                   ArrayRef<MeshSharding> operandShardings,
-  //                   ArrayRef<MeshSharding> resultShardings) const {
-  //   assert(operandShardings.size() >= 1);
-  //   return ShardingOption({}, operandShardings[0].getMeshAttr());
-  // }
-
   // Add replication sharding for input and result.
   LogicalResult
   addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
@@ -734,20 +727,6 @@ struct ReshapeShardingInterface
 
     return success();
   }
-
-  // Default: replication spmdization
-  // LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value>
-  // spmdizedOperands,
-  //                       ArrayRef<MeshSharding> operandShardings,
-  //                       ArrayRef<MeshSharding> resultShardings,
-  //                       IRMapping &spmdizationMap,
-  //                       SymbolTableCollection &symbolTableCollection,
-  //                       OpBuilder &builder) const {
-  //   return spmdizeFullyReplicatedOperation(op, spmdizedOperands,
-  //   operandShardings,
-  //                            resultShardings, spmdizationMap,
-  //                            symbolTableCollection, builder);
-  // }
 };
 } // namespace
 
