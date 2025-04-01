@@ -42,8 +42,7 @@ public:
 
     // check input type
     auto dstArray = op.getNlArray();
-    auto dstType =
-        mlir::dyn_cast<::imex::ndarray::NDArrayType>(dstArray.getType());
+    auto dstType = mlir::dyn_cast<::mlir::RankedTensorType>(dstArray.getType());
     if (!dstType) {
       return ::mlir::failure();
     }
@@ -63,8 +62,8 @@ public:
         op.getNlShape(), op.getAxes());
 
     // cast to original types and replace op
-    auto res = rewriter.create<imex::ndarray::CastOp>(op.getLoc(), dstType,
-                                                      newOp.getNlArray());
+    auto res = rewriter.create<::mlir::tensor::CastOp>(op.getLoc(), dstType,
+                                                       newOp.getNlArray());
     rewriter.replaceOp(op, {newOp.getHandle(), res});
 
     return ::mlir::success();
@@ -72,7 +71,7 @@ public:
 };
 
 /// Pattern to rewrite a subview op with CastOp arguments.
-/// Ported from mlir::tensor::ExtractSliceOp
+/// Ported from mlir::tensor
 class CopyPermuteCastFolder final
     : public mlir::OpRewritePattern<::imex::distruntime::CopyPermuteOp> {
 public:
@@ -83,11 +82,11 @@ public:
   matchAndRewrite(::imex::distruntime::CopyPermuteOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto src = op.getLArray();
-    auto castOp = mlir::dyn_cast<imex::ndarray::CastOp>(src.getDefiningOp());
+    auto castOp = mlir::dyn_cast<::mlir::tensor::CastOp>(src.getDefiningOp());
     if (!castOp)
       return mlir::failure();
 
-    if (!imex::ndarray::canFoldIntoConsumerOp(castOp))
+    if (!mlir::tensor::canFoldIntoConsumerOp(castOp))
       return mlir::failure();
 
     auto newOp = rewriter.create<::imex::distruntime::CopyPermuteOp>(
