@@ -41,7 +41,7 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format on
 
   // Register all external models.
-  // FIXME region::registerBufferizableOpInterfaceExternalModels(registry);
+  region::registerBufferizableOpInterfaceExternalModels(registry);
 }
 
 /// Append all the IMEX dialects to the registry contained in the given context.

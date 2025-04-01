@@ -268,13 +268,13 @@ struct CoalesceShardOpsPass
   static auto getBaseShardDimSize(T shard, T numShards, T extend) {
     return extend / numShards +
            shard.sge(numShards - (extend % numShards)).select(1l, 0l);
-  };
+  }
 
   static auto getBaseShardDimSize(int64_t shard, int64_t numShards,
                                   int64_t extend) {
     return extend / numShards +
            (shard >= numShards - (extend % numShards) ? 1 : 0);
-  };
+  }
 
   static ::mlir::SmallVector<::imex::EasyI64>
   extendHaloForSliceOp(::mlir::IRRewriter &rewriter, mlir::Operation *op,
