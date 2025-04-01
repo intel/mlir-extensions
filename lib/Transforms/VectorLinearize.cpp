@@ -623,59 +623,74 @@ struct UBPoisonOpConversion final
   }
 };
 
-// Linearize the vectors in loop like ops, e.g., scf.for. It needs to
-// update the inits, the block arguments, the yields, and the results.
-struct LoopOpInterfaceConversion final
-    : public mlir::OpInterfaceConversionPattern<mlir::LoopLikeOpInterface> {
+struct LinearizeRegionBranchOp final
+    : public mlir::OpInterfaceConversionPattern<mlir::RegionBranchOpInterface> {
   using OpInterfaceConversionPattern<
-      mlir::LoopLikeOpInterface>::OpInterfaceConversionPattern;
+      mlir::RegionBranchOpInterface>::OpInterfaceConversionPattern;
+
   mlir::LogicalResult
-  matchAndRewrite(mlir::LoopLikeOpInterface op,
-                  llvm::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const final {
+  matchAndRewrite(mlir::RegionBranchOpInterface op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto converter = getTypeConverter();
 
-    rewriter.saveInsertionPoint();
+    mlir::OpBuilder::InsertionGuard guard(rewriter);
     rewriter.startOpModification(op);
 
-    // update init args
+    llvm::SmallVector<mlir::Type> convertedTypes;
+    for (mlir::Type ty : op->getResultTypes()) {
+      convertedTypes.push_back(converter->convertType(ty));
+    }
+
+    if (convertedTypes == op->getResultTypes() &&
+        op->getOperands() == operands) {
+      return mlir::failure();
+    }
+
     op->setOperands(operands);
 
-    // Convert the types of the block arguments.
-    for (auto region : op.getLoopRegions()) {
-      if (mlir::failed(rewriter.convertRegionTypes(region, *converter)))
+    // Convert region types (block arguments and yields)
+    for (mlir::Region &region : op->getRegions()) {
+      if (mlir::failed(rewriter.convertRegionTypes(&region, *converter))) {
         return mlir::failure();
-    }
+      }
 
-    // update the yield values
-    if (auto yieldValues = op.getYieldedValuesMutable()) {
-      for (mlir::OpOperand &yield : *yieldValues) {
-        auto value = yield.get();
-        auto type = value.getType();
-        if (!converter->isLegal(type)) {
-          auto newTy = converter->convertType(type);
-          rewriter.setInsertionPoint(yield.getOwner());
-          value = rewriter.create<mlir::vector::ShapeCastOp>(loc, newTy, value);
-          yield.set(value);
+      // Process yields within each region
+      for (mlir::Block &block : region) {
+        if (auto *terminator = block.getTerminator()) {
+          for (mlir::OpOperand &yieldOperand : terminator->getOpOperands()) {
+            mlir::Value value = yieldOperand.get();
+            mlir::Type type = value.getType();
+            if (!converter->isLegal(type)) {
+              mlir::Type newTy = converter->convertType(type);
+              rewriter.setInsertionPoint(terminator);
+              mlir::Value newValue =
+                  rewriter.create<mlir::vector::ShapeCastOp>(loc, newTy, value);
+              yieldOperand.set(newValue);
+            }
+          }
         }
       }
     }
 
-    // update the result types
+    // Update result types
     rewriter.setInsertionPointAfter(op);
-    if (auto results = op.getLoopResults()) {
-      for (auto result : results.value()) {
-        if (!converter->isLegal(result.getType())) {
-          auto oldTy = result.getType();
-          auto newTy = converter->convertType(oldTy);
-          result.setType(newTy);
-          auto castOp =
-              rewriter.create<mlir::vector::ShapeCastOp>(loc, oldTy, result);
-          result.replaceAllUsesExcept(castOp.getResult(), castOp);
-        }
+    llvm::SmallVector<mlir::Value> newResults;
+    for (mlir::Value result : op->getResults()) {
+      mlir::Type oldTy = result.getType();
+      if (!converter->isLegal(oldTy)) {
+        mlir::Type newTy = converter->convertType(oldTy);
+        result.setType(newTy);
+        mlir::Operation *castOp =
+            rewriter.create<mlir::vector::ShapeCastOp>(loc, oldTy, result);
+        result.replaceAllUsesExcept(castOp->getResult(0), castOp);
+        newResults.push_back(castOp->getResult(0));
+      } else {
+        newResults.push_back(result);
       }
     }
+
     rewriter.finalizeOpModification(op);
     return mlir::success();
   }
@@ -760,6 +775,17 @@ struct VectorLinearizePass final
           return vecTy && vecTy.getRank() == 1;
         });
 
+    target.addDynamicallyLegalOp<mlir::scf::IfOp, mlir::scf::ForOp,
+                                 mlir::scf::WhileOp>([&](mlir::Operation *op) {
+      for (mlir::Type resultType : op->getResultTypes()) {
+        if (auto vecType = mlir::dyn_cast<mlir::VectorType>(resultType)) {
+          if (vecType.getRank() != 1)
+            return false;
+        }
+      }
+      return true;
+    });
+
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractElementOp>();
@@ -775,7 +801,7 @@ struct VectorLinearizePass final
                  VectorExtractOpConversion, VectorInsertOpConversion,
                  VectorSplatOpConversion, VectorLoadOpConversion,
                  VectorStoreOpConversion, VectorCreateMaskOpConversion,
-                 VectorBitCastOpConversion, LoopOpInterfaceConversion>(
+                 VectorBitCastOpConversion, LinearizeRegionBranchOp>(
         typeConverter, context);
 
     // Shuffle16x16 will fallback to Shuffle1D for non 16x16 sizes.
