@@ -17,34 +17,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-//===----------------------------------------------------------------------===//
-// NDArrayDist
-//===----------------------------------------------------------------------===//
-
-def NDArrayDist : Pass<"ndarray-dist"> {
-  let summary = "Use Dist-Ops to enable distributed NDArray Ops";
-  let description = [{
-    Transforms NDArray Ops into a sequence of operations to enable compute-follows-data
-    for distributed memory. Using the Dist dialect for disribution operations.
-
-    #### Output IR
-    - Dist dialect
-    - NDArray dialect
-    - Linalg dialect
-    - Arith dialect
-  }];
-  let constructor = "imex::createNDArrayDistPass()";
-  let dependentDialects = ["::imex::ndarray::NDArrayDialect",
-                           "::imex::dist::DistDialect",
-                           "::imex::distruntime::DistRuntimeDialect",
-                           "::mlir::arith::ArithDialect",
-                           "::mlir::bufferization::BufferizationDialect",
-                           "::mlir::linalg::LinalgDialect",
-                           "::mlir::tensor::TensorDialect",
-                           "::mlir::memref::MemRefDialect"];
-  let options = [];
-}
-
 def AddGPURegions : Pass<"add-gpu-regions"> {
   let summary = "Add RegionOps around NDArray Ops where applicable.";
   let description = [{
@@ -55,6 +27,24 @@ def AddGPURegions : Pass<"add-gpu-regions"> {
   let constructor = "imex::createAddGPURegionsPass()";
   let dependentDialects = ["::imex::region::RegionDialect"];
   let options = [];
+}
+
+//===----------------------------------------------------------------------===//
+// CoalesceShardOps
+//===----------------------------------------------------------------------===//
+
+def CoalesceShardOps : Pass<"coalesce-shard-ops"> {
+  let summary = "Coalesce shard operations from mesh dialect.";
+  let description = [{
+    Combine shard ops which would lead to resharding of tensors.
+    This pass handles coalesing of shard ops which annotate ndarray's
+    subview operations.
+  }];
+  let constructor = "imex::createCoalesceShardOpsPass()";
+  let dependentDialects = ["::mlir::mesh::MeshDialect",
+                           "::mlir::arith::ArithDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::memref::MemRefDialect"];
 }
 
 #endif // _NDARRAY_PASSES_TD_INCLUDED_

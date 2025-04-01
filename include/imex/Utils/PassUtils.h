@@ -105,7 +105,8 @@ extern ::mlir::SmallVector<int64_t> mkConstant(::mlir::ValueRange vals);
 extern ::imex::ValVec getMixedAsValues(const ::mlir::Location &loc,
                                        ::mlir::OpBuilder &builder,
                                        const ::mlir::ValueRange &dyns,
-                                       ::llvm::ArrayRef<int64_t> statics);
+                                       ::llvm::ArrayRef<int64_t> statics,
+                                       bool asI64 = false);
 
 /// similar to mlir::decomposeMixedValues but converting const values tot
 /// statics
@@ -146,6 +147,11 @@ extern ::mlir::MemRefType getMemRefType(::mlir::MLIRContext *ctxt,
                                         const ::mlir::ValueRange &sizes,
                                         ::mlir::Type elType,
                                         bool strided = true);
+
+inline ::mlir::MemRefType getMemRefType(::mlir::RankedTensorType ttype) {
+  return getMemRefType(ttype.getContext(), ttype.getShape(),
+                       ttype.getElementType());
+}
 
 /// Create a 1d MemRef alloc with given size and elType
 extern ::mlir::Value createAllocMR(::mlir::OpBuilder &builder,
@@ -326,20 +332,6 @@ inline std::string mlirTypeToString(::mlir::Type type) {
 inline std::string mkTypedFunc(const ::std::string &base, ::mlir::Type elType) {
   return base + "_" + mlirTypeToString(elType);
 }
-
-// helper for sorting operations
-struct opOrderCmp {
-  opOrderCmp(::mlir::DominanceInfo &dom) : _dom(dom){};
-  ::mlir::DominanceInfo &_dom;
-  bool operator()(::mlir::Operation *i, ::mlir::Operation *j) const {
-    if (_dom.dominates(i, j)) {
-      return true;
-    } else {
-      assert(_dom.dominates(j, i));
-      return false;
-    }
-  }
-};
 } // namespace imex
 
 extern mlir::LogicalResult parseShape(mlir::AsmParser &parser,

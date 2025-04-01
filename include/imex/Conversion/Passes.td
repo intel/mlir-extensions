@@ -57,43 +57,13 @@ def ConvertNDArrayToLinalg : Pass<"convert-ndarray-to-linalg"> {
   }];
   let constructor = "imex::createConvertNDArrayToLinalgPass()";
   let dependentDialects = ["::mlir::linalg::LinalgDialect",
-                           "::mlir::affine::AffineDialect",
-                           "::mlir::func::FuncDialect",
-                           "::mlir::arith::ArithDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::tosa::TosaDialect",
-                           "::mlir::scf::SCFDialect",
                            "::mlir::memref::MemRefDialect",
-                           "::mlir::shape::ShapeDialect",
                            "::mlir::bufferization::BufferizationDialect",
                            "::imex::region::RegionDialect"];
   let options = [];
 }
 
-//===----------------------------------------------------------------------===//
-// DistToStandard
-//===----------------------------------------------------------------------===//
-
-def ConvertDistToStandard: Pass<"convert-dist-to-standard"> {
-  let summary = "Convert from the Dist dialect to runtime calls.";
-  let description = [{
-    Convert Dist dialect operations into standard dialect operations
-    by inserting calls into a distributed runtime.
-
-    Necessary prototypes of runtime functions will be added.
-  }];
-  let constructor = "::imex::createConvertDistToStandardPass()";
-  let dependentDialects = ["::imex::ndarray::NDArrayDialect",
-                           "::imex::distruntime::DistRuntimeDialect",
-                           "::mlir::linalg::LinalgDialect",
-                           "::mlir::func::FuncDialect",
-                           "::mlir::tensor::TensorDialect",
-                           "::mlir::memref::MemRefDialect",
-                           "::mlir::arith::ArithDialect",
-                           "::mlir::scf::SCFDialect",
-                           "::mlir::bufferization::BufferizationDialect"];
-  let options = [];
-}
 
 //===----------------------------------------------------------------------===//
 // DropRegions
