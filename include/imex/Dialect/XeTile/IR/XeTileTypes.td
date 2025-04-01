@@ -150,6 +150,11 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return mlir::BoolAttr();
     }
 
+    bool isScattered() {
+      auto attr = getScatterAttr();
+      return attr && attr.getValue() == true;
+    }
+
   }];
 
   let assemblyFormat = "`<` custom<XeTileType>($shape, $elementType, $encoding) `>`";
