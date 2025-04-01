@@ -25,10 +25,10 @@
 #include <mlir/Support/FileUtilities.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
+#include "imex/Dialect/NDArray/Extensions/AllExtensions.h"
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
 #include <imex/Transforms/Passes.h>
-#include "imex/Dialect/NDArray/Extensions/AllExtensions.h"
 
 int main(int argc, char **argv) {
   ::mlir::registerAllPasses();

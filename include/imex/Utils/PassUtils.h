@@ -332,20 +332,6 @@ inline std::string mlirTypeToString(::mlir::Type type) {
 inline std::string mkTypedFunc(const ::std::string &base, ::mlir::Type elType) {
   return base + "_" + mlirTypeToString(elType);
 }
-
-// helper for sorting operations
-struct opOrderCmp {
-  opOrderCmp(::mlir::DominanceInfo &dom) : _dom(dom) {};
-  ::mlir::DominanceInfo &_dom;
-  bool operator()(::mlir::Operation *i, ::mlir::Operation *j) const {
-    if (_dom.dominates(i, j)) {
-      return true;
-    } else {
-      assert(_dom.dominates(j, i));
-      return false;
-    }
-  }
-};
 } // namespace imex
 
 extern mlir::LogicalResult parseShape(mlir::AsmParser &parser,

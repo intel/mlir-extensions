@@ -564,7 +564,7 @@ struct CoalesceShardOpsPass
       }
     });
   } // runOnOperation
-}; // CoalesceShardOpsPass
+};
 } // namespace
 
 std::unique_ptr<::mlir::Pass> createCoalesceShardOpsPass() {

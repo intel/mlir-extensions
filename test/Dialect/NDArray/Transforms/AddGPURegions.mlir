@@ -46,7 +46,7 @@ func.func @test_region(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
       // CHECK-NEXT: [[v9:%.*]] = tensor.empty() : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
       // CHECK-NEXT: region.env_region_yield [[v9]] : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v7:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
-      // CHECK-NEXT: [[vreduced:%.*]] = linalg.reduce { arith.addi {overflowFlags = #arith.overflow<none>} } ins([[v5]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) outs([[v6]] : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) dimensions = [0] 
+      // CHECK-NEXT: [[vreduced:%.*]] = linalg.reduce { arith.addi {overflowFlags = #arith.overflow<none>} } ins([[v5]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) outs([[v6]] : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) dimensions = [0]
       // CHECK-NEXT: region.env_region_yield [[vreduced]] : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v8:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> i64 {
       // CHECK-NEXT: [[v9:%.*]] = builtin.unrealized_conversion_cast [[v7]] : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> to i64
