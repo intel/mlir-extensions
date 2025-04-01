@@ -33,7 +33,7 @@ def NDArray_Dialect : Dialect {
     let cppNamespace = "::imex::ndarray";
     let summary = "A high-level dialect for parallel tensor operations";
     let description = [{
-            The ndarray dialect describes high-lvel operations on arrays.
+            The ndarray dialect describes high-level operations on arrays.
             It extends the tensor and linalg dialects with operations which
             have array specific semantics, like mutating operations.
 

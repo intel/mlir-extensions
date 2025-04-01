@@ -75,7 +75,7 @@ template <typename T>
 T getBaseShardDimSize(T shard, T numShards, T extend, T one, T zero) {
   return extend / numShards +
          shard.sge(numShards - (extend % numShards)).select(one, zero);
-};
+}
 
 template <typename T,
           typename std::enable_if<std::is_integral<T>::value>::type * = nullptr>
@@ -83,13 +83,13 @@ T getBaseShardDimSize(T shard, T numShards, T extend) {
   return extend / numShards + (shard >= numShards - (extend % numShards)
                                    ? static_cast<T>(1)
                                    : static_cast<T>(0));
-};
+}
 
 template <typename T>
 static T getBaseShardDimOff(T shard, T numShards, T extend, T zero) {
   return (shard * (extend / numShards)) +
          (shard - (numShards - (extend % numShards))).max(zero);
-};
+}
 
 template <typename T,
           typename std::enable_if<std::is_integral<T>::value>::type * = nullptr>
@@ -97,7 +97,7 @@ static T getBaseShardDimOff(T shard, T numShards, T extend) {
   return (shard * (extend / numShards)) +
          std::max(static_cast<T>(0),
                   shard - (numShards - (extend % numShards)));
-};
+}
 
 static MeshSharding ShardingFromOption(const ShardingOption &option,
                                        MLIRContext *ctxt) {
