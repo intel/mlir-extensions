@@ -264,7 +264,12 @@ def GpuXeVMAttachTarget: Pass<"xevm-attach-target", "mlir::gpu::GPUModuleOp"> {
            "Target chip.">,
     Option<"optLevel", "O", "unsigned",
            /*default=*/"2",
-           "Optimization level.">
+           "Optimization level.">,
+    ListOption<"linkLibs", "l", "std::string",
+                  "Extra bitcode libraries paths to link to.">,
+    Option<"cmdOptions", "ocloc-cmd-options", "std::string",
+                  /*default=*/ [{""}],
+                  "Command line options passed to downstream compiler">
   ];
 }
 

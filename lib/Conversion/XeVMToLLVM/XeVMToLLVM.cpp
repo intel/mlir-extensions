@@ -301,15 +301,15 @@ class MemfenceToOCLPattern : public OpConversionPattern<MemfenceOp> {
     const std::string fnName{"atomic_work_item_fence"};
     int memScopeOcl, addrSpaceOcl;
     switch (op.getAddrspace()) {
-    case imex::xevm::AddrSpace::SHARED:
-      addrSpaceOcl = 1;
+    case imex::xevm::OclAddrSpace::kShared:
+      addrSpaceOcl = 1; // CLK_LOCAL_MEM_FENCE
       break;
-    case imex::xevm::AddrSpace::GLOBAL:
-      addrSpaceOcl = 2;
+    case imex::xevm::OclAddrSpace::kGlobal:
+      addrSpaceOcl = 2; // CLK_GLOBAL_MEM_FENCE
       break;
     default:
       // GENERIC is not supported in OpenCL
-      llvm_unreachable("unsupported imex::xevm::FenceAddrSpace");
+      llvm_unreachable("Fence only supports global and shared address spaces.");
     }
     switch (op.getScope()) {
     case imex::xevm::MemoryScope::WORKGROUP:

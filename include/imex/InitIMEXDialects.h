@@ -20,8 +20,8 @@
 
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <imex/Dialect/NDArray/Extensions/AllExtensions.h>
 #include <imex/Dialect/LLVMIR/XeVMDialect.h>
+#include <imex/Dialect/NDArray/Extensions/AllExtensions.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/Region/Transforms/BufferizableOpInterfaceImpl.h>

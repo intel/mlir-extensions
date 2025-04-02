@@ -33,6 +33,8 @@ struct XeVMAttachTarget
     : public imex::impl::GpuXeVMAttachTargetBase<XeVMAttachTarget> {
   using Base::Base;
 
+  DictionaryAttr getFlags(OpBuilder &builder) const;
+
   void runOnOperation() override;
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -41,10 +43,35 @@ struct XeVMAttachTarget
 };
 } // namespace
 
+DictionaryAttr XeVMAttachTarget::getFlags(OpBuilder &builder) const {
+  SmallVector<NamedAttribute, 3> flags;
+  // Tokenize and set the optional command line options.
+  if (!cmdOptions.empty()) {
+    auto options = gpu::TargetOptions::tokenizeCmdOptions(cmdOptions);
+    if (!options.second.empty()) {
+      llvm::SmallVector<mlir::Attribute> xevmOptionAttrs;
+      for (const char *opt : options.second) {
+        xevmOptionAttrs.emplace_back(
+            mlir::StringAttr::get(builder.getContext(), StringRef(opt)));
+      }
+      flags.push_back(builder.getNamedAttr(
+          "ocloc-cmd-options",
+          mlir::ArrayAttr::get(builder.getContext(), xevmOptionAttrs)));
+    }
+  }
+
+  if (!flags.empty())
+    return builder.getDictionaryAttr(flags);
+  return nullptr;
+}
+
 void XeVMAttachTarget::runOnOperation() {
   OpBuilder builder(&getContext());
-  auto target =
-      builder.getAttr<imex::xevm::XeVMTargetAttr>(optLevel, triple, chip);
+  ArrayRef<std::string> libs(linkLibs);
+  SmallVector<StringRef> filesToLink(libs);
+  auto target = builder.getAttr<imex::xevm::XeVMTargetAttr>(
+      optLevel, triple, chip, getFlags(builder),
+      filesToLink.empty() ? nullptr : builder.getStrArrayAttr(filesToLink));
   llvm::Regex matcher(moduleMatcher);
   // Check if the name of the module matches.
   auto gpuModule = cast<gpu::GPUModuleOp>(getOperation());

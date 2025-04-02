@@ -121,6 +121,16 @@ def XeVM_BlockLoad2dOp : XeVM_Op<"blockload2d">,
         (D = C + A * B), where A has row-major layout in registers and B should have column-major layout.
       - if the tile loaded contains out of bound elements of the matrix, they are filled with 0.
       - coordinate is provided in elements, while width and pitch are provided in bytes.
+
+    Example:
+    ```mlir
+      %base_width_a = arith.constant 32 : i32
+      %base_height_a = arith.constant 8 : i32
+      %base_pitch_a = arith.constant 32 : i32
+      %x = arith.constant 0 : i32
+      %y = arith.constant 0 : i32
+      %loaded_a = xevm.blockload2d %src, %base_width_a, %base_height_a, %base_pitch_a, %x, %y {elem_size_in_bits=16, tile_width=16, tile_height=8, v_blocks=1, transpose=false, vnni_transform=false, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<8xi16>
+    ```
   }];
 
   let assemblyFormat = [{
@@ -170,6 +180,16 @@ def XeVM_BlockStore2dOp : XeVM_Op<"blockstore2d">,
       - pitch is the physical stride between the first columns of the current row and the subsequent row,
         this may include (possibly implicit) padding, alignment, or other factors.
       - coordinate is provided in elements, while width and pitch are provided in bytes.
+
+    Example:
+    ```mlir
+      %base_width_c = arith.constant 64 : i32
+      %base_height_c = arith.constant 8 : i32
+      %base_pitch_c = arith.constant 64 : i32
+      %x = arith.constant 0 : i32
+      %y = arith.constant 0 : i32
+      xevm.blockstore2d %dst, %base_width_c, %base_height_c, %base_pitch_c, %x, %y, %src {elem_size_in_bits=32, tile_width=16, tile_height=8, v_blocks=1, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32, vector<8xi32>)
+    ```
   }];
 
   let assemblyFormat = [{
@@ -190,42 +210,23 @@ def XeVM_MemoryScope : I32EnumAttr<"MemoryScope", "Memory scope for memory opera
       I32EnumAttrCase<"SYSTEM", 3, "system">
     ]>{
   let cppNamespace = "imex::xevm";
-  let genSpecializedAttr = 0;
 }
 
-def XeVM_MemoryScopeAttr:
-  EnumAttr<XeVM_Dialect, XeVM_MemoryScope, "mem_scope"> {
-    let summary = [{Describes the memory visibility scope:
-                    "workgroup" - All work-items in the same work-group.
-                    "cluster" - All work-items in the same cluster (a group of workgroups sharing SLM).
-                    "gpu" - All work-items in the global NDrange.
-                    "system" - All work-items in the global NDrange and the host program. }];
-    let assemblyFormat = "$value";
-}
-
-def XeVM_AddrSpace : I32EnumAttr<"AddrSpace", "Address spaces",
+def XeVM_AddrSpace : I32EnumAttr<"OclAddrSpace", "Address spaces in OpenCL",
     [
-      I32EnumAttrCase<"SHARED", 0, "shared">,
-      I32EnumAttrCase<"GLOBAL", 1, "global">,
-      I32EnumAttrCase<"GENERIC", 2, "generic">
+      I32EnumAttrCase<"kPrivate",  0, "private">,  // OpenCL Workitem address space, SPIRV function
+      I32EnumAttrCase<"kGlobal",   1, "global">,   // OpenCL Global memory, SPIRV crossworkgroup
+      I32EnumAttrCase<"kConstant", 2, "constant">, // OpenCL Constant memory, SPIRV uniform constant
+      I32EnumAttrCase<"kShared",   3, "shared">,   // OpenCL Local memory, SPIRV workgroup
+      I32EnumAttrCase<"kGeneric",  4, "generic">   // OpenCL Generic memory, SPIRV generic
     ]>{
   let cppNamespace = "imex::xevm";
-  let genSpecializedAttr = 0;
-}
-
-def XeVM_AddrSpaceAttr:
-  EnumAttr<XeVM_Dialect, XeVM_AddrSpace, "fence_addrspace"> {
-    let summary = [{Specifies the address space for memory operations affected by a fence:
-                    "shared" - workgroup (SLM).
-                    "global" - GPU.
-                    "generic" - both "shared" and "global".}];
-    let assemblyFormat = "$value";
 }
 
 def XeVM_MemfenceOp : XeVM_Op<"memfence">,
   Arguments<(ins
-    XeVM_MemoryScopeAttr:$scope,
-    DefaultValuedAttr<XeVM_AddrSpaceAttr, "imex::xevm::AddrSpace::GENERIC"> :$addrspace
+    XeVM_MemoryScope:$scope,
+    DefaultValuedAttr<XeVM_AddrSpace, "imex::xevm::OclAddrSpace::kGeneric"> :$addrspace
   )> {
   let summary = "Work-item's memory fence.";
   let description = [{
@@ -237,13 +238,13 @@ def XeVM_MemfenceOp : XeVM_Op<"memfence">,
     $addrspace - specify the address space of work-item's memory accesses
                 to be affected by the fence.
   }];
-  let assemblyFormat = [{`addrspace` `=` `` $addrspace `,` `scope` `=` `` $scope attr-dict}];
+  let assemblyFormat = [{`addrspace` `=` $addrspace `,` `scope` `=` $scope attr-dict}];
 }
 
 def XeVM_PrefetchOp : XeVM_Op<"prefetch">,
   Arguments<(ins
     Arg<LLVM_AnyPointer, "", [MemRead]>:$ptr,
-    XeVM_AddrSpaceAttr:$addrspace,
+    XeVM_AddrSpace:$addrspace,
     DefaultValuedAttr<XeVM_LoadCacheControlAttr, "::imex::xevm::LoadCacheControl::DEFAULT">:$l1_cache_control,
     DefaultValuedAttr<XeVM_LoadCacheControlAttr, "::imex::xevm::LoadCacheControl::DEFAULT">:$l3_cache_control
   )> {
@@ -297,6 +298,11 @@ def XeVM_BlockPrefetch2dOp : XeVM_Op<"blockprefetch2d">,
       - pitch is the physical stride between the first columns of the current row and the subsequent row,
         this may include (possibly implicit) padding, alignment, or other factors.
       - coordinate is provided in elements, while width and pitch are provided in bytes.
+
+    Example:
+    ```mlir
+      xevm.blockprefetch2d %ptr, %base_width, %base_height, %base_pitch, %x, %y {elem_size_in_bits=8, tile_width=32, tile_height=8, v_blocks=1, l1_cache_control=UC, l3_cache_control=UC} : (!llvm.ptr<1>, i32, i32, i32, i32, i32)
+    ```
   }];
 
   let assemblyFormat = [{
@@ -371,6 +377,11 @@ def XeVM_DpasOp : XeVM_Op<"dpas">,
 
     Further restrictions as well as more details can be found here:
     https://registry.khronos.org/OpenCL/extensions/intel/cl_intel_subgroup_matrix_multiply_accumulate.html
+
+    Example:
+    ```mlir
+      %c_result = xevm.dpas %c, %a, %b {pa = f16, pb = f16, rc = 8} : (vector<8xf32>, vector<8xi16>, vector<8xi32>) -> vector<8xf32>
+    ```
   }];
 
   let assemblyFormat = [{

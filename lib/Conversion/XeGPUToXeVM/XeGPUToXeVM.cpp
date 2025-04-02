@@ -467,7 +467,7 @@ class PrefetchToXeVMPattern : public OpConversionPattern<xegpu::PrefetchOp> {
     Value ptrLLVM =
         rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
     rewriter.create<imex::xevm::PrefetchOp>(
-        loc, ptrLLVM, imex::xevm::AddrSpace::GLOBAL,
+        loc, ptrLLVM, imex::xevm::OclAddrSpace::kGlobal,
         translateLoadXeGPUCacheHint(op.getL1Hint()),
         translateLoadXeGPUCacheHint(op.getL3Hint()));
     return success();
@@ -489,13 +489,13 @@ class FenceToXeVMPattern : public OpConversionPattern<xegpu::FenceOp> {
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }
-    imex::xevm::AddrSpace addrSpace{imex::xevm::AddrSpace::GLOBAL};
+    imex::xevm::OclAddrSpace addrSpace{imex::xevm::OclAddrSpace::kGlobal};
     switch (op.getMemoryKind()) {
     case xegpu::MemorySpace::Global:
-      addrSpace = imex::xevm::AddrSpace::GLOBAL;
+      addrSpace = imex::xevm::OclAddrSpace::kGlobal;
       break;
     case xegpu::MemorySpace::SLM:
-      addrSpace = imex::xevm::AddrSpace::SHARED;
+      addrSpace = imex::xevm::OclAddrSpace::kShared;
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }
