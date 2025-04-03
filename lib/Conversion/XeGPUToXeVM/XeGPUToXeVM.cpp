@@ -94,7 +94,7 @@ translateLoadXeGPUCacheHint(std::optional<xegpu::CachePolicy> hint) {
   default:
     llvm_unreachable("Unsupported cache control.");
   }
-};
+}
 
 imex::xevm::StoreCacheControl
 translateStoreXeGPUCacheHint(std::optional<xegpu::CachePolicy> hint) {
@@ -111,7 +111,7 @@ translateStoreXeGPUCacheHint(std::optional<xegpu::CachePolicy> hint) {
   default:
     llvm_unreachable("Unsupported cache control.");
   }
-};
+}
 
 class CreateNdDescToXeVMPattern
     : public OpConversionPattern<xegpu::CreateNdDescOp> {
