@@ -58,7 +58,7 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/mlir
-          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}-nocache
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Build LLVM-MLIR
         if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
