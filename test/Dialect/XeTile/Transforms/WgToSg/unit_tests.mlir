@@ -126,4 +126,38 @@ gpu.module @test_arith_extf {
         %create_mask = vector.create_mask %c128, %c100 {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} : vector<128x32xi1>
         gpu.return
     }
+
+    gpu.func @test_if(%cond: i1) {
+        %c0 = arith.constant 0 : index
+        %c1 = arith.constant 1 : index
+        %c2 = arith.constant 2 : index
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 4], sg_data = [8, 8]>} dense<0.0> : vector<32x32xf32>
+        // CHECK: %[[CST:.*]] = arith.constant dense<0.000000e+00> : vector<8x8xf32>
+        %result = scf.for %i = %c0 to %c2 step %c1 iter_args(%arg0 = %cst) -> (vector<32x32xf32>) {
+            // CHECK: scf.if {{%.*}} -> (vector<8x8xf32>) {
+            %if_result = scf.if %cond -> (vector<32x32xf32>) {
+            scf.yield %cst : vector<32x32xf32>
+            // CHECK: scf.yield {{%.*}}  : vector<8x8xf32>
+            } else {
+            scf.yield %arg0 : vector<32x32xf32>
+            // CHECK: scf.yield {{%.*}} : vector<8x8xf32>
+            }
+            scf.yield %cst : vector<32x32xf32>
+        }
+        gpu.return
+    }
+
+    gpu.func @test_if_basic(%cond: i1) {
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 4], sg_data = [4, 4]>} dense<1.0> : vector<16x16xf32>
+        // CHECK: %[[CST:.*]] = arith.constant dense<1.000000e+00> : vector<4x4xf32>
+        %result = scf.if %cond -> (vector<16x16xf32>) {
+            // CHECK: scf.if {{%.*}} -> (vector<4x4xf32>) {
+            // CHECK: scf.yield {{%.*}}  : vector<4x4xf32>
+            scf.yield %cst : vector<16x16xf32>
+        } else {
+            // CHECK: scf.yield {{%.*}}  : vector<4x4xf32>
+            scf.yield %cst : vector<16x16xf32>
+        }
+        gpu.return
+    }
 }

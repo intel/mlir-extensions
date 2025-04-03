@@ -445,6 +445,103 @@ struct WGToSGSCFYieldOpPattern : public OpConversionPattern<scf::YieldOp> {
   }
 };
 
+struct WGToSGSCFIfOpPattern : public OpConversionPattern<mlir::scf::IfOp> {
+  using OpConversionPattern<mlir::scf::IfOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op, OneToNOpAdaptor adaptor,
+                ConversionPatternRewriter &rewriter) const override {
+    if (op.getThenRegion().empty()) {
+      return mlir::failure();
+    }
+
+    // Get the yield ops from then region
+    auto thenYield = cast<scf::YieldOp>(op.getThenRegion().front().getTerminator());
+    if (thenYield.getNumOperands() != op.getNumResults()) {
+      return mlir::failure();
+    }
+
+    SmallVector<mlir::Type> newResultTypes;
+    bool needsChange = false;
+
+    // Check if inside an scf.for
+    if (auto parentFor = dyn_cast<scf::ForOp>(op->getParentOp())) {
+      // Use parent for's iter_args types
+      for (size_t i = 0; i < parentFor.getNumResults(); ++i) {
+        mlir::Type iterType = parentFor.getRegionIterArgs()[i].getType();
+        if (i < op.getNumResults() && iterType != op.getResultTypes()[i]) {
+          newResultTypes.push_back(iterType);
+          needsChange = true;
+        } else {
+          newResultTypes.push_back(op.getResultTypes()[i]);
+        }
+      }
+    } else {
+      for (size_t i = 0; i < op.getNumResults(); ++i) {
+        mlir::Value thenVal = thenYield.getOperand(i);
+        mlir::Type currentType = op.getResultTypes()[i];
+
+        if (auto defOp = thenVal.getDefiningOp()) {
+          if (auto mapAttr = defOp->getAttrOfType<xetile::WorkGroupMapAttr>("map")) {
+            auto sgData = mapAttr.getSgData();
+            auto expectedShape = llvm::SmallVector<int64_t>{sgData[0], sgData[1]};
+            mlir::Type expectedType = mlir::VectorType::get(
+                expectedShape, cast<mlir::VectorType>(thenVal.getType()).getElementType());
+            if (currentType != expectedType) {
+              newResultTypes.push_back(expectedType);
+              needsChange = true;
+            } else {
+              newResultTypes.push_back(currentType);
+            }
+            continue;
+          }
+        }
+        newResultTypes.push_back(currentType);
+      }
+    }
+
+    if (!needsChange) {
+      return mlir::failure();
+    }
+
+    auto newIfOp = rewriter.create<scf::IfOp>(
+        op.getLoc(), newResultTypes, op.getCondition(), !op.getElseRegion().empty());
+
+    // Move the then region to the new if op
+    rewriter.eraseBlock(&newIfOp.getThenRegion().front());
+    rewriter.inlineRegionBefore(op.getThenRegion(), newIfOp.getThenRegion(),
+                                newIfOp.getThenRegion().end());
+
+    // Handle the else region if it exists
+    if (!op.getElseRegion().empty()) {
+      rewriter.eraseBlock(&newIfOp.getElseRegion().front());
+      rewriter.inlineRegionBefore(op.getElseRegion(), newIfOp.getElseRegion(),
+                                  newIfOp.getElseRegion().end());
+
+      // Adjust else yield if inside scf.for
+      if (auto parentFor = dyn_cast<scf::ForOp>(op->getParentOp())) {
+        auto *elseBlock = &newIfOp.getElseRegion().front();
+        auto elseYield = cast<scf::YieldOp>(elseBlock->getTerminator());
+        SmallVector<mlir::Value> newOperands;
+
+        for (size_t i = 0; i < elseYield.getNumOperands(); ++i) {
+          if (elseYield.getOperand(i).getType() != newResultTypes[i]) {
+            newOperands.push_back(parentFor.getRegionIterArgs()[i]);
+          } else {
+            newOperands.push_back(elseYield.getOperand(i));
+          }
+        }
+
+        rewriter.setInsertionPoint(elseYield);
+        rewriter.replaceOpWithNewOp<scf::YieldOp>(elseYield, newOperands);
+      }
+    }
+
+    rewriter.replaceOp(op, newIfOp.getResults());
+    return mlir::success();
+  }
+};
+
 class WGToSGUpdateTileOffsetOpPattern
     : public OpConversionPattern<xetile::UpdateTileOffsetOp> {
   using OpConversionPattern<xetile::UpdateTileOffsetOp>::OpConversionPattern;
@@ -1164,7 +1261,9 @@ class WGToSGMathFPowIOpPattern : public OpConversionPattern<mlir::math::FPowIOp>
   }
 };
 
-static bool hasMap(Operation* op){
+
+
+static bool hasMap(mlir::Operation* op){
   if (llvm::isa<imex::xetile::LoadTileOp>(op)){
     auto tileTy =  dyn_cast<xetile::TileType>(op->getOperand(0).getType());
     if (tileTy.getWgMap())
@@ -1273,7 +1372,7 @@ void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns,
                   sgLayoutMap);
   patterns.insert<WGToSGLoadTileOpPattern, WGToSGTileMMAOpPattern, WGToSGStoreTileOpPattern,
                   WGToSGSCFForOpPattern, WGToSGUpdateTileOffsetOpPattern,
-                  WGToSGSCFYieldOpPattern, WGToSGVectorBroadcast,
+                  WGToSGSCFYieldOpPattern, WGToSGVectorBroadcast, WGToSGSCFIfOpPattern,
                   WGToSGXeTileConvertLayout, WGToSGPrefetchOpPattern,
                   WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp,
                   WGToSGArithSelectOpPattern, WGToSGMathFPowIOpPattern,
@@ -1420,19 +1519,55 @@ public:
           return true;
         });
 
-    target.addDynamicallyLegalOp<scf::YieldOp>(
-        [&](scf::YieldOp op) -> bool {
-          // For cases with scf.if having hidden yield
-          for (auto result: op.getResults()) {
-            auto tileTy = dyn_cast<xetile::TileType>(result.getType());
-            auto vecTy =  dyn_cast<VectorType>(result.getType());
-            if (tileTy && tileTy.getWgMap())
-              return false;
-            if (vecTy && hasMap(result.getDefiningOp()))
-              return false;
-          }
-          return true;
-        });
+    target.addDynamicallyLegalOp<mlir::scf::YieldOp>(
+      [&](mlir::scf::YieldOp op) -> bool {
+        for (auto operand : op.getOperands()) {
+            if (auto tileTy = mlir::dyn_cast<xetile::TileType>(operand.getType())) {
+                if (tileTy.getWgMap()) {
+                    return false;
+                }
+            }
+            auto vecTy = mlir::dyn_cast<mlir::VectorType>(operand.getType());
+            if (!vecTy) {
+                continue;
+            }
+            if (auto defOp = operand.getDefiningOp()) {
+                if (hasMap(defOp)) {
+                    return false;
+                }
+            } else if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(operand)) {
+                mlir::Block *block = blockArg.getOwner();
+                mlir::Operation *parentOp = block->getParentOp();
+                if (!parentOp) {
+                    continue;
+                }
+                if (auto parentFor = dyn_cast<mlir::scf::ForOp>(parentOp)) {
+                    size_t argNum = blockArg.getArgNumber();
+                    if (argNum < parentFor.getInitArgs().size()) {
+                        mlir::Value initArg = parentFor.getInitArgs()[argNum];
+                        if (auto initDefOp = initArg.getDefiningOp()) {
+                            if (hasMap(initDefOp)) {
+                                return false;
+                            }
+                        }
+                    }
+                } else if (auto parentIf = dyn_cast<mlir::scf::IfOp>(parentOp)) {
+                    if (auto nestedParent = dyn_cast<mlir::scf::ForOp>(parentOp->getParentOp())) {
+                        size_t argNum = blockArg.getArgNumber();
+                        if (argNum < nestedParent.getNumRegionIterArgs()) {
+                            mlir::Value initArg = nestedParent.getInitArgs()[argNum];
+                            if (auto initDefOp = initArg.getDefiningOp()) {
+                                if (hasMap(initDefOp)) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    });
 
     target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
                                  mlir::math::ExpOp, mlir::math::SqrtOp, mlir::arith::ExtFOp,
@@ -1461,10 +1596,72 @@ public:
             return false;
         });
 
-    target.addDynamicallyLegalOp<scf::IfOp>(
-    [&](scf::IfOp op) -> bool {
+    target.addDynamicallyLegalOp<mlir::scf::IfOp>(
+        [&](mlir::scf::IfOp op) -> bool {
+          if (op.getNumResults() == 0)
+            return true;
+
+          if (op.getThenRegion().empty() || op.getElseRegion().empty())
+            return true;
+
+          mlir::Block *thenBlock = &op.getThenRegion().front();
+          mlir::Block *elseBlock = &op.getElseRegion().front();
+
+          auto thenYield = llvm::dyn_cast<mlir::scf::YieldOp>(thenBlock->getTerminator());
+          auto elseYield = llvm::dyn_cast<mlir::scf::YieldOp>(elseBlock->getTerminator());
+
+          if (!thenYield || !elseYield)
+            return true;
+
+          if (thenYield.getNumOperands() != op.getNumResults() ||
+              elseYield.getNumOperands() != op.getNumResults())
+            return true;
+
+          llvm::SmallVector<mlir::Value> thenVals(thenYield.getOperands());
+          llvm::SmallVector<mlir::Value> elseVals(elseYield.getOperands());
+
+          for (unsigned i = 0; i < op.getNumResults(); ++i) {
+            mlir::Value thenVal = thenVals[i];
+            mlir::Value elseVal = elseVals[i];
+
+            // Check if either branch has a map attribute on its defining op
+            xetile::WorkGroupMapAttr mapAttr = nullptr;
+            if (auto defOp = thenVal.getDefiningOp()) {
+              mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(defOp->getAttr("map"));
+            }
+            if (!mapAttr) {
+              if (auto defOp = elseVal.getDefiningOp()) {
+                mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(defOp->getAttr("map"));
+              }
+            }
+
+            if (!mapAttr)
+              return true;
+
+            auto sgData = mapAttr.getSgData();
+            llvm::SmallVector<int64_t> expectedShape = {sgData[0], sgData[1]};
+
+            mlir::VectorType currentResultType = mlir::dyn_cast<mlir::VectorType>(op.getResult(i).getType());
+            if (!currentResultType)
+              return true;
+
+            llvm::ArrayRef<int64_t> currentShape = currentResultType.getShape();
+            if (currentShape.size() != expectedShape.size())
+              return false;
+
+            bool shapesMatch = true;
+            for (size_t j = 0; j < currentShape.size(); ++j) {
+              if (currentShape[j] != expectedShape[j]) {
+                shapesMatch = false;
+                break;
+              }
+            }
+            if (!shapesMatch)
+              return false;
+          }
+
           return true;
-    });
+        });
 
     target.addIllegalOp<xetile::ConvertLayoutOp>();
 
