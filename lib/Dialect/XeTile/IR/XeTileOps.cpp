@@ -32,6 +32,8 @@
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
+#define DEBUG_TYPE "xetile-ops"
+
 namespace imex {
 namespace xetile {
 
@@ -175,7 +177,7 @@ mlir::LogicalResult InitTileOp::verify() {
     // Check if all shape and stride values are constant.
     if (!llvm::all_of(dynamicShape, isConstantIndex) ||
         !llvm::all_of(dynamicStrides, isConstantIndex)) {
-      llvm::dbgs() << "Assuming user has verified the layout\n";
+      LLVM_DEBUG(llvm::dbgs() << "Assuming user has verified the layout\n");
       return mlir::success();
     }
 
@@ -194,7 +196,7 @@ mlir::LogicalResult InitTileOp::verify() {
           "memref operand is expected to have a column-major layout");
     }
   } else if (isSourceMemRef() && !sourceMemRefHasStaticShape())
-    llvm::dbgs() << "Assuming user has verified the layout\n";
+    LLVM_DEBUG(llvm::dbgs() << "Assuming user has verified the layout\n");
 
   return mlir::success();
 }
