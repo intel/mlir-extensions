@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
+#include "mlir/Target/LLVMIR/Dialect/All.h"
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/SourceMgr.h>
@@ -39,6 +41,9 @@ int main(int argc, char **argv) {
   ::mlir::registerAllExtensions(registry);
   ::imex::registerAllDialects(registry);
   ::imex::ndarray::registerAllExtensions(registry);
+
+  ::mlir::registerAllGPUToLLVMIRTranslations(registry);
+  imex::registerConvertXeVMToLLVMInterface(registry);
 
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));

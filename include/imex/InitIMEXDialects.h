@@ -20,11 +20,13 @@
 
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
+#include <imex/Dialect/LLVMIR/XeVMDialect.h>
 #include <imex/Dialect/NDArray/Extensions/AllExtensions.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/Region/Transforms/BufferizableOpInterfaceImpl.h>
 #include <imex/Dialect/XeTile/IR/XeTileOps.h>
+#include <imex/Target/LLVM/XeVM/Target.h>
 
 namespace imex {
 
@@ -35,13 +37,13 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
                     ::imex::ndarray::NDArrayDialect,
                     ::imex::region::RegionDialect,
                     ::imex::xetile::XeTileDialect,
-                    ::imex::gpux::GPUXDialect>();
-
-  ndarray::registerAllExtensions(registry);
+                    ::imex::gpux::GPUXDialect,
+                    ::imex::xevm::XeVMDialect>();
   // clang-format on
-
+  ndarray::registerAllExtensions(registry);
   // Register all external models.
   region::registerBufferizableOpInterfaceExternalModels(registry);
+  xevm::registerXeVMTargetInterfaceExternalModels(registry);
 }
 
 /// Append all the IMEX dialects to the registry contained in the given context.
