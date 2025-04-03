@@ -108,7 +108,7 @@ def XeVM_BlockLoad2dOp : XeVM_Op<"blockload2d">,
         - 32 for f32, bf32
         - 16 for f16, int16, bf16
         - 8 for int8, int4, int2
-      $v_blocks - number of tiles to load
+      $v_blocks - number of tiles to load (a.k.a. array length)
       $transpose - transpose the tile in registers (useful for 32 bit element type)
       $vnni_transform - transpose and pack the submatrix in registers (useful for < 32 bit element types)
       $cache_control - an enumerator that sets the L1 and L3 cache behaviour
@@ -118,7 +118,7 @@ def XeVM_BlockLoad2dOp : XeVM_Op<"blockload2d">,
         this may include (possibly implicit) padding, alignment, or other factors.
       - the $transpose and $vnni_transform parameters are mutual exclusive
       - transposing the tile loaded is typically used for the B matrix operand
-        (D = C + A * B), where A has row-major layout in registers and B should have column-major layout.
+        (D = C + A * B), where A has row-major layout and B should have column-major layout in memory.
       - if the tile loaded contains out of bound elements of the matrix, they are filled with 0.
       - coordinate is provided in elements, while width and pitch are provided in bytes.
 
@@ -154,7 +154,7 @@ def XeVM_BlockStore2dOp : XeVM_Op<"blockstore2d">,
     I32Attr:$elem_size_in_bits,
     I32Attr:$tile_width,
     I32Attr:$tile_height,
-    I32Attr:$v_blocks,
+    DefaultValuedAttr<I32Attr, "1">:$v_blocks,
     FixedVectorOfRankAndType<[1, 2, 3], [XeVM_ElemType]>:$stored_val,
     DefaultValuedAttr<XeVM_StoreCacheControlAttr, "::imex::xevm::StoreCacheControl::DEFAULT">:$l1_cache_control,
     DefaultValuedAttr<XeVM_StoreCacheControlAttr, "::imex::xevm::StoreCacheControl::DEFAULT">:$l3_cache_control

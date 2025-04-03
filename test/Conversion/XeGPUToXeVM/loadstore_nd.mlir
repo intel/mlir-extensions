@@ -1,7 +1,7 @@
 // RUN: imex-opt -convert-xegpu-to-xevm -split-input-file %s | FileCheck %s
 
-gpu.module @fence_check {
-    gpu.func @fence(%src: memref<8x16xf32, 1>, %dst: memref<8x16xf32, 1>) kernel {
+gpu.module @load_store_check {
+    gpu.func @load_store(%src: memref<8x16xf32, 1>, %dst: memref<8x16xf32, 1>) kernel {
         %srcce = memref.memory_space_cast %src : memref<8x16xf32, 1> to memref<8x16xf32>
         %dstte = memref.memory_space_cast %dst : memref<8x16xf32, 1> to memref<8x16xf32>
 
