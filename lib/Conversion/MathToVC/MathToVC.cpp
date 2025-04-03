@@ -47,12 +47,15 @@ template <typename MOp> std::string getVCIntrinsicName() {
   constexpr bool isFloorOp = std::is_same_v<MOp, math::FloorOp>;
   constexpr bool isExpOp = std::is_same_v<MOp, math::ExpOp>;
   constexpr bool isExp2Op = std::is_same_v<MOp, math::Exp2Op>;
+  constexpr bool isAbsFOp = std::is_same_v<MOp, math::AbsFOp>;
   if (isCeilOp)
     return "llvm.genx.rndu.";
   else if (isFloorOp)
     return "llvm.genx.rndd.";
   else if (isExpOp || isExp2Op)
     return "llvm.genx.exp.";
+  else if (isAbsFOp)
+    return "llvm.genx.absf.";
   else
     assert(0 && "Unsupported math Op. Add more support!");
 }
@@ -255,7 +258,8 @@ void imex::populateMathToVCPatterns(
     bool enableHighPrecisionInterimCalculation) {
   // Add patterns
   patterns.add<ElementwiseFloatOnlyMathOpPattern<math::CeilOp>,
-               ElementwiseFloatOnlyMathOpPattern<math::FloorOp>>(
+               ElementwiseFloatOnlyMathOpPattern<math::FloorOp>,
+               ElementwiseFloatOnlyMathOpPattern<math::AbsFOp>>(
       typeConverter, patterns.getContext());
   patterns.add<ExpOpPattern<math::ExpOp>, ExpOpPattern<math::Exp2Op>>(
       typeConverter, patterns.getContext(),

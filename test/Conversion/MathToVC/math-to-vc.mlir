@@ -72,6 +72,20 @@ module @gemm attributes {gpu.container_module} {
       %2 = math.exp2 %v1 : vector<16xf16>
       gpu.return
     }
+
+    // -----
+
+    // CHECK-LABEL: gpu.func @absf_f16
+    gpu.func @absf_f16(%arg0: memref<8x16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
+      %c0 = arith.constant 0 : index
+      %0 = vector.load %arg0[%c0, %c0] : memref<8x16xf16>, vector<16xf16>
+      // CHECK: %[[EXTF_F32:.*]] = arith.extf {{.*}} : vector<16xf16> to vector<16xf32>
+      // CHECK-NEXT: %[[ABSF:.*]] = func.call @llvm.genx.absf.v16f32(%[[EXTF_F32]]) : (vector<16xf32>) -> vector<16xf32>
+      // CHECK-NEXT: %[[TRUNC_F16:.*]] = arith.truncf %[[ABSF]] : vector<16xf32> to vector<16xf16>
+      %2 = math.absf %0 : vector<16xf16>
+      gpu.return
+    }
+
   }
 }
 
