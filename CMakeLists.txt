@@ -37,6 +37,22 @@ if(LINUX)
     message(STATUS "Building for target: LINUX")
 endif()
 
+
+string(FIND "${LLVM_TARGETS_TO_BUILD}" "SPIRV" SPIRV_FOUND)
+if(SPIRV_FOUND GREATER -1)
+  message(STATUS "SPIRV is part of the LLVM targets")
+  set(IMEX_SPIRV_BACKEND_ENABLED 1)
+else()
+  message(STATUS "SPIRV is not part of the LLVM targets")
+  set(IMEX_SPIRV_BACKEND_ENABLED 0)
+endif()
+
+# option(IMEX_BUILD_SPIRV_BACKEND "Append SPIRV to LLVM_TARGETS_TO_BUILD" ON)
+# if(IMEX_BUILD_SPIRV_BACKEND)
+#   set(LLVM_TARGETS_TO_BUILD "${LLVM_TARGETS_TO_BUILD};SPIRV" CACHE STRING "LLVM targets to build" FORCE)
+#   message(STATUS "IMEX adds SPIRV target to LLVM, LLVM_TARGETS_TO_BUILD = ${LLVM_TARGETS_TO_BUILD}")
+# endif()
+
 # Expected LLVM SHA
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
 message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")

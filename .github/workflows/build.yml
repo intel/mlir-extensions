@@ -58,7 +58,7 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/mlir
-          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}-nocache
 
       - name: Build LLVM-MLIR
         if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
@@ -75,7 +75,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
             -DLLVM_USE_LINKER=gold                                         \
             -DLLVM_INSTALL_UTILS=ON                                        \
-            -DLLVM_TARGETS_TO_BUILD=X86                                    \
+            -DLLVM_TARGETS_TO_BUILD="X86;SPIRV"                              \
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir

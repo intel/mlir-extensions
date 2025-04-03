@@ -660,3 +660,73 @@ extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuWait(GPUL0QUEUE *queue) {
     return;
   });
 }
+
+// Minimal upstream wrappers (for gpu-to-llvm)
+
+// When we need device, but not the command queue itself
+thread_local static GPUL0QUEUE defaultQ;
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT GPUL0QUEUE *mgpuStreamCreate() {
+  return catchAll([&]() { return new GPUL0QUEUE(); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
+mgpuStreamSynchronize(GPUL0QUEUE *stream) {
+  // Implicit sync via     desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void mgpuStreamDestroy(GPUL0QUEUE *queue) {
+  catchAll([&]() { delete queue; });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
+mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX, size_t gridY,
+                 size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
+                 size_t sharedMemBytes, GPUL0QUEUE *queue, void **params,
+                 void **extra, size_t paramsCount) {
+  return catchAll([&]() {
+    for (size_t i = 0; i < paramsCount; ++i)
+      CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
+                                               sizeof(void *), params[i]));
+    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, blockX, blockY, blockZ));
+    ze_group_count_t dispatch;
+    dispatch.groupCountX = static_cast<uint32_t>(gridX);
+    dispatch.groupCountY = static_cast<uint32_t>(gridY);
+    dispatch.groupCountZ = static_cast<uint32_t>(gridZ);
+    CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
+        queue->zeCommandList_, kernel, &dispatch, nullptr, 0, nullptr));
+  });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *
+mgpuMemAlloc(size_t size, GPUL0QUEUE *queue, bool isShared) {
+  GPUL0QUEUE *q = &defaultQ;
+  if (queue)
+    q = queue;
+  return catchAll([&]() { return allocDeviceMemory(q, size, 64, isShared); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void mgpuMemFree(GPUL0QUEUE *queue,
+                                                      void *ptr) {
+  catchAll([&]() { deallocDeviceMemory(queue, ptr); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_module_handle_t
+mgpuModuleLoad(const void *data, size_t dataSize) {
+  return catchAll([&]() { return loadModule(&defaultQ, data, dataSize); });
+}
+
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_kernel_handle_t
+mgpuModuleGetFunction(ze_module_handle_t module, const char *name) {
+  assert(module && name);
+  ze_kernel_handle_t zeKernel;
+  ze_kernel_desc_t desc = {};
+  desc.pKernelName = name;
+  CHECK_ZE_RESULT(zeKernelCreate(module, &desc, &zeKernel));
+  return zeKernel;
+}
+
+extern "C" void mgpuModuleUnload(ze_module_handle_t module) {
+  // CHECK_ZE_RESULT(zeModuleDestroy(module));
+  // These wrappers explicitly cache the module!
+}

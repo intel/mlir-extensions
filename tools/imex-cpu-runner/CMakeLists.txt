@@ -25,4 +25,5 @@ target_link_libraries(imex-cpu-runner PRIVATE
   MLIRParser
   MLIRTargetLLVMIRExport
   MLIRSupport
+  MLIRXeVMToLLVMIRTranslation
   )
