@@ -540,7 +540,8 @@ def XeTile_ReductionOp: XeTile_Op<"reduction", []> {
 
     let arguments = (ins Vector_CombiningKindAttr: $kind,
                          XeTile_2DVector: $source,
-                         DenseI64ArrayAttr: $reduction_dims);
+                         DenseI64ArrayAttr: $reduction_dims,
+                         DefaultValuedAttr<I64Attr, "0">: $reduction_size);
     let results = (outs XeTile_2DVector: $result);
     let assemblyFormat = [{
         $kind `,` $source $reduction_dims attr-dict `:` type($source) `->` type($result)
