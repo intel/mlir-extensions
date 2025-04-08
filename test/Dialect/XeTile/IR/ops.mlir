@@ -330,6 +330,12 @@ func.func @test_reduce(%source: vector<8x16xf16>) {
   return
 }
 
+func.func @test_reduce_reduction_size(%source: vector<8x16xf16>) {
+  // CHECK: xetile.reduction {{.*}} [0] {reduction_size = 8 : i64} : vector<8x16xf16> -> vector<1x16xf16>
+  %1 = xetile.reduction <add>, %source [0] { reduction_size = 8 : i64 } : vector<8x16xf16> -> vector<1x16xf16>
+  return
+}
+
 func.func @test_reduce_map(%source: vector<256x128xf16>) {
   // CHECK: xetile.reduction {{.*}} [1] {map1 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 128]>, map2 = #xetile.wg_map<sg_layout = [32, 1], sg_data = [8, 1]>} : vector<256x128xf16> -> vector<256x1xf16>
   %1 = xetile.reduction <add>, %source [1] {map1 = #wg_map_a, map2 = #wg_map_a2} : vector<256x128xf16> -> vector<256x1xf16>
