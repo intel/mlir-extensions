@@ -365,6 +365,57 @@ struct RemoveRedundantTransposeOpPattern
   }
 };
 
+// Remove XeTile reduction's reduction_size attribute and replace it with shape
+// casts around it.
+struct RemoveReductionSizePattern
+    : public mlir::OpRewritePattern<imex::xetile::ReductionOp> {
+  using mlir::OpRewritePattern<imex::xetile::ReductionOp>::OpRewritePattern;
+  mlir::LogicalResult
+  matchAndRewrite(imex::xetile::ReductionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op.getReductionSize() == 0)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto srcTy = op.getSource().getType();
+    auto elemTy = srcTy.getElementType();
+    auto reductionSize = static_cast<int64_t>(op.getReductionSize());
+    // Get reduction dimension "i"
+    // Op validation ensures that only a single reduction dimension is
+    // present if reduction size is set to non zero.
+    // Also source rank is restricted to 2D.
+    auto redDim = op.getReductionDims().front();
+    auto resultTy = op.getType();
+    auto numRes = resultTy.getNumElements();
+    llvm::SmallVector<int64_t> newShape;
+    if (redDim == 0) {
+      newShape.push_back(reductionSize);
+      newShape.push_back(numRes);
+    } else {
+      newShape.push_back(numRes);
+      newShape.push_back(reductionSize);
+    }
+    llvm::SmallVector<int64_t> newRedShape;
+    if (redDim == 0) {
+      newRedShape.push_back(1);
+      newRedShape.push_back(numRes);
+    } else {
+      newRedShape.push_back(numRes);
+      newRedShape.push_back(1);
+    }
+    mlir::Value newCast = rewriter.create<mlir::vector::ShapeCastOp>(
+        loc, mlir::VectorType::get(newShape, elemTy), op.getSource());
+    mlir::Value newReductionOp = rewriter.create<imex::xetile::ReductionOp>(
+        loc, mlir::VectorType::get(newRedShape, elemTy), op.getKind(), newCast,
+        op.getReductionDims());
+
+    auto shapeCastOp = rewriter.create<mlir::vector::ShapeCastOp>(
+        op.getLoc(), op.getType(), newReductionOp);
+    rewriter.replaceOp(op, shapeCastOp);
+    return mlir::success();
+  }
+};
+
 struct XeTileCanonicalizationPass final
     : public imex::impl::XeTileCanonicalizationBase<
           XeTileCanonicalizationPass> {
@@ -430,6 +481,7 @@ struct XeTileCanonicalizationPass final
 
       target.addLegalOp<mlir::memref::ReinterpretCastOp>();
       target.addLegalOp<imex::xetile::TransposeOp>();
+      target.addLegalOp<mlir::vector::ShapeCastOp>();
       // Col-major tile creattion is not allowed.
       target.addDynamicallyLegalOp<imex::xetile::InitTileOp>(
           [&](imex::xetile::InitTileOp op) {
@@ -449,6 +501,11 @@ struct XeTileCanonicalizationPass final
       target.addDynamicallyLegalOp<imex::xetile::LoadTileOp>(
           [&](imex::xetile::LoadTileOp op) {
             return isValidTile(op.getTileType());
+          });
+      // ReductionOp is legal if reduction size is 0.
+      target.addDynamicallyLegalOp<imex::xetile::ReductionOp>(
+          [&](imex::xetile::ReductionOp op) {
+            return op.getReductionSize() == 0;
           });
       // If any iterArg of the forOp is a col-major tile, it is illegal.
       target.addDynamicallyLegalOp<mlir::scf::ForOp>([&](mlir::scf::ForOp op) {
@@ -475,6 +532,7 @@ struct XeTileCanonicalizationPass final
           .add<InitTileOpPattern, LoadTileOpPattern, UpdateTileOffsetOpPattern,
                PrefetchTilePattern, ScfForOpPattern, ScfYieldOpPattern>(
               typeConverter, context);
+      patterns.add<RemoveReductionSizePattern>(context);
 
       if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                     std::move(patterns))))
