@@ -160,4 +160,12 @@ gpu.module @test_arith_extf {
         }
         gpu.return
     }
+
+    gpu.func @test_init_tile_using_addr(%src: i64, %dim0_size : index, %dim1_size : index,
+      %dim0_stride : index, %dim1_stride : index ) {
+      //CHECK: xetile.init_tile {{%.*}}[{{%.*}}, {{%.*}}], [{{%.*}}, {{%.*}}], [{{%.*}}, {{%.*}}] : i64 -> !xetile.tile<4x64xf16>
+      %1 = xetile.init_tile %src[8, 16], [%dim0_size, %dim1_size], [%dim0_stride, %dim1_stride]
+        : i64 ->  !xetile.tile<128x64xf16, #xetile.tile_attr<wg_map = <sg_layout = [32, 1], sg_data = [4, 64]>>>
+      gpu.return
+  }
 }
