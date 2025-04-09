@@ -116,3 +116,15 @@ module @two_type attributes {gpu.container_module} {
     }
   }
 }
+
+// -----
+module @subbyte attributes {gpu.container_module} {
+  gpu.module @test_kernel {
+    gpu.func @test_prefetch(%arg0: memref<8x256xi1>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x256xi1> -> !xegpu.tensor_desc<8x256xi1>
+      // CHECK: func.call @llvm.genx.lsc.prefetch.2d.ugm.desc.v2i8.i8({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, i8) -> ()
+      xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x256xi1>
+      gpu.return
+    }
+  }
+}
