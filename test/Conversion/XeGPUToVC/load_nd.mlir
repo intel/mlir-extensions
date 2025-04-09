@@ -35,6 +35,18 @@ module @gemm attributes {gpu.container_module} {
       gpu.return
     }
 
+    // CHECK: gpu.func @test_load_nd_subbyte(%[[arg0:.*]]: memref<8x256xi1>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+    gpu.func @test_load_nd_subbyte(%arg0: memref<8x256xi1>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x256xi1> -> !xegpu.tensor_desc<8x256xi1>
+      // CHECK: %[[V10:.*]] = func.call @llvm.genx.lsc.load.2d.ugm.desc.v256i8.v2i8({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<256xi8>) -> vector<256xi8>
+      // CHECK: %[[V11:.*]] = vector.bitcast %[[V10]] : vector<256xi8> to vector<2048xi1>
+      // CHECK: %[[V12:.*]] = vector.shape_cast %[[V11]] : vector<2048xi1> to vector<8x256xi1>
+      %1 = xegpu.load_nd %0 : !xegpu.tensor_desc<8x256xi1> -> vector<8x256xi1>
+      %cst0 = arith.constant 0 : index
+      vector.store %1, %arg0[%cst0, %cst0] : memref<8x256xi1>, vector<8x256xi1>
+      gpu.return
+    }
+
     // CHECK: gpu.func @test_load_nd_1(%[[arg0:.*]]: memref<8x16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     gpu.func @test_load_nd_1(%arg0: memref<8x16xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
       //CHECK: %[[intptr:.*]] = memref.extract_aligned_pointer_as_index %{{.*}} : memref<8x16xf16> -> index

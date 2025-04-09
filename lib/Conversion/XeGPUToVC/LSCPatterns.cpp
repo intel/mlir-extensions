@@ -840,6 +840,31 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
             op, "Only global access supported for block load.");
       auto payload = adaptor.getTensorDesc();
       auto retTy = op.getType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block load.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+        retTy = VectorType::get(tdescTy.getShape(), elemTy);
+      }
 
       // TODO: remove this after moving transposeBitWidth into a standalone
       // pass. update the width and pictch of the payload when transposeBitWidth
@@ -908,6 +933,8 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
 
       // TODO: remove this after moving transposeBitWidth into a standalone
       // pass.
+      // NOTE: sub byte type handling also needs the bitcast to the original
+      // type after the intrinsic call.
       if (retTy != op.getType()) {
         auto targetTy = convertVectorType(op.getType()).second;
         callOp = rewriter.create<vector::BitCastOp>(loc, targetTy, callOp);
@@ -959,6 +986,31 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
       if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block prefetch.");
+      auto elemTy = tdescTy.getElementType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block prefetch.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+      }
       auto callOp = gen2DPrefetchIntrinsicCall(
           rewriter, loc, l1hint, l3hint, tdescTy, adaptor.getTensorDesc());
       rewriter.replaceOp(op, callOp);
@@ -1010,7 +1062,33 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
       if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block store.");
-
+      auto elemTy = tdescTy.getElementType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block store.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+        auto dataTy = VectorType::get({tdescTy.getNumElements()}, elemTy);
+        data = rewriter.create<vector::BitCastOp>(loc, dataTy, data);
+      }
       auto callOp =
           gen2DStoreIntrinsicCall(rewriter, loc, l1hint, l3hint, tdescTy,
                                   adaptor.getTensorDesc(), data);
