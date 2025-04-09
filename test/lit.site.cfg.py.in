@@ -42,6 +42,7 @@ config.imex_enable_excluded_tests = @IMEX_ENABLE_EXCLUDED_TESTS@
 config.imex_enable_ats_target = @IMEX_ENABLE_ATS_TARGET@
 config.imex_enable_pvc_target = @IMEX_ENABLE_PVC_TARGET@
 config.imex_enable_fs_simulator = @IMEX_ENABLE_FS_SIMULATOR@
+config.imex_enable_bindings_python = @IMEX_ENABLE_BINDINGS_PYTHON@
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""

@@ -64,6 +64,12 @@ if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
         )
 endif()
 
+if(IMEX_ENABLE_BINDINGS_PYTHON)
+    list(APPEND IMEX_TEST_DEPENDS
+        ImexPythonModules
+        )
+endif()
+
 # "Gen" is the root of all generated test cases
 add_subdirectory(Gen)
 

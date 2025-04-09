@@ -72,3 +72,11 @@ tools = [
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+llvm_config.with_environment(
+    "PYTHONPATH",
+    [
+        os.path.join(config.imex_obj_root, "python_packages"),
+    ],
+    append_path=True,
+)
