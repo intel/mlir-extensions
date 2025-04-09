@@ -208,20 +208,18 @@ public:
     for (size_t j = 0; j < offsets.size() - 2; ++j) {
         newOffsets.push_back(offsets[j]);
     }
+
+    auto sourceMemRefType = mlir::dyn_cast<mlir::MemRefType>(source.getType());
+
     for (size_t i = 0; i < offsetPermutations.size(); i++) {
       newOffsets.push_back(offsetPermutations[i][0]);
       newOffsets.push_back(offsetPermutations[i][1]);
       Value newInitTileOp = nullptr;
-      auto sourceMemRefType = mlir::dyn_cast<mlir::MemRefType>(source.getType());
-      if (!sourceMemRefType) {
-        return failure();
-      }
-
-      if (sourceMemRefType.hasStaticShape()) {
+      if (sourceMemRefType && sourceMemRefType.hasStaticShape()) {
         newInitTileOp = rewriter.create<xetile::InitTileOp>(
             loc, newTileTy, source, newOffsets);
       }
-      else {
+      else { // memref with dynamic shape or non memref source
         newInitTileOp = rewriter.create<xetile::InitTileOp>(
             loc, newTileTy, source, newOffsets, op.getMixedSizes(), op.getMixedStrides());
       }
