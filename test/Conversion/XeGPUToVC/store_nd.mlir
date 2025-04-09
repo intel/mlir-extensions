@@ -38,6 +38,15 @@ module @gemm attributes {gpu.container_module} {
       gpu.return
     }
 
+    gpu.func @test_store_nd_subbyte(%arg0: memref<8x256xi1>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
+      %c = arith.constant dense<1> : vector<8x256xi1>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x256xi1> -> !xegpu.tensor_desc<8x256xi1>
+      // CHECK: %[[V10:.*]] = vector.bitcast {{.*}} : vector<2048xi1> to vector<256xi8>
+      // CHECK: func.call @llvm.genx.lsc.store.2d.ugm.desc.v2i8.v256i8({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, %[[V10]]) : (i1, vector<2xi8>, i8, i16, i16, vector<16xi32>, i32, i32, vector<256xi8>) -> ()
+      xegpu.store_nd %c, %0 : vector<8x256xi1>, !xegpu.tensor_desc<8x256xi1>
+      gpu.return
+    }
+
     // CHECK: gpu.func @test_store_nd_1d_strided_memref(%[[arg0:.*]]: memref<32x32xf32, strided<[64, 1]>>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     gpu.func @test_store_nd_1d_strided_memref(%arg0: memref<32x32xf32, strided<[64,1], offset: 0>>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
 
