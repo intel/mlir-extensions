@@ -8,7 +8,7 @@ endif()
 
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
-set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Werror -Wnon-virtual-dtor -Wno-error=address -Wno-error=pragmas -Wno-error=pedantic -Wno-error=parentheses")
+set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wall -Werror -Wnon-virtual-dtor")
 
 if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
     # Building as part of LLVM via the external project mechanism.
@@ -283,6 +283,7 @@ endif()
 
 set(IMEX_ENABLE_BINDINGS_PYTHON 0 CACHE BOOL "Enable IMEX Python Binding")
 if (IMEX_ENABLE_BINDINGS_PYTHON)
+    set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wno-error=address -Wno-error=pragmas -Wno-error=pedantic -Wno-error=parentheses")
     set(IMEX_ENABLE_BINDINGS_PYTHON 1)
 else ()
     set(IMEX_ENABLE_BINDINGS_PYTHON 0)
