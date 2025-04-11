@@ -146,6 +146,17 @@ cd build
 cmake --build build --target doc_doxygen
 ```
 
+### Building Python bindings
+
+IMEX can be built with Python bindings. The `imex_mlir` Python package functions similarly to the [MLIR Python bindings](https://mlir.llvm.org/docs/Bindings/Python/), providing access to the MLIR objects as well as IMEX dialects and passes. To enable the bindings:
+
+- LLVM must be built with `-DMLIR_ENABLE_BINDINGS_PYTHON=1`.
+- IMEX must be built with `-DIMEX_ENABLE_BINDINGS_PYTHON=1`.
+- On systems with multiple Python implementations, you may need to specify the desired Python version, for example, `-DPython3_EXECUTABLE=$(which python3)`.
+- pybind11 and nanobind are additional build dependencies.
+
+The `imex_mlir` package is located in the `<IMEX_ROOT>/python_packages/` directory, where `<IMEX_ROOT>` refers to the IMEX build or installation directory. To use the Python bindings, include `<IMEX_ROOT>/python_packages/` in your `PYTHONPATH` environment variable. Usage examples can be found in the [Python test suite](test/python/).
+
 ## Adding a new dialect
 ```sh
 # enter root directory of mlir-extension
