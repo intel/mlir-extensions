@@ -3,9 +3,9 @@
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 
-#sg_map_a_f16 = #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-#sg_map_b_f16 = #xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
-#sg_map_c_f32 = #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+#sg_map_a_f16 = #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>
+#sg_map_b_f16 = #xegpu.layout<lane_layout = [1, 16], lane_data = [2, 1]>
+#sg_map_c_f32 = #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>
 
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
@@ -23,7 +23,7 @@ module @gemm attributes {gpu.container_module} {
       %b_loaded = xegpu.load_nd %b_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>, #sg_map_b_f16> -> vector<8x2xf16>
       %c_loaded = xegpu.load_nd %c_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #sg_map_c_f32> -> vector<8x1xf32>
 
-      %d = xegpu.dpas %a_loaded, %b_loaded, %c_loaded {sg_map_a = #sg_map_a_f16, sg_map_b = #sg_map_b_f16, sg_map_c = #sg_map_c_f32} : vector<8x1xf16>, vector<8x2xf16>, vector<8x1xf32> -> vector<8x1xf32>
+      %d = xegpu.dpas %a_loaded, %b_loaded, %c_loaded {a_layout = #sg_map_a_f16, b_layout = #sg_map_b_f16, c_layout = #sg_map_c_f32} : vector<8x1xf16>, vector<8x2xf16>, vector<8x1xf32> -> vector<8x1xf32>
 
       xegpu.store_nd %d, %c_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #sg_map_c_f32>
       gpu.return

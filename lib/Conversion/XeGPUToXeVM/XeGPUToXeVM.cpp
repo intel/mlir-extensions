@@ -122,7 +122,7 @@ class CreateNdDescToXeVMPattern
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto resultDesc = cast<TensorDescType>(op.getResult().getType());
-    auto sgMap = resultDesc.getSGMapAttr();
+    auto sgMap = resultDesc.getLayoutAttr();
     if (!sgMap) {
       op.emitError() << "XeVM expects SGMap attribute to be present for tensor "
                         "descriptors";

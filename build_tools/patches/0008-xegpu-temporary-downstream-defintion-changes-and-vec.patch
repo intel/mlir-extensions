@@ -1,6 +1,6 @@
-From 7790e4776821298f3e97d9b7f11d8d42e84ede59 Mon Sep 17 00:00:00 2001
+From 34eb42d07af1bd30183c45b24b7663ae9e0470c1 Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Fri, 21 Feb 2025 19:43:35 +0100
+Date: Wed, 9 Apr 2025 18:26:12 +0200
 Subject: [PATCH 1/1] xegpu temporary downstream definition changes and vec
 
 ---
@@ -10,10 +10,10 @@ Subject: [PATCH 1/1] xegpu temporary downstream definition changes and vec
  3 files changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index 78dfaef97420..80797cd87b82 100644
+index 16a7f63d60c8..8a518e84570d 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -309,6 +309,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
+@@ -332,6 +332,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
    let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
@@ -21,8 +21,8 @@ index 78dfaef97420..80797cd87b82 100644
                         OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint);
-@@ -881,4 +882,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
-   let extraClassDeclaration = extraBaseClassDeclaration;
+@@ -1003,4 +1004,9 @@ def XeGPU_ConvertLayoutOp: XeGPU_Op<"convert_layout", [Pure, AllTypesMatch<["sou
+     let hasVerifier = 1;
  }
 
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
@@ -32,10 +32,10 @@ index 78dfaef97420..80797cd87b82 100644
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-index 61b55c57240c..4f55566ef36b 100644
+index 0bc0f2fca2c3..87af0060aa5d 100644
 --- a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
 +++ b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-@@ -202,6 +202,7 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
+@@ -203,6 +203,7 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
      xegpu::CachePolicyAttr hint = nullptr;
      auto loadOp = rewriter.create<xegpu::LoadNdOp>(
          loc, vecTy, ndDesc, /*packed=*/nullptr, transposeAttr,
@@ -43,7 +43,7 @@ index 61b55c57240c..4f55566ef36b 100644
          /*l1_hint=*/hint,
          /*l2_hint=*/hint, /*l3_hint=*/hint);
      rewriter.replaceOp(readOp, loadOp);
-@@ -271,6 +272,7 @@ struct LoadLowering : public OpRewritePattern<vector::LoadOp> {
+@@ -272,6 +273,7 @@ struct LoadLowering : public OpRewritePattern<vector::LoadOp> {
      xegpu::CachePolicyAttr hint = nullptr;
      auto loadNdOp = rewriter.create<xegpu::LoadNdOp>(
          loc, vecTy, ndDesc, /*packed=*/nullptr, /*transpose=*/nullptr,
@@ -52,7 +52,7 @@ index 61b55c57240c..4f55566ef36b 100644
          /*l2_hint=*/hint, /*l3_hint=*/hint);
      rewriter.replaceOp(loadOp, loadNdOp);
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 25dc1f22f043..1f5361abb38e 100644
+index 0d67e3d70f94..873268c2bc10 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -70,6 +70,7 @@ static bool isWriteHintOrNone(const CachePolicyAttr &attr) {
@@ -63,7 +63,7 @@ index 25dc1f22f043..1f5361abb38e 100644
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
 
-@@ -297,7 +298,7 @@ LogicalResult LoadNdOp::verify() {
+@@ -321,7 +322,7 @@ LogicalResult LoadNdOp::verify() {
        mlir::emitWarning(getLoc()) << "Invalid transpose attr. It is ignored.";
    }
 
