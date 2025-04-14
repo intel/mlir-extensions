@@ -983,12 +983,11 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
       // where the data will be treated as 32-bit type implicitly.
       Type targetTy = type.getElementType();
 
-      xegpu::SGMapAttr sgMap = nullptr;
+      xegpu::LayoutAttr sgMap = nullptr;
       if (auto attr = type.getSgMap()) {
-        auto layout =
-            llvm::to_vector_of<uint32_t>(attr.getWiLayout().asArrayRef());
-        auto data = llvm::to_vector_of<uint32_t>(attr.getWiData().asArrayRef());
-        sgMap = xegpu::SGMapAttr::get(context, layout, data);
+        auto layout = attr.getWiLayout().asArrayRef();
+        auto data = attr.getWiData().asArrayRef();
+        sgMap = xegpu::LayoutAttr::get(context, layout, data);
       }
 
       auto memSpaceAttr = convertMemorySpace(type.getMemorySpace());

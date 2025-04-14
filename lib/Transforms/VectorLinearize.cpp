@@ -375,7 +375,7 @@ struct VectorInsertStridedSliceConversion final
     for (auto i = 0; i < srcShape[0]; i++) {
       auto srcOffset = i * srcShape[1];
       auto value = rewriter.create<mlir::vector::ExtractStridedSliceOp>(
-          loc, adaptor.getSource(), srcOffset, srcShape[1], 1);
+          loc, adaptor.getValueToStore(), srcOffset, srcShape[1], 1);
 
       auto dstOffset = linearizedOffset + i * dstShape.back();
       dstValue = rewriter.create<mlir::vector::InsertStridedSliceOp>(
@@ -496,7 +496,7 @@ struct VectorInsertOpConversion final
     if (insertOp.hasDynamicPosition())
       return rewriter.notifyMatchFailure(insertOp,
                                          "dynamic position is not supported.");
-    auto srcTy = insertOp.getSourceType();
+    auto srcTy = insertOp.getValueToStoreType();
     auto srcAsVec = mlir::dyn_cast<mlir::VectorType>(srcTy);
     uint64_t srcSize = 0;
     if (srcAsVec) {
@@ -540,7 +540,7 @@ struct VectorInsertOpConversion final
     std::iota(modifiedSrcIndices.begin(), modifiedSrcIndices.begin() + srcSize,
               0);
     auto modifiedSource = rewriter.create<mlir::vector::ShuffleOp>(
-        insertOp.getLoc(), dstTy, adaptor.getSource(), adaptor.getSource(),
+        insertOp.getLoc(), dstTy, adaptor.getValueToStore(), adaptor.getValueToStore(),
         modifiedSrcIndices);
 
     rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(

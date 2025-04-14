@@ -3,7 +3,7 @@
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 
-#sg_map = #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
+#sg_map = #xegpu.layout<lane_layout = [16], lane_data = [1]>
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
     gpu.func @load_store_2d(%src: memref<128xf32, 1>, %dst: memref<128xf32, 1>) kernel {
