@@ -9,9 +9,9 @@ module @gemm attributes {gpu.container_module} {
         %srcce = memref.memory_space_cast %src : memref<16x16xf32, 1> to memref<16x16xf32>
         %dstte = memref.memory_space_cast %dst : memref<16x16xf32, 1> to memref<16x16xf32>
 
-        %src_tdesc = xegpu.create_nd_tdesc %srcce[0, 0] : memref<16x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
-        %dst_tdesc = xegpu.create_nd_tdesc %dstte[0, 0] : memref<16x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
-        %loaded = xegpu.load_nd %src_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>> -> vector<8x1xf32>
+        %src_tdesc = xegpu.create_nd_tdesc %srcce[0, 0] : memref<16x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
+        %dst_tdesc = xegpu.create_nd_tdesc %dstte[0, 0] : memref<16x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
+        %loaded = xegpu.load_nd %src_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>> -> vector<8x1xf32>
 
         %tid_x = gpu.thread_id x
         %tid_x_i32 = arith.index_cast %tid_x : index to i32
@@ -19,12 +19,12 @@ module @gemm attributes {gpu.container_module} {
 
         %loaded_modified = vector.insert %tid_x_f32, %loaded[0, 0] : f32 into vector<8x1xf32>
 
-        xegpu.store_nd %loaded_modified, %dst_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
+        xegpu.store_nd %loaded_modified, %dst_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
 
         %c8 = arith.constant 8 : index
         %c0 = arith.constant 0 : index
-        %dst_tdesc_new = xegpu.update_nd_offset %dst_tdesc, [%c8, %c0] : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
-        xegpu.store_nd %loaded_modified, %dst_tdesc_new <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>>
+        %dst_tdesc_new = xegpu.update_nd_offset %dst_tdesc, [%c8, %c0] : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
+        xegpu.store_nd %loaded_modified, %dst_tdesc_new <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x1xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
         gpu.return
     }
   }

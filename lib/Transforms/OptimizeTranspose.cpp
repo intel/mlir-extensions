@@ -477,7 +477,7 @@ struct CreateNdDescOpPattern
     auto newTdescTy = xegpu::TensorDescType::get(
         tdescTy.getShape(), tdescTy.getElementType(), /*array_length=*/1,
         tdescTy.getBoundaryCheck(), tdescTy.getMemorySpace(),
-        tdescTy.getSgMap());
+        tdescTy.getLayout());
     auto origOffsetY = op.getOffsets().back();
     for (int64_t i = 0; i < arrayLength; ++i) {
       auto attr = rewriter.getIndexAttr(i * tdescTy.getShape()[1]);

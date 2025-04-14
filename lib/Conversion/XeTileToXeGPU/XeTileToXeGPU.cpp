@@ -973,86 +973,86 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
                              memSpace);
     });
 
-    typeConverter.addConversion([&](xetile::TileType type)
-                                    -> xegpu::TensorDescType {
-      auto context = type.getContext();
-      auto scatterAttr = type.getScatterAttr();
-      bool isScattered = scatterAttr ? scatterAttr.getValue() : false;
+    typeConverter.addConversion(
+        [&](xetile::TileType type) -> xegpu::TensorDescType {
+          auto context = type.getContext();
+          auto scatterAttr = type.getScatterAttr();
+          bool isScattered = scatterAttr ? scatterAttr.getValue() : false;
 
-      // by default the targetTy is the element type, except for SLM cases,
-      // where the data will be treated as 32-bit type implicitly.
-      Type targetTy = type.getElementType();
+          // by default the targetTy is the element type, except for SLM cases,
+          // where the data will be treated as 32-bit type implicitly.
+          Type targetTy = type.getElementType();
 
-      xegpu::SGMapAttr sgMap = nullptr;
-      if (auto attr = type.getSgMap()) {
-        auto layout =
-            llvm::to_vector_of<uint32_t>(attr.getWiLayout().asArrayRef());
-        auto data = llvm::to_vector_of<uint32_t>(attr.getWiData().asArrayRef());
-        sgMap = xegpu::SGMapAttr::get(context, layout, data);
-      }
+          xegpu::LayoutAttr sgMap = nullptr;
+          if (auto attr = type.getSgMap()) {
+            auto layout = attr.getWiLayout().asArrayRef();
+            auto data = attr.getWiData().asArrayRef();
+            sgMap = xegpu::LayoutAttr::get(context, layout, data);
+          }
 
-      auto memSpaceAttr = convertMemorySpace(type.getMemorySpace());
-      auto memSpace =
-          memSpaceAttr ? memSpaceAttr.getValue() : xegpu::MemorySpace::Global;
+          auto memSpaceAttr = convertMemorySpace(type.getMemorySpace());
+          auto memSpace = memSpaceAttr ? memSpaceAttr.getValue()
+                                       : xegpu::MemorySpace::Global;
 
-      Attribute encoding;
-      llvm::SmallVector<int64_t> shape;
-      if (isScattered) {
-        // Scattered tile is lowered to scattered tensor_desc with chunk
-        // size 1. It supports both global memory and shared memory. while
-        // scattered tile can support 2D shape, scattered tensor_desc only
-        // support 1D shape.
-        auto chunkSizeAttr = IntegerAttr::get(IntegerType::get(context, 64), 1);
-        auto msA = memSpaceAttr
-                       ? memSpaceAttr
-                       : xegpu::MemorySpaceAttr::get(context, memSpace);
+          Attribute encoding;
+          llvm::SmallVector<int64_t> shape;
+          if (isScattered) {
+            // Scattered tile is lowered to scattered tensor_desc with chunk
+            // size 1. It supports both global memory and shared memory. while
+            // scattered tile can support 2D shape, scattered tensor_desc only
+            // support 1D shape.
+            auto chunkSizeAttr =
+                IntegerAttr::get(IntegerType::get(context, 64), 1);
+            auto msA = memSpaceAttr
+                           ? memSpaceAttr
+                           : xegpu::MemorySpaceAttr::get(context, memSpace);
 
-        encoding =
-            xegpu::ScatterTensorDescAttr::get(context, msA, chunkSizeAttr);
-        shape.push_back(type.getNumElements());
-      } else if (memSpace == xegpu::MemorySpace::Global) {
-        // Blocked tile on global memory is lowered to blocked tensor_desc
-        // with the same shape.
-        auto arrayLenAttr = type.getArrayLength();
-        auto boundaryCheckAttr = BoolAttr::get(context, true);
-        encoding = xegpu::BlockTensorDescAttr::get(
-            context, memSpaceAttr, arrayLenAttr, boundaryCheckAttr);
-        shape = llvm::to_vector(type.getShape());
-      } else {
-        // for TileType created for SLM access, it will be converted into:
-        // 1. a 1D block tensor_desc if it is for row-major access
-        // 2. a scattered tensor_desc if it is for col-major access.
-        auto elemBits = type.getElementType().getIntOrFloatBitWidth();
-        auto vnniFactor = std::max<int>(32 / elemBits, 1);
+            encoding =
+                xegpu::ScatterTensorDescAttr::get(context, msA, chunkSizeAttr);
+            shape.push_back(type.getNumElements());
+          } else if (memSpace == xegpu::MemorySpace::Global) {
+            // Blocked tile on global memory is lowered to blocked tensor_desc
+            // with the same shape.
+            auto arrayLenAttr = type.getArrayLength();
+            auto boundaryCheckAttr = BoolAttr::get(context, true);
+            encoding = xegpu::BlockTensorDescAttr::get(
+                context, memSpaceAttr, arrayLenAttr, boundaryCheckAttr);
+            shape = llvm::to_vector(type.getShape());
+          } else {
+            // for TileType created for SLM access, it will be converted into:
+            // 1. a 1D block tensor_desc if it is for row-major access
+            // 2. a scattered tensor_desc if it is for col-major access.
+            auto elemBits = type.getElementType().getIntOrFloatBitWidth();
+            auto vnniFactor = std::max<int>(32 / elemBits, 1);
 
-        // SLM access only supports 32-bit or 64-bit data type, so convert
-        // the type if original element type is less than 32-bit.
-        if (elemBits < 32) {
-          targetTy = type.getElementType().isInteger()
-                         ? (Type)IntegerType::get(context, 32)
-                         : (Type)Float32Type::get(context);
-        }
+            // SLM access only supports 32-bit or 64-bit data type, so convert
+            // the type if original element type is less than 32-bit.
+            if (elemBits < 32) {
+              targetTy = type.getElementType().isInteger()
+                             ? (Type)IntegerType::get(context, 32)
+                             : (Type)Float32Type::get(context);
+            }
 
-        if (isColMajorOrder(type.getOrder())) {
-          // For access with col-major order
-          auto chunkSize = type.getShape()[0] / vnniFactor;
-          auto chunkSizeAttr =
-              IntegerAttr::get(IntegerType::get(context, 64), chunkSize);
-          encoding = xegpu::ScatterTensorDescAttr::get(context, memSpaceAttr,
-                                                       chunkSizeAttr);
-          shape = {type.getShape()[1], chunkSize};
-        } else {
-          // For access with row-major order
-          auto vecSize = type.getNumElements() / vnniFactor;
-          encoding = xegpu::BlockTensorDescAttr::get(
-              context, memSpaceAttr, nullptr /*array_len*/,
-              nullptr /*boundary_check*/);
-          shape.push_back(vecSize);
-        }
-      }
-      return xegpu::TensorDescType::get(context, shape, targetTy, encoding,
-                                        sgMap);
-    });
+            if (isColMajorOrder(type.getOrder())) {
+              // For access with col-major order
+              auto chunkSize = type.getShape()[0] / vnniFactor;
+              auto chunkSizeAttr =
+                  IntegerAttr::get(IntegerType::get(context, 64), chunkSize);
+              encoding = xegpu::ScatterTensorDescAttr::get(
+                  context, memSpaceAttr, chunkSizeAttr);
+              shape = {type.getShape()[1], chunkSize};
+            } else {
+              // For access with row-major order
+              auto vecSize = type.getNumElements() / vnniFactor;
+              encoding = xegpu::BlockTensorDescAttr::get(
+                  context, memSpaceAttr, nullptr /*array_len*/,
+                  nullptr /*boundary_check*/);
+              shape.push_back(vecSize);
+            }
+          }
+          return xegpu::TensorDescType::get(context, shape, targetTy, encoding,
+                                            sgMap);
+        });
 
     auto materializeWithCast = [&](OpBuilder &builder, Type type,
                                    ValueRange inputs, Location loc) -> Value {
