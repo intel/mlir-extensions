@@ -540,8 +540,8 @@ struct VectorInsertOpConversion final
     std::iota(modifiedSrcIndices.begin(), modifiedSrcIndices.begin() + srcSize,
               0);
     auto modifiedSource = rewriter.create<mlir::vector::ShuffleOp>(
-        insertOp.getLoc(), dstTy, adaptor.getValueToStore(), adaptor.getValueToStore(),
-        modifiedSrcIndices);
+        insertOp.getLoc(), dstTy, adaptor.getValueToStore(),
+        adaptor.getValueToStore(), modifiedSrcIndices);
 
     rewriter.replaceOpWithNewOp<mlir::vector::ShuffleOp>(
         insertOp, dstTy, adaptor.getDest(), modifiedSource,
