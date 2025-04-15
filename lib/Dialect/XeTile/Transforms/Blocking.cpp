@@ -1423,7 +1423,7 @@ public:
               r->eraseArgument(arg.getArgNumber());
           }
         } // end of iface.hasLoop()
-      } // end of convert the region arguments
+      }   // end of convert the region arguments
     }
 
     // convert BlockArguments and Inits if it is a loop,
