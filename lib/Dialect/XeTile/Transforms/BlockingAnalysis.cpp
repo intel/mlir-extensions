@@ -996,6 +996,17 @@ void BlockingAnalysis::printAnalysisResult() {
                      << ", arrayLen: " << getArrayLength(inputOpr);
       }
       llvm::dbgs() << "\n";
+    } else if (auto WhileOp = mlir::dyn_cast<mlir::scf::WhileOp>(op)) {
+      llvm::dbgs() << "\nOp: " << op->getName();
+      for (auto [i, arg] : llvm::enumerate(WhileOp.getBefore().getArguments()))
+        llvm::dbgs() << "\n   before arg[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(arg)
+                     << ", arrayLen: " << getArrayLength(arg);
+      for (auto [i, arg] : llvm::enumerate(WhileOp.getAfter().getArguments()))
+        llvm::dbgs() << "\n   after arg[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(arg)
+                     << ", arrayLen: " << getArrayLength(arg);
+      llvm::dbgs() << "\n";
     }
   });
 }

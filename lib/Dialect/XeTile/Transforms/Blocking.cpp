@@ -1327,6 +1327,15 @@ public:
     llvm::SmallVector<RegionSuccessor> successors;
     iface.getSuccessorRegions(RegionBranchPoint::parent(), successors);
 
+    // SCF::WhileOp has two regions, named before and after respectively.
+    // For parent point, it returns the before region,
+    if (auto whileOp = dyn_cast_or_null<scf::WhileOp>(op)) {
+      iface.getSuccessorRegions(whileOp.getBefore(), successors);
+    }
+
+    if (successors.size() == 0)
+      return failure();
+
     // the region iter arguments will be used as the anchor if it is a loop,
     // otherwise, the op results will be used as the anchor.
     // TODO: is it safe to assume that first is always the entry successor?
@@ -1353,62 +1362,77 @@ public:
     auto defaultIP = rewriter.saveInsertionPoint();
     PatternRewriter::InsertionGuard g(rewriter);
 
-    for (auto s : successors) { // convert the terminator
+    // convert the terminators and arguments of each region
+    for (auto [i, s] : llvm::enumerate(successors)) {
       if (s.isParent())
         continue;
-      Region *r = s.getSuccessor();
-      auto terminator = r->front().getTerminator();
-      llvm::SmallVector<Value> convertedOperands;
-      rewriter.setInsertionPoint(terminator);
-      convertOperandsOrResults(
-          terminator->getOperands(), blockSZs,
-          [&](int64_t i, Value v, ShapedType type,
-              llvm::ArrayRef<int64_t> blockSZ) {
-            auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
-            auto newOprs = addPackOp(v, newTypes, blockSZ, loc, rewriter);
-            convertedOperands.append(newOprs.begin(), newOprs.end());
-          },
-          [&](int64_t i, Value v) { convertedOperands.push_back(v); });
 
-      terminator->setOperands(convertedOperands);
+      Region *r = s.getSuccessor();
+
+      { // convert the terminator
+        auto terminator = r->front().getTerminator();
+        rewriter.setInsertionPoint(terminator);
+
+        llvm::SmallVector<Value> convertedOperands;
+        auto operands = terminator->getOpOperands();
+        // the condition operand of ConditionOp needs no conversions
+        if (isa<scf::ConditionOp>(terminator)) {
+          convertedOperands.push_back(operands[0].get());
+          operands = operands.drop_front();
+        }
+
+        convertOperandsOrResults(
+            OperandRange(operands.data(), operands.size()), blockSZs,
+            [&](int64_t i, Value v, ShapedType type,
+                llvm::ArrayRef<int64_t> blockSZ) {
+              auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
+              auto newOprs = addPackOp(v, newTypes, blockSZ, loc, rewriter);
+              convertedOperands.append(newOprs.begin(), newOprs.end());
+            },
+            [&](int64_t i, Value v) { convertedOperands.push_back(v); });
+
+        terminator->setOperands(convertedOperands);
+      } // end of convert the terminator
+
+      { // convert the region arguments for loops
+        if (iface.hasLoop()) {
+          rewriter.setInsertionPointToStart(&r->front());
+          auto arguments = llvm::to_vector(s.getSuccessorInputs());
+          convertOperandsOrResults(
+              llvm::ArrayRef<Value>(arguments), blockSZs,
+              [&](int64_t i, Value arg, ShapedType type,
+                  llvm::ArrayRef<int64_t> blockSZ) {
+                auto newTypes =
+                    convertTypes(type, blockSZ, arrayLengthAttrs[i]);
+                llvm::SmallVector<Location> locs(newTypes.size(), arg.getLoc());
+                llvm::SmallVector<Value> newArgs;
+                llvm::for_each(r->addArguments(newTypes, locs),
+                               [&](BlockArgument b) { newArgs.push_back(b); });
+                auto cast = addUnpackOp(newArgs, type, blockSZ, loc, rewriter);
+                arg.replaceAllUsesWith(cast);
+              },
+              [&](int64_t i, Value arg) {
+                auto newArg = r->addArgument(arg.getType(), arg.getLoc());
+                arg.replaceAllUsesWith(newArg);
+              });
+
+          // cleanup the old arguments, it has to done in reverse order
+          for (auto v : llvm::reverse(arguments)) {
+            auto arg = dyn_cast<BlockArgument>(v);
+            if (arg && arg.use_empty())
+              r->eraseArgument(arg.getArgNumber());
+          }
+        } // end of iface.hasLoop()
+      }   // end of convert the region arguments
     }
 
-    // convert BlockArguments and Inits if it is a loop, otherwise original
-    // inputs will used
+    // convert BlockArguments and Inits if it is a loop,
+    // otherwise original inputs will used
     llvm::SmallVector<Value> convertedOperands(op->getOperands());
-    if (iface.hasLoop()) {
-      RegionSuccessor s = successors[0];
-      Region *r = s.getSuccessor();
-      rewriter.setInsertionPointToStart(&r->front());
-      auto arguments = llvm::to_vector(s.getSuccessorInputs());
-      convertOperandsOrResults(
-          llvm::ArrayRef<Value>(arguments), blockSZs,
-          [&](int64_t i, Value arg, ShapedType type,
-              llvm::ArrayRef<int64_t> blockSZ) {
-            auto newTypes = convertTypes(type, blockSZ, arrayLengthAttrs[i]);
-            llvm::SmallVector<Location> locs(newTypes.size(), arg.getLoc());
-            llvm::SmallVector<Value> newArgs;
-            llvm::for_each(r->addArguments(newTypes, locs),
-                           [&](BlockArgument b) { newArgs.push_back(b); });
-            auto cast = addUnpackOp(newArgs, type, blockSZ, loc, rewriter);
-            arg.replaceAllUsesWith(cast);
-          },
-          [&](int64_t i, Value arg) {
-            auto newArg = r->addArgument(arg.getType(), arg.getLoc());
-            arg.replaceAllUsesWith(newArg);
-          });
-
-      // cleanup the old arguments, it has to done in reverse order
-      for (auto v : llvm::reverse(arguments)) {
-        auto arg = dyn_cast<BlockArgument>(v);
-        if (arg && arg.use_empty())
-          r->eraseArgument(arg.getArgNumber());
-      }
-
-      // convert the Inits
+    if (auto loop = dyn_cast_or_null<LoopLikeOpInterface>(op)) {
       rewriter.setInsertionPoint(op);
+      auto inits = loop.getInits();
 
-      auto inits = iface.getEntrySuccessorOperands(s);
       convertedOperands.pop_back_n(inits.size());
       convertOperandsOrResults(
           inits, blockSZs,
