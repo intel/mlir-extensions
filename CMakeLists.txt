@@ -272,6 +272,13 @@ else ()
     set(IMEX_ENABLE_PVC_TARGET 0)
 endif()
 
+set(IMEX_ENABLE_BINDINGS_PYTHON 0 CACHE BOOL "Enable IMEX Python Binding")
+if (IMEX_ENABLE_BINDINGS_PYTHON)
+    set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -Wno-error=address -Wno-error=pragmas -Wno-error=pedantic -Wno-error=parentheses")
+    set(IMEX_ENABLE_BINDINGS_PYTHON 1)
+else ()
+    set(IMEX_ENABLE_BINDINGS_PYTHON 0)
+endif()
 
 if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
     if (IMEX_ENABLE_DEBUG_BUILD)
@@ -325,6 +332,9 @@ endif()
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)
     add_subdirectory(docs)
+endif()
+if (IMEX_ENABLE_BINDINGS_PYTHON)
+    add_subdirectory(python)
 endif()
 
 # Custom target to install all imex headers
