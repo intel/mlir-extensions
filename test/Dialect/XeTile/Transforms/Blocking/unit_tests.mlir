@@ -1665,5 +1665,42 @@ gpu.module @test_kernel {
     gpu.return
   }
 
-
+  //-----
+  gpu.func @while_loop_kernel(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>, %arg3: i32) kernel attributes {VectorComputeFunctionINTEL, known_block_size = array<i32: 32, 1, 1>, known_grid_size = array<i32: 1, 1, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c10_i32 = arith.constant 10 : i32
+    %block_id_x = gpu.block_id x
+    %thread_id_x = gpu.thread_id x
+    %cast = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
+    %cast_0 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
+    %cast_1 = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
+    %index = arith.addi %block_id_x, %thread_id_x : index
+    %tile_indices = vector.splat %index : vector<1x256xindex>
+    %tile_indices_i32 = arith.index_cast %tile_indices : vector<1x256xindex> to vector<1x256xi32>
+    %arg3_splat = vector.splat %arg3 : vector<1x256xi32>
+    %mask = arith.cmpi slt, %tile_indices_i32, %arg3_splat : vector<1x256xi32>
+    %tile = xetile.init_tile %cast_1, %tile_indices : memref<?xf32>, vector<1x256xindex> -> !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %load1 = xetile.load %tile, %mask : !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x256xi1> -> vector<1x256xf32>
+    %tile_0 = xetile.init_tile %cast_0, %tile_indices : memref<?xf32>, vector<1x256xindex> -> !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %load2 = xetile.load %tile_0, %mask : !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x256xi1> -> vector<1x256xf32>
+    %sum = arith.addf %load1, %load2 : vector<1x256xf32>
+    %result:2 = scf.while (%arg4 = %sum, %arg5 = %c0_i32) : (vector<1x256xf32>, i32) -> (vector<1x256xf32>, i32) {
+        %cond = arith.cmpi slt, %arg5, %c10_i32 : i32
+        scf.condition(%cond) %arg4, %arg5 : vector<1x256xf32>, i32
+    } do {
+    ^bb0(%arg4: vector<1x256xf32>, %arg5: i32):
+        //CHECK-COUNT-16: arith.addf {{.*}} : vector<1x16xf32>
+        %new_sum = arith.addf %arg4, %load1 : vector<1x256xf32>
+        //CHECK-COUNT-16: arith.addf {{.*}} : vector<1x16xf32>
+        %new_sum2 = arith.addf %new_sum, %load2 : vector<1x256xf32>
+        %new_iter = arith.addi %arg5, %c1_i32 : i32
+        scf.yield %new_sum2, %new_iter : vector<1x256xf32>, i32
+    }
+    //CHECK-COUNT-16: xetile.init_tile {{.*}} : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    %tile_out = xetile.init_tile %cast, %tile_indices : memref<?xf32>, vector<1x256xindex> -> !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
+    //CHECK-COUNT-16: xetile.store {{.*}} : vector<1x16xf32>, !xetile.tile<1x16xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x16xi1>
+    xetile.store %result#0, %tile_out, %mask : vector<1x256xf32>, !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x256xi1>
+    gpu.return
+  }
 }
