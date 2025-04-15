@@ -148,7 +148,8 @@ void BlockingRequests::print(llvm::raw_ostream &os) const {
   if (!isInitialized()) {
     os << "Uninitialized";
   } else {
-    os << "Requests (" << requests.size() << ", " << "def: " << def << "): [";
+    os << "Requests (" << requests.size() << ", "
+       << "def: " << def << "): [";
     for (auto [i, iter] : llvm::enumerate(requests)) {
       auto point = iter.first;
       auto block = iter.second;
@@ -970,13 +971,13 @@ void BlockingAnalysis::printAnalysisResult() {
     } else if (auto forOp = mlir::dyn_cast<mlir::scf::ForOp>(op)) {
       llvm::dbgs() << "\nOp: " << op->getName();
       for (auto [i, arg] : llvm::enumerate(forOp.getRegionIterArgs()))
-        llvm::dbgs() << "\n   arg[" << i
-                     << "]: " << " --> blkSZ: " << getDefBlockSize(arg)
+        llvm::dbgs() << "\n   arg[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(arg)
                      << ", arrayLen: " << getArrayLength(arg);
 
       for (auto [i, res] : llvm::enumerate(forOp.getResults()))
-        llvm::dbgs() << "\n   res[" << i
-                     << "]: " << " --> blkSZ: " << getDefBlockSize(res)
+        llvm::dbgs() << "\n   res[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(res)
                      << ", arrayLen: " << getArrayLength(res);
       llvm::dbgs() << "\n";
     } else if (auto YieldOp = mlir::dyn_cast<mlir::scf::YieldOp>(op)) {
@@ -998,12 +999,12 @@ void BlockingAnalysis::printAnalysisResult() {
     } else if (auto WhileOp = mlir::dyn_cast<mlir::scf::WhileOp>(op)) {
       llvm::dbgs() << "\nOp: " << op->getName();
       for (auto [i, arg] : llvm::enumerate(WhileOp.getBefore().getArguments()))
-        llvm::dbgs() << "\n   before arg[" << i
-                     << "]: " << " --> blkSZ: " << getDefBlockSize(arg)
+        llvm::dbgs() << "\n   before arg[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(arg)
                      << ", arrayLen: " << getArrayLength(arg);
       for (auto [i, arg] : llvm::enumerate(WhileOp.getAfter().getArguments()))
-        llvm::dbgs() << "\n   after arg[" << i
-                     << "]: " << " --> blkSZ: " << getDefBlockSize(arg)
+        llvm::dbgs() << "\n   after arg[" << i << "]: "
+                     << " --> blkSZ: " << getDefBlockSize(arg)
                      << ", arrayLen: " << getArrayLength(arg);
       llvm::dbgs() << "\n";
     }
