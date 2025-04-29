@@ -648,9 +648,7 @@ public:
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<xegpu::DpasOp>(op, op.getType(), adaptor.getA(),
-                                               adaptor.getB(), adaptor.getC(),
-                                               /*SGMapA, SGMapB, SGMapC*/
-                                               nullptr, nullptr, nullptr);
+                                               adaptor.getB(), adaptor.getC());
     return success();
   }
 };
@@ -1061,7 +1059,6 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
           .getResult(0);
     };
 
-    typeConverter.addArgumentMaterialization(materializeWithCast);
     typeConverter.addTargetMaterialization(materializeWithCast);
     typeConverter.addSourceMaterialization(materializeWithCast);
 

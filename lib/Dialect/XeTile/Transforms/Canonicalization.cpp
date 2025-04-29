@@ -475,7 +475,6 @@ struct XeTileCanonicalizationPass final
         return tileTy;
       });
 
-      typeConverter.addArgumentMaterialization(addUnrealizedCast);
       typeConverter.addSourceMaterialization(addUnrealizedCast);
       typeConverter.addTargetMaterialization(addUnrealizedCast);
 

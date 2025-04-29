@@ -3,7 +3,6 @@
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 
-#sg_map_a_bf16 = #xegpu.layout<lane_layout = [16], lane_data = [1]>
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
     gpu.func @load_store_2d(%src: memref<128xf32, 1>, %dst: memref<128xf32, 1>) kernel {
@@ -11,11 +10,11 @@ module @gemm attributes {gpu.container_module} {
         %dstte = memref.memory_space_cast %dst : memref<128xf32, 1> to memref<128xf32>
 
         %offsets = arith.constant dense<[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]> : vector<16xindex>
-        %src_tdesc = xegpu.create_tdesc %srcce, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>, #sg_map_a_bf16>
-        %dst_tdesc = xegpu.create_tdesc %dstte, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>, #sg_map_a_bf16>
+        %src_tdesc = xegpu.create_tdesc %srcce, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>
+        %dst_tdesc = xegpu.create_tdesc %dstte, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>
 
         %mask = arith.constant dense<[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]> : vector<16xi1>
-        %loaded = xegpu.load %src_tdesc, %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, transpose}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>, #sg_map_a_bf16>, vector<16xi1> -> vector<1xf32>
+        %loaded = xegpu.load %src_tdesc, %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, vector<16xi1> -> vector<1xf32>
 
         %tid_x = gpu.thread_id x
         %tid_x_i32 = arith.index_cast %tid_x : index to i32
@@ -24,7 +23,7 @@ module @gemm attributes {gpu.container_module} {
         %c0 = arith.constant 0 : i32
         %loaded_modified = vector.insert %tid_x_f32, %loaded[0] : f32 into vector<1xf32>
 
-        xegpu.store %loaded_modified, %dst_tdesc, %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>, transpose}> : vector<1xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>, #sg_map_a_bf16>, vector<16xi1>
+        xegpu.store %loaded_modified, %dst_tdesc, %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<1xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, vector<16xi1>
         gpu.return
     }
   }

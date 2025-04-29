@@ -22,6 +22,7 @@
 #include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 
+#include "llvm/Config/Targets.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/TargetSelect.h"
@@ -233,6 +234,11 @@ XeVMTargetAttrImpl::serializeToObject(Attribute attribute, Operation *module,
   SpirSerializer serializer(
       *module, cast<imex::xevm::XeVMTargetAttr>(attribute), options);
   serializer.init();
+
+#if !LLVM_HAS_SPIRV_TARGET
+  module->emitError("Cannot run `TargetRegistry::lookupTarget()` for SPIRV "
+                    "without having the target built.");
+#endif
 
   return serializer.run();
 }

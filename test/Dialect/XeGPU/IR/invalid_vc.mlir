@@ -62,7 +62,7 @@ func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
   %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
         -> !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>
 
-  // expected-error@+1 {{load of rank-2 tensor has to be transposed.}}
+  // expected-error@+1 {{neither a valid distribution for SIMT nor consistent with the tensor descriptor for SIMD}}
   %2 = xegpu.load %1, %0 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
                           : !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x8x4xf16>
   return

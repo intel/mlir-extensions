@@ -150,7 +150,7 @@ static LLVM::CallOp createDeviceFunctionCall(
   Location loc = UnknownLoc::get(ctx);
 
   auto funcOpRes =
-      LLVM::lookupOrCreateFn(moduleOp, funcName, argTypes, retType);
+      LLVM::lookupOrCreateFn(rewriter, moduleOp, funcName, argTypes, retType);
   assert(!failed(funcOpRes));
   LLVM::LLVMFuncOp funcOp = funcOpRes.value();
   funcOp.setCConv(LLVM::cconv::CConv::SPIR_FUNC);
