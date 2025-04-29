@@ -109,7 +109,6 @@ static void populateVectorLinearizeTypeConversionsAndLegality(
     return builder.createOrFold<mlir::vector::ShapeCastOp>(loc, type,
                                                            inputs.front());
   };
-  typeConverter.addArgumentMaterialization(materializeCast);
   typeConverter.addSourceMaterialization(materializeCast);
   typeConverter.addTargetMaterialization(materializeCast);
   target.markUnknownOpDynamicallyLegal(

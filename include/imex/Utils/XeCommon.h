@@ -26,7 +26,6 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/OneToNTypeConversion.h>
 
 using namespace mlir::xegpu;
 

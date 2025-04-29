@@ -315,7 +315,6 @@ struct MathToVCPass : public imex::impl::ConvertMathToVCBase<MathToVCPass> {
       return builder.create<mlir::vector::ShapeCastOp>(loc, type,
                                                        inputs.front());
     };
-    typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);
 
