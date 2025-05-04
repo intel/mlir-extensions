@@ -12,7 +12,7 @@ func.func @main() {
   // OPENCL: func.func @main()
   %0 = func.call @alloc_buffer() :  () -> memref<8xf32>
   // OPENCL: %[[MEMREF:.*]] = gpu.alloc  host_shared () : memref<8xf32>
-  // OPENCL: memref.copy %0, %[[MEMREF]] : memref<8xf32> to memref<8xf32>
+  // OPENCL: gpu.memcpy %[[MEMREF]], %0 : memref<8xf32>, memref<8xf32>
   %1 = memref.alloc() : memref<8xf32>
   %2 = memref.alloc() : memref<8xf32>
   gpu.launch blocks(%arg0, %arg1, %arg2) in (%arg6 = %c8, %arg7 = %c1, %arg8 = %c1) threads(%arg3, %arg4, %arg5) in (%arg9 = %c1, %arg10 = %c1, %arg11 = %c1) {
