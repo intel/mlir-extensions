@@ -121,13 +121,6 @@ class CreateNdDescToXeVMPattern
                   xegpu::CreateNdDescOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto resultDesc = cast<TensorDescType>(op.getResult().getType());
-    auto sgMap = resultDesc.getLayoutAttr();
-    if (!sgMap) {
-      op.emitError() << "XeVM expects SGMap attribute to be present for tensor "
-                        "descriptors";
-      return mlir::failure();
-    }
     auto source = op.getSource();
     Type payloadElemTy = rewriter.getI32Type();
     Type i64Ty = rewriter.getI64Type();
@@ -292,8 +285,7 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
       auto l3 = translateStoreXeGPUCacheHint(op.getL3Hint());
       VectorType srcFlatVecTy =
           VectorType::get(srcVecTy.getNumElements(), srcVecTy.getElementType());
-      Value srcFlatVec = rewriter.create<vector::ShapeCastOp>(loc, srcFlatVecTy,
-                                                              op.getValue());
+      Value srcFlatVec = op.getValue();
       srcFlatVecTy = encodeVectorTypeTo(srcFlatVecTy,
                                         rewriter.getIntegerType(elemBitSize));
       srcFlatVec =
@@ -327,9 +319,7 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
         resultFlatVec = rewriter.create<vector::BitCastOp>(
             loc, encodeVectorTypeTo(loadedTy, dstVecTy.getElementType()),
             resultFlatVec);
-        auto newOp =
-            rewriter.create<vector::ShapeCastOp>(loc, dstVecTy, resultFlatVec);
-        rewriter.replaceOp(op, newOp);
+        rewriter.replaceOp(op, resultFlatVec);
       }
     }
     return success();
@@ -548,14 +538,8 @@ class DpasToXeVMPattern : public OpConversionPattern<xegpu::DpasOp> {
     }
     auto rc = IntegerAttr::get(rewriter.getI32Type(), 8);
 
-    VectorType aNty =
-        VectorType::get(aTy.getNumElements(), aTy.getElementType());
-    Value aVec = rewriter.create<vector::ShapeCastOp>(loc, aNty, op.getLhs());
-
-    VectorType bNty =
-        VectorType::get(bTy.getNumElements(), bTy.getElementType());
-    Value bVec = rewriter.create<vector::ShapeCastOp>(loc, bNty, op.getRhs());
-
+    Value aVec = op.getLhs();
+    Value bVec = op.getRhs();
     auto cvecty = cast<VectorType>(c.getType());
     VectorType cNty =
         VectorType::get(cvecty.getNumElements(), cvecty.getElementType());
