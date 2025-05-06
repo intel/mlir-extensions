@@ -474,8 +474,17 @@ class FenceToXeVMPattern : public OpConversionPattern<xegpu::FenceOp> {
     case xegpu::FenceScope::Workgroup:
       memScope = imex::xevm::MemoryScope::WORKGROUP;
       break;
+    case xegpu::FenceScope::Local:
+      memScope = imex::xevm::MemoryScope::LOCAL;
+      break;
+    case xegpu::FenceScope::Tile:
+      memScope = imex::xevm::MemoryScope::TILE;
+      break;
     case xegpu::FenceScope::GPU:
       memScope = imex::xevm::MemoryScope::GPU;
+      break;
+    case xegpu::FenceScope::System:
+      memScope = imex::xevm::MemoryScope::SYSTEM;
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }

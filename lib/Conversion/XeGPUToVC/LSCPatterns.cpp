@@ -1317,9 +1317,9 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto pred = i1_val(1);
-    uint8_t fence_op, sfid, fence_scope;
+    uint8_t fence_op_flush, sfid, fence_scope;
 
-    enum lscFenceOp {
+    enum lscFenceOpFlush {
       NONE = 0,
       EVICT = 1,
       INVALIDATE = 2,
@@ -1327,6 +1327,7 @@ public:
       CLEAN = 4,
       FLUSHL3 = 5
     };
+    // Fence scope values aligns with bspec but not all of them used
     enum lscFenceScope {
       GROUP = 0,
       LOCAL = 1,
@@ -1338,8 +1339,7 @@ public:
     };
     enum lscSFID { UGM = 0, UGML = 1, TGM = 3, SLM = 4 };
 
-    // the design limits the fence_op to NONE
-    fence_op = lscFenceOp::NONE;
+    fence_op_flush = lscFenceOpFlush::NONE;
     sfid = lscSFID::UGM;
     fence_scope = lscFenceScope::GROUP;
 
@@ -1356,12 +1356,39 @@ public:
     case xegpu::FenceScope::Workgroup:
       fence_scope = lscFenceScope::GROUP;
       break;
+    case xegpu::FenceScope::Local:
+      fence_scope = lscFenceScope::LOCAL;
+      break;
+    case xegpu::FenceScope::Tile:
+      fence_scope = lscFenceScope::TILE;
+      break;
     case xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
       break;
+    case xegpu::FenceScope::System:
+      fence_scope = lscFenceScope::SYSTEM;
+      break;
     }
 
-    SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
+    auto flushValue = op.getFenceOpFlush();
+    if (flushValue.has_value()) {
+      switch (flushValue.value()) {
+      case xegpu::FenceOpFlush::None:
+        fence_op_flush = lscFenceOpFlush::NONE;
+        break;
+      case xegpu::FenceOpFlush::Evict:
+        fence_op_flush = lscFenceOpFlush::EVICT;
+        break;
+      case xegpu::FenceOpFlush::Invalidate:
+        fence_op_flush = lscFenceOpFlush::INVALIDATE;
+        break;
+      case xegpu::FenceOpFlush::Discard:
+        fence_op_flush = lscFenceOpFlush::DISCARD;
+        break;
+      }
+    }
+
+    SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op_flush),
                             i8_val(fence_scope)};
 
     std::string funcName = "llvm.genx.lsc.fence.i1";

@@ -205,9 +205,10 @@ def XeVM_BlockStore2dOp : XeVM_Op<"blockstore2d">,
 def XeVM_MemoryScope : I32EnumAttr<"MemoryScope", "Memory scope for memory operations",
     [
       I32EnumAttrCase<"WORKGROUP", 0, "workgroup">,
-      I32EnumAttrCase<"CLUSTER", 1, "cluster">,
-      I32EnumAttrCase<"GPU", 2, "gpu">,
-      I32EnumAttrCase<"SYSTEM", 3, "system">
+      I32EnumAttrCase<"LOCAL", 1, "local">,
+      I32EnumAttrCase<"TILE", 2, "tile">,
+      I32EnumAttrCase<"GPU", 3, "gpu">,
+      I32EnumAttrCase<"SYSTEM", 4, "system">
     ]>{
   let cppNamespace = "imex::xevm";
 }

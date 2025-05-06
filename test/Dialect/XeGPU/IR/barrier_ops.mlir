@@ -43,3 +43,17 @@ func.func @fence() {
   xegpu.fence memory_kind = global, fence_scope = workgroup
   return
 }
+
+// CHECK-LABEL: func @fence_1({{.*}}) {
+func.func @fence_1() {
+  // CHECK: xegpu.fence memory_kind = global, fence_scope = tile
+  xegpu.fence memory_kind = global, fence_scope = tile
+  return
+}
+
+// CHECK-LABEL: func @fence_2({{.*}}) {
+func.func @fence_2() {
+  // CHECK: xegpu.fence memory_kind = global, fence_scope = tile, fence_op_flush = evict
+  xegpu.fence memory_kind = global, fence_scope = tile, fence_op_flush = evict
+  return
+}
