@@ -1,0 +1,69 @@
+From cfb25d2f76986fb2566b3a26fd82c3f152d88a8a Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Wed, 30 Apr 2025 11:24:51 -0500
+Subject: [PATCH] Extend xegpu op fence def
+
+---
+ .../mlir/Dialect/XeGPU/IR/XeGPUAttrs.td       | 24 +++++++++++++++++--
+ .../include/mlir/Dialect/XeGPU/IR/XeGPUOps.td |  5 ++--
+ 2 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
+index f1bed70253ef..401043e590b1 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUAttrs.td
+@@ -138,14 +138,34 @@ def XeGPU_CacheHintAttr
+ }
+
+ def XeGPU_FenceScopeWorkgroup: I32EnumAttrCase<"Workgroup", 0, "workgroup">;
+-def XeGPU_FenceScopeGPU: I32EnumAttrCase<"GPU", 1, "gpu">;
++def XeGPU_FenceScopeLocal: I32EnumAttrCase<"Local", 1, "local">;
++def XeGPU_FenceScopeTile: I32EnumAttrCase<"Tile", 2, "tile">;
++def XeGPU_FenceScopeGPU: I32EnumAttrCase<"GPU", 3, "gpu">;
++def XeGPU_FenceScopeSystem: I32EnumAttrCase<"System", 4, "system">;
+ def XeGPU_FenceScope: I32EnumAttr<"FenceScope",
+       "The enumeration for the scope of fence operation.",
+-      [XeGPU_FenceScopeWorkgroup, XeGPU_FenceScopeGPU]> {
++      [XeGPU_FenceScopeWorkgroup, XeGPU_FenceScopeLocal, XeGPU_FenceScopeTile, XeGPU_FenceScopeGPU,
++      XeGPU_FenceScopeSystem]> {
+   let genSpecializedAttr = 0;
+   let cppNamespace = "::mlir::xegpu";
+ }
+
++def XeGPU_FenceOpFlushNone: I32EnumAttrCase<"None", 0, "none">;
++def XeGPU_FenceOpFlushEvict: I32EnumAttrCase<"Evict", 1, "evict">;
++def XeGPU_FenceOpFlushInvalidate: I32EnumAttrCase<"Invalidate", 2, "invalidate">;
++def XeGPU_FenceOpFlushDiscard: I32EnumAttrCase<"Discard", 3, "discard">;
++def XeGPU_FenceOpFlush: I32EnumAttr<"FenceOpFlush",
++      "The enumeration for the scope of fence cache flushing.",
++      [XeGPU_FenceOpFlushNone, XeGPU_FenceOpFlushEvict, XeGPU_FenceOpFlushInvalidate, XeGPU_FenceOpFlushDiscard]> {
++  let genSpecializedAttr = 0;
++  let cppNamespace = "::mlir::xegpu";
++}
++def XeGPU_FenceOpFlushAttr:
++  EnumAttr<XeGPU_Dialect, XeGPU_FenceOpFlush, "fence_cache_flushing"> {
++    let summary = [{Describes the cache flushing for fence op.}];
++    let assemblyFormat = "$value";
++}
++
+ def XeGPU_FenceScopeAttr:
+   EnumAttr<XeGPU_Dialect, XeGPU_FenceScope, "fence_scope"> {
+     let summary = [{Describes the scope of fence.
+diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+index 9b001a78d6fe..01c5357e33ca 100644
+--- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
++++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
+@@ -976,8 +976,9 @@ def XeGPU_FenceOp: XeGPU_Op<"fence", []> {
+         within each workgroup. "GPU" means the scope would be across workgroups within the GPU.
+   }];
+   let arguments = (ins XeGPU_MemorySpaceAttr: $memory_kind,
+-                       XeGPU_FenceScopeAttr: $fence_scope);
+-  let assemblyFormat = [{`memory_kind` `=` `` $memory_kind `,` `fence_scope` `=` `` $fence_scope attr-dict}];
++                       XeGPU_FenceScopeAttr: $fence_scope,
++                       OptionalAttr<XeGPU_FenceOpFlushAttr>: $fence_op_flush);
++  let assemblyFormat = [{`memory_kind` `=` `` $memory_kind `,` `fence_scope` `=` `` $fence_scope (`,` `fence_op_flush` `=` `` $fence_op_flush^)? attr-dict}];
+   let extraClassDeclaration = extraBaseClassDeclaration;
+ }
+
+--
+2.34.1
