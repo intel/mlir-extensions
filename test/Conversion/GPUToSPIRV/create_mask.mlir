@@ -30,3 +30,36 @@ module attributes {
 // CHECK-NEXT: %[[CAST:.*]] = spirv.SConvert %[[SELECT2]] : i32 to i16
 // CHECK-NEXT: spirv.Bitcast %[[CAST]] : i16 to vector<16xi1>
 // CHECK-NEXT: spirv.Return
+
+// -----
+
+module attributes {
+  gpu.container_module,
+  spirv.target_env = #spirv.target_env<#spirv.vce<v1.0,
+      [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR],
+      [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spirv.resource_limits<>>
+} {
+  gpu.module @kernels {
+    // CHECK-LABEL: spirv.func @constant_mask_0
+    gpu.func @constant_mask_0() kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %0 = vector.constant_mask [0] : vector<16xi1>
+      // CHECK-NEXT: spirv.Constant dense<false> : vector<16xi1>
+      // CHECK-NEXT: spirv.Return
+      gpu.return
+    }
+    // CHECK-LABEL: spirv.func @constant_mask_7
+    gpu.func @constant_mask_7() kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %7 = vector.constant_mask [7] : vector<16xi1>
+      // CHECK-NEXT: spirv.Constant dense<[true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false]> : vector<16xi1>
+      // CHECK-NEXT: spirv.Return
+      gpu.return
+    }
+    // CHECK-LABEL: spirv.func @constant_mask_16
+    gpu.func @constant_mask_16() kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %16 = vector.constant_mask [16] : vector<16xi1>
+      // CHECK-NEXT: spirv.Constant dense<true> : vector<16xi1>
+      // CHECK-NEXT: spirv.Return
+      gpu.return
+    }
+  }
+}

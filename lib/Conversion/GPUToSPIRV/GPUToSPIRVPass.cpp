@@ -36,6 +36,7 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVTypes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/Dialect/Vector/Transforms/LoweringPatterns.h>
 #include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Matchers.h>
@@ -371,6 +372,10 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
     mlir::populateBuiltinFuncToSPIRVPatterns(typeConverter, patterns);
     mlir::populateVectorToSPIRVPatterns(typeConverter, patterns);
+    // this is for lowering of ConstantMaskOpLowering
+    // but we should also consider replacing VectorMaskConversionPattern
+    // with the upstream one
+    mlir::vector::populateVectorMaskOpLoweringPatterns(patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     mlir::index::populateIndexToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
@@ -383,7 +388,6 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
-    // for ub.poison op with vector operand
     imex::populateVectorToSPIRVPatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
