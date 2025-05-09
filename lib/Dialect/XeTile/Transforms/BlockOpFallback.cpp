@@ -580,10 +580,10 @@ public:
     analyzeAtomicRMWOp(op, convertToScatteredType);
     mlir::RewritePatternSet patterns(context);
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification =
-        mlir::GreedySimplifyRegionLevel::Disabled;
-    config.useTopDownTraversal = true;
-    config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
+    config.setRegionSimplificationLevel(
+        mlir::GreedySimplifyRegionLevel::Disabled);
+    config.setUseTopDownTraversal(true);
+    config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
     patterns.add<InitTileOpPattern>(context, uArchInterface,
                                     convertToScatteredType);
     patterns.add<LoadTileOpPattern, StoreTileOpPattern,

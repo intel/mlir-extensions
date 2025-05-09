@@ -169,10 +169,10 @@ struct HoistTransposePass final
 
     mlir::RewritePatternSet patterns(context);
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification =
-        mlir::GreedySimplifyRegionLevel::Disabled;
-    config.useTopDownTraversal = true;
-    config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
+    config.setRegionSimplificationLevel(
+        mlir::GreedySimplifyRegionLevel::Disabled);
+    config.setUseTopDownTraversal(true);
+    config.setStrictness( mlir::GreedyRewriteStrictness::ExistingAndNewOps);
     // TODO: Currently we only support hoisting TransposeOps before
     // ExtractStridedSliceOp. We may also want to support hoisting TransposeOps
     // before element-wise ops.

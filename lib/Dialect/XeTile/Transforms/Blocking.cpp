@@ -1638,14 +1638,14 @@ public:
     MLIRContext &context = getContext();
 
     GreedyRewriteConfig config;
-    config.strictMode = GreedyRewriteStrictness::ExistingOps;
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     // ops inside regions, e.g., body of scf.for, needs to be processed
     // before the op (e.g., scf.for) containing the region; otherwise
     // the blocking analysis result for region args will be destroyed
     // after scf.for is updated, leading to their users cannot be updated
     // correctly.
     mod.walk([&](Region *region) {
-      config.scope = region;
+      config.setScope(region);
       RewritePatternSet patterns(&context);
       populateXeTileBlockingPatterns(patterns, analysis);
       llvm::SmallVector<Operation *> ops;
