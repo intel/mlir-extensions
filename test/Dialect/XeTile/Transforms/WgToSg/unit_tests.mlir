@@ -167,5 +167,55 @@ gpu.module @test_arith_extf {
       %1 = xetile.init_tile %src[8, 16], [%dim0_size, %dim1_size], [%dim0_stride, %dim1_stride]
         : i64 ->  !xetile.tile<128x64xf16, #xetile.tile_attr<wg_map = <sg_layout = [32, 1], sg_data = [4, 64]>>>
       gpu.return
-  }
+    }
+
+    gpu.func @test_while_vector_op(%cond1: i1, %cond2: i1) {
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} dense<1.0> : vector<128x256xf32>
+        %zero = arith.constant {map = #xetile.wg_map<sg_layout = [2, 4], sg_data = [64, 64]>} dense<0.0> : vector<128x256xf32>
+
+        // CHECK: [[RES1:%.+]] = scf.while ({{.*}}) : (vector<32x32xf32>, i1) -> vector<32x32xf32>
+        %result1 = scf.while (%arg0 = %cst, %arg1 = %cond1) : (vector<128x256xf32>, i1) -> (vector<128x256xf32>) {
+          %cond = arith.andi %arg1, %cond1 : i1
+          scf.condition(%cond) %arg0 : vector<128x256xf32>
+        } do {
+        ^bb0(%arg0: vector<128x256xf32>):
+          // CHECK：scf.yield {{.*}} : vector<32x32xf32>, i1
+          scf.yield %cst, %cond1 : vector<128x256xf32>, i1
+        }
+
+        // CHECK: [[RES2:%.+]] = scf.while ({{.*}}) : (vector<64x64xf32>, i1) -> vector<64x64xf32>
+        %result2 = scf.while (%arg2 = %zero, %arg3 = %cond2) : (vector<128x256xf32>, i1) -> (vector<128x256xf32>) {
+          %cond = arith.andi %arg3, %cond2 : i1
+          scf.condition(%cond) %arg2 : vector<128x256xf32>
+        } do {
+        ^bb0(%arg2: vector<128x256xf32>):
+          // CHECK：scf.yield {{.*}} : vector<64x64xf32>, i1
+          scf.yield %zero, %cond2 : vector<128x256xf32>, i1
+        }
+
+        gpu.return
+    }
+    gpu.func @test_if_vector_op(%cond1: i1, %cond2: i1) {
+        %cst = arith.constant {map = #xetile.wg_map<sg_layout = [4, 8], sg_data = [32, 32]>} dense<1.0> : vector<128x256xf32>
+        %zero = arith.constant {map = #xetile.wg_map<sg_layout = [2, 4], sg_data = [64, 64]>} dense<0.0> : vector<128x256xf32>
+        // CHECK: %[[RES1:.*]] = scf.if {{.*}} -> (vector<32x32xf32>)
+        %result = scf.if %cond1 -> (vector<128x256xf32>) {
+            // CHECK：scf.yield {{.*}} : vector<32x32xf32>
+            scf.yield %cst : vector<128x256xf32>
+        } else {
+            // CHECK：scf.yield {{.*}} : vector<32x32xf32>
+            scf.yield %cst : vector<128x256xf32>
+        }
+
+        // CHECK: %[[RES2:.*]] = scf.if {{.*}} -> (vector<64x64xf32>)
+        %result1 = scf.if %cond2 -> (vector<128x256xf32>) {
+            // CHECK：scf.yield {{.*}} : vector<64x64xf32>
+            scf.yield %zero : vector<128x256xf32>
+        } else {
+            // CHECK：scf.yield {{.*}} : vector<64x64xf32>
+            scf.yield %zero : vector<128x256xf32>
+        }
+        gpu.return
+    }
+
 }
