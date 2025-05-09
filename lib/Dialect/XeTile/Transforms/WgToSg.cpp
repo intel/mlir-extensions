@@ -47,6 +47,20 @@ namespace imex {
 
 namespace imex {
 
+static xetile::WorkGroupMapAttr getWorkGroupMapAttr(Value val) {
+  auto defOp = val.getDefiningOp();
+  if (!defOp)
+    return nullptr;
+  if (auto ld = dyn_cast<xetile::LoadTileOp>(defOp)) {
+    return ld.getTile().getType().getWgMap();
+  }
+  if (defOp->hasAttr("map"))
+    return defOp->getAttrOfType<xetile::WorkGroupMapAttr>("map");
+  if (defOp->hasAttr("wg_map_c"))
+    return defOp->getAttrOfType<xetile::WorkGroupMapAttr>("wg_map_c");
+  return nullptr;
+}
+
 // This pass transform the Ops at WG level to SG level using the
 // decomposition attributes provided by wg_map.
 // clang-format off
@@ -573,15 +587,6 @@ class WGToSGXeTileConvertLayout
       return rewriter.create<arith::ConstantIndexOp>(loc, value);
     };
 
-    // get the workgroup map attribute for a value from its defining op.
-    auto getWorkGroupMapAttr = [&](Value val) {
-      auto defOp = val.getDefiningOp();
-      if (auto ld = dyn_cast<xetile::LoadTileOp>(defOp)) {
-        return ld.getTile().getType().getWgMap();
-      }
-      return defOp->getAttrOfType<xetile::WorkGroupMapAttr>("map");
-    };
-
     auto isOneUseTranspose = [&](Operation *op) {
       return isa<xetile::TransposeOp, vector::TransposeOp>(op) && op->hasOneUse();
     };
@@ -1089,6 +1094,17 @@ class WGToSGMathFPowIOpPattern : public OpConversionPattern<mlir::math::FPowIOp>
   }
 };
 
+class UnrealizedConversionCastOpPattern : public OpConversionPattern<mlir::UnrealizedConversionCastOp> {
+  using OpConversionPattern<mlir::UnrealizedConversionCastOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getOperands());
+    return mlir::success();
+  }
+};
+
 // This function traverses backwards through loop-carried dependencies in SCF
 // `for` loops to find the original (pre-loop) value.
 static Value getPreLoopValue(Value val) {
@@ -1185,7 +1201,7 @@ void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns,
                   WGToSGArithSelectOpPattern, WGToSGMathFPowIOpPattern,
                   WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp,
                   WGToSGLoadGatherOpPattern, WGToSGStoreScatterOpPattern,
-                  WGToSGVectorCreateMask>(patterns.getContext());
+                  WGToSGVectorCreateMask, UnrealizedConversionCastOpPattern>(patterns.getContext());
   patterns.insert<WGToSGElementWiseOpSameArgAndResultTypePattern<math::ExpOp, 1>,
                   WGToSGElementWiseOpSameArgAndResultTypePattern<math::SqrtOp, 1>,
                   WGToSGElementWiseOpSameArgAndResultTypePattern<arith::AddFOp, 2>,
@@ -1232,7 +1248,7 @@ public:
 
   void runOnOperation() override {
     MLIRContext &context = getContext();
-    auto mod = this->getOperation();
+    auto mod = getOperation();
 
     // skip functions with XeTile.TileType inputs and outputs
     if (!isSupportedModule(mod)) {
@@ -1241,9 +1257,86 @@ public:
       return signalPassFailure();
     }
 
-    Operation *op = getOperation();
     // Run the analysis to find the candidates for the transformation
-    analyzeTransposeOps(op, sgLayoutMap);
+    analyzeTransposeOps(mod, sgLayoutMap);
+
+    { // temporary change the VectorType to RankedTensorType for Structure Control Flow operands
+      mlir::TypeConverter converter;
+      converter.addConversion([&](Type type) -> Type { return type; });
+      converter.addConversion([&](VectorType type) -> Type {
+        auto newTy = RankedTensorType::get(type.getShape(), type.getElementType());
+        return newTy;
+      });
+
+      auto materializeCast = [&](mlir::OpBuilder &builder, mlir::Type type,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+        if (inputs.size() != 1)
+          return nullptr;
+        return builder.create<UnrealizedConversionCastOp>(loc, type, inputs).getResult(0);
+      };
+      converter.addSourceMaterialization(materializeCast);
+      converter.addTargetMaterialization(materializeCast);
+
+      mlir::ConversionTarget target(context);
+      target.addLegalOp<UnrealizedConversionCastOp>();
+
+      mlir::RewritePatternSet patterns(&context);
+      scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns, target);
+      (void)mlir::applyPartialConversion(mod, target, std::move(patterns));
+
+      // propagate the layout info into the RankedTensorType result for cast ops
+      mod->walk([&](UnrealizedConversionCastOp castOp) {
+        if (castOp.getNumOperands() != 1 || castOp.getNumResults() != 1)
+          return WalkResult::skip();
+
+        auto input = castOp.getInputs()[0];
+        auto result = castOp.getResults()[0];
+        auto inputTy = dyn_cast<VectorType>(input.getType());
+        auto resultTy = dyn_cast<RankedTensorType>(result.getType());
+
+        // Only look at ops casting from VectorType to RankedTensorType
+        if (!isa<VectorType>(inputTy) || !isa<RankedTensorType>(resultTy))
+          return WalkResult::skip();
+
+        auto wgMap = getWorkGroupMapAttr(input);
+        if (wgMap) {
+          auto newTy = resultTy.cloneWithEncoding(wgMap);
+          result.setType(newTy);
+
+          // update the arguments if user is a LoopLike op.
+          for (OpOperand &use : result.getUses()) {
+            if (auto loop = dyn_cast<LoopLikeOpInterface>(use.getOwner())) {
+              auto arg = loop.getTiedLoopRegionIterArg(&use);
+              arg.setType(newTy);
+            }
+            // whileOp has two regions, the BlockArgument of the after region
+            // is not exposed by LoopLikeOpInterface
+            if (auto whileOp = dyn_cast<scf::WhileOp>(use.getOwner())) {
+              auto idx = use.getOperandNumber();
+              auto arg = whileOp.getAfterArguments()[idx];
+              arg.setType(newTy);
+            }
+          }
+          return WalkResult::advance();
+        }
+        return WalkResult::skip();
+      });
+
+      // using yieldOp as anchor to update the result type of its ParentOp
+      mod->walk([&](scf::YieldOp yieldOp) {
+        auto parentOp = yieldOp->getParentOp();
+        for (auto r: parentOp->getOpResults()) {
+          auto idx = r.getResultNumber();
+          auto resultTy = r.getType();
+          auto yieldTy = yieldOp.getResults()[idx].getType();
+          if (isa<RankedTensorType>(resultTy) && yieldTy != resultTy)
+            r.setType(yieldTy);
+        }
+      });
+
+    }
+
     mlir::ConversionTarget target(context);
     mlir::RewritePatternSet patterns(&context);
 
@@ -1343,7 +1436,9 @@ public:
     mlir::TypeConverter converter;
     target.addIllegalOp<xetile::ConvertLayoutOp>();
 
-    target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+    target.markUnknownOpDynamicallyLegal([](Operation *op) {
+      return !isa<mlir::UnrealizedConversionCastOp>(op);
+    });
 
     populateXeTileWgToSgPatterns(patterns, sgLayoutMap);
 
@@ -1354,71 +1449,25 @@ public:
     // handle the conversion of the vector/tile type of same shape
     // mapped to different sgData for region ops.
     // TODO : Fix the type converter to handle such case.
-    converter.addConversion([op](Type type) -> Type {
-      Type resultType = type;
-      auto vecType = dyn_cast<VectorType>(type);
-      auto tileTy = dyn_cast<xetile::TileType>(type);
-      if (!vecType && !tileTy) return resultType;
+    converter.addConversion([&](Type type) -> Type { return type; });
+    converter.addConversion([&](xetile::TileType type) -> Type {
+      if (auto wgMap = type.getWgMap()) {
+        auto sgData = wgMap.getSgData();
+        auto newTy = xetile::TileType::get({sgData[0], sgData[1]}, type.getElementType());
+        return newTy;
+      }
+      return type;
+    });
 
-      op->walk([&](Operation *op) {
-        auto isResultType = [&](Value value, Type valueType) {
-          if (valueType != type) return false;
-          if (tileTy) {
-            if (!tileTy.getWgMap()) return false;
-            auto newShape = tileTy.getWgMap().getSgData();
-            resultType = xetile::TileType::get({newShape[0], newShape[1]}, tileTy.getElementType());
-            return true;
-          }
-          if (vecType) {
-            Operation *defOp = value.getDefiningOp();
-            if (!defOp) return false;
-            if (auto ld = dyn_cast<xetile::LoadTileOp>(defOp)) {
-              auto mapAttr = ld.getTile().getType().getWgMap();
-              if (mapAttr) {
-                auto newShape = mapAttr.getSgData();
-                resultType = VectorType::get({newShape[0], newShape[1]}, vecType.getElementType());
-                return true;
-              }
-            } else {
-              auto mapAttr = defOp->getAttrOfType<xetile::WorkGroupMapAttr>("map");
-              if (mapAttr) {
-                auto newShape = mapAttr.getSgData();
-                resultType = VectorType::get({newShape[0], newShape[1]}, vecType.getElementType());
-                return true;
-              }
-            }
-          }
-          return false;
-        };
+    converter.addConversion([&](RankedTensorType type) -> Type {
+      auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(type.getEncoding());
 
-        if (auto forOp = dyn_cast<scf::ForOp>(op)) {
-          for (Value iterArg : forOp.getInitArgs()) {
-            if (isResultType(iterArg, iterArg.getType())) {
-              return WalkResult::interrupt();
-            }
-          }
-        }
-        if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
-          for (auto yieldOp : ifOp.getThenRegion().getOps<scf::YieldOp>()) {
-            for (Value yieldOperand : yieldOp.getOperands()) {
-              if (isResultType(yieldOperand, yieldOperand.getType())) {
-                return WalkResult::interrupt();
-              }
-            }
-          }
-          if (!ifOp.getElseRegion().empty()) {
-            for (auto yieldOp : ifOp.getElseRegion().getOps<scf::YieldOp>()) {
-              for (Value yieldOperand : yieldOp.getOperands()) {
-                if (isResultType(yieldOperand, yieldOperand.getType())) {
-                  return WalkResult::interrupt();
-                }
-              }
-            }
-          }
-        }
-        return WalkResult::advance();
-      });
-      return resultType;
+      if (!mapAttr)
+        return VectorType::get(type.getShape(), type.getElementType());
+
+      auto sgData = llvm::to_vector_of<int64_t>(mapAttr.getSgData().asArrayRef());
+      return VectorType::get(sgData, type.getElementType());
+
     });
 
     target.addDynamicallyLegalOp<scf::ForOp, scf::IfOp, scf::YieldOp>(
@@ -1440,8 +1489,8 @@ public:
     if (mlir::failed(
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
       return signalPassFailure();
-    }
-  };
+  }
+};
 /// Create a pass
 std::unique_ptr<Pass> createXeTileWgToSgPass() {
   return std::make_unique<XeTileWgToSgPass>();
