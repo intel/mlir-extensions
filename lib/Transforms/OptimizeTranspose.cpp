@@ -953,9 +953,9 @@ private:
     auto *context = &getContext();
     RewritePatternSet patterns(context);
     GreedyRewriteConfig config;
-    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
-    config.useTopDownTraversal = true;
-    config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
+    config.setRegionSimplificationLevel(GreedySimplifyRegionLevel::Disabled);
+    config.setUseTopDownTraversal(true);
+    config.setStrictness(GreedyRewriteStrictness::ExistingAndNewOps);
     patterns.add<TransposeRewritePattern>(context, analysis, uArchInterface);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
                                      config))) {

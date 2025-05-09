@@ -428,10 +428,10 @@ struct XeTileCanonicalizationPass final
     {
       mlir::RewritePatternSet patterns(context);
       mlir::GreedyRewriteConfig config;
-      config.enableRegionSimplification =
-          mlir::GreedySimplifyRegionLevel::Disabled;
-      config.useTopDownTraversal = true;
-      config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
+      config.setRegionSimplificationLevel(
+          mlir::GreedySimplifyRegionLevel::Disabled);
+      config.setUseTopDownTraversal(true);
+      config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
       patterns.add<VectorTransposeToXetileTransposeOpPattern,
                    VectorBroadcastToXetileBroadcastOpPattern,
                    VectorMultiReductionToXeTileReduce>(context);
@@ -543,10 +543,10 @@ struct XeTileCanonicalizationPass final
     {
       mlir::RewritePatternSet patterns(context);
       mlir::GreedyRewriteConfig config;
-      config.enableRegionSimplification =
-          mlir::GreedySimplifyRegionLevel::Disabled;
-      config.useTopDownTraversal = true;
-      config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
+      config.setRegionSimplificationLevel(
+          mlir::GreedySimplifyRegionLevel::Disabled);
+      config.setUseTopDownTraversal(true);
+      config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
       patterns.add<RemoveRedundantTransposeOpPattern>(context);
 
       if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),

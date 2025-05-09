@@ -258,21 +258,21 @@ func.func @test_vector_transpose_16x16(%arg: vector<16x16xf32>) -> vector<16x16x
 // CHECK:       %[[L3:.*]] = vector.load %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf32>, vector<4xf32>
 // CHECK:       %[[T3:.*]] = vector.shuffle %[[L3]], %[[L3]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf32>, vector<4xf32>
 // CHECK:       %[[R4:.*]] = vector.shuffle %[[R3]], %[[T3]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19] : vector<16xf32>, vector<16xf32>
-//
-// CHECK:       %[[S0:.*]] = vector.shuffle %[[R4]], %[[R4]] [0, 1, 2, 3] : vector<16xf32>, vector<16xf32>
+// CHECK:       %[[R5:.*]] = vector.shape_cast %[[R4]] : vector<16xf32> to vector<16xf32>
+// CHECK:       %[[S0:.*]] = vector.shuffle %[[R5]], %[[R5]] [0, 1, 2, 3] : vector<16xf32>, vector<16xf32>
 // CHECK:       vector.store %[[S0]], %{{.*}}[%[[C0]], %[[C0]]] : memref<4x4xf32>, vector<4xf32>
 //
-// CHECK:       %[[S1:.*]] = vector.shuffle %[[R4]], %[[R4]] [4, 5, 6, 7] : vector<16xf32>, vector<16xf32>
+// CHECK:       %[[S1:.*]] = vector.shuffle %[[R5]], %[[R5]] [4, 5, 6, 7] : vector<16xf32>, vector<16xf32>
 // CHECK:       %[[C1:.*]] = arith.constant 1 : index
 // CHECK:       %[[I1:.*]] = arith.addi %[[C0]], %[[C1]] : index
 // CHECK:       vector.store %[[S1]], %{{.*}}[%[[I1]], %[[C0]]] : memref<4x4xf32>, vector<4xf32>
 //
-// CHECK:       %[[S2:.*]] = vector.shuffle %[[R4]], %[[R4]] [8, 9, 10, 11] : vector<16xf32>, vector<16xf32>
+// CHECK:       %[[S2:.*]] = vector.shuffle %[[R5]], %[[R5]] [8, 9, 10, 11] : vector<16xf32>, vector<16xf32>
 // CHECK:       %[[C2:.*]] = arith.constant 2 : index
 // CHECK:       %[[I2:.*]] = arith.addi %[[C0]], %[[C2]] : index
 // CHECK:       vector.store %[[S2]], %{{.*}}[%[[I2]], %[[C0]]] : memref<4x4xf32>, vector<4xf32>
 //
-// CHECK:       %[[S3:.*]] = vector.shuffle %[[R4]], %[[R4]] [12, 13, 14, 15] : vector<16xf32>, vector<16xf32>
+// CHECK:       %[[S3:.*]] = vector.shuffle %[[R5]], %[[R5]] [12, 13, 14, 15] : vector<16xf32>, vector<16xf32>
 // CHECK:       %[[C3:.*]] = arith.constant 3 : index
 // CHECK:       %[[I3:.*]] = arith.addi %[[C0]], %[[C3]] : index
 // CHECK:       vector.store %[[S3]], %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf32>, vector<4xf32>
@@ -316,21 +316,21 @@ func.func @test_vector_store_load_4x4_f16(%buffer: memref<4x4xf16>) {
 // CHECK:       %[[L3:.*]] = vector.load %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
 // CHECK:       %[[T3:.*]] = vector.shuffle %[[L3]], %[[L3]] [0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] : vector<4xf16>, vector<4xf16>
 // CHECK:       %[[R4:.*]] = vector.shuffle %[[R3]], %[[T3]] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19] : vector<16xf16>, vector<16xf16>
-//
-// CHECK:       %[[S0:.*]] = vector.shuffle %[[R4]], %[[R4]] [0, 1, 2, 3] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[R5:.*]] = vector.shape_cast %[[R4]] : vector<16xf16> to vector<16xf16>
+// CHECK:       %[[S0:.*]] = vector.shuffle %[[R5]], %[[R5]] [0, 1, 2, 3] : vector<16xf16>, vector<16xf16>
 // CHECK:       vector.store %[[S0]], %{{.*}}[%[[C0]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
 //
-// CHECK:       %[[S1:.*]] = vector.shuffle %[[R4]], %[[R4]] [4, 5, 6, 7] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[S1:.*]] = vector.shuffle %[[R5]], %[[R5]] [4, 5, 6, 7] : vector<16xf16>, vector<16xf16>
 // CHECK:       %[[C1:.*]] = arith.constant 1 : index
 // CHECK:       %[[I1:.*]] = arith.addi %[[C0]], %[[C1]] : index
 // CHECK:       vector.store %[[S1]], %{{.*}}[%[[I1]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
 //
-// CHECK:       %[[S2:.*]] = vector.shuffle %[[R4]], %[[R4]] [8, 9, 10, 11] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[S2:.*]] = vector.shuffle %[[R5]], %[[R5]] [8, 9, 10, 11] : vector<16xf16>, vector<16xf16>
 // CHECK:       %[[C2:.*]] = arith.constant 2 : index
 // CHECK:       %[[I2:.*]] = arith.addi %[[C0]], %[[C2]] : index
 // CHECK:       vector.store %[[S2]], %{{.*}}[%[[I2]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
 //
-// CHECK:       %[[S3:.*]] = vector.shuffle %[[R4]], %[[R4]] [12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
+// CHECK:       %[[S3:.*]] = vector.shuffle %[[R5]], %[[R5]] [12, 13, 14, 15] : vector<16xf16>, vector<16xf16>
 // CHECK:       %[[C3:.*]] = arith.constant 3 : index
 // CHECK:       %[[I3:.*]] = arith.addi %[[C0]], %[[C3]] : index
 // CHECK:       vector.store %[[S3]], %{{.*}}[%[[I3]], %[[C0]]] : memref<4x4xf16>, vector<4xf16>
