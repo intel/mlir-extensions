@@ -703,8 +703,8 @@ By allowing XeGPU operating on workgroup level data size, it provides a concise 
   * sg_layout: Defines the n-d arrangement of subgroups within the workgroup.
   * sg_data: Specifies the shape of the tensor for each subgroup after decomposition.
   * inst_data: Specifies the shape of the tensor for each instruction at subgroup level. It maybe identical to sg_data.
-  * lane_layout: Defines the n-d arrangement of WIs within the subgroup. It was known as `wi_layout`.
-  * lane_data: Specifies the shape of the tensor fragment that each WI owns. The lane_data must be contiguous. One instruction may owns multiple lane_data. It was known as `wi_data`.
+  * lane_layout: Defines the n-d arrangement of WIs within the subgroup. It is renamed from sgmap's `wi_layout`.
+  * lane_data: Specifies the shape of the tensor fragment that each WI owns. The lane_data must be contiguous. One instruction may owns multiple lane_data. It is renamed from sgmap's `wi_data`.
   * order: The dimension order used to linearize n-d subgroup ids and lane ids. The first dimension in the order list is the fastest-changing dimension.
 
 Example of linerized subgourp id regarding order[1, 0] vs. order [0, 1]. 
@@ -736,9 +736,9 @@ The following conditions must hold:
 ```mlir
 * subgroup_size must represent the number of work items (lanes) in a subgroup for a kernel.
 * workgroup_size must represent the number of subgroups in a workgroup for a kernel.
-* for dimension i, tensor_desc[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
-* for dimension i, sg_data[i] must be evenly divisible by inst_data[i].
-* for dimension i, inst_data[i] must be evenly divisible by lane_layout[i] x lane_data[i].
+* for any dimension i, tensor_desc[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
+* for any dimension i, sg_data[i] must be evenly divisible by inst_data[i].
+* for any dimension i, inst_data[i] must be evenly divisible by lane_layout[i] x lane_data[i].
 * When lane_data contains multiple elements, they must be contiguous and come from a single dimension.
 ```
 
@@ -774,7 +774,7 @@ The workgroup creates a tensor descriptor [64, 16] and distributes to 4 subgroup
 The example below shows a workgroup tensor [128, 128] being distributed to 4 subgroups with `sg_layout` [2,2], with each subgroup assigned `sg_data` [32,128]. 
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [2, 2], sg_data = [32, 128], lane_layout=[1,16], lane_data = [1, 1], order = [1, 0]>
-   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xf16> -> tensor_desc<16x128xf16, #layout_a>
+   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xf16> -> tensor_desc<128x128xf16, #layout_a>
 ```
 The table below illustrates the result tensor for each subgroup and its linear subgroup id.
 
