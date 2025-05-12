@@ -11,6 +11,7 @@ builtin.module(
     convert-cf-to-llvm
     convert-vector-to-llvm
     convert-arith-to-llvm
+    expand-strided-metadata
     finalize-memref-to-llvm
     gpu-to-llvm
     reconcile-unrealized-casts

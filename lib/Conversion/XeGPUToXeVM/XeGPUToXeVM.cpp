@@ -15,6 +15,7 @@
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Dialect/XeGPU/IR/XeGPU.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
@@ -677,6 +678,8 @@ struct ConvertXeGPUToXeVMPass
 
     RewritePatternSet patterns(&getContext());
     imex::populateXeGPUToXeVMConversionPatterns(patterns, typeConverter);
+    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
+        typeConverter, patterns, target);
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
       signalPassFailure();
