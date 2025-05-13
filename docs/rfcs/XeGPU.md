@@ -729,14 +729,14 @@ lane_data_size = lane_data[0] × lane_data[1]
 subgroup_size = lane_layout[0] × lane_layout[1]
 sg_data_size = sg_data[0] × sg_data[1]
 workgroup_size = sg_layout[0] × sg_layout[1]
-tensor_size = tensor_desc[0] × tensor_desc[1]
+tensor_size = tensor_shape[0] × tensor_shape[1]
 ```
 
 The following conditions must hold:
 ```mlir
 * subgroup_size must represent the number of work items (lanes) in a subgroup for a kernel.
 * workgroup_size must represent the number of subgroups in a workgroup for a kernel.
-* for any dimension i, tensor_desc[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
+* for any dimension i, tensor_shape[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
 * for any dimension i, sg_data[i] must be evenly divisible by inst_data[i].
 * for any dimension i, inst_data[i] must be evenly divisible by lane_layout[i] x lane_data[i].
 * When lane_data contains multiple elements, they must be contiguous and come from a single dimension.
@@ -747,12 +747,12 @@ The following conditions must hold:
 The workgroup level tensor is first distributed to subgroup and then work item level. 
 
 ***subgroup distribution rule***
-The tensor is first distributed to sg_data along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < tensor_desc[i], after all subgroups are assigned for the first round, the rest data will wrap around and be assigned to the first subgroup until the data is completely assigned. If sg_data[i] is equal to tensor_desc[i], the tensor data is broadcasted to all subgroups along the dimension i.
+The tensor is first distributed to sg_data along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < tensor_shape[i], after all subgroups are assigned for the first round, the rest data will wrap around and be assigned to the first subgroup until the data is completely assigned. If sg_data[i] is equal to tensor_shape[i], the tensor data is broadcasted to all subgroups along the dimension i.
 
 ***work item distribution rule***
 As sg_data is evenly divisible by distribution_unit_size (i.e., sg_data % distribution_unit_size == 0), and each work item will recieve the distribution unit multiple times, with each unit having lane_data_size.
 
-Conceptually, the work item (WI) distribution process can be broken down into two steps. The first step divides the sg_data tensor according to `lane_layout` to obtain a subtensor. The second step linerize the elements as a 1D tensor. The order of elements with the linerized tensor are determined by the order attribute and the blocking effects of inst_data within sg_data.  
+Conceptually, the work item (WI) distribution process can be broken down into two steps. The first step divides the sg_data tensor according to `lane_layout` to obtain a subtensor. The second step linerize the elements as a 1D tensor. The order of elements with the linerized tensor are determined by the order: lane_data, distribution of lane_data within inst_data, and inst_data within sg_data accoring to the order attribute.
 
 **Examples of workgroup distribution with xegpu.layout**
 
@@ -799,11 +799,12 @@ For `dpas`, the `layout` attribute of input operands must have the same `sg_layo
    #layout_c = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data=[16,16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]> //layout for %vector_c
 ```
 
-For `reduction`,  `layout` of the input operand has an additional dimension to represent the dimension being reduced.  `sg_layout` must be the same and the new dimension as `1`. The new dimension of `sg_data` must be the same as the input tensor size, and the other dimension must be the same as the output's `layout`. The new dimension of `order` should not change the existing ordering specified by the output's `layout`.
+For `reduction`, `xegpu.slice` is introduced to represent the `layout` of the reduced tensor. It inherits a regualr `layout` and specifies the dimension being reduced.
 
 ```mlir
-   #layout_a = #xegpu.layout<sg_layout = [32], sg_data = [8], inst_data=[1], lane_layout=[16], lane_data = [1], order=[0]>
-   %vector_a = vector.multi_reduction <add> %vector_b, %cst_0 [1] {#layout_a}: vector<256x128xfloat> into vector<256xfloat>
+   #layout_a = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 128], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
+   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   %vector_a = vector.multi_reduction <add> %vector_b, %cst_0 [1] {#layout_a_reduce}: vector<256x128xfloat> into vector<256xfloat>
    
    //derived layout for input operand
    #layout_b = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 128], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
@@ -811,8 +812,9 @@ For `reduction`,  `layout` of the input operand has an additional dimension to r
 
 The rule also applies to reduction from 3d to 2d.
 ```mlir
-   #layout_a = #xegpu.layout<sg_layout = [8, 4], sg_data = [1, 32], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
-   %%vector_a = vector.multi_reduction <add>, %vector_b, %cst_0 [1] {#layout_a}: vector<8x32x128xf32> to vector<8x128xf32>
+   #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0]>
+   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   %%vector_a = vector.multi_reduction <add>, %vector_b, %cst_0 [1] {#layout_a_reduce}: vector<8x32x128xf32> to vector<8x128xf32>
 
    //derived layout for input operand
    #layout_b = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0]>
@@ -820,21 +822,30 @@ The rule also applies to reduction from 3d to 2d.
 
 For `shape_cast`, it first determines the dimensions being reduced or expanded. The input's `layout` needs to expand or reduce the value accordingly for related dimension in `sg_layout` and `sg_data`. `order` should be consistent between input and output.
 ```mlir
-   layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
+   #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
    %vector_a = vector.shape_cast %vector_b {#layout_a} : vector<256x128xf32> to vector<8x32x128xf32>
 
    //derived layout for input operand
    #layout_b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data=[1, 16], lane_layout=[1, 16], lane_data = [1, 1], order=[1, 0]>
+```
+```mlir
+   #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [32, 1, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
+   %vector_a = vector.shape_cast %vector_b {#layout_a} : vector<256x128xf32> to vector<256x1x128xf32>
+
+   //derived layout for input operand
+   #layout_b = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [32, 1, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
+   #layout_b_reduce = #xegpu.slice<{dim = 1, parent = #layout_b}>
 ```
 
 For `broadcast`, `layout` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut layout and must be removed for the input operand. The corresponding dimension in `sg_data` and `order` must be removed also.
 
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [16, 1], sg_data = [16, 256], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
-   %vector_a = vector.broadcast %vector_b [1] {#layout_a}: vector<256xfloat> into vector<256x256xfloat>
+   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   %vector_a = vector.broadcast %vector_b [1] {#layout_a_reduce}: vector<256xfloat> into vector<256x256xfloat>
 
    //derived layout for input operand
-   #layout_b = #xegpu.layout<sg_layout = [16], sg_data = [16], inst_data=[16], lane_layout=[16], lane_data = [1], order=[1, 0]>
+   #layout_b = #xegpu.layout<sg_layout = [16, 1], sg_data = [16, 256], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
 ```
 
 For `transpose`, the values in `layout` must be swapped for the two dimensions being transposed, including `sg_layout`, `sg_data`, and `order`.
