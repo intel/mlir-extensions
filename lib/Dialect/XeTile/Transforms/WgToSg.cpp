@@ -1202,24 +1202,62 @@ void populateXeTileWgToSgPatterns(mlir::RewritePatternSet &patterns,
                   WGToSGVectorShapeCast, WGToSGVectorMultiDimReductionOp,
                   WGToSGLoadGatherOpPattern, WGToSGStoreScatterOpPattern,
                   WGToSGVectorCreateMask, UnrealizedConversionCastOpPattern>(patterns.getContext());
-  patterns.insert<WGToSGElementWiseOpSameArgAndResultTypePattern<math::ExpOp, 1>,
-                  WGToSGElementWiseOpSameArgAndResultTypePattern<math::SqrtOp, 1>,
-                  WGToSGElementWiseOpSameArgAndResultTypePattern<arith::AddFOp, 2>,
-                  WGToSGArithDifferentResultTypePattern<arith::TruncFOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::TruncIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::ExtFOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::ExtSIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::ExtUIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::SIToFPOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::UIToFPOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::FPToSIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::FPToUIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::IndexCastUIOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::IndexCastOp>,
-                  WGToSGArithDifferentResultTypePattern<arith::BitcastOp>,
-                  WGToSGElementWiseOpComparisonOpsPattern<arith::CmpIOp>,
-                  WGToSGElementWiseOpComparisonOpsPattern<arith::CmpFOp>,
-                  WGToSGArithConstantOpPattern>(patterns.getContext());
+  patterns.insert<
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::ExpOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::SqrtOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AbsFOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::CosOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::CoshOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AcosOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AcoshOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::SinOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::SinhOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AsinOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AsinhOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::TanOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::TanhOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AtanOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::Atan2Op, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::AtanhOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::ErfOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::LogOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::Log2Op, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::FloorOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::CeilOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::PowFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<math::RsqrtOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::NegFOp, 1>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::AddFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::AddIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::SubFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::SubIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::MulFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::MulIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::ShLIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::ShRSIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::ShRUIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::DivFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::DivSIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::DivUIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::MaximumFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::MinimumFOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::RemSIOp, 2>,
+      WGToSGElementWiseOpSameArgAndResultTypePattern<arith::RemUIOp, 2>,
+      WGToSGArithDifferentResultTypePattern<arith::TruncFOp>,
+      WGToSGArithDifferentResultTypePattern<arith::TruncIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::ExtFOp>,
+      WGToSGArithDifferentResultTypePattern<arith::ExtSIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::ExtUIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::SIToFPOp>,
+      WGToSGArithDifferentResultTypePattern<arith::UIToFPOp>,
+      WGToSGArithDifferentResultTypePattern<arith::FPToSIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::FPToUIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::IndexCastUIOp>,
+      WGToSGArithDifferentResultTypePattern<arith::IndexCastOp>,
+      WGToSGArithDifferentResultTypePattern<arith::BitcastOp>,
+      WGToSGElementWiseOpComparisonOpsPattern<arith::CmpIOp>,
+      WGToSGElementWiseOpComparisonOpsPattern<arith::CmpFOp>,
+      WGToSGArithConstantOpPattern>(patterns.getContext());
 }
 
 // Transforms WG XeTile IR to SG XeTile
@@ -1364,14 +1402,6 @@ public:
             return false;
         });
 
-    target.addDynamicallyLegalOp<xetile::LoadGatherOp>(
-        [&](xetile::LoadGatherOp op) -> bool {
-          if (!op.getTile().getType().getWgMap())
-            return true;
-          else
-            return false;
-        });
-
     target.addDynamicallyLegalOp<xetile::TileMMAOp>(
         [&](xetile::TileMMAOp op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
@@ -1406,16 +1436,22 @@ public:
             return false;
         });
 
-    target.addDynamicallyLegalOp<mlir::arith::ConstantOp, mlir::arith::AddFOp,
-                                 mlir::math::ExpOp, mlir::math::SqrtOp, mlir::arith::ExtFOp,
-                                 mlir::arith::ExtSIOp, mlir::arith::ExtUIOp, mlir::arith::FPToSIOp,
-                                 mlir::arith::FPToUIOp, mlir::arith::UIToFPOp, mlir::arith::SIToFPOp,
-                                 mlir::arith::TruncFOp, mlir::arith::TruncIOp, mlir::arith::CmpIOp,
-                                 mlir::arith::CmpFOp,  mlir::arith::IndexCastUIOp, mlir::arith::SelectOp,
-                                 mlir::math::FPowIOp,mlir::arith::IndexCastOp, mlir::arith::BitcastOp,
-                                 mlir::vector::TransposeOp, mlir::vector::BroadcastOp,
-                                 mlir::vector::MultiDimReductionOp,mlir::vector::ShapeCastOp,
-                                 mlir::vector::CreateMaskOp>(
+    target.addDynamicallyLegalOp<
+        arith::ConstantOp, arith::AddFOp, arith::AddIOp, arith::SubFOp,
+        arith::SubIOp, arith::MulFOp, arith::MulIOp, arith::ShLIOp,
+        arith::ShRSIOp, arith::ShRUIOp, arith::DivFOp, arith::DivSIOp,
+        arith::DivUIOp, arith::MaximumFOp, arith::MinimumFOp, arith::RemSIOp,
+        arith::RemUIOp, arith::NegFOp, math::ExpOp, math::SqrtOp, math::AbsFOp,
+        math::AcosOp, math::AcoshOp, math::SinOp, math::SinhOp, math::AsinOp,
+        math::AsinhOp, math::TanOp, math::TanhOp, math::AtanOp, math::Atan2Op,
+        math::AtanhOp, math::CosOp, math::CoshOp, math::ErfOp, math::LogOp,
+        math::Log2Op, math::FloorOp, math::CeilOp, math::PowFOp, math::RsqrtOp,
+        arith::ExtFOp, arith::ExtSIOp, arith::ExtUIOp, arith::FPToSIOp,
+        arith::FPToUIOp, arith::UIToFPOp, arith::SIToFPOp, arith::TruncFOp,
+        arith::TruncIOp, arith::CmpIOp, arith::CmpFOp, arith::IndexCastUIOp,
+        arith::SelectOp, math::FPowIOp, arith::IndexCastOp, arith::BitcastOp,
+        vector::TransposeOp, vector::BroadcastOp, vector::MultiDimReductionOp,
+        vector::ShapeCastOp, vector::CreateMaskOp>(
         [&](mlir::Operation *op) -> bool {
           auto mapAttr = llvm::dyn_cast_or_null<xetile::WorkGroupMapAttr>(
               op->getAttr("map"));
