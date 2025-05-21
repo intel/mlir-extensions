@@ -1,0 +1,38 @@
+From 2e17b18af9fe6c10ea4cc87c864ebaaa94d41c18 Mon Sep 17 00:00:00 2001
+From: Charitha Saumya <charitha.saumya.gusthinna.waduge@intel.com>
+Date: Tue, 20 May 2025 00:12:00 +0000
+Subject: [PATCH] add mem copy support in sycl runtime
+
+---
+ mlir/lib/ExecutionEngine/SyclRuntimeWrappers.cpp | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/mlir/lib/ExecutionEngine/SyclRuntimeWrappers.cpp b/mlir/lib/ExecutionEngine/SyclRuntimeWrappers.cpp
+index c250340c38fc..5ed9e3871f60 100644
+--- a/mlir/lib/ExecutionEngine/SyclRuntimeWrappers.cpp
++++ b/mlir/lib/ExecutionEngine/SyclRuntimeWrappers.cpp
+@@ -149,7 +149,6 @@ static void launchKernel(sycl::queue *queue, sycl::kernel *kernel, size_t gridX,
+ // Wrappers
+
+ extern "C" SYCL_RUNTIME_EXPORT sycl::queue *mgpuStreamCreate() {
+-
+   return catchAll([&]() {
+     sycl::queue *queue =
+         new sycl::queue(getDefaultContext(), getDefaultDevice());
+@@ -168,6 +167,14 @@ mgpuMemAlloc(uint64_t size, sycl::queue *queue, bool isShared) {
+   });
+ }
+
++extern "C" SYCL_RUNTIME_EXPORT void
++mgpuMemcpy(void *dst, void *src, size_t sizeBytes, sycl::queue *queue) {
++  catchAll([&]() {
++    // TODO: Add support for async copy
++    queue->memcpy(dst, src, sizeBytes).wait();
++  });
++}
++
+ extern "C" SYCL_RUNTIME_EXPORT void mgpuMemFree(void *ptr, sycl::queue *queue) {
+   catchAll([&]() {
+     if (ptr) {
+--
+2.34.1

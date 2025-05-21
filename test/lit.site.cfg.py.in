@@ -53,6 +53,7 @@ config.mlir_c_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_ut
 if config.enable_vulkan_runner:
     config.vulkan_runtime_wrappers = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "vulkan-runtime-wrappers" + config.llvm_shlib_ext))
 if config.imex_enable_sycl_runtime:
+    config.mlir_sycl_runtime = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_sycl_runtime" + config.llvm_shlib_ext))
     config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
 if config.imex_enable_l0_runtime:
     config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
