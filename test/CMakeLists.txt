@@ -48,6 +48,12 @@ endif()
 
 if(IMEX_ENABLE_SYCL_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
+        mlir_sycl_runtime
+        )
+endif()
+
+if(IMEX_ENABLE_SYCL_RUNTIME)
+    list(APPEND IMEX_TEST_DEPENDS
         sycl-runtime
         )
 endif()
