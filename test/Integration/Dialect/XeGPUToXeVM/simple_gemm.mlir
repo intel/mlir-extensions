@@ -1,12 +1,12 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
+// RUN: %python_executable %imex_runner --requires=sycl-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_sycl_runtime --filecheck
 
 
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
-    gpu.func @load_store_2d_dpas(%a: memref<256x256xf16>, %b: memref<256x256xf16>, %c: memref<256x256xf32>) kernel {
+    gpu.func @simple_gemm(%a: memref<256x256xf16>, %b: memref<256x256xf16>, %c: memref<256x256xf32>) kernel {
       %c0 = arith.constant 0 : index
       %c1 = arith.constant 1 : index
       %c8 = arith.constant 8 : index
@@ -18,19 +18,21 @@ module @gemm attributes {gpu.container_module} {
       %x_block_offset = arith.muli %block_x, %c8 : index
       %y_block_offset = arith.muli %block_y, %c16 : index
 
-      %c_tdesc = xegpu.create_nd_tdesc %c[%x_block_offset, %y_block_offset] : memref<256x256xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
-      %c_init_value = xegpu.load_nd %c_tdesc : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf32>
+      %c_tdesc = xegpu.create_nd_tdesc %c[%x_block_offset, %y_block_offset] : memref<256x256xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %c_init_value = xegpu.load_nd %c_tdesc : !xegpu.tensor_desc<8x16xf32> -> vector<8xf32>
+      %a_tdesc = xegpu.create_nd_tdesc %a[%x_block_offset, %c0] : memref<256x256xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %b_tdesc = xegpu.create_nd_tdesc %b[%c0, %y_block_offset] : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16>
 
-      %r = scf.for %k = %c0 to %c256 step %c16 iter_args(%arg_c = %c_init_value) -> ( vector<8xf32>) {
-        // TODO: There is issue with update_nd_offset. To avoid it, we use create_nd_tdesc here.
-        %a_tdesc_new = xegpu.create_nd_tdesc %a[%x_block_offset, %k] : memref<256x256xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
-        %b_tdesc_new = xegpu.create_nd_tdesc %b[%k, %y_block_offset] : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
-        %a_val = xegpu.load_nd %a_tdesc_new : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf16>
-        %b_val = xegpu.load_nd %b_tdesc_new : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<16xf16>
+      %r:3 = scf.for %k = %c0 to %c256 step %c16 iter_args(%arg_a = %a_tdesc, %arg_b = %b_tdesc, %arg_c = %c_init_value) -> ( !xegpu.tensor_desc<8x16xf16>, !xegpu.tensor_desc<16x16xf16>,  vector<8xf32>) {
+
+        %a_val = xegpu.load_nd %arg_a : !xegpu.tensor_desc<8x16xf16> -> vector<8xf16>
+        %b_val = xegpu.load_nd %arg_b : !xegpu.tensor_desc<16x16xf16> -> vector<16xf16>
+        %a_desc_next = xegpu.update_nd_offset %arg_a, [%c0, %c16] : !xegpu.tensor_desc<8x16xf16>
+        %b_desc_next = xegpu.update_nd_offset %arg_b, [%c16, %c0] : !xegpu.tensor_desc<16x16xf16>
         %dpas = xegpu.dpas %a_val, %b_val, %arg_c : vector<8xf16>, vector<16xf16>, vector<8xf32> -> vector<8xf32>
-        scf.yield %dpas : vector<8xf32>
+        scf.yield %a_desc_next, %b_desc_next, %dpas : !xegpu.tensor_desc<8x16xf16>, !xegpu.tensor_desc<16x16xf16>, vector<8xf32>
       }
-      xegpu.store_nd %r, %c_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
+      xegpu.store_nd %r#2, %c_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }
@@ -39,15 +41,22 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
-    %memref_a = gpu.alloc host_shared () : memref<256x256xf16>
-    memref.copy %a, %memref_a : memref<256x256xf16> to memref<256x256xf16>
-    %memref_b = gpu.alloc host_shared () : memref<256x256xf16>
-    memref.copy %b, %memref_b : memref<256x256xf16> to memref<256x256xf16>
-    %memref_c = gpu.alloc host_shared () : memref<256x256xf32>
-    memref.copy %c, %memref_c : memref<256x256xf32> to memref<256x256xf32>
-
-    gpu.launch_func @kernel::@load_store_2d_dpas blocks in (%c32, %c16, %c1) threads in (%c16, %c1, %c1) args(%memref_a : memref<256x256xf16>, %memref_b : memref<256x256xf16>, %memref_c : memref<256x256xf32>)
-    return %memref_c : memref<256x256xf32>
+    %t = gpu.wait async
+    %memref_a, %t1 = gpu.alloc async [%t] () : memref<256x256xf16>
+    %t2 = gpu.memcpy async [%t1] %memref_a, %a : memref<256x256xf16>, memref<256x256xf16>
+    %memref_b, %t3 = gpu.alloc async [%t2] () : memref<256x256xf16>
+    %t4 = gpu.memcpy async [%t3] %memref_b, %b : memref<256x256xf16>, memref<256x256xf16>
+    %memref_c, %t5 = gpu.alloc async [%t4] () : memref<256x256xf32>
+    %t6 = gpu.memcpy async [%t5] %memref_c, %c : memref<256x256xf32>, memref<256x256xf32>
+    %t7 = gpu.launch_func async [%t6] @kernel::@simple_gemm blocks in (%c32, %c16, %c1) threads in (%c16, %c1, %c1) args(%memref_a : memref<256x256xf16>, %memref_b : memref<256x256xf16>, %memref_c : memref<256x256xf32>)
+    gpu.wait [%t6] // Wait for the kernel to finish.
+    %t8 = gpu.wait async
+    %t9 = gpu.memcpy async [%t8] %c, %memref_c : memref<256x256xf32>, memref<256x256xf32>
+    %t10 = gpu.dealloc async [%t9] %memref_a : memref<256x256xf16>
+    %t11 = gpu.dealloc async [%t10] %memref_b : memref<256x256xf16>
+    %t12 = gpu.dealloc async [%t11] %memref_c : memref<256x256xf32>
+    gpu.wait [%t12]
+    return %c : memref<256x256xf32>
   }
 
   // compute CPU reference (takes minutes)
@@ -155,7 +164,7 @@ module @gemm attributes {gpu.container_module} {
     // call @printMemrefF16(%cast) : (memref<*xf16>) -> ()
     %cast_C = memref.cast %2 : memref<256x256xf32> to memref<*xf32>
     %cast_C_ref = memref.cast %C_ref : memref<256x256xf32> to memref<*xf32>
-    // call @printMemrefF16(%cast_C) : (memref<*xf16>) -> ()
+    // call @printMemrefF32(%cast_C) : (memref<*xf32>) -> ()
     // call @printMemrefF32(%cast_C_ref) : (memref<*xf32>) -> ()
 
     %C_row_0 = memref.subview %C_ref[0, 0][1, 256][1, 1] : memref<256x256xf32> to memref<1x256xf32, strided<[256, 1], offset:0>>
