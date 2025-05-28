@@ -55,7 +55,7 @@ imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
 imex_enable_spirv_backend = @IMEX_SPIRV_BACKEND_ENABLED@
 
-runner_choices = ['imex-cpu-runner', 'mlir-runner']
+runner_choices = ['imex-cpu-runner']
 enabled_features = []
 all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime', 'igpu-fp64', 'spirv-backend']
 if imex_enable_vulkan_runner:
