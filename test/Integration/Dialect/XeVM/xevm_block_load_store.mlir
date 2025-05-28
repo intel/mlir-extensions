@@ -1,7 +1,7 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xevm-to-llvm.pp \
+// RUN: %python_executable %imex_runner --requires=sycl-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xevm-to-llvm.pp \
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_sycl_runtime --filecheck
 
 module @gemm attributes {gpu.container_module} {
 
