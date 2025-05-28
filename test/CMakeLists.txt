@@ -6,6 +6,7 @@ endif()
 set(IMEX_TEST_DEPENDS
         imex-opt
         imex-cpu-runner
+        mlir-runner
         mlir_c_runner_utils
         mlir_runner_utils
         imex_runner_utils
@@ -46,7 +47,7 @@ if(IMEX_ENABLE_VULKAN_RUNNER)
         )
 endif()
 
-if(IMEX_ENABLE_SYCL_RUNTIME)
+if(MLIR_ENABLE_SYCL_RUNNER)
     list(APPEND IMEX_TEST_DEPENDS
         mlir_sycl_runtime
         )
