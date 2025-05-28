@@ -47,10 +47,6 @@ if(IMEX_ENABLE_VULKAN_RUNNER)
         )
 endif()
 
-if(NOT DEFINED MLIR_ENABLE_SYCL_RUNNER)
-    set(MLIR_ENABLE_SYCL_RUNNER 0)
-endif()
-
 if(MLIR_ENABLE_SYCL_RUNNER)
     list(APPEND IMEX_TEST_DEPENDS
         mlir_sycl_runtime
