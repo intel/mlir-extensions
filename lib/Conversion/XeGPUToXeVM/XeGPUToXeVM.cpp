@@ -275,12 +275,6 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
     auto tileW = tdescTy.getDimSize(1);
     auto tileH = tdescTy.getDimSize(0);
     int32_t vblocks = tdescTy.getArrayLength();
-    // TODO: Why is vblocks calculated like this?
-    // if (elemBitSize == 16) {
-    //   vblocks = (tileW + 16 - 1) / 16;
-    //   tileW = 16;
-    // }
-
     if constexpr (std::is_same_v<OpType, StoreNdOp>) {
       VectorType srcVecTy = cast<VectorType>(op.getValue().getType());
       auto l1 = translateStoreXeGPUCacheHint(op.getL1Hint());
