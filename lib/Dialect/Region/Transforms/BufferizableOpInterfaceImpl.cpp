@@ -21,7 +21,7 @@ convertToBuffers(::mlir::ValueRange values,
                  ::mlir::SmallVector<::mlir::Value> &buffers,
                  ::mlir::RewriterBase &rewriter,
                  const ::mlir::bufferization::BufferizationOptions &options,
-                 const mlir::bufferization::BufferizationState& state) {
+                 const mlir::bufferization::BufferizationState &state) {
   buffers.reserve(values.size());
   for (auto val : values) {
     if (::mlir::isa<::mlir::TensorType>(val.getType())) {
@@ -71,7 +71,7 @@ struct EnvironmentRegionOpInterface
   ::mlir::LogicalResult
   bufferize(::mlir::Operation *op, ::mlir::RewriterBase &rewriter,
             const ::mlir::bufferization::BufferizationOptions &options,
-            mlir::bufferization::BufferizationState& bufState) const {
+            mlir::bufferization::BufferizationState &bufState) const {
     auto envOp = ::mlir::cast<region::EnvironmentRegionOp>(op);
     // Convert op arguments to memrefs.
     ::mlir::SmallVector<::mlir::Value> newArguments;
@@ -137,7 +137,7 @@ struct EnvironmentRegionYieldOpInterface
   ::mlir::LogicalResult
   bufferize(::mlir::Operation *op, ::mlir::RewriterBase &rewriter,
             const ::mlir::bufferization::BufferizationOptions &options,
-            mlir::bufferization::BufferizationState& state) const {
+            mlir::bufferization::BufferizationState &state) const {
     auto yieldOp = ::mlir::cast<region::EnvironmentRegionYieldOp>(op);
 
     // Create a new terminator with bufferized operands.

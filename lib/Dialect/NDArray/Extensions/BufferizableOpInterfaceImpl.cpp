@@ -39,9 +39,10 @@ struct SubviewOpInterface
     return {{op->getOpResult(0), BufferRelation::Unknown}};
   }
 
-  LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options,
-                          const mlir::bufferization::BufferizationState& state) const {
+  LogicalResult
+  bufferize(Operation *op, RewriterBase &rewriter,
+            const BufferizationOptions &options,
+            const mlir::bufferization::BufferizationState &state) const {
     auto subviewOp = cast<SubviewOp>(op);
     SmallVector<OpFoldResult> mixedOffsets = subviewOp.getMixedOffsets();
     SmallVector<OpFoldResult> mixedSizes = subviewOp.getMixedSizes();
@@ -69,12 +70,12 @@ struct SubviewOpInterface
 
   FailureOr<BaseMemRefType>
   getBufferType(Operation *op, Value value, const BufferizationOptions &options,
-                const mlir::bufferization::BufferizationState& state,
+                const mlir::bufferization::BufferizationState &state,
                 SmallVector<Value> &invocationStack) const {
     auto subviewOp = cast<SubviewOp>(op);
     assert(value == subviewOp.getResult() && "invalid value");
-    auto srcMemrefType = bufferization::getBufferType(subviewOp.getSource(),
-                                                      options, state, invocationStack);
+    auto srcMemrefType = bufferization::getBufferType(
+        subviewOp.getSource(), options, state, invocationStack);
     if (failed(srcMemrefType))
       return failure();
     SmallVector<OpFoldResult> mixedOffsets = subviewOp.getMixedOffsets();
@@ -110,9 +111,10 @@ struct InsertSliceOpInterface
     return true;
   }
 
-  LogicalResult bufferize(Operation *op, RewriterBase &rewriter,
-                          const BufferizationOptions &options,
-                          const mlir::bufferization::BufferizationState& state) const {
+  LogicalResult
+  bufferize(Operation *op, RewriterBase &rewriter,
+            const BufferizationOptions &options,
+            const mlir::bufferization::BufferizationState &state) const {
     // insert_slice ops arise from tiling and bufferizing them out-of-place is
     // generally a deal breaker. When used with loops, this ends up cloning the
     // whole tensor on every single iteration and is a symptom of a
@@ -129,7 +131,8 @@ struct InsertSliceOpInterface
         getBuffer(rewriter, insertSliceOp.getDestination(), options, state);
     if (failed(dstMemref))
       return failure();
-    auto srcMemref = getBuffer(rewriter, insertSliceOp.getSource(), options, state);
+    auto srcMemref =
+        getBuffer(rewriter, insertSliceOp.getSource(), options, state);
     if (failed(srcMemref))
       return failure();
     auto srcRank = mlir::cast<mlir::ShapedType>(srcMemref->getType()).getRank();
