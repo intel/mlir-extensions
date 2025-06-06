@@ -20,12 +20,13 @@ namespace {
 convertToBuffers(::mlir::ValueRange values,
                  ::mlir::SmallVector<::mlir::Value> &buffers,
                  ::mlir::RewriterBase &rewriter,
-                 const ::mlir::bufferization::BufferizationOptions &options) {
+                 const ::mlir::bufferization::BufferizationOptions &options,
+                 const mlir::bufferization::BufferizationState &state) {
   buffers.reserve(values.size());
   for (auto val : values) {
     if (::mlir::isa<::mlir::TensorType>(val.getType())) {
       ::mlir::FailureOr<::mlir::Value> maybeBuffer =
-          ::mlir::bufferization::getBuffer(rewriter, val, options);
+          ::mlir::bufferization::getBuffer(rewriter, val, options, state);
       if (failed(maybeBuffer)) {
         return ::mlir::failure();
       }
@@ -69,18 +70,19 @@ struct EnvironmentRegionOpInterface
 
   ::mlir::LogicalResult
   bufferize(::mlir::Operation *op, ::mlir::RewriterBase &rewriter,
-            const ::mlir::bufferization::BufferizationOptions &options) const {
+            const ::mlir::bufferization::BufferizationOptions &options,
+            mlir::bufferization::BufferizationState &bufState) const {
     auto envOp = ::mlir::cast<region::EnvironmentRegionOp>(op);
     // Convert op arguments to memrefs.
     ::mlir::SmallVector<::mlir::Value> newArguments;
     if (failed(convertToBuffers(envOp.getArgs(), newArguments, rewriter,
-                                options))) {
+                                options, bufState))) {
       return ::mlir::failure();
     }
     // Infer result memref types by converting yield op operands to memrefs
     ::mlir::SmallVector<::mlir::Value> newResults;
     if (failed(convertToBuffers(envOp.getBody()->getTerminator()->getOperands(),
-                                newResults, rewriter, options))) {
+                                newResults, rewriter, options, bufState))) {
       return ::mlir::failure();
     }
     ::mlir::TypeRange resTypes(newResults);
@@ -134,13 +136,14 @@ struct EnvironmentRegionYieldOpInterface
 
   ::mlir::LogicalResult
   bufferize(::mlir::Operation *op, ::mlir::RewriterBase &rewriter,
-            const ::mlir::bufferization::BufferizationOptions &options) const {
+            const ::mlir::bufferization::BufferizationOptions &options,
+            mlir::bufferization::BufferizationState &state) const {
     auto yieldOp = ::mlir::cast<region::EnvironmentRegionYieldOp>(op);
 
     // Create a new terminator with bufferized operands.
     ::mlir::SmallVector<::mlir::Value> newOperands;
     if (failed(convertToBuffers(yieldOp.getOperands(), newOperands, rewriter,
-                                options))) {
+                                options, state))) {
       return ::mlir::failure();
     }
     ::mlir::bufferization::replaceOpWithNewBufferizedOp<
