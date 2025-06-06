@@ -483,7 +483,7 @@ void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
   auto mrTyp = mlir::cast<::mlir::MemRefType>(toTyp);
   auto shapedMrTyp =
       mlir::cast<::mlir::ShapedType>(mrTyp).clone(iTyp.getShape());
-  ::mlir::Value shapedMr = builder.create<::mlir::bufferization::ToMemrefOp>(
+  ::mlir::Value shapedMr = builder.create<::mlir::bufferization::ToBufferOp>(
       loc, shapedMrTyp, input);
   if (clone) {
     shapedMr = builder.create<::mlir::bufferization::CloneOp>(loc, shapedMr);
