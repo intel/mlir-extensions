@@ -270,6 +270,12 @@ else ()
     set(IMEX_ENABLE_ATS_TARGET 0)
 endif()
 
+if (IMEX_ENABLE_BMG_TARGET)
+    set(IMEX_ENABLE_BMG_TARGET 1)
+else ()
+    set(IMEX_ENABLE_BMG_TARGET 0)
+endif()
+
 if (IMEX_ENABLE_PVC_TARGET)
     set(IMEX_ENABLE_PVC_TARGET 1)
 else ()
