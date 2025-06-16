@@ -41,6 +41,7 @@ config.imex_enable_bf16_tests = @IMEX_ENABLE_BF16_TESTS@
 config.imex_enable_excluded_tests = @IMEX_ENABLE_EXCLUDED_TESTS@
 config.imex_enable_ats_target = @IMEX_ENABLE_ATS_TARGET@
 config.imex_enable_pvc_target = @IMEX_ENABLE_PVC_TARGET@
+config.imex_enable_bmg_target = @IMEX_ENABLE_BMG_TARGET@
 config.imex_enable_bindings_python = @IMEX_ENABLE_BINDINGS_PYTHON@
 config.mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
 
