@@ -18,11 +18,16 @@ jobs:
       run:
         shell: bash -l -eo pipefail {0}
 
+    strategy:
+      matrix:
+        python: [3.9]
+
     steps:
       - name: Setup conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
+          miniforge-version: latest
+          #auto-update-conda: true
           python-version: ${{ matrix.python }}
           activate-environment: imex-devel
 
