@@ -31,6 +31,9 @@ jobs:
       - name: Setup conda
         uses: conda-incubator/setup-miniconda@v3
         with:
+          installer-url: https://github.com/conda-forge/miniforge/releases/download/25.3.0-3/Miniforge3-25.3.0-3-Linux-x86_64.sh
+          channels: conda-forge
+          channel-priority: strict        
           auto-update-conda: true
           python-version: ${{ matrix.python }}
           activate-environment: imex-devel
