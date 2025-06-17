@@ -13,7 +13,7 @@ permissions: read-all
 jobs:
   build_linux:
     name: Builds IMEX on Linux
-    runs-on: ubuntu-22.04
+    runs-on: cpu
     defaults:
       run:
         shell: bash -l -eo pipefail {0}
