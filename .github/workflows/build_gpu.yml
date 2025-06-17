@@ -30,7 +30,7 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v4
         env:
-          LLVM_CACHE_NUMBER: 2  # Increase to reset cache
+          LLVM_CACHE_NUMBER: 3  # Increase to reset cache
         with:
           path: |
             ${{ github.workspace }}/mlir
