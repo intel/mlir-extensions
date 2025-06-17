@@ -19,6 +19,21 @@ jobs:
         shell: bash -l -eo pipefail {0}
 
     steps:
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+          activate-environment: imex-devel
+
+      - name: Conda info
+        run: conda info
+
+      - name: Install Build tools
+        run: |
+          conda install cmake ninja conda-forge::lit conda-forge::doxygen
+          conda list
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
@@ -64,7 +79,7 @@ jobs:
         shell: bash -le {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DMLIR_ENABLE_SYCL_RUNNER=1
+          ./scripts/compile.sh -DLLVM_EXTERNAL_LIT="../llvm-project/build/utils/lit" -DLLVM_LIT_ARGS="-a" -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DMLIR_ENABLE_SYCL_RUNNER=1
           cmake --build build --target check-imex  | tee build/tests.txt
 
       - name: Upload tests.txt
