@@ -43,6 +43,8 @@ jobs:
           cd llvm-project
           git checkout $LLVM_SHA
           git apply ../build_tools/patches/*.patch
+          source /opt/intel/oneapi/setvars.sh
+
 
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           cmake -G Ninja -B build -S llvm                                  \
@@ -61,10 +63,9 @@ jobs:
       - name: Build IMEX and run lit tests
         shell: bash -le {0}
         run: |
-          source /opt/intel/oneapi/setvars.sh
           ./scripts/compile.sh -DLLVM_LIT_ARGS="-a" -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir -DIMEX_ENABLE_PVC_TARGET=1 -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLLVM_LIT_ARGS="-a -j 4 --debug --timeout=1800" -DMLIR_ENABLE_SYCL_RUNNER=1
           cmake --build build --target check-imex  | tee build/tests.txt
-          
+
       - name: Upload tests.txt
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
