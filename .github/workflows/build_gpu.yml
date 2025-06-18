@@ -27,7 +27,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
-          #auto-update-conda: true
+          auto-update-conda: true
           python-version: ${{ matrix.python }}
           activate-environment: imex-devel
 
