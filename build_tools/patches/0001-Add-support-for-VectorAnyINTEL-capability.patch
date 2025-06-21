@@ -1,7 +1,7 @@
-From c10fb55e593cff647d3d8835799b3c39d208cfcc Mon Sep 17 00:00:00 2001
+From 46f1b01b6cde4956f4b08985adc59dd530788d4a Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Fri, 21 Feb 2025 19:20:18 +0100
-Subject: [PATCH 1/1] Add support for VectorAnyINTEL capability
+Date: Fri, 13 Jun 2025 19:12:11 +0200
+Subject: [PATCH] Add support for VectorAnyINTEL capability
 
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  11 +-
@@ -24,13 +24,13 @@ Subject: [PATCH 1/1] Add support for VectorAnyINTEL capability
  17 files changed, 322 insertions(+), 69 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index cafe14046957..b01e581e0f15 100644
+index d2ba76cdad90..ac491f6068a0 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4163,7 +4163,14 @@ def SPIRV_Int32 : TypeAlias<I32, "Int32">;
- def SPIRV_Float32 : TypeAlias<F32, "Float32">;
+@@ -4194,7 +4194,14 @@ def SPIRV_BFloat16KHR : TypeAlias<BF16, "BFloat16">;
  def SPIRV_Float : FloatOfWidths<[16, 32, 64]>;
  def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
+ def SPIRV_AnyFloat : AnyTypeOf<[SPIRV_Float, SPIRV_BFloat16KHR]>;
 -def SPIRV_Vector : VectorOfLengthAndType<[2, 3, 4, 8, 16],
 +// Remove the vector size restriction.
 +// Vector type is quite restrictive in SPIR-V.
@@ -40,10 +40,10 @@ index cafe14046957..b01e581e0f15 100644
 +// via VectorAnyINTEL capability (SPV_INTEL_vector_compute extension).
 +// It allows vector length of 2 to 2^32-1.
 +def SPIRV_Vector : VectorOfLengthRangeAndType<[2, 0xFFFFFFFF],
-                                        [SPIRV_Bool, SPIRV_Integer, SPIRV_Float]>;
+                                        [SPIRV_Bool, SPIRV_Integer, SPIRV_AnyFloat]>;
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
-@@ -4213,7 +4220,7 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
+@@ -4245,7 +4252,7 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
      "Matrix">;
 
  class SPIRV_VectorOf<Type type> :
@@ -53,10 +53,10 @@ index cafe14046957..b01e581e0f15 100644
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index a18b32253d85..4ba962fbeecc 100644
+index 45ec1846580f..6ca59f91eee9 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
-@@ -643,6 +643,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
+@@ -648,6 +648,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
 
@@ -150,10 +150,10 @@ index a18b32253d85..4ba962fbeecc 100644
  // Negative values for `n` index in reverse.
  class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 0cf5f0823be6..92f0319db022 100644
+index a21acef1c4b4..a7c60f6bf1cb 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -191,9 +191,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
+@@ -188,9 +188,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
        parser.emitError(typeLoc, "only 1-D vector allowed but found ") << t;
        return Type();
      }
@@ -169,7 +169,7 @@ index 0cf5f0823be6..92f0319db022 100644
        return Type();
      }
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index 337df3a5a65f..275b5aa507fb 100644
+index 93e0c9b33c54..a349da00027e 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -100,9 +100,10 @@ bool CompositeType::classof(Type type) {
@@ -210,10 +210,10 @@ index 337df3a5a65f..275b5aa507fb 100644
            capabilities.push_back(ref);
          }
 diff --git a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
-index c56dbcca2175..03777d4a98b8 100644
+index f5a58c58e05d..406e81235e10 100644
 --- a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 +++ b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
-@@ -88,9 +88,13 @@ static std::optional<SmallVector<int64_t>> getTargetShape(VectorType vecType) {
+@@ -87,9 +87,13 @@ static std::optional<SmallVector<int64_t>> getTargetShape(VectorType vecType) {
  template <typename LabelT>
  static LogicalResult checkExtensionRequirements(
      LabelT label, const spirv::TargetEnv &targetEnv,
@@ -229,7 +229,7 @@ index c56dbcca2175..03777d4a98b8 100644
        continue;
 
      LLVM_DEBUG({
-@@ -116,9 +120,13 @@ static LogicalResult checkExtensionRequirements(
+@@ -115,9 +119,13 @@ static LogicalResult checkExtensionRequirements(
  template <typename LabelT>
  static LogicalResult checkCapabilityRequirements(
      LabelT label, const spirv::TargetEnv &targetEnv,
@@ -245,7 +245,7 @@ index c56dbcca2175..03777d4a98b8 100644
        continue;
 
      LLVM_DEBUG({
-@@ -135,6 +143,55 @@ static LogicalResult checkCapabilityRequirements(
+@@ -134,6 +142,55 @@ static LogicalResult checkCapabilityRequirements(
    return success();
  }
 
@@ -301,7 +301,7 @@ index c56dbcca2175..03777d4a98b8 100644
  /// Returns true if the given `storageClass` needs explicit layout when used in
  /// Shader environments.
  static bool needsExplicitLayout(spirv::StorageClass storageClass) {
-@@ -280,11 +337,14 @@ convertScalarType(const spirv::TargetEnv &targetEnv,
+@@ -279,11 +336,14 @@ convertScalarType(const spirv::TargetEnv &targetEnv,
      return nullptr;
    }
 
@@ -316,7 +316,7 @@ index c56dbcca2175..03777d4a98b8 100644
    auto intType = cast<IntegerType>(type);
    LLVM_DEBUG(llvm::dbgs() << type << " converted to 32-bit for SPIR-V\n");
    return IntegerType::get(targetEnv.getContext(), /*width=*/32,
-@@ -359,10 +419,13 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
+@@ -358,10 +418,13 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
 
      if (type.getRank() <= 1 && type.getNumElements() == 1)
        return elementType;
@@ -334,7 +334,7 @@ index c56dbcca2175..03777d4a98b8 100644
        return nullptr;
      }
 
-@@ -384,16 +447,40 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
+@@ -383,16 +446,40 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
    cast<spirv::CompositeType>(type).getExtensions(extensions, storageClass);
    cast<spirv::CompositeType>(type).getCapabilities(capabilities, storageClass);
 
@@ -382,7 +382,7 @@ index c56dbcca2175..03777d4a98b8 100644
  }
 
  static Type
-@@ -1562,16 +1649,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
+@@ -1563,16 +1650,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
    SmallVector<ArrayRef<spirv::Extension>, 4> typeExtensions;
    SmallVector<ArrayRef<spirv::Capability>, 8> typeCapabilities;
    for (Type valueType : valueTypes) {
@@ -471,10 +471,10 @@ index 1abe0fd2ec46..f64436fa2632 100644
  }
 
 diff --git a/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir b/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir
-index 82d750755ffe..6f364c5b0875 100644
+index 1737f4a906bf..13f4e17167ef 100644
 --- a/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir
 +++ b/mlir/test/Conversion/FuncToSPIRV/types-to-spirv.mlir
-@@ -351,8 +351,21 @@ module attributes {
+@@ -345,8 +345,21 @@ module attributes {
    spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [], []>, #spirv.resource_limits<>>
  } {
 
@@ -499,10 +499,10 @@ index 82d750755ffe..6f364c5b0875 100644
  } // end module
 
 diff --git a/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir b/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
-index 2d0c86e08de5..f60bd10c115b 100644
+index d58c27598f2b..4c22244c08e0 100644
 --- a/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/arithmetic-ops.mlir
-@@ -283,7 +283,7 @@ func.func @dot(%arg0: vector<4xf32>, %arg1: vector<4xf32>) -> f16 {
+@@ -339,7 +339,7 @@ func.func @dot(%arg0: vector<4xf32>, %arg1: vector<4xf32>) -> f16 {
  // -----
 
  func.func @dot(%arg0: vector<4xi32>, %arg1: vector<4xi32>) -> i32 {
@@ -543,7 +543,7 @@ index f3f0ebf60f46..1138f38bcef2 100644
    return %0 : f16
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir b/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir
-index beda3872bc8d..75e4c1b9a43d 100644
+index 642346cc40b0..10ede222ada7 100644
 --- a/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir
 @@ -27,7 +27,7 @@ func.func @exp(%arg0 : i32) -> () {
@@ -578,7 +578,7 @@ index bb15d018a6c4..f23c2b329a51 100644
    spirv.Return
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir b/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
-index 5c24f0e6a7d3..5cbdc5e1e5ef 100644
+index d6c34645f574..c24892a00d5a 100644
 --- a/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 @@ -166,7 +166,7 @@ func.func @logicalUnary(%arg0 : i1)
@@ -591,10 +591,10 @@ index 5c24f0e6a7d3..5cbdc5e1e5ef 100644
    return
  }
 diff --git a/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir b/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
-index 60ae1584d29f..ac6598b42b03 100644
+index 7ab94f17360d..07d85ca5fa90 100644
 --- a/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/non-uniform-ops.mlir
-@@ -495,7 +495,7 @@ func.func @group_non_uniform_bitwise_and(%val: i32) -> i32 {
+@@ -511,7 +511,7 @@ func.func @group_non_uniform_bitwise_and(%val: i32) -> i32 {
  // -----
 
  func.func @group_non_uniform_bitwise_and(%val: i1) -> i1 {
@@ -603,7 +603,7 @@ index 60ae1584d29f..ac6598b42b03 100644
    %0 = spirv.GroupNonUniformBitwiseAnd <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
-@@ -516,7 +516,7 @@ func.func @group_non_uniform_bitwise_or(%val: i32) -> i32 {
+@@ -532,7 +532,7 @@ func.func @group_non_uniform_bitwise_or(%val: i32) -> i32 {
  // -----
 
  func.func @group_non_uniform_bitwise_or(%val: i1) -> i1 {
@@ -612,7 +612,7 @@ index 60ae1584d29f..ac6598b42b03 100644
    %0 = spirv.GroupNonUniformBitwiseOr <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
-@@ -537,7 +537,7 @@ func.func @group_non_uniform_bitwise_xor(%val: i32) -> i32 {
+@@ -553,7 +553,7 @@ func.func @group_non_uniform_bitwise_xor(%val: i32) -> i32 {
  // -----
 
  func.func @group_non_uniform_bitwise_xor(%val: i1) -> i1 {
@@ -621,7 +621,7 @@ index 60ae1584d29f..ac6598b42b03 100644
    %0 = spirv.GroupNonUniformBitwiseXor <Workgroup> <Reduce> %val : i1 -> i1
    return %0: i1
  }
-@@ -558,7 +558,7 @@ func.func @group_non_uniform_logical_and(%val: i1) -> i1 {
+@@ -574,7 +574,7 @@ func.func @group_non_uniform_logical_and(%val: i1) -> i1 {
  // -----
 
  func.func @group_non_uniform_logical_and(%val: i32) -> i32 {
@@ -630,7 +630,7 @@ index 60ae1584d29f..ac6598b42b03 100644
    %0 = spirv.GroupNonUniformLogicalAnd <Workgroup> <Reduce> %val : i32 -> i32
    return %0: i32
  }
-@@ -579,7 +579,7 @@ func.func @group_non_uniform_logical_or(%val: i1) -> i1 {
+@@ -595,7 +595,7 @@ func.func @group_non_uniform_logical_or(%val: i1) -> i1 {
  // -----
 
  func.func @group_non_uniform_logical_or(%val: i32) -> i32 {
@@ -639,7 +639,7 @@ index 60ae1584d29f..ac6598b42b03 100644
    %0 = spirv.GroupNonUniformLogicalOr <Workgroup> <Reduce> %val : i32 -> i32
    return %0: i32
  }
-@@ -600,7 +600,7 @@ func.func @group_non_uniform_logical_xor(%val: i1) -> i1 {
+@@ -616,7 +616,7 @@ func.func @group_non_uniform_logical_xor(%val: i1) -> i1 {
  // -----
 
  func.func @group_non_uniform_logical_xor(%val: i32) -> i32 {

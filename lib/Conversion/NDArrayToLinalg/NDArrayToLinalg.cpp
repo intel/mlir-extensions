@@ -180,7 +180,7 @@ struct SubviewLowering
 
     // convert result to tensor
     auto res = rewriter.create<::mlir::bufferization::ToTensorOp>(
-        loc, sw,
+        loc, srcTnsr.getType(), sw,
         /*restrict=*/true, /*writable=*/true);
     rewriter.replaceOp(op, res.getResult());
 
