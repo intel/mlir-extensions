@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,17 +31,22 @@ add_mlir_library(sycl-runtime
     SyclRuntimeWrappers.cpp
 
     EXCLUDE_FROM_LIBMLIR
-  )
+
+    LINK_LIBS
+    imex_execution_engine_utils
+)
 
 check_cxx_compiler_flag("-frtti" CXX_HAS_FRTTI_FLAG)
+
 if(NOT CXX_HAS_FRTTI_FLAG)
     message(FATAL_ERROR "CXX compiler does not accept flag -frtti")
 endif()
-target_compile_options (sycl-runtime PUBLIC -fexceptions -frtti)
+
+target_compile_options(sycl-runtime PUBLIC -fexceptions -frtti)
 
 target_include_directories(sycl-runtime PRIVATE
     ${MLIR_INCLUDE_DIRS}
-    )
+)
 
 target_link_libraries(sycl-runtime PRIVATE LevelZero::LevelZero SyclRuntime::SyclRuntime)
 

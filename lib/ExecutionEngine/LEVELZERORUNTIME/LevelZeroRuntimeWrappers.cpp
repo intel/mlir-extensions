@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "imex/ExecutionEngine/ExecutionEngineUtils.h"
+
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cfloat>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -513,9 +517,6 @@ static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
   ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
 
   if (getenv("IMEX_ENABLE_PROFILING")) {
-    auto executionTime = 0.0f;
-    auto maxTime = 0.0f;
-    auto minTime = FLT_MAX;
     auto rounds = 1000;
     auto warmups = 3;
 
@@ -547,6 +548,8 @@ static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
         warmups = runs;
     }
 
+    std::vector<float> executionTime(rounds, 0.0);
+
     // warmup
     for (int r = 0; r < warmups; r++) {
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
@@ -574,17 +577,21 @@ static ze_event_handle_t launchKernel(GPUL0QUEUE *queue,
       auto endTime =
           tstampEvent.get_profiling_info<imex::profiling::command_end>();
       auto duration = float(endTime - startTime) / 1000000.0f;
-      executionTime += duration;
-      if (duration > maxTime)
-        maxTime = duration;
-      if (duration < minTime)
-        minTime = duration;
+      executionTime[r] = duration;
     }
     deallocDeviceMemory(queue, cache);
+
+    // Print profiling results
     fprintf(stdout,
             "the kernel execution time is (ms, on L0 runtime):"
-            "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
-            executionTime / rounds, minTime, maxTime, rounds);
+            "avg: %.4f, min: %.4f, max: %.4f, median: %4f, std_deviation: %4f, "
+            "variance: %4f, P95: %4f, P5: %4f, median_one_third_avg: %4f (over "
+            "%d runs)\n",
+            calculateAverage(executionTime), calculateMin(executionTime),
+            calculateMax(executionTime), calculateMedian(executionTime),
+            calculateStdDev(executionTime), calculateVariance(executionTime),
+            calculateP95(executionTime), calculateP5(executionTime),
+            calculateMiddleThirdAverage(executionTime), rounds);
   }
 
   Event *event = new Event(queue->zeContext_, queue->zeDevice_);
