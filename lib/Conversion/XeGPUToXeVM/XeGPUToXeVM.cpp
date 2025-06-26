@@ -158,16 +158,16 @@ class CreateNdDescToXeVMPattern
           val = rewriter.create<arith::TruncIOp>(loc, payloadElemTy, val);
         } else {
           int32_t off = llvm::cast<IntegerAttr>(cast<Attribute>(ofr)).getInt();
-          val = rewriter.create<arith::ConstantIntOp>(loc, off, payloadElemTy);
+          val = rewriter.create<arith::ConstantIntOp>(loc, payloadElemTy, off);
         }
         return val;
       };
       offsetW = createOffset(rank - 1);
       offsetH = createOffset(rank - 2);
       baseShapeW = rewriter.create<arith::ConstantIntOp>(
-          loc, sourceMemrefTy.getDimSize(rank - 1), payloadElemTy);
+          loc, payloadElemTy, sourceMemrefTy.getDimSize(rank - 1));
       baseShapeH = rewriter.create<arith::ConstantIntOp>(
-          loc, sourceMemrefTy.getDimSize(rank - 2), payloadElemTy);
+          loc, payloadElemTy, sourceMemrefTy.getDimSize(rank - 2));
     } else if (isa<IntegerType>(sourceTy)) {
       op.emitError()
           << "Integer as source are currently not supported by the pass.";
@@ -268,7 +268,7 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
     auto elemType = tdescTy.getElementType();
     const uint32_t elemBitSize = elemType.getIntOrFloatBitWidth();
     Value elemByteSize = rewriter.create<arith::ConstantIntOp>(
-        loc, elemBitSize / 8, rewriter.getI32Type());
+        loc, rewriter.getI32Type(), elemBitSize / 8);
     Value surfaceW =
         rewriter.create<arith::MulIOp>(loc, baseShapeW, elemByteSize);
 
