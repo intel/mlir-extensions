@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,17 +15,20 @@
 find_package(LevelZero)
 
 if(NOT LevelZero_FOUND)
-    message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
+  message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
 add_mlir_library(level-zero-runtime
-    SHARED
-    LevelZeroRuntimeWrappers.cpp
+  SHARED
+  LevelZeroRuntimeWrappers.cpp
 
-    EXCLUDE_FROM_LIBMLIR
-  )
+  EXCLUDE_FROM_LIBMLIR
 
-target_compile_options (level-zero-runtime PUBLIC -fexceptions)
+  LINK_LIBS
+  imex_execution_engine_utils
+)
+
+target_compile_options(level-zero-runtime PUBLIC -fexceptions)
 
 target_link_libraries(level-zero-runtime PRIVATE LevelZero::LevelZero)
 
