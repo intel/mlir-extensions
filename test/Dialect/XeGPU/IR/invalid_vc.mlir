@@ -87,7 +87,7 @@ func.func @test_create_tdesc_invalid_chunk_size(%src: ui64, %offsets : vector<16
 // -----
 func.func @test_create_tdesc_unaligned(%src: ui64, %offsets : vector<16xindex>) {
   %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-  // expected-error@+1 {{expected tensor shape[1] to be a multiple of packing factor 2}}
+  // expected-error@+1 {{expected tensor shape[1] to be a multiple of chunk alignment factor 2}}
               -> !xegpu.tensor_desc<16x3xf16, #xegpu.scatter_tdesc_attr<chunk_size = 3>>
   return
 }

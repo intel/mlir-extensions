@@ -46,6 +46,13 @@ namespace imex {
 
 namespace LSC {
 
+static SmallVector<int64_t> generateFullPermutation(int rank) {
+  SmallVector<int64_t> permutation;
+  for (int i = rank - 1; i >= 0; --i)
+    permutation.push_back(i);
+  return permutation;
+}
+
 static int getCacheEncoding(std::optional<xegpu::CachePolicy> hint) {
 
   if (!hint.has_value())
@@ -1139,6 +1146,21 @@ public:
     auto newValue = genLoadIntrinsicCallWithC32BConversion(
         rewriter, loc, resultTy, simd_lanes, op.getMask(), l1hint, l3hint,
         elemTy, chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc());
+
+    // transpose the result because of the difference between hardware
+    // implementation and the XeGPU definition.
+    if (resultTy.getRank() > 1) {
+      SmallVector<int64_t> permutation =
+          generateFullPermutation(resultTy.getRank());
+      llvm::ArrayRef<int64_t> shape = resultTy.getShape();
+      auto intrinsicTy =
+          VectorType::get(applyPermutation(shape, permutation), elemTy);
+      newValue =
+          rewriter.create<vector::ShapeCastOp>(loc, intrinsicTy, newValue);
+      newValue =
+          rewriter.create<vector::TransposeOp>(loc, newValue, permutation);
+    }
+
     rewriter.replaceOp(op, newValue);
 
     return success();
@@ -1220,10 +1242,22 @@ public:
     auto l1hint = op.getL1Hint();
     // auto l2hint = op.getL2Hint();
     auto l3hint = op.getL3Hint();
+
+    Value data = adaptor.getValue();
+    // transpose the value because of the difference between hardware
+    // implementation and the XeGPU definition.
+    if (tdescTy.getRank() > 1) {
+      Type flatVecTy =
+          data.getType(); // 1D VectorType expected by the intrinsic
+      SmallVector<int64_t> permutation =
+          generateFullPermutation(tdescTy.getRank());
+      data = rewriter.create<vector::ShapeCastOp>(loc, op.getValueType(), data);
+      data = rewriter.create<vector::TransposeOp>(loc, data, permutation);
+      data = rewriter.create<vector::ShapeCastOp>(loc, flatVecTy, data);
+    }
     auto callOp = genStoreIntrinsicCallWithC32BConversion(
         rewriter, loc, simd_lanes, op.getMask(), l1hint, l3hint, elemTy,
-        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(),
-        adaptor.getValue());
+        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(), data);
 
     rewriter.replaceOp(op, callOp);
     return success();

@@ -32,7 +32,8 @@ module @gemm attributes {gpu.container_module} {
 
       %cast = memref.reinterpret_cast %mem to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
       %5 = xegpu.create_tdesc %cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #scatter>
-      xegpu.store %cst, %5, %mask {transpose} : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1>
+      %trans = vector.transpose %cst, [1, 0] : vector<8x16xf32> to vector<16x8xf32>
+      xegpu.store %trans, %5, %mask : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1>
 
       gpu.return
     }

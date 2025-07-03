@@ -153,7 +153,8 @@ gpu.module @test_kernel {
     //CHECK: %[[r19:.*]] = vector.shape_cast %[[r3]] : vector<4x16x2xf16> to vector<4x32xf16>
     //CHECK: %[[r20:.*]] = vector.bitcast %[[r19]] : vector<4x32xf16> to vector<4x16xf32>
     //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<16xi1>
-    //CHECK: xegpu.store %[[r20]], %[[r15]], %[[cst]] <{{{.*}}, transpose}> : vector<4x16xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 4 : i64>>, vector<16xi1>
+    //CHECK: %[[r21:.*]] = vector.transpose %[[r20]], [1, 0] : vector<4x16xf32> to vector<16x4xf32>
+    //CHECK: xegpu.store %[[r21]], %[[r15]], %[[cst]] {{.*}} : vector<16x4xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 4 : i64>>, vector<16xi1>
     xetile.store_tile %a, %st_tile : vector<8x16xf16>, !xetile.tile<8x16xf16, #xetile.tile_attr<order=[0, 1], memory_space=3>>
 
     //CHECK: %[[r30:.*]] = xegpu.create_nd_tdesc %[[alloc]][%{{.*}}] : memref<2048xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm>>
