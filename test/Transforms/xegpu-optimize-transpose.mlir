@@ -376,8 +376,9 @@ func.func @test_transpose_8x16xf16(%arg0: memref<8x16xf16>, %arg1: memref<8x16xf
   //CHECK: %[[r3:.*]] = vector.bitcast %[[r2]] : vector<128xf16> to vector<64xf32>
   //CHECK: %[[r4:.*]] = vector.shape_cast %[[r3]] : vector<64xf32> to vector<4x16xf32>
   //CHECK: %[[alloc:.*]] = memref.alloc() : memref<4096xf32, 3>
+  //CHECK: %[[r5:.*]] = vector.transpose %[[r4]], [1, 0] : vector<4x16xf32> to vector<16x4xf32>
   //CHECK: %[[r22:.*]] = xegpu.create_tdesc %[[alloc]], %{{.*}} : memref<4096xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 4 : i64>>
-  //CHECK: xegpu.store %[[r4]], %[[r22]], %[[cst]] <{transpose}> : vector<4x16xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 4 : i64>>, vector<16xi1>
+  //CHECK: xegpu.store %[[r5]], %[[r22]], %[[cst]] : vector<16x4xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 4 : i64>>, vector<16xi1>
   //CHECK: %[[r23:.*]] = xegpu.create_nd_tdesc %[[alloc]][{{.*}}] : memref<4096xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>>
   //CHECK: %[[r24:.*]] = xegpu.load_nd %[[r23]]  : !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>> -> vector<64xf32>
   //CHECK: %[[r25:.*]] = vector.bitcast %[[r24]] : vector<64xf32> to vector<128xf16>
@@ -396,15 +397,16 @@ func.func @test_transpose_16x16xf16(%arg0: memref<16x16xf16>, %arg1: memref<8x32
   %out = xegpu.create_nd_tdesc %arg1[0, 0] : memref<8x32xf16> -> !xegpu.tensor_desc<8x32xf16>
   xegpu.store_nd %cast, %out : vector<8x32xf16>, !xegpu.tensor_desc<8x32xf16>
 
-  //CHECK: %cst = arith.constant dense<true> : vector<16xi1>
+  //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<16xi1>
   //CHECK: %[[r0:.*]] = xegpu.create_nd_tdesc %{{.*}}[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
   //CHECK: %[[r1:.*]] = xegpu.load_nd %[[r0]] <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
   //CHECK: %[[r2:.*]] = vector.shape_cast %[[r1]] : vector<8x16x2xf16> to vector<256xf16>
   //CHECK: %[[r3:.*]] = vector.bitcast %[[r2]] : vector<256xf16> to vector<128xf32>
   //CHECK: %[[r4:.*]] = vector.shape_cast %[[r3]] : vector<128xf32> to vector<8x16xf32>
   //CHECK: %[[alloc:.*]] = memref.alloc() : memref<8192xf32, 3>
+  //CHECK: %[[trans:.*]] = vector.transpose %[[r4]], [1, 0] : vector<8x16xf32> to vector<16x8xf32>
   //CHECK: %[[r22:.*]] = xegpu.create_tdesc %[[alloc]], %{{.*}} : memref<8192xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>
-  //CHECK: xegpu.store %[[r4]], %[[r22]], %[[cst]] <{transpose}> : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<16xi1>
+  //CHECK: xegpu.store %[[trans]], %[[r22]], %[[cst]] : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<16xi1>
   //CHECK: %[[r23:.*]] = xegpu.create_nd_tdesc %[[alloc]][{{.*}}] : memref<8192xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>>
   //CHECK: %[[r24:.*]] = xegpu.load_nd %[[r23]]  : !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>> -> vector<64xf32>
   //CHECK: %[[r25:.*]] = vector.bitcast %[[r24]] : vector<64xf32> to vector<128xf16>
@@ -434,8 +436,9 @@ func.func @test_transpose_8x16xf32(%arg0: memref<8x16xf32>, %arg1: memref<8x16xf
   //CHECK: %[[r0:.*]] = xegpu.create_nd_tdesc %{{.*}}[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK: %[[r1:.*]] = xegpu.load_nd %[[r0]]  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
   //CHECK: %[[alloc:.*]] = memref.alloc() : memref<8192xf32, 3>
+  //CHECK: %[[r2:.*]] = vector.transpose %[[r1]], [1, 0] : vector<8x16xf32> to vector<16x8xf32>
   //CHECK: %[[r19:.*]] = xegpu.create_tdesc %[[alloc]], %{{.*}} : memref<8192xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>
-  //CHECK: xegpu.store %[[r1]], %[[r19]], %[[cst]] <{transpose}> : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<16xi1>
+  //CHECK: xegpu.store %[[r2]], %[[r19]], %[[cst]] : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<16xi1>
   //CHECK: %[[r20:.*]] = xegpu.create_nd_tdesc %[[alloc]][{{.*}}] : memref<8192xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>>
   //CHECK: %[[r21:.*]] = xegpu.load_nd %[[r20]]  : !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>> -> vector<64xf32>
   //CHECK: %[[r22:.*]] = vector.shape_cast %[[r21]] : vector<64xf32> to vector<8x8xf32>
@@ -464,32 +467,35 @@ func.func @test_transpose(%arg0: memref<16x16xf16>, %arg1: memref<8x32xf16>) {
   xegpu.store_nd %transposed, %out : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
   return
 
-  //CHECK: %[[cst:.*]] = arith.constant dense<true> : vector<8xi1>
-  //CHECK: %[[cst_0:.*]] = arith.constant dense<[0, 8, 16, 24, 32, 40, 48, 56]> : vector<8xindex>
-  //CHECK: %[[c64:.*]] = arith.constant 64 : index
-  //CHECK: %[[c8:.*]] = arith.constant 8 : index
-  //CHECK: %[[c16:.*]] = arith.constant 16 : index
-  //CHECK: %[[r0:.*]] = gpu.subgroup_id : index
-  //CHECK: %[[r1:.*]] = arith.muli %[[r0]], %[[c8]] : index
-  //CHECK: %[[r2:.*]] = xegpu.create_nd_tdesc %[[arg0]][0, %[[r1]]] : memref<16x16xf16> -> !xegpu.tensor_desc<16x8xf16>
-  //CHECK: %[[r3:.*]] = xegpu.load_nd %[[r2]] <{packed}> : !xegpu.tensor_desc<16x8xf16> -> vector<8x8x2xf16>
-  //CHECK: %[[r4:.*]] = vector.shape_cast %[[r3]] : vector<8x8x2xf16> to vector<128xf16>
-  //CHECK: %[[r5:.*]] = vector.bitcast %[[r4]] : vector<128xf16> to vector<64xf32>
-  //CHECK: %[[r6:.*]] = vector.shape_cast %[[r5]] : vector<64xf32> to vector<8x8xf32>
-  //CHECK: %[[alloc:.*]] = memref.alloc() : memref<4096xf32, 3>
-  //CHECK: %[[r7:.*]] = gpu.subgroup_id : index
-  //CHECK: %[[r8:.*]] = arith.muli %[[r7]], %[[c64]] : index
-  //CHECK: %[[r9:.*]] = vector.broadcast %[[r8]] : index to vector<8xindex>
-  //CHECK: %[[r10:.*]] = arith.addi %[[r9]], %[[cst_0]] : vector<8xindex>
-  //CHECK: %[[r11:.*]] = xegpu.create_tdesc %[[alloc]], %[[r10]] : memref<4096xf32, 3>, vector<8xindex> -> !xegpu.tensor_desc<8x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>
-  //CHECK: xegpu.store %[[r6]], %[[r11]], %[[cst]] <{transpose}> : vector<8x8xf32>, !xegpu.tensor_desc<8x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<8xi1>
-  //CHECK: %[[r12:.*]] = xegpu.create_nd_tdesc %[[alloc]][%[[r8]]] : memref<4096xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>>
-  //CHECK: %[[r13:.*]] = xegpu.load_nd %[[r12]]  : !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>> -> vector<64xf32>
-  //CHECK: %[[r14:.*]] = vector.bitcast %[[r13]] : vector<64xf32> to vector<128xf16>
-  //CHECK: %[[r15:.*]] = vector.shape_cast %[[r14]] : vector<128xf16> to vector<8x16xf16>
-  //CHECK: %[[r16:.*]] = arith.muli %[[r0]], %[[c16]] : index
-  //CHECK: %[[r17:.*]] = xegpu.create_nd_tdesc %[[arg1]][0, %[[r16]]] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
-  //CHECK: xegpu.store_nd %[[r15]], %[[r17]]  : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
+  //CHECK: [[c0:%.+]] = arith.constant 0 : index
+  //CHECK: [[cst:%.+]] = arith.constant dense<true> : vector<8xi1>
+  //CHECK: [[cst_0:%.+]] = arith.constant dense<[0, 8, 16, 24, 32, 40, 48, 56]> : vector<8xindex>
+  //CHECK: [[c64:%.+]] = arith.constant 64 : index
+  //CHECK: [[c8:%.+]] = arith.constant 8 : index
+  //CHECK: [[c16:%.+]] = arith.constant 16 : index
+  //CHECK: [[r0:%.+]] = gpu.subgroup_id : index
+  //CHECK: [[r1:%.+]] = arith.muli [[r0]], [[c8]] : index
+  //CHECK: [[r2:%.+]] = xegpu.create_nd_tdesc %[[arg0]][0, [[r1]]] : memref<16x16xf16> -> !xegpu.tensor_desc<16x8xf16>
+  //CHECK: [[r3:%.+]] = xegpu.load_nd [[r2]] <{packed}> : !xegpu.tensor_desc<16x8xf16> -> vector<8x8x2xf16>
+  //CHECK: [[r4:%.+]] = vector.shape_cast [[r3]] : vector<8x8x2xf16> to vector<128xf16>
+  //CHECK: [[r5:%.+]] = vector.bitcast [[r4]] : vector<128xf16> to vector<64xf32>
+  //CHECK: [[r6:%.+]] = vector.shape_cast [[r5]] : vector<64xf32> to vector<8x8xf32>
+  //CHECK: [[alloc:%.+]] = memref.alloc() : memref<4096xf32, 3>
+  //CHECK: [[r7:%.+]] = gpu.subgroup_id : index
+  //CHECK: [[r8:%.+]] = arith.muli [[r7]], [[c64]] : index
+  //CHECK: [[r9:%.+]] = vector.transpose [[r6]], [1, 0] : vector<8x8xf32> to vector<8x8xf32>
+  //CHECK: [[r10:%.+]] = vector.broadcast [[r8]] : index to vector<8xindex>
+  //CHECK: [[r11:%.+]] = arith.addi [[r10]], [[cst_0]] : vector<8xindex>
+  //CHECK: [[r12:%.+]] = xegpu.create_tdesc [[alloc]], [[r11]] : memref<4096xf32, 3>, vector<8xindex> -> !xegpu.tensor_desc<8x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>
+  //CHECK: xegpu.store [[r9]], [[r12]], [[cst]] : vector<8x8xf32>, !xegpu.tensor_desc<8x8xf32, #xegpu.scatter_tdesc_attr<memory_space =  slm, chunk_size = 8 : i64>>, vector<8xi1>
+  //CHECK: [[r13:%.+]] = arith.addi [[r8]], [[c0]] : index
+  //CHECK: [[r14:%.+]] = xegpu.create_nd_tdesc [[alloc]][[[r13]]] : memref<4096xf32, 3> -> !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>>
+  //CHECK: [[r15:%.+]] = xegpu.load_nd [[r14]] : !xegpu.tensor_desc<64xf32, #xegpu.block_tdesc_attr<memory_space =  slm, array_length = 1 : i64, boundary_check = false>> -> vector<64xf32>
+  //CHECK: [[r16:%.+]] = vector.bitcast [[r15]] : vector<64xf32> to vector<128xf16>
+  //CHECK: [[r17:%.+]] = vector.shape_cast [[r16]] : vector<128xf16> to vector<8x16xf16>
+  //CHECK: [[r18:%.+]] = arith.muli [[r0]], [[c16]] : index
+  //CHECK: [[r19:%.+]] = xegpu.create_nd_tdesc %[[arg1]][0, [[r18]]] : memref<8x32xf16> -> !xegpu.tensor_desc<8x16xf16>
+  //CHECK: xegpu.store_nd [[r17]], [[r19]]  : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
 }
 
 // -----

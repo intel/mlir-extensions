@@ -120,8 +120,8 @@ def EnvironmentRegionOp : Region_Op<"env_region", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Attribute":$environment,
-      CArg<"::mlir::ValueRange", "std::nullopt">:$args,
-      CArg<"::mlir::TypeRange", "std::nullopt">:$results,
+      CArg<"::mlir::ValueRange", "{}">:$args,
+      CArg<"::mlir::TypeRange", "{}">:$results,
       CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location)>", "nullptr">)>
   ];
 

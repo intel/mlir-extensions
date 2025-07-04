@@ -535,12 +535,11 @@ public:
     auto ldTy = VectorType::get(type.getNumElements(), elemTy);
     auto maskTy =
         VectorType::get(type.getNumElements(), rewriter.getIntegerType(1));
-    auto transposeAttr = UnitAttr();
     auto [L1, L2, L3] = getCachePolicy(op);
     auto mask =
         rewriter.create<vector::ShapeCastOp>(loc, maskTy, adaptor.getMask());
     auto ldOp = rewriter.create<xegpu::LoadGatherOp>(
-        loc, ldTy, adaptor.getTile(), mask, transposeAttr, L1, L2, L3);
+        loc, ldTy, adaptor.getTile(), mask, L1, L2, L3);
     auto v = rewriter.create<vector::ShapeCastOp>(loc, op.getType(), ldOp);
     rewriter.replaceOp(op, v);
     return success();
@@ -574,9 +573,15 @@ public:
       auto maskTy = VectorType::get(tileTy.getShape()[1], rewriter.getI1Type());
       auto mask = rewriter.create<arith::ConstantOp>(
           loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
-      auto transAttr = rewriter.getUnitAttr();
+
+      if (tileTy.getRank() > 1) {
+        SmallVector<int64_t> permutation = llvm::to_vector(
+            llvm::reverse(llvm::seq<int64_t>(tileTy.getRank())));
+        value = rewriter.create<vector::TransposeOp>(loc, value, permutation);
+      }
+
       rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(
-          op, value, adaptor.getTile(), mask, transAttr, L1, L2, L3);
+          op, value, adaptor.getTile(), mask, L1, L2, L3);
     } else {
       // Since the low-level instruction works on 1D vector of 32-bits data, the
       // data to be stored need to be linearized and bitcasted.
@@ -605,12 +610,11 @@ public:
     auto numElems = tileTy.getNumElements();
     auto valTy = VectorType::get(numElems, tileTy.getElementType());
     auto maskTy = VectorType::get(numElems, rewriter.getIntegerType(1));
-    auto transposeAttr = UnitAttr();
     auto [L1, L2, L3] = getCachePolicy(op, xegpu::CachePolicy::WRITE_BACK);
     mask = rewriter.create<vector::ShapeCastOp>(op.getLoc(), maskTy, mask);
     value = rewriter.create<vector::ShapeCastOp>(op.getLoc(), valTy, value);
-    rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(
-        op, value, tdesc, mask, transposeAttr, L1, L2, L3);
+    rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(op, value, tdesc, mask,
+                                                       L1, L2, L3);
     return success();
   }
 };

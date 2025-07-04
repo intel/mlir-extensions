@@ -57,7 +57,8 @@ module @gemm attributes {gpu.container_module} {
       %slm_desc = xegpu.create_tdesc %slm, %offsets : memref<256xf32, 3>, vector<8xindex> -> !xegpu.tensor_desc<8x8xf32, #slm>
 
       %mask = arith.constant dense<[1, 1, 1, 1, 1, 1, 1, 1]> : vector<8xi1>
-      xegpu.store %cast, %slm_desc, %mask {transpose} : vector<8x8xf32>, !xegpu.tensor_desc<8x8xf32, #slm>, vector<8xi1>
+      %trans = vector.transpose %cast, [1, 0] : vector<8x8xf32> to vector<8x8xf32>
+      xegpu.store %trans, %slm_desc, %mask : vector<8x8xf32>, !xegpu.tensor_desc<8x8xf32, #slm>, vector<8xi1>
 
       // step2: load from slm using 1d block load
       %off = arith.muli %id, %c64 : index

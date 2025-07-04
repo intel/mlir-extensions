@@ -65,7 +65,7 @@ static ::mlir::LogicalResult matchAndRewritePTOP(::mlir::Operation *op,
 
   // create a region with given env and clone creator op within and yield it
   rewriter.replaceOpWithNewOp<::imex::region::EnvironmentRegionOp>(
-      op, env, std::nullopt, op->getResultTypes(),
+      op, env, llvm::ArrayRef<mlir::Value>(), op->getResultTypes(),
       [op](::mlir::OpBuilder &builder, ::mlir::Location loc) {
         auto cOp = builder.clone(*op);
         (void)builder.create<::imex::region::EnvironmentRegionYieldOp>(

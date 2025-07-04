@@ -31,7 +31,6 @@ add_mlir_library(IMEXTransforms
   MLIRSupport
   MLIRTransformUtils
   MLIRVectorTransforms
-  MLIRCopyOpInterface
 
   DEPENDS
   IMEXTransformsPassIncGen

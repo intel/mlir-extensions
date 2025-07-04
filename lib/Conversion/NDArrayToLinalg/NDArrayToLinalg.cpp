@@ -102,7 +102,7 @@ struct CopyLowering : public ::mlir::OpRewritePattern<::imex::ndarray::CopyOp> {
       // create a region with given env, add copy op within it
       auto env = rewriter.getStringAttr("protect_copy_op");
       rewriter.create<::imex::region::EnvironmentRegionOp>(
-          loc, env, std::nullopt, std::nullopt,
+          loc, env, llvm::ArrayRef<mlir::Value>(), llvm::ArrayRef<mlir::Type>(),
           [&srcMR, &mr](::mlir::OpBuilder &builder, ::mlir::Location loc) {
             (void)builder.create<::mlir::memref::CopyOp>(loc, srcMR, mr);
             (void)builder.create<::imex::region::EnvironmentRegionYieldOp>(loc);

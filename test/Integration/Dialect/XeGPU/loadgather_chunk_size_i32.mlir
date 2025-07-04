@@ -36,8 +36,8 @@ module @gemm attributes {gpu.container_module} {
       %mask = arith.constant dense<[1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0]> : vector<16xi1>
       %tdesc_in = xegpu.create_tdesc %in, %offsets : memref<?xi32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
       %tdesc_out = xegpu.create_tdesc %out, %offsets : memref<?xi32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
-      %loaded = xegpu.load %tdesc_in, %mask {transpose} : !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1> -> vector<2x16xi32>
-      xegpu.store %loaded, %tdesc_out, %mask {transpose} : vector<2x16xi32>, !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1>
+      %loaded = xegpu.load %tdesc_in, %mask : !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1> -> vector<16x2xi32>
+      xegpu.store %loaded, %tdesc_out, %mask : vector<16x2xi32>, !xegpu.tensor_desc<16x2xi32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1>
       gpu.return
     }
   }

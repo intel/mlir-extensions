@@ -31,7 +31,7 @@ module @gemm attributes {gpu.container_module} {
       %a_cast = memref.reinterpret_cast %a to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
       %a_tdesc = xegpu.create_tdesc %a_cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #scatter>
       xegpu.prefetch %a_tdesc : !xegpu.tensor_desc<16x8xf32, #scatter>
-      %data = xegpu.load %a_tdesc, %mask {transpose} : !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1> -> vector<8x16xf32>
+      %data = xegpu.load %a_tdesc, %mask : !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1> -> vector<16x8xf32>
 
       // store to b using store_nd, used to check the implicit order issues with load_gather and store_scatter.
       // %c0 = arith.constant 0 : index
@@ -41,7 +41,7 @@ module @gemm attributes {gpu.container_module} {
       // store to b using store_scatter
       %b_cast = memref.reinterpret_cast %b to offset: [0], sizes: [128], strides: [1] : memref<16x8xf32> to memref<128xf32>
       %b_tdesc = xegpu.create_tdesc %b_cast, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #scatter>
-      xegpu.store %data, %b_tdesc, %mask {transpose} : vector<8x16xf32>, !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1>
+      xegpu.store %data, %b_tdesc, %mask : vector<16x8xf32>, !xegpu.tensor_desc<16x8xf32, #scatter>, vector<16xi1>
       gpu.return
     }
   }

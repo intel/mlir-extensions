@@ -10,6 +10,7 @@ builtin.module(
     gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true}
         convert-xegpu-to-vc)
     cse
+    canonicalize
     imex-vector-linearize
     canonicalize
     cse
