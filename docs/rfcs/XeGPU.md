@@ -799,11 +799,12 @@ For `dpas`, the `layout` attribute of input operands must have the same `sg_layo
    #layout_c = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data=[16,16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]> //layout for %vector_c
 ```
 
-For `reduction`, `xegpu.slice` is introduced to represent the `layout` of the reduced tensor. It inherits a regualr `layout` and specifies the dimension being reduced.
+For `reduction`, `xegpu.slice` is introduced to represent the `layout` of the reduced tensor. It inherits a regualr `layout` and specifies the dimension being reduced. 
+It conceptually squeezes the threads along that dim, and all threads share the same mapping with their representative thread. 
 
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 128], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
-   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   #layout_a_reduce = #xegpu.slice<#layout_a, 1>
    %vector_a = vector.multi_reduction <add> %vector_b, %cst_0 [1] {#layout_a_reduce}: vector<256x128xfloat> into vector<256xfloat>
    
    //derived layout for input operand
@@ -813,7 +814,7 @@ For `reduction`, `xegpu.slice` is introduced to represent the `layout` of the re
 The rule also applies to reduction from 3d to 2d.
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0]>
-   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   #layout_a_reduce = #xegpu.slice<#layout_a, 1>
    %%vector_a = vector.multi_reduction <add>, %vector_b, %cst_0 [1] {#layout_a_reduce}: vector<8x32x128xf32> to vector<8x128xf32>
 
    //derived layout for input operand
@@ -834,14 +835,14 @@ For `shape_cast`, it first determines the dimensions being reduced or expanded. 
 
    //derived layout for input operand
    #layout_b = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [32, 1, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
-   #layout_b_reduce = #xegpu.slice<{dim = 1, parent = #layout_b}>
+   #layout_b_reduce = #xegpu.slice<#layout_b, 1>
 ```
 
 For `broadcast`, `layout` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut layout and must be removed for the input operand. The corresponding dimension in `sg_data` and `order` must be removed also.
 
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [16, 1], sg_data = [16, 256], inst_data=[1, 16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
-   #layout_a_reduce = #xegpu.slice<{dim = 1, parent = #layout_a}>
+   #layout_a_reduce = #xegpu.slice<#layout_a, 1>
    %vector_a = vector.broadcast %vector_b [1] {#layout_a_reduce}: vector<256xfloat> into vector<256x256xfloat>
 
    //derived layout for input operand
