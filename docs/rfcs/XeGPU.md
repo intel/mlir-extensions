@@ -343,6 +343,26 @@ The motivation of `matrix_desc` data type and related operations is to simplify 
 |load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]> -> vector<128x256xbf16> |
 |store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]>, vector<128x256xbf16> |
 
+User creates `matrix_desc` to hold a matrix in the share local memory. The operation allocates a share local memory for the matrix, assuming the matrix is row-major and contiguous. The block attribute indicates the matrix has a blocked layout.
+```mlir
+%mdesc_a = xegpu.create_matrix_desc: matrix_desc<256x128xbf16, @mem_layout=block[8, 16]>
+```
+User creates a subview of matrix.
+```mlir
+%mdesc_a = xegpu.matrix_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]: matrix_desc<3x256x128xbf16> -> matrix_desc<256x128xbf16>
+%mdesc_coop_a = xegpu.matrix_desc_subview %mdesc_a[0, %wg_id_x_in_cluster*64]: matrix_desc<256x128xbf16> -> matrix_desc<256x64xbf16, row_stride=128>
+```
+
+Users load a matrix from share local memory to vector. 
+```mlir
+vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @mem_layout=block[8, 16]> -> vector<256x128xbf6>
+```
+
+Users store a matrix to share local memory from vector. 
+```mlir
+store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @mem_layout=block[8, 16]>, vector<256x128xbf6>
+```
+
 ## XeGPU Attributes to support Work Item Level semantics
 
 **Attribute xegpu.sg_map**
