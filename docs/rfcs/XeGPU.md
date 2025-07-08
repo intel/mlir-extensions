@@ -329,6 +329,20 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 `nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the `sg_map`.
 
+## XeGPU operations to access share local memory
+Users must create `matrix_desc` to hold a matrix in the share local memory. The matrix must be row-major. The matrix can attach a attribute for its memory layout, for example, a blocked layout or just original non-blocked row-major layout (aka. linear layout). 
+User can get a subview of an existing `matrix_desc` to get a new `matrix_desc`, potentially having a stride. Then user can use load_matrix and store_matrix to move the matrix data between share local memory and vectors (registers). The matrix is typically 2d and but can be multi-dimension. XeGPU's load_matrix and store_matrix works at workgroup level only. It uses xegpu.layout to describe how the matrix is decomposed to data fragments and maps to work items. The workgroup level operation loads the entire matrix to vector.
+
+The motivation of `matrix_desc` data type and related operations is to simplify the programming model. Rather than trying to reuse `tensor_desc` to describe the matrix/tile in the share local memory, it is straightforward to use a dedicate data type to describe it. The use of share local memory is usually very local not exposed to workgroup level user, for example, supporting the lowering of transpose, reduction, and convert layout operations. So the createion of matrix_desc doesn't take a memref as input and implictly allocate share local memory. The share local memory may be blocked to facilitate the optimized lowering to load chunk or 1d block load. 
+
+
+| Ops	| Syntax	| Example |
+| :---   | :----   | :--- |
+|create_matrix_desc	| operation ::= xegpu.create_matrix_desc attr-dict : type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc : matrix_desc<256x128xbf16,  @mem_layout=block[8, 16] > |
+|matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview \$mdesc, DynamicIndexList<\$coord>  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16,  @layout_type=1> -> matrix_desc<128x128xbf16, @row_stride=256,  @mem_layout=block[8, 16]> |
+|load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]> -> vector<128x256xbf16> |
+|store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]>, vector<128x256xbf16> |
+
 ## XeGPU Attributes to support Work Item Level semantics
 
 **Attribute xegpu.sg_map**
