@@ -366,7 +366,7 @@ store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @block=[8, 16]>, ve
 **Cooperative Transpose Example**
 Suppose we have wg-level user input code 
 ```mlir
-#Coop_t_wg ={sg_layout = [4, 8],  sg_data= [8, 32], order=[1, 0] }
+#Coop_t_wg ={sg_layout = [4, 8],  sg_data= [8, 32], order=[0, 1] }
 #Coop_wg = {sg_layout = [8, 4] , sg_data= [32, 8], order=[1, 0] }
 #dpas_wg = {sg_layout = [8, 4],  sg_data= [32, 32], order=[1, 0] }
 
@@ -377,7 +377,7 @@ Suppose we have wg-level user input code
 
 After an optimization pass which optimize the transpose-A pattern, the transformed code uses store_matrix and load_matrix. Note the load_nd and store_matrix has smaller sg_data so the subgroups perform cooperative transpose.
 ```mlir
-#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[1, 0] }
+#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[0, 1] }
 #dpas_t_wg = {sg_layout = [4, 8], sg_data= [32, 32], order=[1, 0] }
 
 %at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16 >
