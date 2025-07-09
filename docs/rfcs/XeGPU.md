@@ -338,30 +338,94 @@ The motivation of `matrix_desc` data type and related operations is to simplify 
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|create_matrix_desc	| operation ::= xegpu.create_matrix_desc attr-dict : type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc : matrix_desc<256x128xbf16,  @mem_layout=block[8, 16] > |
-|matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview \$mdesc, DynamicIndexList<\$coord>  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16,  @layout_type=1> -> matrix_desc<128x128xbf16, @row_stride=256,  @mem_layout=block[8, 16]> |
-|load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]> -> vector<128x256xbf16> |
-|store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @mem_layout=block[8, 16]>, vector<128x256xbf16> |
+|create_matrix_desc	| operation ::= xegpu.create_matrix_desc attr-dict : type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc : matrix_desc<256x128xbf16> |
+|matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview \$mdesc, DynamicIndexList<\$coord>  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16,  @layout_type=1> -> matrix_desc<128x128xbf16, @stride=[256,1],  @block=[8, 16]> |
+|load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
+|store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @block=[8, 16]>, vector<128x256xbf16> |
 
-User creates `matrix_desc` to hold a matrix in the share local memory. The operation allocates a share local memory for the matrix, assuming the matrix is row-major and contiguous. The block attribute indicates the matrix has a blocked layout.
+User creates `matrix_desc` to hold a matrix in the share local memory. The operation allocates a share local memory for the matrix, assuming the matrix is row-major and contiguous. 
 ```mlir
-%mdesc_a = xegpu.create_matrix_desc: matrix_desc<256x128xbf16, @mem_layout=block[8, 16]>
+%mdesc_a = xegpu.create_matrix_desc: matrix_desc<256x128xbf16>
 ```
-User creates a subview of matrix.
+User creates a subview of matrix. The new matrix maybe associated with `block` and `strides` atttribute to describe the memory layout. The `strides` attributes allows matrix_desc being further decomposed to subgroup and work item level. The `block` attribute indicates the matrix has a blocked layout. 
 ```mlir
-%mdesc_a = xegpu.matrix_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]: matrix_desc<3x256x128xbf16> -> matrix_desc<256x128xbf16>
-%mdesc_coop_a = xegpu.matrix_desc_subview %mdesc_a[0, %wg_id_x_in_cluster*64]: matrix_desc<256x128xbf16> -> matrix_desc<256x64xbf16, row_stride=128>
+%mdesc_a = xegpu.matrix_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]: matrix_desc<3x256x128xbf16> -> matrix_desc<256x128xbf16, @block=[8, 16]>
+%mdesc_coop_a = xegpu.matrix_desc_subview %mdesc_a[0, %wg_id_x_in_cluster*64]: matrix_desc<256x128xbf16> -> matrix_desc<256x64xbf16, @strides=[128, 1]>
 ```
 
 Users load a matrix from share local memory to vector. 
 ```mlir
-vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @mem_layout=block[8, 16]> -> vector<256x128xbf6>
+vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
 ```
 
 Users store a matrix to share local memory from vector. 
 ```mlir
-store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @mem_layout=block[8, 16]>, vector<256x128xbf6>
+store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @block=[8, 16]>, vector<256x128xbf6>
 ```
+
+**Cooperative Transpose Example**
+Suppose we have wg-level user input code 
+```mlir
+#Coop_t_wg ={sg_layout = [4, 8],  sg_data= [8, 32], order=[1, 0] }
+#Coop_wg = {sg_layout = [8, 4] , sg_data= [32, 8], order=[1, 0] }
+#dpas_wg = {sg_layout = [8, 4],  sg_data= [32, 32], order=[1, 0] }
+
+%at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16 >
+%a = vector.transpose %1 #Coop_wg :vector<32x256xf16> -> vector<256x32xf16>
+%a_dpas = Conv_layout %2 #Coop_wg #dpas_wg 
+```
+
+After an optimization pass which optimize the transpose-A pattern, the transformed code uses store_matrix and load_matrix. Note the load_nd and store_matrix has smaller sg_data so the subgroups perform cooperative transpose.
+```mlir
+#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[1, 0] }
+#dpas_t_wg = {sg_layout = [4, 8], sg_data= [32, 32], order=[1, 0] }
+
+%at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16 >
+%m1 = create_matrix_desc : matrix_desc<32x256xf16>
+%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, strides=[1, 32], #coop_wg>
+store_matrix %m1t[0, 0], %at: vector<32x256xf16>, matrix_desc<32x256xf16, strides=[1, 32], #Coop_t_wg>
+barrier
+%m4 = matrix_desc_subview : matrix_desc<256x32xf16, #dpas_t_wg >
+%a_dpas = load_matrix %m2 [0, 0] #dpas_t_wg : vector<256x32xf16>, matrix_desc<256x32xf16, #dpas_t_wg>
+```
+
+After wg->sg level distribution and blocking, this lowers to the following sg-level code. 
+```mlir
+%at1 = load_nd %tdesc, sg_coords1: tensor_desc<32x256xf16> -> vector<8x16xf16>
+%at2 = load_nd %tdesc, sg_coords2: tensor_desc<32x256xf16> -> vector<8x16xf16>
+%m1 = create_matrix_desc : matrix_desc<32x256xf16>
+
+%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
+store_matrix %m1t, sg_slm_coord1, %at1: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
+store_matrix %m1t, sg_slm_coord2, %at2: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
+barrier
+%m4 = matrix_desc_subview : matrix_desc<256x32xf16, block=[16, 16] >
+%a_dpas1 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
+%a_dpas2 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
+%a_dpas3 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
+%a_dpas4 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
+```
+
+After assigned with lane_layout
+```mlir
+#Coop_t_lane ={lane_layout = [1, 16] , lane_data= [1, 1]} 
+#dpas_t_lane = {lane_layout = [2, 8], lane_data= [1, 2]}
+
+%at1 = load_nd %tdesc, sg_coords1: tensor_desc<32x256xf16, #Coop_t_lane> -> vector<8x16xf16>
+%at2 = load_nd %tdesc, sg_coords2: tensor_desc<32x256xf16, #Coop_t_lane> -> vector<8x16xf16>
+%m1 = create_matrix_desc : matrix_desc<32x256xf16>
+
+%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
+store_matrix %m1t, sg_slm_coord1, %at1: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
+store_matrix %m1t, sg_slm_coord2, %at2: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
+barrier
+%m4 = matrix_desc_subview : matrix_desc<256x32xf16, block=[16, 16], #dpas_t_lane >
+%a_dpas1 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
+%a_dpas2 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
+%a_dpas3 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
+%a_dpas4 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
+```
+
 
 ## XeGPU Attributes to support Work Item Level semantics
 
