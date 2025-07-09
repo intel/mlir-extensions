@@ -408,7 +408,7 @@ barrier
 
 After assigned with lane_layout
 ```mlir
-#Coop_t_lane ={lane_layout = [1, 16] , lane_data= [1, 1]} 
+#Coop_t_lane ={lane_layout = [1, 16] , lane_data= [8, 1]} 
 #dpas_t_lane = {lane_layout = [2, 8], lane_data= [1, 2]}
 
 %at1 = load_nd %tdesc, sg_coords1: tensor_desc<32x256xf16, #Coop_t_lane> -> vector<8x16xf16>
