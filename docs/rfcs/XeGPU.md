@@ -377,55 +377,100 @@ Suppose we have wg-level user input code
 
 After an optimization pass which optimize the transpose-A pattern, the transformed code uses store_matrix and load_matrix. Note the load_nd and store_matrix has smaller sg_data so the subgroups perform cooperative transpose.
 ```mlir
-#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[0, 1] }
-#dpas_t_wg = {sg_layout = [4, 8], sg_data= [32, 32], order=[1, 0] }
+#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[0, 1 }
+#dpas_t_wg = {sg_layout = [8, 4], sg_data= [32, 32], order=[1, 0] }
 
 %at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16 >
-%m1 = create_matrix_desc : matrix_desc<32x256xf16>
-%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, strides=[1, 32], #coop_wg>
-store_matrix %m1t[0, 0], %at: vector<32x256xf16>, matrix_desc<32x256xf16, strides=[1, 32], #Coop_t_wg>
+%m = create_matrix_desc : matrix_desc<32x256xf16>
+%mt = matrix_desc_subview %m: matrix_desc<32x256xf16, strides=[1, 32], #coop_t_wg>
+store_matrix %mt[0, 0], %at: vector<32x256xf16>, matrix_desc<32x256xf16, strides=[1, 32], #coop_t_wg>
 barrier
-%m4 = matrix_desc_subview : matrix_desc<256x32xf16, #dpas_t_wg >
-%a_dpas = load_matrix %m2 [0, 0] #dpas_t_wg : vector<256x32xf16>, matrix_desc<256x32xf16, #dpas_t_wg>
+%ma = matrix_desc_subview : matrix_desc<256x32xf16, #dpas_t_wg>
+%a_dpas = load_matrix %ma [0, 0] #dpas_t_wg : matrix_desc<256x32xf16, #dpas_t_wg> -> vector<256x32xf16>
 ```
 
-After wg->sg level distribution and blocking, this lowers to the following sg-level code. 
+After wg->sg level distribution, this lowers to the following sg-level code. 
 ```mlir
-%at1 = load_nd %tdesc, sg_coords1: tensor_desc<32x256xf16> -> vector<8x16xf16>
-%at2 = load_nd %tdesc, sg_coords2: tensor_desc<32x256xf16> -> vector<8x16xf16>
-%m1 = create_matrix_desc : matrix_desc<32x256xf16>
+#coop_t_inst ={ inst_data=[8, 16] }
+#dpas_t_inst = {inst_data=[16, 16] }
+create_nd_tdesc %tdesc_sg [widy*32+sg_idy*8, widx*256+sg_idx*32] : : memref<4096x4096xf16> -> : tensor_desc<8x32xf16, #coop_t_inst>
+%at = load_nd %tdesc: tensor_desc<8x32xf16, #coop_t_inst> -> vector<8x32xf16> 
 
-%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
-store_matrix %m1t, sg_slm_coord1, %at1: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
-store_matrix %m1t, sg_slm_coord2, %at2: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
+%m = create_matrix_desc : matrix_desc<32x256xf16>
+%mt_sg = create_matrix_desc %m [sg_idy*8, sg_idx*32]: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #coop_t_inst >
+store_matrix %mt_sg, %at: vector<8x32xf16>, matrix_desc<8x32xf16, block=[16, 16], strides=[1, 32], #coop_t_inst >
 barrier
-%m4 = matrix_desc_subview : matrix_desc<256x32xf16, block=[16, 16] >
-%a_dpas1 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
-%a_dpas2 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
-%a_dpas3 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
-%a_dpas4 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16]>
+%ma = matrix_desc_subview %m : matrix_desc<256x32xf16, block=[16, 16], #dpas_t_inst>
+%ma_sg = matrix_desc_subview %ma [sg_idy*32, sg_idx*32%32]: matrix_desc<32x32xf16, block=[16, 16] , #dpas_t_inst>
+%a_dpas = load_matrix ma_sg: matrix_desc<32x32xf16, block=[16, 16], #dpas_t_inst >-> vector<32x32xf16>
+
 ```
 
-After assigned with lane_layout
+After blocking according to inst_data.
 ```mlir
-#Coop_t_lane ={lane_layout = [1, 16] , lane_data= [8, 1]} 
-#dpas_t_lane = {lane_layout = [2, 8], lane_data= [1, 2]}
+create_nd_tdesc %tdesc_sg [widy*32+sg_idy*8, widx*256+sg_idx*32] : : memref<4096x4096xf16> -> : tensor_desc<8x32xf16>
+%at = load_nd %tdesc, sg_coords1: tensor_desc<8x32xf16> -> vector<8x32xf16> 
+%at0 = vector.extract %at[0, 0] : vector<8x32xf16> -> vector<8x16xf16>
+%at1 = vector.extract %at[0, 16] : vector<8x32xf16> -> vector<8x16xf16>
+%m = create_matrix_desc : matrix_desc<32x256xf16>
+%mt_sg = create_matrix_desc %m1 [0, 0]: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]>
 
-%at1 = load_nd %tdesc, sg_coords1: tensor_desc<32x256xf16, #Coop_t_lane> -> vector<8x16xf16>
-%at2 = load_nd %tdesc, sg_coords2: tensor_desc<32x256xf16, #Coop_t_lane> -> vector<8x16xf16>
-%m1 = create_matrix_desc : matrix_desc<32x256xf16>
+%mt_inst0 = create_matrix_desc % mt_sg [sg_idy*8, sg_idx*32]: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]> -> matrix_desc<8x16xf16, block=[16, 16], strides=[1, 32]>
+%mt_inst1 = create_matrix_desc % mt_sg [sg_idy*8, sg_idx*32+16]: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32]> -> matrix_desc<8x16xf16, block=[16, 16], strides=[1, 32]>
 
-%m1t = matrix_desc_subview %m1: matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
-store_matrix %m1t, sg_slm_coord1, %at1: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
-store_matrix %m1t, sg_slm_coord2, %at2: vector<8x16xf16>, matrix_desc<32x256xf16, block=[16, 16], strides=[1, 32], #Coop_t_lane>
+store_matrix %mt_inst0, %at0: vector<8x16xf16>, matrix_desc<8x16xf16, block=[16, 16], strides=[1, 32]>
+store_matrix %mt_inst1, %at1: vector<8x16xf16>, matrix_desc<8x16xf16, block=[16, 16], strides=[1, 32]>
 barrier
-%m4 = matrix_desc_subview : matrix_desc<256x32xf16, block=[16, 16], #dpas_t_lane >
-%a_dpas1 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
-%a_dpas2 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
-%a_dpas3 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
-%a_dpas4 = load_matrix %m2 sg_slm_coord3 #dpas_t_wg : vector<16x16xf16>, matrix_desc<256x32xf16, block=[16, 16],  #dpas_t_lane>
+%ma = matrix_desc_subview %m: matrix_desc<256x32xf16, block=[16, 16] >
+%ma_inst0 = matrix_desc_subview % ma [sg_idy*32, sg_idx*32%32]: matrix_desc<16x16xf16, block=[16, 16] >
+% ma_inst1 = matrix_desc_subview %ma [sg_idy*32, sg_idx*32%32+16]: matrix_desc<16x16xf16, block=[16, 16] >
+% ma_inst2 = matrix_desc_subview %ma [sg_idy*32+16, sg_idx*32%32]: matrix_desc<16x16xf16, block=[16, 16] >
+% ma_inst3 = matrix_desc_subview %ma [sg_idy*32+16, sg_idx*32%32+16]: matrix_desc<16x16xf16, block=[16, 16] >
+%a_dpas_0 = load_matrix ma_inst0: matrix_desc<16x16xf16, block=[16, 16]>, vector<16x16xf16>
+%a_dpas_1 = load_matrix ma_inst1: matrix_desc<16x16xf16, block=[16, 16]>, vector<16x16xf16>
+%a_dpas_2 = load_matrix ma_inst2: matrix_desc<16x16xf16, block=[16, 16]>, vector<16x16xf16>
+%a_dpas_3 = load_matrix ma_inst3: matrix_desc<16x16xf16, block=[16, 16]>, vector<16x16xf16>
 ```
 
+MaterializeSLMAccess pass replace matrix_desc and related ops to memref and load and load_1d. Pseudo code used to simplify the code.
+```mlir
+create_nd_tdesc %tdesc_sg [widy*32+sg_idy*8, widx*256+sg_idx*32] : : memref<4096x4096xf16> -> : tensor_desc<8x32xf16>
+%at = load_nd %tdesc, sg_coords1: tensor_desc<8x32xf16> -> vector<8x32xf16> 
+%at0 = vector.extract %at[0, 0] : vector<8x32xf16> -> vector<8x16xf16>
+%at1 = vector.extract %at[0, 16] : vector<8x32xf16> -> vector<8x16xf16>
+
+%blk_y=sg_idy*8 /16: index
+%blk_in_y=sg_idy*8 %16: index
+%sg_idx_vec = %sg_idx*32 + [0..15] : vector<16xindex> 
+%blk_x=%sg_idx_vec /16: vector<16xindex > 
+%blk_in_x=%sg_idx_vec %16: vector<16xindex >
+%sg_start_offset_vec = %blk_y * 16 + %blk_in_y + %blk_x * 512 + %blk_in_x*16
+%tdesc0 = xegpu.create_tdesc %m, %sg_start_offset_vec: memref<8192xf16, 3>, %sg_start_offset_vec ->tdesc<8x16xf16, chunk=8, scope=slm>
+
+%sg_idx_vec2 = %sg_idx*32 + [16..31] : vector<16xindex> 
+%blk_x2=%sg_idx_vec /16: vector<16xindex > 
+%blk_in_x2=%sg_idx_vec %16: vector<16xindex >
+%sg_start_offset_vec2 = %blk_y * 16 + %blk_in_y + %blk_x * 512 + %blk_in_x*16
+%tdesc1 = xegpu.create_tdesc %m, %sg_start_offset_vec2: memref<8192xf16, 3>, %sg_start_offset_vec ->tdesc<8x16xf16, chunk=8, scope=slm>
+
+xegpu.store %tdesc0, %at0: tdesc<8x32xf16, chunk=8, scope=slm>, vector<8x16xf16>
+xegpu.store %tdesc1, %at1: tdesc<8x32xf16, chunk=8, scope=slm>, vector<8x16xf16>
+
+barrier
+%inst_start_offset0  = sg_idy*2* 512
+%tdesc0 = xegpu.create_nd_tdesc %m1, % inst_start_offset0 : memref<8192xf16, 3>, index->tdesc<256xf16 >
+%inst_start_offset0  = sg_idy*2* 512 + 256
+%tdesc1 = xegpu.create_nd_tdesc %m1, % inst_start_offset0 : memref<8192xf16, 3>, index->tdesc<256xf16 >
+%inst_start_offset0  = sg_idy*2* 512 + 512
+%tdesc2 = xegpu.create_nd_tdesc %m1, % inst_start_offset0 : memref<8192xf16, 3>, index->tdesc<256xf16 >
+%inst_start_offset0  = sg_idy*2* 512 + 512 + 256
+%tdesc3 = xegpu.create_nd_tdesc %m1, % inst_start_offset0 : memref<8192xf16, 3>, index->tdesc<256xf16 >
+
+a_dpas_0 = Load_nd %tdesc0: tdesc<256xf16 > -> vector<256xf16>
+a_dpas_1 = Load_nd %tdesc1: tdesc<256xf16 > -> vector<256xf16>
+a_dpas_2 = Load_nd %tdesc2: tdesc<256xf16 > -> vector<256xf16>
+a_dpas_3 = Load_nd %tdesc3: tdesc<256xf16 > -> vector<256xf16>
+```
 
 ## XeGPU Attributes to support Work Item Level semantics
 
