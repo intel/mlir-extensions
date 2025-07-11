@@ -340,20 +340,9 @@ This complexity was further compounded by hierarchical distribution, where workg
 
 **Design and Semantics**
 
-The matrix_desc type addresses these challenges by:
-
--Encoding layout transformations (e.g., transpose, blocking) as static attributes of the descriptor.
-
--Separating logical and physical address computation:
-
-	-The distribution and unrolling process operates on a conceptual row-major 2D matrix.
-
-	-The physical address materialization then maps logical coordinates to hardware-compliant SLM addresses, guided by layout attributes in matrix_desc.
+The matrix_desc type addresses these challenges by encoding layout transformations—such as transpose and blocking—as static attributes of the descriptor, and by clearly separating logical and physical address computation. The distribution and unrolling process operates on a conceptual row-major 2D matrix, enabling clean and structured logical access, while the physical address materialization phase maps these logical coordinates to hardware-compliant SLM addresses, guided by the layout attributes attached to the matrix_desc.
 
 This separation simplifies distribution and unrolling passes and enables systematic, robust transformations during compilation. The descriptor encapsulates all necessary layout metadata to generate correct and efficient SLM access patterns — supporting both regular loads and 1D block loads — without requiring the user to write explicit address arithmetic.
-
-Users must create `matrix_desc` to hold a matrix in the share local memory. The matrix must be row-major. The matrix can attach a attribute for its memory layout, for example, a blocked layout or just original non-blocked row-major layout (aka. linear layout). User can get a subview of an existing `matrix_desc` to get a new `matrix_desc`, potentially having strided and blocked layout attributes. Then user can use load_matrix and store_matrix to move the matrix data between slm and vectors (registers). The matrix is typically 2d and but can be multi-dimension. XeGPU's load_matrix and store_matrix works at workgroup scope only. 
-
 
 **Basic Usage**
 
