@@ -330,8 +330,11 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 `nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the `sg_map`.
 
 ## matrix_desc Type: Simplified Shared Local Memory (SLM) Abstraction
+
 To streamline programming of shared local memory (SLM) on Intel Xe architecture, the XeGPU dialect introduces a new type: matrix_desc. This abstraction is designed to simplify the management of workgroup-level tiles in SLM, especially in scenarios involving layout transformations such as transpose, reduction, and blocking.
+
 **Background and Motivation**
+
 On Xe2 GPUs, SLM remains accessible for direct use by programmers. However, in tile-based programming — particularly when applying layout transformations such as transpose, re-layout — SLM is more commonly used as a backing store to facilitate structured tile movement across subgroups and lanes.
 
 Prior to the introduction of matrix_desc, SLM usage was modeled using the nd_tdesc type, which was originally designed for global memory access. As such, it lacked layout-specific attributes like blocking and stride metadata, which are essential for modeling tiled or transposed views in SLM. Developers were responsible for manually computing physical addresses — a process that became particularly complex when applying transformations such as transpose or blocking as required by chunked load or 1D block load. 
@@ -359,29 +362,29 @@ Data movement between SLM and vector registers is performed using load_matrix an
 |load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
 |store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @block=[8, 16]>, vector<128x256xbf16> |
 
-User creates `matrix_desc` to hold a matrix in the share local memory. The operation allocates a share local memory for the matrix, assuming the matrix is row-major and contiguous. 
+Users create a `matrix_desc` to represent a matrix stored in shared local memory (SLM). The operation allocates SLM for the matrix, assuming a row-major contiguous layout.
 
 ```mlir
 %mdesc_a = xegpu.create_matrix_desc: matrix_desc<256x128xbf16>
 ```
-User creates a subview of matrix. The new matrix maybe associated with `block` and `strides` atttributes to describe the memory layout. The `strides` attributes allows matrix_desc being further decomposed to subgroup and work item level. The `block` attribute indicates the matrix has a blocked layout. The `block` attribute facilitates the optimized lowering to 1d block load, and `strides` for load with chunk. It can also attach `xegpu.layout` attribute to describe how the matrix is decomposed to data fragments and maps to work items. 
+Users can create a subview of a matrix_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. The resulting matrix_desc may be annotated with layout attributes such as @block and @strides to describe its memory layout more precisely. The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads. Additionally, a subview may carry an xegpu.layout attribute that defines how the matrix is logically partitioned into fragments and mapped to work items.
 ```mlir
 %mdesc_a = xegpu.matrix_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]: matrix_desc<3x256x128xbf16> -> matrix_desc<256x128xbf16, @block=[8, 16]>
 %mdesc_coop_a = xegpu.matrix_desc_subview %mdesc_a[0, %wg_id_x_in_cluster*64]: matrix_desc<256x128xbf16> -> matrix_desc<256x64xbf16, @strides=[128, 1]>
 ```
 
-Users load a matrix from share local memory to vector. 
+Users can load a matrix from shared local memory into a vector value using the load_matrix operation. The result is a vector type in the IR, representing a tile stored in registers.
 ```mlir
 vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
 ```
 
-Users store a matrix to share local memory from vector. 
+Users can store a matrix from a vector value into shared local memory using the store_matrix operation.
 ```mlir
 store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @block=[8, 16]>, vector<256x128xbf6>
 ```
 
 **Cooperative Transpose Example**
-Suppose we have wg-level user input code 
+This example demonstrates a cooperative transpose pattern in which a matrix tile is loaded by a workgroup and collaboratively transposed across subgroups or threads. The operation is broken into two steps: a local transpose using vector.transpose and a cooperative re-layout using xegpu.convert_layout, where neighboring subgroups within a workgroup exchange data to form the desired transposed tile layout.
 ```mlir
 #Coop_t_wg ={sg_layout = [4, 8],  sg_data= [8, 32], order=[0, 1] }
 #Coop_wg = {sg_layout = [8, 4] , sg_data= [32, 8], order=[1, 0] }
@@ -391,19 +394,42 @@ Suppose we have wg-level user input code
 %a = vector.transpose %1 #Coop_wg :vector<32x256xf16> -> vector<256x32xf16>
 %a_dpas = Conv_layout %2 #Coop_wg #dpas_wg 
 ```
+In this flow:
 
-After an optimization pass which optimize the transpose-A pattern, the transformed code uses store_matrix and load_matrix. Note the load_nd and store_matrix has smaller sg_data so the subgroups perform cooperative transpose.
-```mlir
-#Coop_t_wg ={sg_layout = [4, 8], sg_data= [8, 32], order=[0, 1 }
-#dpas_t_wg = {sg_layout = [8, 4], sg_data= [32, 32], order=[1, 0] }
+vector.transpose applies a local transpose within each thread’s register tile.
 
-%at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16 >
-%m = create_matrix_desc : matrix_desc<32x256xf16>
-%mt = matrix_desc_subview %m: matrix_desc<32x256xf16, strides=[1, 32], #coop_t_wg>
-store_matrix %mt[0, 0], %at: vector<32x256xf16>, matrix_desc<32x256xf16, strides=[1, 32], #coop_t_wg>
-barrier
-%ma = matrix_desc_subview : matrix_desc<256x32xf16, #dpas_t_wg>
-%a_dpas = load_matrix %ma [0, 0] #dpas_t_wg : matrix_desc<256x32xf16, #dpas_t_wg> -> vector<256x32xf16>
+xegpu.convert_layout performs a cooperative data exchange among threads/subgroups to assemble a larger tile in the transposed layout.
+
+The result is a matrix tile conforming to the #dpas_wg layout, ready for compute instructions such as DPAS.
+
+After an optimization pass that targets the transpose-A pattern, the code is transformed to use store_matrix and load_matrix to materialize the transpose cooperatively in shared local memory. Note that both load_nd and store_matrix use smaller sg_data values, meaning each subgroup processes a smaller fragment, enabling a cooperative transpose across threads.
+
+It is generally preferred to fuse transpose and convert_layout earlier in the pipeline, as this affects the blocking strategy for load_matrix and store_matrix (which are the lowered forms of the logical layout conversion and transpose). Early fusion enables better alignment with optimal hardware load instructions.
+
+```mlir 
+#Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], order = [0, 1] }  // original layout
+#dpas_t_wg  = { sg_layout = [8, 4], sg_data = [32, 32], order = [1, 0] } // target DPAS layout
+
+%at = xegpu.load_nd %tdesc
+    : tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+
+%m = xegpu.create_matrix_desc
+    : matrix_desc<32x256xf16>
+
+%mt = xegpu.matrix_desc_subview %m[0, 0]
+    : matrix_desc<32x256xf16> -> matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
+
+xegpu.store_matrix %mt[0, 0], %at
+    : vector<32x256xf16>, matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
+
+xegpu.barrier
+
+%ma = xegpu.matrix_desc_subview %m[0, 0]
+    : matrix_desc<32x256xf16> -> matrix_desc<256x32xf16, #dpas_t_wg>
+
+%a_dpas = xegpu.load_matrix %ma[0, 0]
+    : matrix_desc<256x32xf16, #dpas_t_wg> -> vector<256x32xf16>
+
 ```
 
 After wg->sg level distribution, this lowers to the following sg-level code. 
