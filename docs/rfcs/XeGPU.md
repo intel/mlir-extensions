@@ -329,11 +329,39 @@ Attribute `Memory_kind` describes the memory kind. "global" means the global mem
 
 `nbarrier` and `fence` operations lower to uniform instructions, so there is no need to specify the `sg_map`.
 
-## XeGPU operations to access share local memory
-XeGPU introduced `matrix_desc` data type to simplify programming share local memory (slm). In Xe2, the slm access is not directly programmed by user, but as an implementation to support transpose, reduction, and convert layout of a workgroup level tile. There is a common programming pattern that user allocates a 2d matrix in slm with row-major contiguous layout, then distribute the matrix to each subgroup and lane. The distribution process involves complex address computation, espeically when the memory access try to view the 2d matrix in a transposed view. The address computation becomes even more complicated for Xe2's 1d block load as it requires to block the slm so the innermost block is contiguous in slm. `matrix_desc` data type simplified the distribution by encoding the transposed and blocked layout as attribute, which separates the logical addresses compution in distribution and later physical address computation. The distribution process works on a logical address on top of row-major contiguous view of 2d matrix, and later materialized to physical address using the slm's memory layout attributes as required by 1d block load and regular load. 
+## matrix_desc Type: Simplified Shared Local Memory (SLM) Abstraction
+To streamline programming of shared local memory (SLM) on Intel Xe architecture, the XeGPU dialect introduces a new type: matrix_desc. This abstraction is designed to simplify the management of workgroup-level tiles in SLM, especially in scenarios involving layout transformations such as transpose, reduction, and blocking.
+**Background and Motivation**
+On Xe2 GPUs, SLM remains accessible for direct use by programmers. However, in tile-based programming — particularly when applying layout transformations such as transpose, re-layout — SLM is more commonly used as a backing store to facilitate structured tile movement across subgroups and lanes.
+
+Prior to the introduction of matrix_desc, SLM usage was modeled using the nd_tdesc type, which was originally designed for global memory access. As such, it lacked layout-specific attributes like blocking and stride metadata, which are essential for modeling tiled or transposed views in SLM. Developers were responsible for manually computing physical addresses — a process that became particularly complex when applying transformations such as transpose or blocking as required by chunked load or 1D block load. 
+
+This complexity was further compounded by hierarchical distribution, where workgroup-level tiles are subdivided across subgroups, instructions, and individual lanes — each step requiring separate address transformation logic. This made the code error-prone and difficult to optimize.
+
+**Design and Semantics**
+
+The matrix_desc type addresses these challenges by:
+
+-Encoding layout transformations (e.g., transpose, blocking) as static attributes of the descriptor.
+
+-Separating logical and physical address computation:
+
+	-The distribution and unrolling process operates on a conceptual row-major 2D matrix.
+
+	-The physical address materialization then maps logical coordinates to hardware-compliant SLM addresses, guided by layout attributes in matrix_desc.
+
+This separation simplifies distribution and unrolling passes and enables systematic, robust transformations during compilation. The descriptor encapsulates all necessary layout metadata to generate correct and efficient SLM access patterns — supporting both regular loads and 1D block loads — without requiring the user to write explicit address arithmetic.
 
 Users must create `matrix_desc` to hold a matrix in the share local memory. The matrix must be row-major. The matrix can attach a attribute for its memory layout, for example, a blocked layout or just original non-blocked row-major layout (aka. linear layout). User can get a subview of an existing `matrix_desc` to get a new `matrix_desc`, potentially having strided and blocked layout attributes. Then user can use load_matrix and store_matrix to move the matrix data between slm and vectors (registers). The matrix is typically 2d and but can be multi-dimension. XeGPU's load_matrix and store_matrix works at workgroup scope only. 
 
+
+**Basic Usage**
+
+To represent a matrix stored in shared local memory (SLM), users must create a matrix_desc object. The underlying memory is assumed to follow a row-major layout, and the base matrix_desc represents a raw, unannotated matrix in this layout. The base matrix may be n-dimensional.
+
+Only matrix_desc instances created via subview may carry an xegpu.layout attribute, which specifies the mapping of lanes and registers to fragments of the matrix. This attribute guides the tile distribution process based on the assumed row-major view of the original matrix. In addition, subviewed matrix_desc instances may carry layout metadata such as blocking and striding, which are used to control physical address computation when accessing SLM.
+
+Data movement between SLM and vector registers is performed using load_matrix and store_matrix, which operate at workgroup scope and require the input matrix_desc to be 2D. If the original matrix is higher-dimensional, it must be subviewed to a 2D shape before it can be used with these operations.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
