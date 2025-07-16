@@ -16,18 +16,17 @@ module attributes {
 
 // CHECK-LABEL: spirv.func @create_mask
 // CHECK-SAME: %[[MASK_VAL:[[:alnum:]]+]]: i64
-// CHECK-NEXT: %[[VECTOR_WIDTH:.*]] = spirv.Constant 16 : i32
-// CHECK-NEXT: %[[MASK_VAL_I32:.*]] = spirv.SConvert %[[MASK_VAL]] : i64 to i32
-// CHECK-NEXT: %[[CMP1:.*]] = spirv.SLessThan %[[MASK_VAL_I32]], %[[VECTOR_WIDTH]] : i32
-// CHECK-NEXT: %[[ONE:.*]] = spirv.Constant 1 : i32
-// CHECK-NEXT: %[[SHIFT:.*]] = spirv.ShiftLeftLogical %[[ONE]], %[[MASK_VAL_I32]] : i32, i32
-// CHECK-NEXT: %[[MASK:.*]] = spirv.ISub %[[SHIFT]], %[[ONE]] : i32
-// CHECK-NEXT: %[[MASK_ONES:.*]] = spirv.Constant -1 : i32
-// CHECK-NEXT: %[[SELECT1:.*]] = spirv.Select %[[CMP1]], %[[MASK]], %[[MASK_ONES]] : i1, i32
-// CHECK-NEXT: %[[ZERO:.*]] = spirv.Constant 0 : i32
-// CHECK-NEXT: %[[CMP2:.*]] = spirv.SLessThan %[[MASK_VAL_I32]], %[[ZERO]] : i32
-// CHECK-NEXT: %[[SELECT2:.*]] = spirv.Select %[[CMP2]], %[[ZERO]], %[[SELECT1]] : i1, i32
-// CHECK-NEXT: %[[CAST:.*]] = spirv.SConvert %[[SELECT2]] : i32 to i16
+// CHECK-NEXT: %[[VECTOR_WIDTH:.*]] = spirv.Constant 16 : i64
+// CHECK-NEXT: %[[CMP1:.*]] = spirv.SLessThan %[[MASK_VAL]], %[[VECTOR_WIDTH]] : i64
+// CHECK-NEXT: %[[ONE:.*]] = spirv.Constant 1 : i64
+// CHECK-NEXT: %[[SHIFT:.*]] = spirv.ShiftLeftLogical %[[ONE]], %[[MASK_VAL]] : i64, i64
+// CHECK-NEXT: %[[MASK:.*]] = spirv.ISub %[[SHIFT]], %[[ONE]] : i64
+// CHECK-NEXT: %[[MASK_ONES:.*]] = spirv.Constant -1 : i64
+// CHECK-NEXT: %[[SELECT1:.*]] = spirv.Select %[[CMP1]], %[[MASK]], %[[MASK_ONES]] : i1, i64
+// CHECK-NEXT: %[[ZERO:.*]] = spirv.Constant 0 : i64
+// CHECK-NEXT: %[[CMP2:.*]] = spirv.SLessThan %[[MASK_VAL]], %[[ZERO]] : i64
+// CHECK-NEXT: %[[SELECT2:.*]] = spirv.Select %[[CMP2]], %[[ZERO]], %[[SELECT1]] : i1, i64
+// CHECK-NEXT: %[[CAST:.*]] = spirv.SConvert %[[SELECT2]] : i64 to i16
 // CHECK-NEXT: spirv.Bitcast %[[CAST]] : i16 to vector<16xi1>
 // CHECK-NEXT: spirv.Return
 

@@ -93,31 +93,31 @@ public:
       return mlir::failure();
 
     auto vWidth = vTy.getNumElements();
+    assert(vWidth <= 64 && "vector.create_mask supports vector widths <= 64");
     auto vWidthConst = rewriter.create<mlir::arith::ConstantOp>(
-        vMaskOp.getLoc(), rewriter.getI32IntegerAttr(vWidth));
+        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(vWidth));
     auto maskVal = adaptor.getOperands()[0];
     maskVal = rewriter.create<mlir::arith::TruncIOp>(
-        vMaskOp.getLoc(), rewriter.getI32Type(), maskVal);
+        vMaskOp.getLoc(), rewriter.getI64Type(), maskVal);
 
     // maskVal < vWidth
     auto cmp = rewriter.create<mlir::arith::CmpIOp>(
         vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal,
         vWidthConst);
     auto one = rewriter.create<mlir::arith::ConstantOp>(
-        vMaskOp.getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
+        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(1));
     auto shift = rewriter.create<mlir::spirv::ShiftLeftLogicalOp>(
         vMaskOp.getLoc(), one, maskVal);
     auto mask1 =
         rewriter.create<mlir::arith::SubIOp>(vMaskOp.getLoc(), shift, one);
     auto mask2 = rewriter.create<mlir::arith::ConstantOp>(
-        vMaskOp.getLoc(), rewriter.getI32Type(),
-        rewriter.getI32IntegerAttr(0xFFFFFFFF));
+        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(-1)); // all ones
     mlir::Value sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(),
                                                              cmp, mask1, mask2);
 
     // maskVal < 0
     auto zero = rewriter.create<mlir::arith::ConstantOp>(
-        vMaskOp.getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
+        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(0));
     auto cmp2 = rewriter.create<mlir::arith::CmpIOp>(
         vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal, zero);
     sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(), cmp2, zero,
