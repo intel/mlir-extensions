@@ -334,7 +334,8 @@ enum TransposeUsageType { PACKED = 1, NON_PACKED = 2 };
 
 // Helper function to pack the given value in vnni format.
 // to 32-bit representation. e.g., vector<8x8x2xf16> to vector<8x8xf32>
-static TypedValue<::mlir::VectorType> pack(TypedValue<::mlir::VectorType> value, PatternRewriter &rewriter) {
+static TypedValue<::mlir::VectorType> pack(TypedValue<::mlir::VectorType> value,
+                                           PatternRewriter &rewriter) {
   auto type = dyn_cast<VectorType>(value.getType());
   if (!type || type.getRank() != 3)
     return value;
