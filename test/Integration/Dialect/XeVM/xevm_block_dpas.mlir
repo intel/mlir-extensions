@@ -1,7 +1,13 @@
-// RUN: %python_executable %imex_runner --requires=mlir-sycl-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xevm-to-llvm.pp \
-// RUN:                                       --runner imex-cpu-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_sycl_runtime --filecheck
+// RUN: imex-opt %s \
+// RUN: | imex-opt -pass-pipeline='builtin.module(cse,func.func(gpu-async-region),xevm-attach-target,gpu.module(convert-gpu-to-llvm-spv{use-64bit-index=true},convert-xevm-to-llvm,cse))' \
+// RUN: | imex-opt -convert-scf-to-cf -convert-cf-to-llvm -convert-vector-to-llvm -convert-arith-to-llvm \
+// RUN: | imex-opt -gpu-to-llvm -reconcile-unrealized-casts -cse -gpu-module-to-binary \
+// RUN: | imex-cpu-runner \
+// RUN:   --shared-libs=%mlir_sycl_runtime \
+// RUN:   --shared-libs=%mlir_runner_utils \
+// RUN:   --shared-libs=%mlir_c_runner_utils \
+// RUN:   --entry-point-result=void \
+// RUN: | FileCheck %s
 
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
@@ -15,24 +21,24 @@ module @gemm attributes {gpu.container_module} {
       %base_pitch_a = arith.constant 32 : i32
       %x = arith.constant 0 : i32
       %y = arith.constant 0 : i32
-      %loaded_a = xevm.blockload2d %a, %base_width_a, %base_height_a, %base_pitch_a, %x, %y {elem_size_in_bits=16, tile_width=16, tile_height=8, v_blocks=1, transpose=false, vnni_transform=false, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<8xi16>
+      %loaded_a = xevm.blockload2d %a, %base_width_a, %base_height_a, %base_pitch_a, %x, %y <{elem_size_in_bits=16 : i32, tile_width=16 : i32, tile_height=8 : i32, v_blocks=1 : i32, transpose=false, pack_register=false}> : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<8xi16>
 
       %base_width_b = arith.constant 32 : i32
       %base_height_b = arith.constant 16 : i32
       %base_pitch_b = arith.constant 32 : i32
-      %loaded_b1 = xevm.blockload2d %b, %base_width_b, %base_height_b, %base_pitch_b, %x, %y {elem_size_in_bits=16, tile_width=16, tile_height=16, v_blocks=1, transpose=false, vnni_transform=false, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<16xi16>
+      %loaded_b1 = xevm.blockload2d %b, %base_width_b, %base_height_b, %base_pitch_b, %x, %y <{elem_size_in_bits=16 : i32, tile_width=16 : i32, tile_height=16 : i32, v_blocks=1 : i32, transpose=false, pack_register=false}> : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<16xi16>
       %loaded_b_casted = vector.bitcast %loaded_b1 : vector<16xi16> to vector<8xi32>
 
       %base_width_c = arith.constant 64 : i32
       %base_height_c = arith.constant 8 : i32
       %base_pitch_c = arith.constant 64 : i32
-      %loaded_c = xevm.blockload2d %c, %base_width_c, %base_height_c, %base_pitch_c, %x, %y {elem_size_in_bits=32, tile_width=16, tile_height=8, v_blocks=1, transpose=false, vnni_transform=false, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<8xi32>
+      %loaded_c = xevm.blockload2d %c, %base_width_c, %base_height_c, %base_pitch_c, %x, %y <{elem_size_in_bits=32 : i32, tile_width=16 : i32, tile_height=8 : i32, v_blocks=1 : i32, transpose=false, pack_register=false}> : (!llvm.ptr<1>, i32, i32, i32, i32, i32) -> vector<8xi32>
 
       %loaded_c_casted = vector.bitcast %loaded_c : vector<8xi32> to vector<8xf32>
-      %c_result = xevm.dpas %loaded_c_casted, %loaded_a, %loaded_b_casted {pa = f16, pb = f16, rc = 8} : (vector<8xf32>, vector<8xi16>, vector<8xi32>) -> vector<8xf32>
+      %c_result = xevm.mma %loaded_a, %loaded_b_casted, %loaded_c_casted {shape=<m=8, n=16, k=16>, types=<d=f32, a=f16, b=f16, c=f32>} : (vector<8xi16>, vector<8xi32>, vector<8xf32>) -> vector<8xf32>
       %c_result_casted = vector.bitcast %c_result : vector<8xf32> to vector<8xi32>
 
-      xevm.blockstore2d %c, %base_width_c, %base_height_c, %base_pitch_c, %x, %y, %c_result_casted {elem_size_in_bits=32, tile_width=16, tile_height=8, v_blocks=1, l1_cache_control=Default, l3_cache_control=Default} : (!llvm.ptr<1>, i32, i32, i32, i32, i32, vector<8xi32>)
+      xevm.blockstore2d %c, %base_width_c, %base_height_c, %base_pitch_c, %x, %y, %c_result_casted <{elem_size_in_bits=32 : i32, tile_width=16 : i32, tile_height=8 : i32}> : (!llvm.ptr<1>, i32, i32, i32, i32, i32, vector<8xi32>)
       gpu.return
     }
   }
@@ -41,29 +47,34 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
 
-    %memref_a = gpu.alloc host_shared () : memref<8x16xf16>
-    memref.copy %a, %memref_a : memref<8x16xf16> to memref<8x16xf16>
+    %memref_a = gpu.alloc() : memref<8x16xf16>
+    gpu.memcpy %memref_a, %a : memref<8x16xf16>, memref<8x16xf16>
     %a_ptr_as_idx = memref.extract_aligned_pointer_as_index %memref_a : memref<8x16xf16> -> index
     %a_ptr_as_i64 = arith.index_cast %a_ptr_as_idx : index to i64
     %a_ptr = llvm.inttoptr %a_ptr_as_i64 : i64 to !llvm.ptr
     %a_ptr_casted = llvm.addrspacecast %a_ptr : !llvm.ptr to !llvm.ptr<1>
 
-    %memref_b = gpu.alloc host_shared () : memref<16x16xf16>
-    memref.copy %b, %memref_b : memref<16x16xf16> to memref<16x16xf16>
+    %memref_b = gpu.alloc() : memref<16x16xf16>
+    gpu.memcpy %memref_b, %b : memref<16x16xf16>, memref<16x16xf16>
     %b_ptr_as_idx = memref.extract_aligned_pointer_as_index %memref_b : memref<16x16xf16> -> index
     %b_ptr_as_i64 = arith.index_cast %b_ptr_as_idx : index to i64
     %b_ptr = llvm.inttoptr %b_ptr_as_i64 : i64 to !llvm.ptr
     %b_ptr_casted = llvm.addrspacecast %b_ptr : !llvm.ptr to !llvm.ptr<1>
 
-    %memref_c = gpu.alloc host_shared () : memref<8x16xf32>
-    memref.copy %c, %memref_c : memref<8x16xf32> to memref<8x16xf32>
+    %memref_c = gpu.alloc() : memref<8x16xf32>
+    gpu.memcpy %memref_c, %c : memref<8x16xf32>, memref<8x16xf32>
     %c_ptr_as_idx = memref.extract_aligned_pointer_as_index %memref_c : memref<8x16xf32> -> index
     %c_ptr_as_i64 = arith.index_cast %c_ptr_as_idx : index to i64
     %c_ptr = llvm.inttoptr %c_ptr_as_i64 : i64 to !llvm.ptr
     %c_ptr_casted = llvm.addrspacecast %c_ptr : !llvm.ptr to !llvm.ptr<1>
 
     gpu.launch_func @kernel::@block_dpas blocks in (%c1, %c1, %c1) threads in (%c16, %c1, %c1) args(%a_ptr_casted : !llvm.ptr<1>, %b_ptr_casted : !llvm.ptr<1>, %c_ptr_casted : !llvm.ptr<1>)
-    return %memref_c : memref<8x16xf32>
+    gpu.dealloc %memref_a : memref<8x16xf16>
+    gpu.dealloc %memref_b : memref<16x16xf16>
+    %res = memref.alloc() : memref<8x16xf32>
+    gpu.memcpy %res, %memref_c : memref<8x16xf32>, memref<8x16xf32>
+    gpu.dealloc %memref_c : memref<8x16xf32>
+    return %res : memref<8x16xf32>
   }
 
   func.func @main() attributes {llvm.emit_c_interface} {
@@ -112,6 +123,10 @@ module @gemm attributes {gpu.container_module} {
     // CHECK-NEXT: [0,   96,   192,   288,   384,   480,   576,   672,   768,   864,   960,   1056,   1152,   1248,   1344,   1440]
     // CHECK-NEXT: [0,   112,   224,   336,   448,   560,   672,   784,   896,   1008,   1120,   1232,   1344,   1456,   1568,   1680]
 
+    memref.dealloc %A : memref<8x16xf16>
+    memref.dealloc %B : memref<16x16xf16>
+    memref.dealloc %C : memref<8x16xf32>
+    memref.dealloc %C_res : memref<8x16xf32>
     return
   }
   func.func private @printMemrefF16(%ptr : memref<*xf16>) attributes { llvm.emit_c_interface }

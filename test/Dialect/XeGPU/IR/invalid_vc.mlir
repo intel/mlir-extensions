@@ -36,25 +36,6 @@ func.func @test_create_nd_tdesc_vc_4(%input: memref<?x?xf32>) {
 }
 
 // -----
-func.func @test_create_nd_tdesc_vc_5(%input: memref<24x32x64xf32>) {
-  %c1 = arith.constant 2 : index
-  %c8 = arith.constant 8 : index
-
-  %1 = xegpu.create_nd_tdesc %input[%c1, %c1, %c8]
-  // expected-error@+1 {{expected 1D or 2D tensor}}
-                              : memref<24x32x64xf32> -> !xegpu.tensor_desc<8x16x8xf32>
-  return
-}
-
-// -----
-func.func @test_create_tdesc(%src: ui64, %offsets : vector<16x8xindex>) {
-  %1 = xegpu.create_tdesc %src, %offsets
-  // expected-error@+1 {{expected chunk blocks for 2D tensor}}
-                              : ui64, vector<16x8xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<>>
-  return
-}
-
-// -----
 func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
   %0 = arith.constant dense<1>: vector<16xi1>
   // CHECK: xegpu.create_tdesc {{.*}} : ui64, vector<16xindex>
@@ -69,25 +50,9 @@ func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
 }
 
 // -----
-func.func @test_create_tdesc_oversized(%src: ui64, %offsets : vector<16xindex>) {
-  // expected-error@+1 {{total access size (simd_lanes * chunk_size * sizeof(elemTy)) is upto 512 bytes}}
-  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-              -> !xegpu.tensor_desc<16x16xf32, #xegpu.scatter_tdesc_attr<chunk_size = 16>>
-  return
-}
-
-// -----
-func.func @test_create_tdesc_invalid_chunk_size(%src: ui64, %offsets : vector<16xindex>) {
-  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-  // expected-error@+1 {{invalid chunk size}}
-              -> !xegpu.tensor_desc<16x7xf32, #xegpu.scatter_tdesc_attr<chunk_size = 7>>
-  return
-}
-
-// -----
 func.func @test_create_tdesc_unaligned(%src: ui64, %offsets : vector<16xindex>) {
   %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-  // expected-error@+1 {{expected tensor shape[1] to be a multiple of chunk alignment factor 2}}
+  // expected-error@+1 {{expected last dim of tensor to be a multiple of 2}}
               -> !xegpu.tensor_desc<16x3xf16, #xegpu.scatter_tdesc_attr<chunk_size = 3>>
   return
 }

@@ -24,11 +24,13 @@ gpu.module @fence_check {
         //CHECK: %[[PREF_LLVMPTR:.*]] = llvm.inttoptr %[[PREF_INTPTR]] : i64 to !llvm.ptr<1>
         //CHECK: %[[PREF_SIZEOF_F32:.*]] = arith.constant 4 : i32
         //CHECK: %[[PREF_BASE_ROW_IN_BYTES:.*]] = arith.muli %[[PREF_BASE_W]], %[[PREF_SIZEOF_F32]] : i32
-        //CHECK: xevm.blockprefetch2d %[[PREF_LLVMPTR]], %[[PREF_BASE_ROW_IN_BYTES]], %[[PREF_BASE_H]], %[[PREF_BASE_ROW_IN_BYTES]], %[[PREF_TILE_W]], %[[PREF_TILE_H]] {elem_size_in_bits = 32, tile_width = 16, tile_height = 8, v_blocks = 1, l1_cache_control = C, l3_cache_control = UC} : (!llvm.ptr<1>, i32, i32, i32, i32, i32)
+        //CHECK: xevm.blockprefetch2d %[[PREF_LLVMPTR]], %[[PREF_BASE_ROW_IN_BYTES]], %[[PREF_BASE_H]],
+        //CHECK-SAME:   %[[PREF_BASE_ROW_IN_BYTES]], %[[PREF_TILE_W]], %[[PREF_TILE_H]]
+        //CHECK-SAME:   <{cache_control = #xevm.load_cache_control<L1c_L2uc_L3uc>, elem_size_in_bits = 32 : i32,
+        //CHECK-SAME:     tile_height = 8 : i32, tile_width = 16 : i32, v_blocks = 1 : i32}>
+        //CHECK-SAME:   : (!llvm.ptr<1>, i32, i32, i32, i32, i32)
         xegpu.prefetch_nd %src_tdesc<{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>, #xegpu.layout<lane_layout = [1, 16], lane_data = [1, 1]>>
 
         gpu.return
     }
 }
-
-// /home/jovyan/graph-compiler/build/bin/gc-opt /home/jovyan/graph-compiler/test/mlir/test/gc/Conversion/GPU/XeGPUToXeVM/prefetch_nd.mlir --convert-xegpu-to-xevm

@@ -1129,7 +1129,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType
@@ -1177,7 +1177,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
     auto scope = tdescTy.getMemorySpace();
 
@@ -1230,7 +1230,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType

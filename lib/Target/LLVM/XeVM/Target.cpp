@@ -13,11 +13,11 @@
 
 #include "imex/Target/LLVM/XeVM/Target.h"
 
-#include "imex/Dialect/LLVMIR/XeVMDialect.h"
 #include "imex/Target/LLVM/XeVM/Utils.h"
 #include "mlir/Dialect/GPU/IR/CompilationInterfaces.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/XeVMDialect.h"
 #include "mlir/IR/ExtensibleDialect.h"
 #include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
@@ -69,8 +69,8 @@ public:
 void imex::xevm::registerXeVMTargetInterfaceExternalModels(
     DialectRegistry &registry) {
   registry.addExtension(
-      +[](MLIRContext *ctx, imex::xevm::XeVMDialect *dialect) {
-        imex::xevm::XeVMTargetAttr::attachInterface<XeVMTargetAttrImpl>(*ctx);
+      +[](MLIRContext *ctx, mlir::xevm::XeVMDialect *dialect) {
+        mlir::xevm::XeVMTargetAttr::attachInterface<XeVMTargetAttrImpl>(*ctx);
       });
 }
 
@@ -82,7 +82,7 @@ void imex::xevm::registerXeVMTargetInterfaceExternalModels(
 }
 
 imex::xevm::SerializeGPUModuleBase::SerializeGPUModuleBase(
-    Operation &module, imex::xevm::XeVMTargetAttr target,
+    Operation &module, mlir::xevm::XeVMTargetAttr target,
     const gpu::TargetOptions &targetOptions)
     : ModuleToObject(module, target.getTriple(), "", {}, target.getO()),
       target(target) {}
@@ -99,7 +99,7 @@ void imex::xevm::SerializeGPUModuleBase::init() {
   });
 }
 
-imex::xevm::XeVMTargetAttr
+mlir::xevm::XeVMTargetAttr
 imex::xevm::SerializeGPUModuleBase::getTarget() const {
   return target;
 }
@@ -107,7 +107,7 @@ imex::xevm::SerializeGPUModuleBase::getTarget() const {
 namespace {
 class SpirSerializer : public imex::xevm::SerializeGPUModuleBase {
 public:
-  SpirSerializer(Operation &module, imex::xevm::XeVMTargetAttr target,
+  SpirSerializer(Operation &module, mlir::xevm::XeVMTargetAttr target,
                  const gpu::TargetOptions &targetOptions)
       : imex::xevm::SerializeGPUModuleBase(module, target, targetOptions) {}
 
@@ -232,7 +232,7 @@ XeVMTargetAttrImpl::serializeToObject(Attribute attribute, Operation *module,
   });
 
   SpirSerializer serializer(
-      *module, cast<imex::xevm::XeVMTargetAttr>(attribute), options);
+      *module, cast<mlir::xevm::XeVMTargetAttr>(attribute), options);
   serializer.init();
 
 #if !LLVM_HAS_SPIRV_TARGET

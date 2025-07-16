@@ -467,17 +467,6 @@ def ConvertArithToVC : Pass<"convert-arith-to-vc", "::mlir::gpu::GPUModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// XeVMToLLVM
-//===----------------------------------------------------------------------===//
-
-def ConvertXeVMToLLVMPass : Pass<"convert-xevm-to-llvm"> {
-  let summary = "Convert XeVM to LLVM dialect";
-  let dependentDialects = [
-    "imex::xevm::XeVMDialect",
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // XeGPUToXeVM
 //===----------------------------------------------------------------------===//
 
@@ -485,7 +474,7 @@ def ConvertXeGPUToXeVMPass : Pass<"convert-xegpu-to-xevm"> {
   let summary = "Convert XeGPU to XeVM dialect";
   let dependentDialects = [
     "::mlir::xegpu::XeGPUDialect",
-    "::imex::xevm::XeVMDialect",
+    "::mlir::xevm::XeVMDialect",
     "::mlir::vector::VectorDialect",
     "::mlir::memref::MemRefDialect",
     "::mlir::arith::ArithDialect",

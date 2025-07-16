@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/Target/LLVMIR/Dialect/XeVM/XeVMToLLVMIRTranslation.h"
-#include "imex/Dialect/LLVMIR/XeVMDialect.h"
+#include "mlir/Dialect/LLVMIR/XeVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Target/LLVMIR/ModuleTranslation.h"
@@ -52,7 +52,7 @@ public:
                  NamedAttribute attribute,
                  LLVM::ModuleTranslation &moduleTranslation) const final {
     StringRef attrName = attribute.getName().getValue();
-    if (attrName == imex::xevm::XeVMDialect::getCacheControlsAttrName()) {
+    if (attrName == mlir::xevm::XeVMDialect::getCacheControlsAttrName()) {
       auto cacheControlsArray = dyn_cast<ArrayAttr>(attribute.getValue());
       if (cacheControlsArray.size() != 2) {
         return op->emitOpError(
@@ -105,10 +105,11 @@ private:
 
 namespace imex::xevm {
 void registerXeVMDialectTranslation(DialectRegistry &registry) {
-  registry.insert<XeVMDialect>();
-  registry.addExtension(+[](MLIRContext *ctx, XeVMDialect *dialect) {
-    dialect->addInterfaces<XeVMDialectLLVMIRTranslationInterface>();
-  });
+  registry.insert<mlir::xevm::XeVMDialect>();
+  registry.addExtension(
+      +[](MLIRContext *ctx, mlir::xevm::XeVMDialect *dialect) {
+        dialect->addInterfaces<XeVMDialectLLVMIRTranslationInterface>();
+      });
 }
 
 void registerXeVMDialectTranslation(MLIRContext &context) {

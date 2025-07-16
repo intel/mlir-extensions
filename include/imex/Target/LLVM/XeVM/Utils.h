@@ -13,8 +13,8 @@
 #ifndef MLIR_TARGET_LLVM_XEVM_UTILS_H
 #define MLIR_TARGET_LLVM_XEVM_UTILS_H
 
-#include "imex/Dialect/LLVMIR/XeVMDialect.h"
 #include "mlir/Dialect/GPU/IR/CompilationInterfaces.h"
+#include "mlir/Dialect/LLVMIR/XeVMDialect.h"
 #include "mlir/Target/LLVM/ModuleToObject.h"
 
 namespace imex {
@@ -24,14 +24,15 @@ namespace xevm {
 /// By default this class serializes into LLVM bitcode.
 class SerializeGPUModuleBase : public mlir::LLVM::ModuleToObject {
 public:
-  SerializeGPUModuleBase(mlir::Operation &module, XeVMTargetAttr target,
+  SerializeGPUModuleBase(mlir::Operation &module,
+                         mlir::xevm::XeVMTargetAttr target,
                          const mlir::gpu::TargetOptions &targetOptions = {});
 
   static void init();
-  XeVMTargetAttr getTarget() const;
+  mlir::xevm::XeVMTargetAttr getTarget() const;
 
 protected:
-  XeVMTargetAttr target;
+  mlir::xevm::XeVMTargetAttr target;
 };
 } // namespace xevm
 } // namespace imex
