@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: func.func @test_hoist_transpose_0(
 // CHECK-SAME: %[[ARG0:[0-9a-zA-Z]+]]: memref<64x64xf16>) -> vector<16x16xf16> {
-// CHECK: %[[T1:.*]] = xegpu.load_nd %{{.*}}  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>> -> vector<32x16xf16>
+// CHECK: %[[T1:.*]] = xegpu.load_nd %{{.*}}  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<>> -> vector<32x16xf16>
 // CHECK: %[[T2:.*]] = vector.transpose %[[T1]], [1, 0] : vector<32x16xf16> to vector<16x32xf16>
 // CHECK: %[[T3:.*]] = vector.extract_strided_slice %[[T2]] {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<16x32xf16> to vector<16x16xf16>
 // CHECK: %[[T4:.*]] = vector.extract_strided_slice %[[T2]] {offsets = [0, 16], sizes = [16, 16], strides = [1, 1]} : vector<16x32xf16> to vector<16x16xf16>
@@ -22,7 +22,7 @@ func.func @test_hoist_transpose_0(%arg0: memref<64x64xf16>) -> vector<16x16xf16>
 // -----
 // CHECK-LABEL: func.func @test_hoist_transpose_1(
 // CHECK-SAME: %[[ARG0:[0-9a-zA-Z]+]]: memref<64x64xf16>) -> vector<16x16xf16> {
-// CHECK: %[[T1:.*]] = xegpu.load_nd %{{.*}}  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xf16>
+// CHECK: %[[T1:.*]] = xegpu.load_nd %{{.*}}  : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x16xf16>
 // CHECK: %[[T2:.*]] = vector.extract %[[T1]][0] : vector<32x16xf16> from vector<2x32x16xf16>
 // CHECK: %[[T3:.*]] = vector.extract %[[T1]][1] : vector<32x16xf16> from vector<2x32x16xf16>
 // CHECK: %[[T4:.*]] = vector.transpose %[[T2]], [1, 0] : vector<32x16xf16> to vector<16x32xf16>

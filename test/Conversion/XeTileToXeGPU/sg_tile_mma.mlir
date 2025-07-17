@@ -9,22 +9,22 @@ gpu.module @test_kernel {
     %c0 = arith.constant 0 : index
     %c64 = arith.constant 64 : index
 
-    //CHECK: %[[r0:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[c0]], %[[c64]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>>
+    //CHECK: %[[r0:.*]] = xegpu.create_nd_tdesc %[[arg0]][%[[c0]], %[[c64]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
   	%1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
 
-    //CHECK: %[[r1:.*]] = xegpu.load_nd %[[r0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xf16>
+    //CHECK: %[[r1:.*]] = xegpu.load_nd %[[r0]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x16xf16>
     //CHECK: %[[r2:.*]] = vector.extract %[[r1]][0] : vector<32x16xf16> from vector<2x32x16xf16>
     //CHECK: %[[r3:.*]] = vector.extract %[[r1]][1] : vector<32x16xf16> from vector<2x32x16xf16>
     %2 = xetile.load_tile %1 : !xetile.tile<32x32xf16> -> vector<32x32xf16>
 
-    //CHECK: %[[r4:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c64]], %[[c0]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>>
-    //CHECK: %[[r5:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c64]], %[[c32]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>>
+    //CHECK: %[[r4:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c64]], %[[c0]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
+    //CHECK: %[[r5:.*]] = xegpu.create_nd_tdesc %[[arg1]][%[[c64]], %[[c32]]] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
   	%3 = xetile.init_tile %b[%c64, %c0] : memref<1024x1024xf16> -> !xetile.tile<32x64xf16>
 
-    //CHECK: %[[r6:.*]] = xegpu.load_nd %[[r4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xf16>
+    //CHECK: %[[r6:.*]] = xegpu.load_nd %[[r4]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x16xf16>
     //CHECK: %[[r7:.*]] = vector.extract %[[r6]][0] : vector<32x16xf16> from vector<2x32x16xf16>
     //CHECK: %[[r8:.*]] = vector.extract %[[r6]][1] : vector<32x16xf16> from vector<2x32x16xf16>
-    //CHECK: %[[r9:.*]] = xegpu.load_nd %[[r5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64, boundary_check = true>> -> vector<2x32x16xf16>
+    //CHECK: %[[r9:.*]] = xegpu.load_nd %[[r5]] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x16xf16>
     //CHECK: %[[r10:.*]] = vector.extract %[[r9]][0] : vector<32x16xf16> from vector<2x32x16xf16>
     //CHECK: %[[r11:.*]] = vector.extract %[[r9]][1] : vector<32x16xf16> from vector<2x32x16xf16>
     %4 = xetile.load_tile %3 : !xetile.tile<32x64xf16> -> vector<32x64xf16>

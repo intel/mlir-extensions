@@ -20,7 +20,6 @@ set(IMEX_ALL_LIBS
   IMEXXeGPUToVC
   IMEXXeTileToXeGPU
   MLIRXeGPUToXeVM
-  MLIRXeVMToLLVM
   IMEXUtil
   imex_runner_utils
 )

@@ -1,7 +1,13 @@
-// RUN: %python_executable %imex_runner --requires=mlir-sycl-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xevm-to-llvm.pp \
-// RUN:                                       --runner imex-cpu-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_sycl_runtime --filecheck
+// RUN: imex-opt %s \
+// RUN: | imex-opt -pass-pipeline='builtin.module(cse,func.func(gpu-async-region),xevm-attach-target,gpu.module(convert-gpu-to-llvm-spv{use-64bit-index=true},convert-xevm-to-llvm,cse))' \
+// RUN: | imex-opt -convert-scf-to-cf -convert-cf-to-llvm -convert-vector-to-llvm -convert-arith-to-llvm \
+// RUN: | imex-opt -gpu-to-llvm -reconcile-unrealized-casts -cse -gpu-module-to-binary \
+// RUN: | imex-cpu-runner \
+// RUN:   --shared-libs=%mlir_sycl_runtime \
+// RUN:   --shared-libs=%mlir_runner_utils \
+// RUN:   --shared-libs=%mlir_c_runner_utils \
+// RUN:   --entry-point-result=void \
+// RUN: | FileCheck %s
 
 module @gemm attributes {gpu.container_module} {
 
@@ -18,14 +24,18 @@ module @gemm attributes {gpu.container_module} {
   func.func @test(%src : memref<8x16xf32>) -> memref<8x16xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
-    %memref_0 = gpu.alloc host_shared () : memref<8x16xf32>
-    memref.copy %src, %memref_0 : memref<8x16xf32> to memref<8x16xf32>
+    %memref_0 = gpu.alloc() : memref<8x16xf32>
+    gpu.memcpy %memref_0, %src : memref<8x16xf32>, memref<8x16xf32>
     %0 = memref.extract_aligned_pointer_as_index %memref_0 : memref<8x16xf32> -> index
     %1 = arith.index_cast %0 : index to i64
     %2 = llvm.inttoptr %1 : i64 to !llvm.ptr
     %src_casted = llvm.addrspacecast %2 : !llvm.ptr to !llvm.ptr<1>
     gpu.launch_func @kernel::@store_constant blocks in (%c1, %c1, %c1) threads in (%c16, %c1, %c1) args(%src_casted : !llvm.ptr<1>)
-    return %memref_0 : memref<8x16xf32>
+    %dst = memref.alloc() : memref<8x16xf32>
+    gpu.memcpy %dst, %memref_0 : memref<8x16xf32>, memref<8x16xf32>
+    gpu.dealloc %memref_0 : memref<8x16xf32>
+
+    return %dst : memref<8x16xf32>
   }
 
   func.func @main() attributes {llvm.emit_c_interface} {
@@ -57,6 +67,7 @@ module @gemm attributes {gpu.container_module} {
     // CHECK-NEXT: [11.11{{.*}}]
 
     memref.dealloc %A : memref<8x16xf32>
+    memref.dealloc %B : memref<8x16xf32>
     return
   }
   func.func private @printMemrefF32(%ptr : memref<*xf32>)

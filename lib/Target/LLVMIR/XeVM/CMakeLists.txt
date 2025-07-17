@@ -2,7 +2,7 @@ add_imex_translation_library(MLIRXeVMToLLVMIRTranslation
   XeVMToLLVMIRTranslation.cpp
 
   DEPENDS
-  MLIRXeVMConversionsIncGen
+  MLIRXeVMDialect
 
   LINK_COMPONENTS
   Core

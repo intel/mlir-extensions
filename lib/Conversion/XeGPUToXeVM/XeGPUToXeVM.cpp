@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/Conversion/XeGPUToXeVM/XeGPUToXeVM.h"
-#include "imex/Dialect/LLVMIR/XeVMDialect.h"
+#include "mlir/Dialect/LLVMIR/XeVMDialect.h"
 
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -34,7 +34,7 @@ namespace imex {
 } // namespace imex
 
 using namespace mlir;
-using namespace imex::xevm;
+using namespace xevm;
 using namespace xegpu;
 
 namespace {
@@ -50,9 +50,9 @@ enum class NdDescI32Layout : uint32_t {
 static int32_t getNumericXeVMAddrSpace(xegpu::MemorySpace xeGpuMemspace) {
   switch (xeGpuMemspace) {
   case xegpu::MemorySpace::Global:
-    return static_cast<int>(imex::xevm::XeVMAddrSpace::kGlobal);
+    return static_cast<int>(xevm::AddrSpace::GLOBAL);
   case xegpu::MemorySpace::SLM:
-    return static_cast<int>(imex::xevm::XeVMAddrSpace::kShared);
+    return static_cast<int>(xevm::AddrSpace::SHARED);
   }
   llvm_unreachable("Unknown XeGPU memory space.");
 }
@@ -80,35 +80,78 @@ mlir::VectorType encodeVectorTypeTo(mlir::VectorType currentVecType,
   return mlir::VectorType::get(size, toElemType);
 }
 
-imex::xevm::LoadCacheControl
-translateLoadXeGPUCacheHint(std::optional<xegpu::CachePolicy> hint) {
-  auto hintVal = hint.has_value() ? hint.value() : xegpu::CachePolicy::UNCACHED;
-  switch (hintVal) {
+xevm::LoadCacheControl
+translateLoadXeGPUCacheHint(std::optional<xegpu::CachePolicy> L1hint,
+                            std::optional<xegpu::CachePolicy> L3hint) {
+  auto L1hintVal =
+      L1hint.has_value() ? L1hint.value() : xegpu::CachePolicy::UNCACHED;
+  auto L3hintVal =
+      L3hint.has_value() ? L3hint.value() : xegpu::CachePolicy::UNCACHED;
+  switch (L1hintVal) {
   case xegpu::CachePolicy::CACHED:
-    return imex::xevm::LoadCacheControl::C;
+    if (L3hintVal == xegpu::CachePolicy::CACHED)
+      return xevm::LoadCacheControl::L1C_L2UC_L3C;
+    else if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::LoadCacheControl::L1C_L2UC_L3UC;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::UNCACHED:
-    return imex::xevm::LoadCacheControl::UC;
+    if (L3hintVal == xegpu::CachePolicy::CACHED)
+      return xevm::LoadCacheControl::L1UC_L2UC_L3C;
+    else if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::LoadCacheControl::L1UC_L2UC_L3UC;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::STREAMING:
-    return imex::xevm::LoadCacheControl::S;
+    if (L3hintVal == xegpu::CachePolicy::CACHED)
+      return xevm::LoadCacheControl::L1S_L2UC_L3C;
+    else if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::LoadCacheControl::L1S_L2UC_L3UC;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::READ_INVALIDATE:
-    return imex::xevm::LoadCacheControl::IAR;
+    return xevm::LoadCacheControl::INVALIDATE_READ;
   default:
     llvm_unreachable("Unsupported cache control.");
   }
 }
 
-imex::xevm::StoreCacheControl
-translateStoreXeGPUCacheHint(std::optional<xegpu::CachePolicy> hint) {
-  auto hintVal = hint.has_value() ? hint.value() : xegpu::CachePolicy::UNCACHED;
-  switch (hintVal) {
+xevm::StoreCacheControl
+translateStoreXeGPUCacheHint(std::optional<xegpu::CachePolicy> L1hint,
+                             std::optional<xegpu::CachePolicy> L3hint) {
+  auto L1hintVal =
+      L1hint.has_value() ? L1hint.value() : xegpu::CachePolicy::UNCACHED;
+  auto L3hintVal =
+      L3hint.has_value() ? L3hint.value() : xegpu::CachePolicy::UNCACHED;
+  switch (L1hintVal) {
   case xegpu::CachePolicy::UNCACHED:
-    return imex::xevm::StoreCacheControl::UC;
+    if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::StoreCacheControl::L1UC_L2UC_L3UC;
+    else if (L3hintVal == xegpu::CachePolicy::WRITE_BACK)
+      return xevm::StoreCacheControl::L1UC_L2UC_L3WB;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::STREAMING:
-    return imex::xevm::StoreCacheControl::S;
+    if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::StoreCacheControl::L1S_L2UC_L3UC;
+    else if (L3hintVal == xegpu::CachePolicy::WRITE_BACK)
+      return xevm::StoreCacheControl::L1S_L2UC_L3WB;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::WRITE_BACK:
-    return imex::xevm::StoreCacheControl::WB;
+    if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::StoreCacheControl::L1WB_L2UC_L3UC;
+    else if (L3hintVal == xegpu::CachePolicy::WRITE_BACK)
+      return xevm::StoreCacheControl::L1WB_L2UC_L3WB;
+    else
+      llvm_unreachable("Unsupported cache control.");
   case xegpu::CachePolicy::WRITE_THROUGH:
-    return imex::xevm::StoreCacheControl::WT;
+    if (L3hintVal == xegpu::CachePolicy::UNCACHED)
+      return xevm::StoreCacheControl::L1WT_L2UC_L3UC;
+    else if (L3hintVal == xegpu::CachePolicy::WRITE_BACK)
+      return xevm::StoreCacheControl::L1WT_L2UC_L3WB;
+    else
+      llvm_unreachable("Unsupported cache control.");
   default:
     llvm_unreachable("Unsupported cache control.");
   }
@@ -277,8 +320,8 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
     int32_t vblocks = tdescTy.getArrayLength();
     if constexpr (std::is_same_v<OpType, StoreNdOp>) {
       VectorType srcVecTy = cast<VectorType>(op.getValue().getType());
-      auto l1 = translateStoreXeGPUCacheHint(op.getL1Hint());
-      auto l3 = translateStoreXeGPUCacheHint(op.getL3Hint());
+      auto storeCacheControl =
+          translateStoreXeGPUCacheHint(op.getL1Hint(), op.getL3Hint());
       VectorType srcFlatVecTy =
           VectorType::get(srcVecTy.getNumElements(), srcVecTy.getElementType());
       Value srcFlatVec = op.getValue();
@@ -286,17 +329,19 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
                                         rewriter.getIntegerType(elemBitSize));
       srcFlatVec =
           rewriter.create<vector::BitCastOp>(loc, srcFlatVecTy, srcFlatVec);
-      rewriter.create<imex::xevm::BlockStore2dOp>(
+      rewriter.create<xevm::BlockStore2dOp>(
           loc, basePtrLLVM, surfaceW, baseShapeH, surfaceW, offsetW, offsetH,
-          elemBitSize, tileW, tileH, vblocks, srcFlatVec, l1, l3);
+          elemBitSize, tileW, tileH, srcFlatVec,
+          xevm::StoreCacheControlAttr::get(ctxt, storeCacheControl));
       rewriter.eraseOp(op);
     } else {
-      auto l1 = translateLoadXeGPUCacheHint(op.getL1Hint());
-      auto l3 = translateLoadXeGPUCacheHint(op.getL3Hint());
+      auto loadCacheControl =
+          translateLoadXeGPUCacheHint(op.getL1Hint(), op.getL3Hint());
       if constexpr (std::is_same_v<OpType, PrefetchNdOp>) {
-        rewriter.create<imex::xevm::BlockPrefetch2dOp>(
+        rewriter.create<xevm::BlockPrefetch2dOp>(
             loc, basePtrLLVM, surfaceW, baseShapeH, surfaceW, offsetW, offsetH,
-            elemBitSize, tileW, tileH, vblocks, l1, l3);
+            elemBitSize, tileW, tileH, vblocks,
+            xevm::LoadCacheControlAttr::get(ctxt, loadCacheControl));
         rewriter.eraseOp(op);
       } else {
         VectorType dstVecTy = cast<VectorType>(op.getValue().getType());
@@ -308,10 +353,10 @@ class LoadStorePrefetchNdToXeVMPattern : public OpConversionPattern<OpType> {
             dstVecTy, vnni ? rewriter.getI32Type()
                            : rewriter.getIntegerType(elemBitSize));
 
-        Value resultFlatVec = rewriter.create<imex::xevm::BlockLoad2dOp>(
+        Value resultFlatVec = rewriter.create<xevm::BlockLoad2dOp>(
             loc, loadedTy, basePtrLLVM, surfaceW, baseShapeH, surfaceW, offsetW,
-            offsetH, elemBitSize, tileW, tileH, vblocks, transpose, vnni, l1,
-            l3);
+            offsetH, elemBitSize, tileW, tileH, vblocks, transpose, vnni,
+            xevm::LoadCacheControlAttr::get(ctxt, loadCacheControl));
         resultFlatVec = rewriter.create<vector::BitCastOp>(
             loc, encodeVectorTypeTo(loadedTy, dstVecTy.getElementType()),
             resultFlatVec);
@@ -452,10 +497,10 @@ class PrefetchToXeVMPattern : public OpConversionPattern<xegpu::PrefetchOp> {
         loc, rewriter.getI64Type(), adaptor.getTensorDesc());
     Value ptrLLVM =
         rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
-    rewriter.create<imex::xevm::PrefetchOp>(
-        loc, ptrLLVM, imex::xevm::OclAddrSpace::kGlobal,
-        translateLoadXeGPUCacheHint(op.getL1Hint()),
-        translateLoadXeGPUCacheHint(op.getL3Hint()));
+    rewriter.create<xevm::PrefetchOp>(
+        loc, ptrLLVM,
+        xevm::LoadCacheControlAttr::get(
+            ctxt, translateLoadXeGPUCacheHint(op.getL1Hint(), op.getL3Hint())));
     return success();
   }
 };
@@ -465,36 +510,36 @@ class FenceToXeVMPattern : public OpConversionPattern<xegpu::FenceOp> {
   matchAndRewrite(xegpu::FenceOp op, xegpu::FenceOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    imex::xevm::MemoryScope memScope{imex::xevm::MemoryScope::WORKGROUP};
+    xevm::MemScope memScope{xevm::MemScope::WORKGROUP};
     switch (op.getFenceScope()) {
     case xegpu::FenceScope::Workgroup:
-      memScope = imex::xevm::MemoryScope::WORKGROUP;
+      memScope = xevm::MemScope::WORKGROUP;
       break;
     case xegpu::FenceScope::Local:
-      memScope = imex::xevm::MemoryScope::LOCAL;
+      memScope = xevm::MemScope::LANE;
       break;
     case xegpu::FenceScope::Tile:
-      memScope = imex::xevm::MemoryScope::TILE;
+      memScope = xevm::MemScope::SUBGROUP;
       break;
     case xegpu::FenceScope::GPU:
-      memScope = imex::xevm::MemoryScope::GPU;
+      memScope = xevm::MemScope::DEVICE;
       break;
     case xegpu::FenceScope::System:
-      memScope = imex::xevm::MemoryScope::SYSTEM;
+      memScope = xevm::MemScope::SYSTEM;
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }
-    imex::xevm::OclAddrSpace addrSpace{imex::xevm::OclAddrSpace::kGlobal};
+    xevm::AddrSpace addrSpace{xevm::AddrSpace::GLOBAL};
     switch (op.getMemoryKind()) {
     case xegpu::MemorySpace::Global:
-      addrSpace = imex::xevm::OclAddrSpace::kGlobal;
+      addrSpace = xevm::AddrSpace::GLOBAL;
       break;
     case xegpu::MemorySpace::SLM:
-      addrSpace = imex::xevm::OclAddrSpace::kShared;
+      addrSpace = xevm::AddrSpace::SHARED;
       break;
       llvm_unreachable("Unknown XeGPU fence scope.");
     }
-    rewriter.create<imex::xevm::MemfenceOp>(loc, memScope, addrSpace);
+    rewriter.create<xevm::MemfenceOp>(loc, memScope, addrSpace);
     rewriter.eraseOp(op);
     return success();
   }
@@ -511,25 +556,25 @@ class DpasToXeVMPattern : public OpConversionPattern<xegpu::DpasOp> {
     auto bTy = mlir::cast<VectorType>(op.getRhs().getType());
     auto resultType = mlir::cast<VectorType>(op.getResultType());
 
-    auto encodePrecision = [&](Type type) -> imex::xevm::PrecisionType {
+    auto encodePrecision = [&](Type type) -> xevm::ElemType {
       if (type == rewriter.getBF16Type())
-        return imex::xevm::PrecisionType::BF16;
+        return xevm::ElemType::BF16;
       else if (type == rewriter.getF16Type())
-        return imex::xevm::PrecisionType::FP16;
+        return xevm::ElemType::F16;
       else if (type == rewriter.getTF32Type())
-        return imex::xevm::PrecisionType::TF32;
+        return xevm::ElemType::TF32;
       else if (type.isInteger(8)) {
         if (type.isUnsignedInteger())
-          return imex::xevm::PrecisionType::U8;
-        return imex::xevm::PrecisionType::S8;
-      }
-      llvm_unreachable("add more support for PrecisionType");
-      return imex::xevm::PrecisionType::UNUSED;
+          return xevm::ElemType::U8;
+        return xevm::ElemType::S8;
+      } else if (type == rewriter.getF32Type())
+        return xevm::ElemType::F32;
+      else if (type.isInteger(32))
+        return xevm::ElemType::S32;
+      llvm_unreachable("add more support for ElemType");
     };
-    imex::xevm::PrecisionType precATy = encodePrecision(aTy.getElementType());
-    imex::xevm::PrecisionType precBTy = encodePrecision(bTy.getElementType());
-    auto precA = imex::xevm::PrecisionTypeAttr::get(ctxt, precATy);
-    auto precB = imex::xevm::PrecisionTypeAttr::get(ctxt, precBTy);
+    xevm::ElemType precATy = encodePrecision(aTy.getElementType());
+    xevm::ElemType precBTy = encodePrecision(bTy.getElementType());
     Value c = op.getAcc();
     if (!c) {
       auto elementTy = resultType.getElementType();
@@ -541,17 +586,24 @@ class DpasToXeVMPattern : public OpConversionPattern<xegpu::DpasOp> {
       c = rewriter.create<arith::ConstantOp>(
           loc, DenseElementsAttr::get(resultType, initValueAttr));
     }
-    auto rc = IntegerAttr::get(rewriter.getI32Type(), 8);
 
     Value aVec = op.getLhs();
     Value bVec = op.getRhs();
     auto cvecty = cast<VectorType>(c.getType());
+    xevm::ElemType precCTy = encodePrecision(cvecty.getElementType());
+    xevm::ElemType precDTy = encodePrecision(resultType.getElementType());
     VectorType cNty =
         VectorType::get(cvecty.getNumElements(), cvecty.getElementType());
     if (cvecty != cNty)
       c = rewriter.create<vector::ShapeCastOp>(loc, cNty, c);
-    Value dpasRes = rewriter.create<imex::xevm::DpasOp>(loc, cNty, c, aVec,
-                                                        bVec, precA, precB, rc);
+    // TODO: below are uArch dependent values, should move away from hardcoding
+    constexpr int32_t systolicDepth{8};
+    constexpr int32_t executionSize{16};
+    Value dpasRes = rewriter.create<xevm::MMAOp>(
+        loc, cNty, aVec, bVec, c,
+        xevm::MMAShapeAttr::get(ctxt, cvecty.getNumElements(), executionSize,
+                                systolicDepth),
+        xevm::MMATypesAttr::get(ctxt, precDTy, precATy, precBTy, precCTy));
     if (cvecty != cNty)
       dpasRes = rewriter.create<vector::ShapeCastOp>(loc, resultType, dpasRes);
     rewriter.replaceOp(op, dpasRes);
@@ -636,7 +688,7 @@ struct ConvertXeGPUToXeVMPass
   using Base::Base;
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<LLVM::LLVMDialect, XeGPUDialect, imex::xevm::XeVMDialect,
+    registry.insert<LLVM::LLVMDialect, XeGPUDialect, xevm::XeVMDialect,
                     vector::VectorDialect, arith::ArithDialect,
                     memref::MemRefDialect, gpu::GPUDialect>();
   }
@@ -666,7 +718,7 @@ struct ConvertXeGPUToXeVMPass
     });
 
     ConversionTarget target(getContext());
-    target.addLegalDialect<imex::xevm::XeVMDialect, LLVM::LLVMDialect,
+    target.addLegalDialect<xevm::XeVMDialect, LLVM::LLVMDialect,
                            vector::VectorDialect, arith::ArithDialect,
                            memref::MemRefDialect, gpu::GPUDialect>();
     target.addIllegalDialect<XeGPUDialect>();

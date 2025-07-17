@@ -1,7 +1,7 @@
 builtin.module(
     cse
+    xevm-attach-target
     gpu.module(
-        xevm-attach-target
         convert-xegpu-to-xevm
         convert-gpu-to-llvm-spv{use-64bit-index=true}
         convert-xevm-to-llvm

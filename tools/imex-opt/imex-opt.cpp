@@ -43,7 +43,6 @@ int main(int argc, char **argv) {
   ::imex::ndarray::registerAllExtensions(registry);
 
   ::mlir::registerAllGPUToLLVMIRTranslations(registry);
-  imex::registerConvertXeVMToLLVMInterface(registry);
 
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));
