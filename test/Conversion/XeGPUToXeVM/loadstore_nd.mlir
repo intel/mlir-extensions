@@ -1,4 +1,4 @@
-// RUN: imex-opt -convert-xegpu-to-xevm %s | FileCheck %s
+// RUN: imex-opt -convert-xegpu-to-xevm -allow-unregistered-dialect %s | FileCheck %s
 
 gpu.module @load_store_check {
     gpu.func @load_store(%src: memref<8x16xf32, 1>, %dst: memref<8x16xf32, 1>) kernel {
@@ -64,6 +64,33 @@ gpu.module @load_store_check {
         //CHECK-SAME: <{cache_control = #xevm.store_cache_control<L1wb_L2uc_L3uc>, elem_size_in_bits = 32 : i32,
         //CHECK-SAME:   tile_height = 8 : i32, tile_width = 16 : i32}> : (!llvm.ptr<1>, i32, i32, i32, i32, i32, vector<8xi32>)
         xegpu.store_nd %loaded_modified, %dst_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
+        gpu.return
+    }
+
+    gpu.func @create_nd_tdesc_integer_source(%src: i64, %src_h : index, %src_w : index)  kernel {
+        %c1 = arith.constant 1 : index
+        %c4 = arith.constant 4 : index
+        %c8 = arith.constant 8 : index
+        %c0 = arith.constant 0 : index
+        // CHECK: %[[PAYLOAD:.*]] = arith.constant dense<0> : vector<8xi32>
+        // CHECK: %[[T0:.*]] = arith.index_cast %{{.*}} : index to i64
+        // CHECK: %[[T1:.*]] = arith.trunci %[[T0]] : i64 to i32
+        // CHECK: %[[T2:.*]] = arith.index_cast %{{.*}} : index to i64
+        // CHECK: %[[T3:.*]] = arith.trunci %[[T2]] : i64 to i32
+        // CHECK: %[[T4:.*]] = arith.index_cast %{{.*}} : index to i64
+        // CHECK: %[[T5:.*]] = arith.trunci %[[T4]] : i64 to i32
+        // CHECK: %[[T6:.*]] = arith.index_cast %{{.*}} : index to i64
+        // CHECK: %[[T7:.*]] = arith.trunci %[[T6]] : i64 to i32
+        // CHECK: %[[T8:.*]] = vector.bitcast %[[PAYLOAD]] : vector<8xi32> to vector<4xi64>
+        // CHECK: %[[T9:.*]] = vector.insert %{{.*}}, %[[T8]] [0] : i64 into vector<4xi64>
+        // CHECK: %[[T10:.*]] = vector.bitcast %[[T9]] : vector<4xi64> to vector<8xi32>
+        // CHECK: %[[T11:.*]] = vector.insert %[[T5]], %[[T10]] [2] : i32 into vector<8xi32>
+        // CHECK: %[[T12:.*]] = vector.insert %[[T7]], %[[T11]] [3] : i32 into vector<8xi32>
+        // CHECK: %[[T13:.*]] = vector.insert %[[T1]], %[[T12]] [4] : i32 into vector<8xi32>
+        // CHECK: %[[T14:.*]] = vector.insert %[[T3]], %[[T13]] [5] : i32 into vector<8xi32>
+        %src_tdesc = xegpu.create_nd_tdesc %src [%c4, %c8], [%src_h, %src_w], [%src_w, %c1] : i64
+            -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
+        "some_op"(%src_tdesc) : (!xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>) -> ()
         gpu.return
     }
 }
