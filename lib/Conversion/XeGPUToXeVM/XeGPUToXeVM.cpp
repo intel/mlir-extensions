@@ -179,48 +179,49 @@ class CreateNdDescToXeVMPattern
     Value baseShapeH;
     Value offsetW;
     Value offsetH;
+    auto convertToValue = [&](OpFoldResult ofr) -> Value {
+      Value val;
+      if (auto v = llvm::dyn_cast_if_present<Value>(ofr)) {
+        val = rewriter.create<arith::IndexCastOp>(loc, i64Ty, v);
+        val = rewriter.create<arith::TruncIOp>(loc, payloadElemTy, val);
+      } else {
+        int32_t off = llvm::cast<IntegerAttr>(cast<Attribute>(ofr)).getInt();
+        val = rewriter.create<arith::ConstantIntOp>(loc, payloadElemTy, off);
+      }
+      return val;
+    };
+
+    int rank = op.getMixedOffsets().size();
+    if (rank != 2) {
+      op.emitError() << "Expected 2D offsets, got " << rank << "D offsets.";
+      return mlir::failure();
+    }
+    offsetW = convertToValue(op.getMixedOffsets()[rank - 1]);
+    offsetH = convertToValue(op.getMixedOffsets()[rank - 2]);
 
     if (auto sourceTy = source.getType(); isa<MemRefType>(sourceTy)) {
       baseAddr =
           rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, source);
+      baseAddr = rewriter.create<arith::IndexCastUIOp>(loc, i64Ty, baseAddr);
       auto sourceMemrefTy = cast<MemRefType>(sourceTy);
       if (!sourceMemrefTy.hasStaticShape()) {
         op.emitError() << "Expected static memref shape.";
         return mlir::failure();
       }
       auto rank = sourceMemrefTy.getRank();
-      if (rank != 2) {
-        op.emitError() << "Expected a 2D memref.";
-        return mlir::failure();
-      }
-      auto createOffset = [&](unsigned idx) -> Value {
-        Value val;
-        OpFoldResult ofr = op.getMixedOffsets()[idx];
-        if (auto v = llvm::dyn_cast_if_present<Value>(ofr)) {
-          val = rewriter.create<arith::IndexCastOp>(loc, i64Ty, v);
-          val = rewriter.create<arith::TruncIOp>(loc, payloadElemTy, val);
-        } else {
-          int32_t off = llvm::cast<IntegerAttr>(cast<Attribute>(ofr)).getInt();
-          val = rewriter.create<arith::ConstantIntOp>(loc, payloadElemTy, off);
-        }
-        return val;
-      };
-      offsetW = createOffset(rank - 1);
-      offsetH = createOffset(rank - 2);
       baseShapeW = rewriter.create<arith::ConstantIntOp>(
           loc, payloadElemTy, sourceMemrefTy.getDimSize(rank - 1));
       baseShapeH = rewriter.create<arith::ConstantIntOp>(
           loc, payloadElemTy, sourceMemrefTy.getDimSize(rank - 2));
     } else if (isa<IntegerType>(sourceTy)) {
-      op.emitError()
-          << "Integer as source are currently not supported by the pass.";
-      return mlir::failure();
+      baseAddr = source;
+      baseShapeW = convertToValue(op.getMixedSizes()[rank - 1]);
+      baseShapeH = convertToValue(op.getMixedSizes()[rank - 2]);
     } else {
       op.emitError() << "Unknown source type.";
       return mlir::failure();
     }
 
-    baseAddr = rewriter.create<arith::IndexCastUIOp>(loc, i64Ty, baseAddr);
     Value payLoadAsI64 =
         rewriter.create<vector::BitCastOp>(loc, payloadI64Ty, payload);
     payLoadAsI64 = rewriter.create<vector::InsertOp>(
