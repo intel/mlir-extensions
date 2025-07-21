@@ -496,6 +496,7 @@ gpu.barrier
 ```
 
 **Unrolling Guided by Inst_data**
+
 This example illustrates how matrix loads and stores can be unrolled into smaller instruction tiles for better alignment with hardware capabilities. This inst_data attributes ensures that each store operation writes within its assigned block boundary, respecting the @block attributes. On the load side, the matrix_desc is subviewed into multiple 16×16 instruction tiles, which are then used in separate load_matrix operations. This breakdown enables explicit instruction-level unrolling, allowing each instruction to operate on a fixed tile size that aligns with DPAS or tensor-core instruction requirements.
 
 ```mlir
