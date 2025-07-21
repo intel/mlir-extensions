@@ -349,40 +349,32 @@ This separation simplifies distribution and unrolling passes and enables systema
 
 **Basic Usage**
 
-To represent a matrix stored in shared local memory (SLM), users must create a matrix_desc object. The underlying memory is assumed to follow a row-major layout, and the base matrix_desc represents a raw, unannotated matrix in this layout. The base matrix may be n-dimensional.
-
-matrix_desc_view creates a matrix_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). Additionally, an xegpu.layout attribute is added to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix. The matrix_desc_subview creates a subview on top of the matrix_desc produced by matrix_desc_view, inheriting all of its layout attributes. The subview is then subject to decomposition and distribution. 
-
-Data movement between SLM and vector registers is performed using load_matrix and store_matrix, which operate at workgroup scope and require the input matrix_desc to be 2D. If the original matrix is higher-dimensional, it must be subviewed to a 2D shape before it can be used with these operations.
+To represent a matrix stored in shared local memory (SLM), users must create a matrix_desc object. Create_matrix_desc initializes a matrix_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). The matrix_desc_subview creates a subview on top of the matrix_desc, inheriting all of its layout attributes. Load_matrix and store_matrix performs data movement between SLM and vector registers. xegpu.layout attribute is added to load_matrix and store_matrix to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix. 
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|create_matrix_desc	| operation ::= xegpu.create_matrix_desc attr-dict : type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc : matrix_desc<256x128xbf16> |
-|matrix_desc_view	| operation ::= xegpu.matrix_desc_view \$mdesc  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_a_layout = xegpu.matrix_desc_view %mdesc:matrix_desc<256x128xbf16> -> matrix_desc<256x128xbf16, @stride=[1, 256],  @block=[8, 16]> |
+|create_matrix_desc	| operation ::= xegpu.create_matrix_desc $mref attr-dict :type($mref), type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc %m: memref<65536xi8, 3> -> matrix_desc<256x128xbf16> |
 |matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview \$mdesc, DynamicIndexList<\$coord>  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16, @stride=[256,1],  @block=[8, 16]> -> matrix_desc<128x128xbf16, @stride=[256,1],  @block=[8, 16]> |
 |load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
 |store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @block=[8, 16]>, vector<128x256xbf16> |
 
-Users create a `matrix_desc` to represent a matrix stored in shared local memory (SLM). The operation allocates SLM for the matrix, assuming a row-major contiguous layout.
+Users create a `matrix_desc` to represent a matrix stored in shared local memory (SLM). The operation takes a memory buffer (1D int8 memref with empty layout) and create a structured representation of the share local memory. The result matrix_desc has proper information including shape, element type, and memory layout attributes (@block and @strides). The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
+
+When there is no input memref operand, it allocates SLM for the matrix, assuming a row-major contiguous layout.
 
 ```mlir
 %mdesc_a = xegpu.create_matrix_desc: matrix_desc<256x128xbf16>
+%mdesc_b = xegpu. create_matrix_desc %m : memref<16384xi8, 3>-> matrix_desc<32x256xf16, @strides=[1, 32]>
 ```
-matrix_desc_view annotates matrix_desc with layout attributes such as @block and @strides to describe its memory layout more precisely. The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
-
-```mlir
-%mdesc_a_layout = xegpu.matrix_desc_view %mdesc:matrix_desc<256x128xbf16> -> matrix_desc<256x128xbf16, @stride=[1, 256],  @block=[8, 16]>
-```
-Users can create a subview of a matrix_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. Subview inherit memory layout attributes from the base matrix_desc. Additionally, a view may carry an xegpu.layout attribute that defines how the matrix is logically partitioned into fragments and mapped to work items.
+Users can create a subview of a matrix_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. Subview inherits memory layout attributes from the base matrix_desc. For GEMM use case, matrix operations typically work on 2D matrix_desc. If the original matrix is higher-dimensional, it can be subviewed to a 2D shape before it is used with these operations. 
 
 ```mlir
 %mdesc_a = xegpu.matrix_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]
     : matrix_desc<3x256x128xbf16, @block=[8, 16]> -> matrix_desc<256x128xbf16, @block=[8, 16]>
 
 %mdesc_coop_a = xegpu.matrix_desc_subview %mdesc_a[0, %wg_id_x_in_cluster * 64]
-    : matrix_desc<256x128xbf16> -> matrix_desc<256x64xbf16, @strides=[128, 1]>
+    : matrix_desc<256x128xbf16, @strides=[128, 1]> -> matrix_desc<256x64xbf16, @strides=[128, 1]>
 ```
-
 Users can load a matrix from shared local memory into a vector value using the load_matrix operation. The result is a vector type in the IR, representing a tile stored in registers.
 ```mlir
 vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
@@ -401,9 +393,9 @@ This example demonstrates a cooperative transpose pattern in which a matrix tile
 #Coop_wg = {sg_layout = [8, 4] , sg_data= [32, 8], order=[1, 0] }
 #dpas_wg = {sg_layout = [8, 4],  sg_data= [32, 32], order=[1, 0] }
 
-%at = load_nd %tdesc: tensor_desc<4096x4096xf16, #Coop_t_wg> -> vector<32x256xf16 >
-%a = vector.transpose %1 #Coop_wg :vector<32x256xf16> -> vector<256x32xf16>
-%a_dpas = Conv_layout %2 #Coop_wg #dpas_wg 
+%at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+%a = vector.transpose %1 {layout_result_0 = #Coop_wg}: vector<32x256xf16> to vector<256x32xf16>
+%a_dpas = Conv_layout %2 <{from = #Coop_wg, to = #dpas_wg}>: vector<256x32xf16> 
 ```
 In this flow:
 
@@ -415,50 +407,51 @@ In this flow:
 
 **After optimization that targets the transpose-A pattern**
 
-The code is transformed to use store_matrix and load_matrix to materialize the transpose cooperatively in shared local memory. Note that both load_nd and store_matrix use smaller sg_data values, meaning each subgroup processes a smaller fragment, enabling a cooperative transpose across threads.
+The code is transformed to use store_matrix and load_matrix to implement the transpose cooperatively in shared local memory. Note that both load_nd and store_matrix use smaller sg_data values, meaning each subgroup processes a smaller fragment, enabling a cooperative transpose across threads.
 
-It is generally preferred to fuse transpose and convert_layout earlier in the pipeline, as this affects the blocking strategy for load_matrix and store_matrix (which are the lowered forms of the logical layout conversion and transpose). Early fusion enables better alignment with optimal hardware load instructions.
+It is generally preferred to detect the “transpose + convert_layout” pattern and fuse them earlier in the pipeline, as this affects the blocking strategy for load_matrix and store_matrix (which are the lowered forms of the logical layout conversion and transpose). Early fusion enables better alignment with optimal hardware load instructions.
 
 ```mlir 
 #Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], order = [0, 1] }  // original layout
 #dpas_t_wg  = { sg_layout = [8, 4], sg_data = [32, 32], order = [1, 0] } // target DPAS layout
 
-%at = xegpu.load_nd %tdesc : tensor_desc<4096x4096xf16, #Coop_t_wg> -> vector<32x256xf16>
-%m = xegpu.create_matrix_desc : matrix_desc<8192xf16>
-%mt = xegpu.matrix_desc_view %m : matrix_desc<32x256xf16> -> matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
-xegpu.store_matrix %mt[0, 0], %at : vector<32x256xf16>, matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
+%at = xegpu.load_nd %tdesc : tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%mt = xegpu. create_matrix_desc %m : memref<16384xi8, 3>-> matrix_desc<32x256xf16, @strides=[1, 32]>
+xegpu.store_matrix %at, %mt[0, 0] #Coop_t_wg: vector<32x256xf16>, matrix_desc<32x256xf16, @strides=[1, 32]>
 gpu.barrier
-%ma = xegpu.matrix_desc_view %m : matrix_desc<8192xf16> -> matrix_desc<256x32xf16, #dpas_t_wg>
-%a_dpas = xegpu.load_matrix %ma[0, 0] : matrix_desc<256x32xf16, #dpas_t_wg> -> vector<256x32xf16>
+%ma = xegpu.create_matrix_desc %m : memref<16384xi8, 3>-> matrix_desc<256x32xf16>
+%a_dpas = xegpu.load_matrix %ma[0, 0] #dpas_t_wg: matrix_desc<256x32xf16> -> vector<256x32xf16>
 ```
 
-**Adding Attributes for Basic Instruction-Level Blocking**
+**Layout Assignment**
+***Basic Blocking: Using regular load and store instruction***
 
-In this example, the xegpu.layout is extended to support instruction-level blocking. The basic blocking assumes 16 lanes, and each lane handles 2 f16 elements (32 bits). This basic blocking does not change the physical memory layout (i.e., there is no memory-level tiling); instead, it loweres to instructions like store_scatter and load_gather. 
+In this example, the xegpu.layout is extended to support instruction-level blocking. The basic blocking assumes 16 lanes, and each lane handles 2 f16 elements (32 bits). This basic instruction blocking does not try to block memory layout. It lowers to instructions like chunked store and load_gather. 
 
 ```mlir
 #Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], inst_data = [1, 32], order = [0, 1] }
 #dpas_t_wg  = { sg_layout = [8, 4], sg_data = [32, 32], inst_data = [1, 32], order = [1, 0] }
 
-%at = xegpu.load_nd %tdesc: tensor_desc<4096x4096xf16, #Coop_t_wg> -> vector<32x256xf16>
-%m = xegpu.create_matrix_desc: matrix_desc<8192xf16>
-%mt = xegpu.matrix_desc_view %m : matrix_desc<8192xf16> -> matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
-xegpu.store_matrix %mt[0, 0], %at: vector<32x256xf16>, matrix_desc<32x256xf16, @strides=[1, 32], #Coop_t_wg>
+%at = xegpu.load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%m = xegpu.create_matrix_desc %m : memref<16384xi8, 3> -> matrix_desc<32x256xf16, @strides=[1, 32]>
+xegpu.store_matrix %at, %mt[0, 0] #Coop_t_wg: vector<32x256xf16>, matrix_desc<32x256xf16, @strides=[1, 32]>
 
 gpu.barrier
 
-%ma = xegpu.matrix_desc_view %m : matrix_desc<8192xf16> -> matrix_desc<256x32xf16, #dpas_t_wg>
-%a_dpas = xegpu.load_matrix %ma[0, 0] : matrix_desc<256x32xf16, #dpas_t_wg> -> vector<256x32xf16>
+%ma = xegpu.create_matrix_desc %m : memref<16384xi8, 3> -> matrix_desc<256x32xf16>
+%a_dpas = xegpu.load_matrix %ma[0, 0] #dpas_t_wg: matrix_desc<256x32xf16> -> vector<256x32xf16>
 ```
-**Optimized Blocking: Lowering to store_chunk and 1D Block Load**
+***Optimized Blocking: Lowering to store_chunk and 1D Block Load***
 
-This pattern demonstrates a more optimized strategy for instruction-level blocking, enabling the use of efficient memory instructions such as store_chunk and 1D block load. For correct and efficient lowering, several constraints must be satisfied:
+This pattern demonstrates a more optimized strategy for instruction-level blocking, enabling the use of efficient memory instructions such as 1D block load. For correct and efficient lowering, several constraints must be satisfied:
 
-The inst_data field must specify a meaningful 2D shape that aligns with the capabilities of store_chunk and 1D block load.
+- The inst_data field must specify a meaningful 2D shape that aligns with the capabilities of chunked store and 1D block load.
 
-Blocking must be explicitly expressed in the memory layout via the @block attribute. Two related matrix_desc subviews (e.g., producer and consumer) must have consistent block sizes. If one matrix_desc is transposed, the block shape should match the transposed shape of the other one.
+- Blocking must be explicitly expressed in the memory layout via the @block attribute. Two related matrix_desc (e.g., producer and consumer) must have consistent block sizes. If one matrix_desc is transposed, the block shape should match the transposed shape of the other one.
 
-Each instruction must access only within its assigned matrix block boundary — no cross-block accesses are allowed.
+- Each instruction must access only within its assigned matrix block boundary — no cross-block accesses are allowed.
 
 During lowering, store_matrix is lowered to store_chunk if the matrix has strides, and load_matrix is lowered to 1D block load if the matrix has a blocked layout.
 
@@ -466,21 +459,21 @@ During lowering, store_matrix is lowered to store_chunk if the matrix has stride
 #Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], inst_data = [8, 16],  order = [0, 1] }
 #dpas_t_wg  = { sg_layout = [8, 4], sg_data = [32, 32], inst_data = [16, 16], order = [1, 0] }
 
-%at = xegpu.load_nd %tdesc : tensor_desc<4096x4096xf16, #Coop_t_wg> -> vector<32x256xf16>
-%m = xegpu.create_matrix_desc : matrix_desc<8192xf16>
-%mt = xegpu.matrix_desc_view %m : matrix_desc<8192xf16> -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32], #Coop_t_wg>
-xegpu.store_matrix %mt[0, 0], %at : vector<32x256xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32], #Coop_t_wg>
+%at = xegpu.load_nd %tdesc : tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%mt = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at, %mt[0, 0] #Coop_t_wg : vector<32x256xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 
 gpu.barrier
-%ma = xegpu.matrix_desc_view %m : matrix_desc<8192xf16> -> matrix_desc<256x32xf16, @block=[16, 16], #dpas_t_wg>
-%a_dpas = xegpu.load_matrix %ma[0, 0] : matrix_desc<256x32xf16, @block=[16, 16], #dpas_t_wg> -> vector<256x32xf16>
+%ma = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<256x32xf16, @block=[16, 16]>
+%a_dpas = xegpu.load_matrix %ma[0, 0] #dpas_t_wg : matrix_desc<256x32xf16, @block=[16, 16], #dpas_t_wg> -> vector<256x32xf16>
 ```
 
 **Workgroup to Subgroup Distribution**
 
-This example illustrates how data is distributed from workgroup to subgroups. It demonstrates how load_matrix and store_matrix cooperate with matrix_desc subviews to enable efficient subgroup distribution. In this step, the sg_layout and sg_data attributes are removed from the layout specification, leaving only the inst_data attribute.
+This example illustrates how load_matrix and store_matrix are distributed from workgroup to subgroups. After distribution, the sg_layout and sg_data attributes are removed from the layout specification, leaving only the inst_data attribute.
 
-The matrix is assumed to be stored in row-major contiguous layout, and indexing into it is performed using logical coordinates. These logical coordinates are used throughout tile distribution and layout transformations. Only at the final lowering stage (e.g., MaterializeSLMAccess) are physical offsets computed using memory layout attributes such as @strides and @block. A key property of the matrix_desc data type is that logical tile decomposition does not alter the block or stride metadata, making logical address computation straightforward.
+The distribution process assumes matrix stored in row-major contiguous layout, and performes indexing using logical coordinates. These logical coordinates are used throughout tile distribution and layout transformations. Only at the final lowering stage (e.g., MaterializeSLMAccess) are physical offsets computed using memory layout attributes such as @strides and @block. A key property of the matrix_desc data type is that logical tile decomposition does not alter the block or stride metadata, making logical address computation straightforward.
 
 ```mlir
 #coop_t_inst  = { inst_data = [8, 16] }
@@ -491,29 +484,19 @@ The matrix is assumed to be stored in row-major contiguous layout, and indexing 
     : memref<4096x4096xf16> -> tensor_desc<8x32xf16, #coop_t_inst>
 %at = xegpu.load_nd %tdesc_sg
     : tensor_desc<8x32xf16, #coop_t_inst> -> vector<8x32xf16>
-%m = xegpu.create_matrix_desc
-    : matrix_desc<32x256xf16>
-%mt = xegpu.matrix_desc_view %m 
-    : matrix_desc<8192xf16> -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32], #coop_t_inst>
-%mt_sg = xegpu.matrix_desc_subview %mt[%sg_idy * 8, %sg_idx * 32]
-    : matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32], #coop_t_inst>
-      -> matrix_desc<8x32xf16, @block=[16, 16], @strides=[1, 32], #coop_t_inst>
-xegpu.store_matrix %mt_sg, %at
-    : vector<8x32xf16>, matrix_desc<8x32xf16, @block=[16, 16], @strides=[1, 32], #coop_t_inst>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%mt = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at, %mt[%sg_idy * 8, %sg_idx * 32] #coop_t_inst
+    : vector<8x32xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 
 gpu.barrier
-
-%ma = xegpu.matrix_desc_view %m
-    : matrix_desc<8192xf16> -> matrix_desc<256x32xf16, @block=[16, 16], #dpas_t_inst>
-%ma_sg = xegpu.matrix_desc_subview %ma[%sg_idy * 32, %sg_idx * (32 % 32)]
-    : matrix_desc<256x32xf16, @block=[16, 16], #dpas_t_inst>
-      -> matrix_desc<32x32xf16, @block=[16, 16]>
-%a_dpas = xegpu.load_matrix %ma_sg
-    : matrix_desc<32x32xf16, @block=[16, 16], #dpas_t_inst> -> vector<32x32xf16>
+%ma = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<256x32xf16, @block=[16, 16]>
+%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, %sg_idx * (32 % 32)]  #dpas_t_inst
+    : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<32x32xf16>
 ```
-**Unrolling Guided by Inst_data**
 
-This example illustrates how matrix loads and stores can be unrolled into smaller instruction tiles for better alignment with hardware capabilities. This pattern ensures that each load and store operation writes within its assigned block boundary, respecting the @block and @strides attributes. On the load side, the matrix_desc is subviewed into multiple 16×16 instruction tiles, which are then used in separate load_matrix operations. This breakdown enables explicit instruction-level unrolling, allowing each instruction to operate on a fixed tile size that aligns with DPAS or tensor-core instruction requirements.
+**Unrolling Guided by Inst_data**
+This example illustrates how matrix loads and stores can be unrolled into smaller instruction tiles for better alignment with hardware capabilities. This inst_data attributes ensures that each store operation writes within its assigned block boundary, respecting the @block attributes. On the load side, the matrix_desc is subviewed into multiple 16×16 instruction tiles, which are then used in separate load_matrix operations. This breakdown enables explicit instruction-level unrolling, allowing each instruction to operate on a fixed tile size that aligns with DPAS or tensor-core instruction requirements.
 
 ```mlir
 %tdesc_sg = xegpu.create_nd_tdesc %base[%widy * 32 + %sg_idy * 8, %widx * 256 + %sg_idx * 32]
@@ -521,38 +504,23 @@ This example illustrates how matrix loads and stores can be unrolled into smalle
 %at = xegpu.load_nd %tdesc_sg     : tensor_desc<8x32xf16> -> vector<8x32xf16>
 %at0 = vector.extract %at[0, 0]   : vector<8x32xf16> -> vector<8x16xf16>
 %at1 = vector.extract %at[0, 16]  : vector<8x32xf16> -> vector<8x16xf16>
-%m = xegpu.create_matrix_desc : matrix_desc<8192xf16>
-%mt = xegpu.matrix_desc_view %m 
-    : matrix_desc<8192xf16> -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32], #coop_t_inst>
-%mt_inst0 = xegpu.matrix_desc_subview %mt[%sg_idy * 8, %sg_idx * 32]
-    : matrix_desc<8x16xf16, @block=[16, 16], @strides=[1, 32]>
-%mt_inst1 = xegpu.matrix_desc_subview %mt[%sg_idy * 8, %sg_idx * 32 + 16]
-    : matrix_desc<8x16xf16, @block=[16, 16], @strides=[1, 32]>
-xegpu.store_matrix %mt_inst0, %at0
-    : vector<8x16xf16>, matrix_desc<8x16xf16, @block=[16, 16], @strides=[1, 32]>
-xegpu.store_matrix %mt_inst1, %at1
-    : vector<8x16xf16>, matrix_desc<8x16xf16, @block=[16, 16], @strides=[1, 32]>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%mt = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at0, %mt[%sg_idy * 8, %sg_idx * 32]
+    : vector<8x16xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at1, %mt[%sg_idy * 8, %sg_idx * 32 + 16]
+    : vector<8x16xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 
 gpu.barrier
-
-%ma = xegpu.matrix_desc_view %m
-    : matrix_desc<8192xf16> -> matrix_desc<256x32xf16, @block=[16, 16]>
-%ma_inst0 = xegpu.matrix_desc_subview %ma[%sg_idy * 32,       %sg_idx * 32 % 32]
-    : matrix_desc<256x32xf16> -> matrix_desc<16x16xf16, @block=[16, 16]>
-%ma_inst1 = xegpu.matrix_desc_subview %ma[%sg_idy * 32,       %sg_idx * 32 % 32 + 16]
-    : matrix_desc<256x32xf16> -> matrix_desc<16x16xf16, @block=[16, 16]>
-%ma_inst2 = xegpu.matrix_desc_subview %ma[%sg_idy * 32 + 16,  %sg_idx * 32 % 32]
-    : matrix_desc<256x32xf16> -> matrix_desc<16x16xf16, @block=[16, 16]>
-%ma_inst3 = xegpu.matrix_desc_subview %ma[%sg_idy * 32 + 16,  %sg_idx * 32 % 32 + 16]
-    : matrix_desc<256x32xf16> -> matrix_desc<16x16xf16, @block=[16, 16]>
-%a_dpas_0 = xegpu.load_matrix %ma_inst0
-    : matrix_desc<16x16xf16, @block=[16, 16]> -> vector<16x16xf16>
-%a_dpas_1 = xegpu.load_matrix %ma_inst1
-    : matrix_desc<16x16xf16, @block=[16, 16]> -> vector<16x16xf16>
-%a_dpas_2 = xegpu.load_matrix %ma_inst2
-    : matrix_desc<16x16xf16, @block=[16, 16]> -> vector<16x16xf16>
-%a_dpas_3 = xegpu.load_matrix %ma_inst3
-    : matrix_desc<16x16xf16, @block=[16, 16]> -> vector<16x16xf16>
+%ma = xegpu.create_matrix_desc %m : memref<16384xi8, 3>  -> matrix_desc<256x32xf16, @block=[16, 16]>
+%a_dpas_0 = xegpu.load_matrix %ma[%sg_idy * 32, %sg_idx * 32 % 32]
+    : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
+%a_dpas_1 = xegpu.load_matrix %ma[%sg_idy * 32, %sg_idx * 32 % 32 + 16]
+    : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
+%a_dpas_2 = xegpu.load_matrix %ma[%sg_idy * 32 + 16,  %sg_idx * 32 % 32]
+    : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
+%a_dpas_3 = xegpu.load_matrix %[%sg_idy * 32 + 16,  %sg_idx * 32 % 32 + 16]
+    : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
 ```
 
 **MaterializeSLMAccess: Lowering matrix_desc to Physical Memory Access**
@@ -560,13 +528,11 @@ gpu.barrier
 This step lowers high-level matrix_desc operations (store_matrix, load_matrix) into low-level memory operations (store_chunk, load_1d) over shared local memory. It performs full address materialization using the matrix's layout attributes (@strides, @block) and logical lane coordinates.
 
 Key Concepts:
-Matrix-to-Memory Conversion: Replace matrix_desc-based tile abstractions with raw memref and compute physical offsets explicitly.
+- Chunked Store: Each thread stores a small fragment (e.g., 8×1) using the logical offset composed with layout metadata. Lowered to store_chunk.
 
-Chunked Store: Each thread stores a small fragment (e.g., 8×1) using the logical offset composed with layout metadata. Lowered to store_chunk.
+- 1D Block Load: A transposed layout (e.g., 256×32) is blocked as 16×16 tiles. Contiguous blocks are loaded using load_1d, which requires computing the physical offset of the first element per 1D block.
 
-1D Block Load: A transposed layout (e.g., 256×32) is blocked as 16×16 tiles. Contiguous blocks are loaded using load_1d, which requires computing the physical offset of the first element per 1D block.
-
-Offset Calculation: Logical per-lane coordinates are transformed into logical block coordinates, then to physical offsets using block size and strides.
+- Offset Calculation: Logical per-lane coordinates are transformed into logical block coordinates, then to physical offsets using block size and strides.
 
 ```mlir
 %tdesc_sg = xegpu.create_nd_tdesc %base[%widy * 32 + %sg_idy * 8, %widx * 256 + %sg_idx * 32]
@@ -576,41 +542,38 @@ Offset Calculation: Logical per-lane coordinates are transformed into logical bl
 %at1 = vector.extract %at[0, 16]  : vector<8x32xf16> -> vector<8x16xf16>
 
 // Shared local memory buffer
-%m = memref.alloc : memref<8192xf16, 3>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
 
-// ---------------------- Chunked Load ----------------------
-// Compute blocked offset vectors for SLM store
-%blk_y       = divi_signed %sg_idy * 8, 16        : index
-%blk_in_y    = remi_signed %sg_idy * 8, 16        : index
-%sg_idx_vec  = addi %sg_idx * 32, dense<[0, ..., 15]> : vector<16xindex>
-%blk_x       = divi_unsigned %sg_idx_vec, 16
-%blk_in_x    = remi_unsigned %sg_idx_vec, 16
-// calculate physic addresses with pre-computed strides of the blocked matrix.
-// [32x256, strides=1x32] blocked as [2x16x16x16, strides=256x512x1x16] 
-%offset_vec0 = addi (addi (addi (%blk_in_y, %blk_in_x * 16), %blk_y * 256),%blk_x * 512)
-%tdesc0 = xegpu.create_tdesc %m, %offset_vec0
-    : memref<8192xf16, 3>, vector<16xindex> -> tdesc<16x8xf16, chunk=8, scope=slm>
-
-// Repeat for second tile
-%sg_idx_vec2 = addi %sg_idx * 32, dense<[16, ..., 31]> : vector<16xindex>
-%blk_x2      = divi_unsigned %sg_idx_vec2, 16
-%blk_in_x2   = remi_unsigned %sg_idx_vec2, 16
-%offset_vec1 = addi (addi (addi (%blk_in_y, %blk_in_x2 * 16), %blk_y * 256),%blk_x2 * 512)
-%tdesc1 = xegpu.create_tdesc %m, %offset_vec1
-    : memref<8192xf16, 3>, vector<16xindex> -> tdesc<16x8xf16, chunk=8, scope=slm>
-
+// ---------------------- Chunked Store ----------------------
 // The transpose is added as we remove the transpose attribute out from chunked load/store and expect an explict data transpose.
 // it will be no op after lane distribution since each lane owns same data when [8,1] is transpose to [1, 8]
 %at0_t = vector.transpose %at0 : vector<8x16xf16> -> vector<16x8xf16>
+
+// Compute blocked offset vectors for SLM store
+%blk_y=sg_idy*8 /16: index
+%blk_in_y=sg_idy*8 %16: index
+%sg_idx_vec = %sg_idx*32 + [0..15] : vector<16xindex> 
+%blk_x=%sg_idx_vec /16: vector<16xindex > 
+%blk_in_x=%sg_idx_vec %16: vector<16xindex >
+
+// calculate physic addresses with pre-computed strides of the blocked matrix.
+// [32x256, strides=1x32] blocked as [2x16x16x16, strides=256x512x1x16] 
+%offset_vec0 = %blk_y * 256+ + %blk_x * 512 + %blk_in_y + %blk_in_x*16
+xegpu.store %at0_t, %m, %offset_vec0 @chunk_size=8: vector<16x8xf16>, memref<8192xf16, 3>, vector<16xindex>
+
+// Repeat for second tile
 %at1_t = vector.transpose %at1 : vector<8x16xf16> -> vector<16x8xf16>
-xegpu.store %tdesc0, %at0_t : tdesc<16x8xf16, chunk=8, scope=slm>, vector<16x8xf16>
-xegpu.store %tdesc1, %at1_t : tdesc<16x8xf16, chunk=8, scope=slm>, vector<16x8xf16>
+%sg_idx_vec2 = %sg_idx*32 + [16..31] : vector<16xindex> 
+%blk_x2=%sg_idx_vec2 /16: vector<16xindex > 
+%blk_in_x2=%sg_idx_vec2 %16: vector<16xindex >
+%offset_vec1 = %blk_y * 256+ + %blk_x2 * 512 + %blk_in_y+ %blk_in_x2*16
+xegpu.store %at1_t, %m, %offset_vec1: @chunk_size=8: vector<16x8xf16>, memref<8192xf16, 3>, vector<16xindex>
 
 gpu.barrier
 
 // ---------------------- Load 1D Block ----------------------
 // Compute per-block physical offsets
-// pre-computed strides of the blocked matrix: [256x32] blocked as [2x16x16x16, strides=512x256x16x1]
+// pre-computed strides of the blocked matrix: [256x32] blocked as [16x2x16x16, strides=512x256x16x1]
 // sg_idx*32 coord to blocked matrix ccord: sg_idx*32%32/16 (0), sg_idx*32%32%16 (0). %32 due matrix shape[1] is 32
 // sg_idy*32 coord to blocked matrix coord: sg_idy*32/16, sg_idy*32%16 (0)
 //  then map to physical addr using stride  [2x16x16x16, strides=512x256x16x1], get sg_idy*32/16 *512
@@ -619,15 +582,10 @@ gpu.barrier
 %inst_start_offset2 = add %inst_start_offset0, 512
 %inst_start_offset3 = add %inst_start_offset0, 768
 
-%tdesc0 = xegpu.create_nd_tdesc %m, %inst_start_offset0 : memref<8192xf16, 3>, index -> tdesc<256xf16>
-%tdesc1 = xegpu.create_nd_tdesc %m, %inst_start_offset1 : memref<8192xf16, 3>, index -> tdesc<256xf16>
-%tdesc2 = xegpu.create_nd_tdesc %m, %inst_start_offset2 : memref<8192xf16, 3>, index -> tdesc<256xf16>
-%tdesc3 = xegpu.create_nd_tdesc %m, %inst_start_offset3 : memref<8192xf16, 3>, index -> tdesc<256xf16>
-
-%a_dpas_0 = xegpu.load_nd %tdesc0 : tdesc<256xf16> -> vector<256xf16>
-%a_dpas_1 = xegpu.load_nd %tdesc1 : tdesc<256xf16> -> vector<256xf16>
-%a_dpas_2 = xegpu.load_nd %tdesc2 : tdesc<256xf16> -> vector<256xf16>
-%a_dpas_3 = xegpu.load_nd %tdesc3 : tdesc<256xf16> -> vector<256xf16>
+%a_dpas_0 = xegpu.load_nd %m, %inst_start_offset0 : memref<8192xf16, 3>, index -> vector<256xf16>
+%a_dpas_1 = xegpu.load_nd %m, %inst_start_offset1 : memref<8192xf16, 3>, index -> vector<256xf16>
+%a_dpas_2 = xegpu.load_nd %m, %inst_start_offset2 : memref<8192xf16, 3>, index -> vector<256xf16>
+%a_dpas_3 = xegpu.load_nd %m, %inst_start_offset3 : memref<8192xf16, 3>, index -> vector<256xf16>
 ```
 
 ## XeGPU Attributes to support Work Item Level semantics
