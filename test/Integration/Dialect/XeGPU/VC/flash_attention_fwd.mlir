@@ -54,14 +54,14 @@ module @flash_attention attributes {gpu.container_module} {
       %sg_q_x_offset = arith.addi %wg_q_x_offset, %sg_q_x_offset_t0 : index
 
       // init tile for 16x64 Q tiles
-      %q_tile_init_0  = xegpu.create_nd_tdesc %Q[%sg_q_x_offset, %c0], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %q_tile_init_0  = xegpu.create_nd_tdesc %Q[%sg_q_x_offset, %c0], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
       %q_tile_init_1 = xegpu.update_nd_offset %q_tile_init_0, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %q_tile_init_2 = xegpu.update_nd_offset %q_tile_init_1, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %q_tile_init_3 = xegpu.update_nd_offset %q_tile_init_2, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
 
       // init tile for 64x64 K tiles. We do this in 4 stages of 16x64 tiles to reduce register pressure.
       // k is reused by all SGs
-      %k_tile_slice_0_0_init = xegpu.create_nd_tdesc %K [%wg_x_offset, %c0], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %k_tile_slice_0_0_init = xegpu.create_nd_tdesc %K [%wg_x_offset, %c0], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
       %k_tile_slice_0_1_init = xegpu.update_nd_offset %k_tile_slice_0_0_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %k_tile_slice_0_2_init = xegpu.update_nd_offset %k_tile_slice_0_1_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %k_tile_slice_0_3_init = xegpu.update_nd_offset %k_tile_slice_0_2_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
@@ -82,7 +82,7 @@ module @flash_attention attributes {gpu.container_module} {
       %k_tile_slice_3_3_init = xegpu.update_nd_offset %k_tile_slice_3_2_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
 
       // same for V tiles
-      %v_tile_slice_0_0_init = xegpu.create_nd_tdesc %V [%wg_x_offset, %c0], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %v_tile_slice_0_0_init = xegpu.create_nd_tdesc %V [%wg_x_offset, %c0], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
       %v_tile_slice_0_1_init = xegpu.update_nd_offset %v_tile_slice_0_0_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %v_tile_slice_0_2_init = xegpu.update_nd_offset %v_tile_slice_0_1_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
       %v_tile_slice_0_3_init = xegpu.update_nd_offset %v_tile_slice_0_2_init, [%c0, %c16] : !xegpu.tensor_desc<16x16xf16>
@@ -116,7 +116,7 @@ module @flash_attention attributes {gpu.container_module} {
       %prefetch_offset_x = arith.addi %wg_q_x_offset, %prefetch_offset_x_t0 : index
       %prefetch_offset_y = arith.muli %sg_layout_y, %c32 : index
 
-      %k_prefetch_iter0 = xegpu.create_nd_tdesc %K [%prefetch_offset_x, %prefetch_offset_y], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x32xf16>
+      %k_prefetch_iter0 = xegpu.create_nd_tdesc %K [%prefetch_offset_x, %prefetch_offset_y], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x32xf16>
       xegpu.prefetch_nd %k_prefetch_iter0  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x32xf16>
       %k_prefetch_iter1 = xegpu.update_nd_offset %k_prefetch_iter0, [%BLOCK_N, %c0] : !xegpu.tensor_desc<16x32xf16>
       xegpu.prefetch_nd %k_prefetch_iter1  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x32xf16>
@@ -125,7 +125,7 @@ module @flash_attention attributes {gpu.container_module} {
       %k_prefetch_iter3 = xegpu.update_nd_offset %k_prefetch_iter2, [%BLOCK_N, %c0] : !xegpu.tensor_desc<16x32xf16>
 
       // V prefetch is similar to K
-      %v_prefetch_iter0 = xegpu.create_nd_tdesc %V [%prefetch_offset_x, %prefetch_offset_y], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x32xf16>
+      %v_prefetch_iter0 = xegpu.create_nd_tdesc %V [%prefetch_offset_x, %prefetch_offset_y], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x32xf16>
       xegpu.prefetch_nd %v_prefetch_iter0  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x32xf16>
       %v_prefetch_iter1 = xegpu.update_nd_offset %v_prefetch_iter0, [%BLOCK_N, %c0]  : !xegpu.tensor_desc<16x32xf16>
       xegpu.prefetch_nd %v_prefetch_iter1  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x32xf16>
@@ -732,7 +732,7 @@ module @flash_attention attributes {gpu.container_module} {
       %o_val_final_1_3 = arith.truncf %o_val_final_1_3_t : vector<8x16xf32> to vector<8x16xf16>
 
       // O tile, max size is 8x32
-      %o_tile_init_0_0  = xegpu.create_nd_tdesc %Out [%sg_q_x_offset, %c0], [%size_x, %BLOCK_DMODEL], [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<8x32xf16>
+      %o_tile_init_0_0  = xegpu.create_nd_tdesc %Out [%sg_q_x_offset, %c0], shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<8x32xf16>
       %o_tile_init_0_1 = xegpu.update_nd_offset %o_tile_init_0_0, [%c0, %c32] : !xegpu.tensor_desc<8x32xf16>
       %o_tile_init_1_0 = xegpu.update_nd_offset %o_tile_init_0_0, [%c8, %c0] : !xegpu.tensor_desc<8x32xf16>
       %o_tile_init_1_1 = xegpu.update_nd_offset %o_tile_init_1_0, [%c0, %c32] : !xegpu.tensor_desc<8x32xf16>

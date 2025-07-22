@@ -66,14 +66,14 @@ module {
       %38 = arith.remsi %11, %c4 : index
       %39 = scf.for %arg3 = %c0 to %c3 step %c1 iter_args(%arg4 = %cst) -> (vector<8x1xf32>) {
 
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [0], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [1], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [2], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [3], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [4], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [5], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [6], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [7], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [1] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [2] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [3] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [4] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [5] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [6] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [7] : vector<8xf32>, vector<8xf32>
         %45 = vector.extract_strided_slice %arg4 {offsets = [0, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>
         %46 = vector.extract_strided_slice %arg4 {offsets = [1, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>
         %47 = vector.extract_strided_slice %arg4 {offsets = [2, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>
@@ -194,7 +194,6 @@ module {
           scf.yield %460, %461, %463, %465, %467, %469, %471, %473, %475, %477, %458, %459, %439 : !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>, !xegpu.tensor_desc<32x16xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 2 : i64, boundary_check = true>>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, !xegpu.tensor_desc<8x32xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, !xegpu.tensor_desc<4x32xbf16, #xegpu.block_tdesc_attr<memory_space =  global, array_length = 1 : i64, boundary_check = true>>, index
         }
 
-        //CHECK-COUNT-8: vector.shape_cast %{{.*}} : vector<8x16xf32> to vector<128xf32>
         //CHECK-COUNT-64: vector.shuffle {{.*}} : vector<128xf32>, vector<128xf32>
         %72 = vector.extract_strided_slice %71#2 {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<8x16xf32> to vector<1x16xf32>
         %73 = vector.extract_strided_slice %71#2 {offsets = [1, 0], sizes = [1, 16], strides = [1, 1]} : vector<8x16xf32> to vector<1x16xf32>
@@ -550,14 +549,14 @@ module {
         %412 = vector.shape_cast %411 : vector<8xf32> to vector<8xf32>
         %413 = vector.shape_cast %412 : vector<8xf32> to vector<8x1xf32>
 
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [0], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [1], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [2], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [3], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [4], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [5], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [6], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        //CHECK: vector.extract_strided_slice %{{.*}} {offsets = [7], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [1] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [2] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [3] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [4] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [5] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [6] : vector<8xf32>, vector<8xf32>
+        //CHECK: vector.shuffle %{{.*}}, %{{.*}} [7] : vector<8xf32>, vector<8xf32>
         %414 = vector.extract_strided_slice %413 {offsets = [0, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>
         %415 = vector.extract_strided_slice %413 {offsets = [1, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>
         %416 = vector.extract_strided_slice %413 {offsets = [2, 0], sizes = [1, 1], strides = [1, 1]} : vector<8x1xf32> to vector<1x1xf32>

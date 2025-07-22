@@ -7,16 +7,16 @@ gpu.module @load_store_bf16 attributes {spirv.target_env = #spirv.target_env<#sp
     %thread_id_y = gpu.thread_id y
     %thread_id_z = gpu.thread_id z
     %0 = arith.muli %thread_id_z, %c32 : index
-    %1 = xegpu.create_nd_tdesc %arg0[%thread_id_x, %thread_id_y, %0], [4, 2, 128], [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
+    %1 = xegpu.create_nd_tdesc %arg0[%thread_id_x, %thread_id_y, %0], shape: [4, 2, 128], strides: [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
 
     // CHECK: func.call @llvm.genx.lsc.prefetch.stateless.v1i1.v1i64
     xegpu.prefetch_nd %1 : !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
-    %2 = xegpu.create_nd_tdesc %arg0[%thread_id_x, %thread_id_y, %0], [4, 2, 128], [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
+    %2 = xegpu.create_nd_tdesc %arg0[%thread_id_x, %thread_id_y, %0],  shape: [4, 2, 128], strides: [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
 
     // CHECK: %[[LOAD_VAL:.*]] = func.call @llvm.genx.lsc.load.stateless.v16i32.v1i1.v1i64
     // CHECK: %[[REAL_VAL:.*]] = vector.bitcast %[[LOAD_VAL]] : vector<16xi32> to vector<32xbf16>
     %3 = xegpu.load_nd %2 : !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>> -> vector<32xbf16>
-    %4 = xegpu.create_nd_tdesc %arg1[%thread_id_x, %thread_id_y, %0], [4, 2, 128], [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
+    %4 = xegpu.create_nd_tdesc %arg1[%thread_id_x, %thread_id_y, %0], shape: [4, 2, 128], strides: [256, 128, 1] : memref<4x2x128xbf16> -> !xegpu.tensor_desc<32xbf16, #xegpu.block_tdesc_attr<memory_space = global, array_length = 1 : i64, boundary_check = true>>
 
     // CHECK: %[[STORE_VAL:.*]] = vector.bitcast %[[REAL_VAL]] : vector<32xbf16> to vector<16xi32>
     // CHECK: func.call @llvm.genx.lsc.store.stateless.v1i1.v1i64.v16i32

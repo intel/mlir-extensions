@@ -170,20 +170,20 @@ module @gemm attributes {gpu.container_module} {
       %B_ptr_index = memref.extract_aligned_pointer_as_index %B : memref<4096x4096xf16> -> index
       %b_ptr_i64 = arith.index_cast %B_ptr_index : index to i64
 
-      %B_tile_0_0 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y, %c0], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
-      %B_tile_1_0 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y, %c8], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_0_0 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y, %c0], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_1_0 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y, %c8], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
 
       %C_sg_tile_offset_y_plus_16_t0 = arith.addi %C_sg_tile_offset_y, %c16 : index
-      %B_tile_0_1 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_16_t0, %c0], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
-      %B_tile_1_1 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_16_t0, %c8], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_0_1 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_16_t0, %c0], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_1_1 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_16_t0, %c8], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
 
       %C_sg_tile_offset_y_plus_32_t0 = arith.addi %C_sg_tile_offset_y_plus_16_t0, %c16 : index
-      %B_tile_0_2 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_32_t0, %c0], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
-      %B_tile_1_2 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_32_t0, %c8], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_0_2 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_32_t0, %c0], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_1_2 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_32_t0, %c8], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
 
       %C_sg_tile_offset_y_plus_48_t0 = arith.addi %C_sg_tile_offset_y_plus_32_t0, %c16 : index
-      %B_tile_0_3 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_48_t0, %c0], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
-      %B_tile_1_3 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_48_t0, %c8], [%c4096, %c2048], [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_0_3 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_48_t0, %c0], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %B_tile_1_3 = xegpu.create_nd_tdesc %b_ptr_i64[%C_sg_tile_offset_y_plus_48_t0, %c8], shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
 
       // init 16 C tiles of size 8x16 each is initialized to 0.0 assuming a zero C matrix
       %c_init_val_0_0 = arith.constant dense<0.0> : vector<8xf32>

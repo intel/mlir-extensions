@@ -51,14 +51,14 @@ gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.
       %2 = arith.muli %0, %c8 : index
       %3 = arith.muli %1, %c16 : index
 
-      %4 = xegpu.create_nd_tdesc %C[%2, %3], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf32>
+      %4 = xegpu.create_nd_tdesc %C[%2, %3], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf32>
       %5 = xegpu.load_nd %4 : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
 
       %6 = scf.for %arg3 = %c0 to %c32 step %c16 iter_args(%arg4 = %5) -> (vector<8x16xf32>) {
-        %A0 = xegpu.create_nd_tdesc %A[%2, %arg3], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf16>
+        %A0 = xegpu.create_nd_tdesc %A[%2, %arg3], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf16>
         %A0_val = xegpu.load_nd %A0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
 
-        %B0 = xegpu.create_nd_tdesc %B[%arg3, %3], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16x16xf16>
+        %B0 = xegpu.create_nd_tdesc %B[%arg3, %3], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16x16xf16>
         %B0_val = xegpu.load_nd %B0 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
 
         %A0_preop = arith.addf %A0_val, %cst : vector<8x16xf16>

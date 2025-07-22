@@ -40,12 +40,12 @@ module @gemm attributes {gpu.container_module} {
     gpu.func @test_kernel(%arg0: memref<?x?xf32, strided<[?,?], offset: ?>>, %arg1: memref<?x?xf32, strided<[?,?], offset: ?>>, %arg2: memref<?x?xf32, strided<[?,?], offset: ?>>, %shape_x : index, %shape_y : index, %stride_x : index, %stride_y : index) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %thread_id_x = gpu.thread_id x
 
-      %0 = xegpu.create_nd_tdesc %arg0[%thread_id_x, 0], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
+      %0 = xegpu.create_nd_tdesc %arg0[%thread_id_x, 0], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
       %1 = xegpu.load_nd %0  : !xegpu.tensor_desc<16xf32> -> vector<16xf32>
-      %2 = xegpu.create_nd_tdesc %arg1[%thread_id_x, 0], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
+      %2 = xegpu.create_nd_tdesc %arg1[%thread_id_x, 0], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
       %3 = xegpu.load_nd %2  : !xegpu.tensor_desc<16xf32> -> vector<16xf32>
       %4 = arith.addf %3, %1 : vector<16xf32>
-      %5 = xegpu.create_nd_tdesc %arg2[%thread_id_x, 0], [%shape_x, %shape_y], [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
+      %5 = xegpu.create_nd_tdesc %arg2[%thread_id_x, 0], shape: [%shape_x, %shape_y], strides: [%stride_x, %stride_y] : memref<?x?xf32, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf32>
       xegpu.store_nd %4, %5  : vector<16xf32>, !xegpu.tensor_desc<16xf32>
       gpu.return
     }

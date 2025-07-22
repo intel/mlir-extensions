@@ -37,9 +37,9 @@ func.func @test_create_nd_tdesc_vc_1(%src: memref<24x32xf32>, %x : index, %y : i
 func.func @test_create_nd_tdesc_vc_2(%src: ui64, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
+  // CHECK-SAME: %arg0[%arg3, %arg4], shape : [%arg2, %arg1], strides : [%arg1, %c1]
   // CHECK-SAME: ui64 -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : ui64 -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : ui64 -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -47,9 +47,9 @@ func.func @test_create_nd_tdesc_vc_2(%src: ui64, %w : index, %h : index, %x : in
 func.func @test_create_nd_tdesc_vc_3(%src: memref<?x?xf32>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
+  // CHECK-SAME: %arg0[%arg3, %arg4], shape : [%arg2, %arg1], strides : [%arg1, %c1]
   // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -58,9 +58,9 @@ func.func @test_create_nd_tdesc_vc_3(%src: memref<?x?xf32>, %w : index, %h : ind
 func.func @test_create_nd_tdesc_vc_4(%src: memref<?x?xf32>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
+  // CHECK-SAME: %arg0[%arg3, %arg4], shape : [%arg2, %arg1], strides : [%arg1, %c1]
   // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -68,9 +68,9 @@ func.func @test_create_nd_tdesc_vc_4(%src: memref<?x?xf32>, %w : index, %h : ind
 func.func @test_create_nd_tdesc_vc_5(%src: memref<?x?xf32>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
+  // CHECK-SAME: %arg0[%arg3, %arg4], shape : [%arg2, %arg1], strides : [%arg1, %c1]
   // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -78,9 +78,9 @@ func.func @test_create_nd_tdesc_vc_5(%src: memref<?x?xf32>, %w : index, %h : ind
 func.func @test_create_nd_tdesc_vc_6(%src: memref<?x?xf32>, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
+  // CHECK-SAME: %arg0[%arg3, %arg4], shape : [%arg2, %arg1], strides : [%arg1, %c1]
   // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -99,7 +99,7 @@ func.func @test_create_nd_tdesc_vc_8(%src: memref<?x?xf32>, %w : index, %h : ind
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %src[8, %x], shape:[%h, %w], strides: [%w, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 

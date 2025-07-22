@@ -42,9 +42,9 @@ func.func @test_load_nd_simd_f16(%src: memref<24x32xf16>, %x : index, %y : index
 // CHECK-LABEL: func @test_load_nd_simd_bf16({{.*}}) {
 func.func @test_load_nd_simd_bf16(%src: ui64, %w : index, %h : index, %x : index, %y : index) {
   %c1 = arith.constant 1 : index
-  // CHECK: xegpu.create_nd_tdesc {{.*}}[{{.*}}, {{.*}}], [{{.*}}, {{.*}}], [{{.*}}, {{.*}}]
+  // CHECK: xegpu.create_nd_tdesc {{.*}}[{{.*}}, {{.*}}], shape : [{{.*}}, {{.*}}], strides : [{{.*}}, {{.*}}]
   // CHECK-SAME: ui64 -> !xegpu.tensor_desc<8x16xbf16>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] : ui64 -> !xegpu.tensor_desc<8x16xbf16>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], shape: [%h, %w], strides: [%w, %c1] : ui64 -> !xegpu.tensor_desc<8x16xbf16>
   // CHECK: xegpu.load_nd
   // CHECK-SAME: <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}>
   // CHECK-SAME: !xegpu.tensor_desc<8x16xbf16> -> vector<8x16xbf16>
