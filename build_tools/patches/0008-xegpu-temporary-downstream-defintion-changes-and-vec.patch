@@ -24,7 +24,7 @@ index 81e25f7537cb..a7f3367d3774 100644
 @@ -971,4 +972,9 @@ def XeGPU_ConvertLayoutOp: XeGPU_Op<"convert_layout", [Pure, AllTypesMatch<["sou
      let hasVerifier = 1;
  }
- 
+
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
 +  let summary = "prevents the compiler from scheduling.";
 +  let assemblyFormat = [{ attr-dict }];
@@ -62,16 +62,15 @@ index c8da5558438e..a4d1e2c344c1 100644
 +         kind == CachePolicy::STREAMING ||
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
- 
+
 @@ -420,7 +421,7 @@ LogicalResult LoadNdOp::verify() {
        mlir::emitWarning(getLoc()) << "Invalid transpose attr. It is ignored.";
    }
- 
+
 -  if (getPacked()) {
 +  if (getPacked() || getTransposeBitWidth() == 32) {
      if (tdescTy.getRank() == 2) {
        const int axis = 0;
        auto vnni_factor = valueShape.back();
--- 
+--
 2.34.1
-
