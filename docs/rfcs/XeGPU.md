@@ -791,7 +791,7 @@ For `dpas`, the `layout` attribute of input operands must have the same `sg_layo
 ```mlir
    #layout_d = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data=[8,16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]>
    %vector_d = xegpu.dpas %vector_a, %vector_b, %vector_c {#layout_d}:
-     vector<256x256xfloat>, vector<256x32xbf16>, vector<32x256xbf16>
+     vector<256x32xfloat>, vector<32x256xbf16>, vector<256x256xbf16>
 	   into vector<256x256xfloat>
    //derived layout for input operands
    #layout_a = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data=[8,16], lane_layout=[1,16], lane_data = [1, 1], order=[1, 0]> //layout for %vector_a
