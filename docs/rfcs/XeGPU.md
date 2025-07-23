@@ -735,7 +735,7 @@ tensor_size = tensor_shape[0] × tensor_shape[1]
 The following conditions must hold:
 ```mlir
 * subgroup_size must represent the number of work items (lanes) in a subgroup for a kernel.
-* workgroup_size must represent the number of subgroups in a workgroup for a kernel.
+* workgroup_size must represent the number of subgroups in a workgroup for a kernel. User may explicitly specify the nubmer of subgroups and their id ranges.
 * for any dimension i, tensor_shape[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
 * for any dimension i, sg_data[i] must be evenly divisible by inst_data[i].
 * for any dimension i, inst_data[i] must be evenly divisible by lane_layout[i] x lane_data[i].
