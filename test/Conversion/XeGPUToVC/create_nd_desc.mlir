@@ -152,7 +152,7 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r1:.*]] = arith.muli %[[r0]], %[[c0]] : index
       //CHECK: %[[r2:.*]] = arith.addi %[[intptr]], %[[r1]] : index
       //CHECK: %[[r3:.*]] = arith.index_castui %[[r2]] : index to i64
-      %tdesc_1d = xegpu.create_nd_tdesc %arg0[%c0, %c0], [%arg1, %arg2], [%arg3, %arg4] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf16>
+      %tdesc_1d = xegpu.create_nd_tdesc %arg0[%c0, %c0], shape: [%arg1, %arg2], strides: [%arg3, %arg4] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf16>
       gpu.return
     }
 
@@ -182,7 +182,7 @@ module @gemm attributes {gpu.container_module} {
       //CHECK: %[[r15:.*]] = vector.insert %[[r14]], %[[r13]] [5] : i32 into vector<16xi32>
       //CHECK: %[[r16:.*]] = vector.insert %[[r14]], %[[r15]] [6] : i32 into vector<16xi32>
       //CHECK: %[[c1807_i32:.*]] = arith.constant 1807 : i32
-      %tdesc_2d = xegpu.create_nd_tdesc %arg0[%c0, %c0], [%arg1, %arg2], [%arg3, %arg4] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf16>
+      %tdesc_2d = xegpu.create_nd_tdesc %arg0[%c0, %c0], shape: [%arg1, %arg2], strides: [%arg3, %arg4] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<8x16xf16>
       gpu.return
     }
   }

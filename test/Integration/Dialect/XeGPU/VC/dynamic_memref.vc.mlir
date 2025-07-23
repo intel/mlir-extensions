@@ -23,9 +23,9 @@ module @gemm attributes {gpu.container_module} {
       %c1 = arith.constant 1 : index
       %c8 = arith.constant 8 : index
       %c16 = arith.constant 16 : index
-      %1 = xegpu.create_nd_tdesc %arg0[0, 0], [%c8, %c16], [%c16, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %1 = xegpu.create_nd_tdesc %arg0[0, 0], shape: [%c8, %c16], strides: [%c16, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
       %2 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-      %6 = xegpu.create_nd_tdesc %arg1[0, 0], [%c8, %c16], [%c16, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %6 = xegpu.create_nd_tdesc %arg1[0, 0], shape: [%c8, %c16], strides: [%c16, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
       xegpu.store_nd %2, %6 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }

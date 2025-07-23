@@ -19,7 +19,7 @@ func.func @test_create_nd_tdesc_vc_3(%input: memref<?xf32>) {
   %c16 = arith.constant 16 : index
 
   // expected-error@+1 {{expected 1 offset values, got 2}}
-  %1 = xegpu.create_nd_tdesc %input[%c0, %c1], [%c8, %c16], [%c16, %c1] : memref<?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  %1 = xegpu.create_nd_tdesc %input[%c0, %c1], shape: [%c8, %c16], strides: [%c16, %c1] : memref<?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
 
@@ -30,7 +30,7 @@ func.func @test_create_nd_tdesc_vc_4(%input: memref<?x?xf32>) {
   %c8 = arith.constant 8 : index
 
   // expected-error@+1 {{expected 2 offset values, got 1}}
-  %1 = xegpu.create_nd_tdesc %input[%c1], [%c8], [%c1]
+  %1 = xegpu.create_nd_tdesc %input[%c1], shape: [%c8], strides: [%c1]
                               : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }

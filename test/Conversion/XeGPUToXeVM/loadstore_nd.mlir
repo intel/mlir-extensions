@@ -88,7 +88,7 @@ gpu.module @load_store_check {
         // CHECK: %[[T12:.*]] = vector.insert %[[T7]], %[[T11]] [3] : i32 into vector<8xi32>
         // CHECK: %[[T13:.*]] = vector.insert %[[T1]], %[[T12]] [4] : i32 into vector<8xi32>
         // CHECK: %[[T14:.*]] = vector.insert %[[T3]], %[[T13]] [5] : i32 into vector<8xi32>
-        %src_tdesc = xegpu.create_nd_tdesc %src [%c4, %c8], [%src_h, %src_w], [%src_w, %c1] : i64
+        %src_tdesc = xegpu.create_nd_tdesc %src [%c4, %c8], shape: [%src_h, %src_w], strides: [%src_w, %c1] : i64
             -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
         "some_op"(%src_tdesc) : (!xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>) -> ()
         gpu.return
