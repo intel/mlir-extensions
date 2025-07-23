@@ -756,19 +756,19 @@ Conceptually, the work item (WI) distribution process can be broken down into tw
 
 **Examples of workgroup distribution with xegpu.layout**
 
-The workgroup creates a tensor descriptor [64, 16] and distributes to 4 subgroups with `sg_layout` [4, 8], and each subgroup gets `sg_data` [16, 16]. The first dimension is split and distributed to 4 subgroups, and the second dimension is broadcast to 8 subgroups. Then it is further distributed to work item level as a vector of 16 bf16 values.
+The workgroup creates a tensor descriptor [64, 16] and distributes to 32 subgroups with `sg_layout` [4, 8], and each subgroup gets `sg_data` [16, 16]. The first dimension is split and distributed to 4 subgroups, and the second dimension is broadcast to 8 subgroups. Then it is further distributed to work item level as a vector of 16 bf16 values.
 
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [4, 8], sg_data = [16, 16], inst_data= [8, 16], lane_layout=[1,16], lane_data = [1, 1], order = [1, 0]>
-   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xf16> -> tensor_desc<64x16xf16, #layout_a>
-   %wg_vec  = load_nd %wg_tdesc : tensor_desc<64x16xf16, #layout_a> -> vector<64x16xf16xf16>
+   %wg_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<1024x1024xbf16> -> tensor_desc<64x16xbf16, #layout_a>
+   %wg_vec  = load_nd %wg_tdesc : tensor_desc<64x16xbf16, #layout_a> -> vector<64x16xbf16>
 // after subgroup distribution 
 // #layout_a_sg = #xegpu.layout<inst_data = [8, 16], lane_layout=[1, 16], lane_data = [1, 1], order = [1, 0]>
-// %sg_vec_sg  = load_nd %sg_tdesc : tensor_desc<16x16xf16, #layout_a_sg> -> vector<16x16xf16xf16>
+// %sg_vec_sg  = load_nd %sg_tdesc : tensor_desc<16x16xbf16, #layout_a_sg> -> vector<16x16xbf16>
 // after work item distribution 
-// %sg_vec_wi_0  = load_nd %sg_tdesc : tensor_desc<8x16xf16> -> vector<8xf16>
-// %sg_vec_wi_1  = load_nd %sg_tdesc : tensor_desc<8x16xf16> -> vector<8xf16>
-// %sg_vec_wi = vector.shuffle %sg_vec_wi_0, %sg_vec_wi_0, [0..165] : vector<16xf16> 
+// %sg_vec_wi_0  = load_nd %sg_tdesc : tensor_desc<8x16xbf16> -> vector<8xbf16>
+// %sg_vec_wi_1  = load_nd %sg_tdesc : tensor_desc<8x16xbf16> -> vector<8xbf16>
+// %sg_vec_wi = vector.shuffle %sg_vec_wi_0, %sg_vec_wi_0, [0..165] : vector<16xbf16> 
 ```
 
 The example below shows a workgroup tensor [128, 128] being distributed to 4 subgroups with `sg_layout` [2,2], with each subgroup assigned `sg_data` [32,128]. 
