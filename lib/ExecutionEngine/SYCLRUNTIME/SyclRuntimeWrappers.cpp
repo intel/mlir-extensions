@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "imex/ExecutionEngine/ExecutionEngineUtils.h"
+
+#include <algorithm>
 #include <cassert>
 #include <cfloat>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
+#include <mutex>
 #include <stdexcept>
 #include <vector>
 
 #include <level_zero/ze_api.h>
-#include <map>
-#include <mutex>
+
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/queue.hpp> // for queue
 #include <sycl/sycl.hpp>
@@ -324,10 +328,7 @@ static sycl::event *launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
       sycl::nd_range<3>(syclGlobalRange, syclLocalRange));
 
   if (getenv("IMEX_ENABLE_PROFILING")) {
-    auto executionTime = 0.0f;
-    auto maxTime = 0.0f;
-    auto minTime = FLT_MAX;
-    auto rounds = 100;
+    auto rounds = 1000;
     auto warmups = 3;
 
     // Before each run we need to flush the L3 cache (global memory cache) to
@@ -360,6 +361,8 @@ static sycl::event *launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
         warmups = runs;
     }
 
+    std::vector<float> executionTime(rounds, 0.0);
+
     // warmups
     for (int r = 0; r < warmups; r++) {
       auto e = enqueueKernel(syclQueue, kernel, syclNdRange, params,
@@ -382,19 +385,23 @@ static sycl::event *launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
               .get_profiling_info<sycl::info::event_profiling::command_start>();
       auto endTime =
           event.get_profiling_info<sycl::info::event_profiling::command_end>();
-      auto gap = float(endTime - startTime) / 1000000.0f;
-      executionTime += gap;
-      if (gap > maxTime)
-        maxTime = gap;
-      if (gap < minTime)
-        minTime = gap;
+      auto duration = float(endTime - startTime) / 1000000.0f;
+      executionTime[r] = duration;
     }
 
     deallocDeviceMemory(queue, cache);
+
+    // Print the profiling results
     fprintf(stdout,
-            "the kernel execution time is (ms):"
-            "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
-            executionTime / rounds, minTime, maxTime, rounds);
+            "the kernel execution time is (ms, on SYCL runtime):"
+            "avg: %.4f, min: %.4f, max: %.4f, median: %4f, std_deviation: %4f, "
+            "variance: %4f, P95: %4f, P5: %4f, median_one_third_avg: %4f (over "
+            "%d runs)\n",
+            calculateAverage(executionTime), calculateMin(executionTime),
+            calculateMax(executionTime), calculateMedian(executionTime),
+            calculateStdDev(executionTime), calculateVariance(executionTime),
+            calculateP95(executionTime), calculateP5(executionTime),
+            calculateMiddleThirdAverage(executionTime), rounds);
   }
 
   auto event = enqueueKernel(syclQueue, kernel, syclNdRange, params,

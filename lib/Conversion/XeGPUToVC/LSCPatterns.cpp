@@ -23,6 +23,7 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -44,6 +45,13 @@ using mlir::xegpu::StoreScatterOp;
 namespace imex {
 
 namespace LSC {
+
+static SmallVector<int64_t> generateFullPermutation(int rank) {
+  SmallVector<int64_t> permutation;
+  for (int i = rank - 1; i >= 0; --i)
+    permutation.push_back(i);
+  return permutation;
+}
 
 static int getCacheEncoding(std::optional<xegpu::CachePolicy> hint) {
 
@@ -839,6 +847,31 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
             op, "Only global access supported for block load.");
       auto payload = adaptor.getTensorDesc();
       auto retTy = op.getType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block load.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+        retTy = VectorType::get(tdescTy.getShape(), elemTy);
+      }
 
       // TODO: remove this after moving transposeBitWidth into a standalone
       // pass. update the width and pictch of the payload when transposeBitWidth
@@ -907,6 +940,8 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
 
       // TODO: remove this after moving transposeBitWidth into a standalone
       // pass.
+      // NOTE: sub byte type handling also needs the bitcast to the original
+      // type after the intrinsic call.
       if (retTy != op.getType()) {
         auto targetTy = convertVectorType(op.getType()).second;
         callOp = rewriter.create<vector::BitCastOp>(loc, targetTy, callOp);
@@ -958,6 +993,31 @@ class PrefetchNdPattern : public OpConversionPattern<PrefetchNdOp> {
       if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block prefetch.");
+      auto elemTy = tdescTy.getElementType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block prefetch.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+      }
       auto callOp = gen2DPrefetchIntrinsicCall(
           rewriter, loc, l1hint, l3hint, tdescTy, adaptor.getTensorDesc());
       rewriter.replaceOp(op, callOp);
@@ -1009,7 +1069,33 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
       if (scope != xegpu::MemorySpace::Global)
         return rewriter.notifyMatchFailure(
             op, "Only global access supported for block store.");
-
+      auto elemTy = tdescTy.getElementType();
+      auto bitWidth = elemTy.getIntOrFloatBitWidth();
+      if (bitWidth < 8) {
+        if (8 % bitWidth != 0)
+          return rewriter.notifyMatchFailure(
+              op, "Only sub byte type with bit-width 1, 2, 4, or 8 are "
+                  "supported for block store.");
+        auto subByteFactor = 8 / bitWidth;
+        // For supported sub byte type,
+        // fake element type to i8 and update elemTy, retTy and tdescTy
+        // accordingly. Add cast before and after intrinsic call to ensure the
+        // type matches the original type.
+        elemTy = rewriter.getI8Type();
+        auto shape = tdescTy.getShape().vec();
+        auto lastDim = shape.size() - 1;
+        if (shape[lastDim] % subByteFactor != 0) {
+          return rewriter.notifyMatchFailure(
+              op, "The last dimension but be a multiple of (8 / bitWidth) for "
+                  "sub byte types.");
+        }
+        shape[lastDim] = shape[lastDim] / subByteFactor;
+        tdescTy = TensorDescType::get(tdescTy.getContext(), shape, elemTy,
+                                      tdescTy.getEncoding(),
+                                      /*sg_map*/ nullptr);
+        auto dataTy = VectorType::get({tdescTy.getNumElements()}, elemTy);
+        data = rewriter.create<vector::BitCastOp>(loc, dataTy, data);
+      }
       auto callOp =
           gen2DStoreIntrinsicCall(rewriter, loc, l1hint, l3hint, tdescTy,
                                   adaptor.getTensorDesc(), data);
@@ -1043,7 +1129,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType
@@ -1060,6 +1146,21 @@ public:
     auto newValue = genLoadIntrinsicCallWithC32BConversion(
         rewriter, loc, resultTy, simd_lanes, op.getMask(), l1hint, l3hint,
         elemTy, chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc());
+
+    // transpose the result because of the difference between hardware
+    // implementation and the XeGPU definition.
+    if (resultTy.getRank() > 1) {
+      SmallVector<int64_t> permutation =
+          generateFullPermutation(resultTy.getRank());
+      llvm::ArrayRef<int64_t> shape = resultTy.getShape();
+      auto intrinsicTy =
+          VectorType::get(applyPermutation(shape, permutation), elemTy);
+      newValue =
+          rewriter.create<vector::ShapeCastOp>(loc, intrinsicTy, newValue);
+      newValue =
+          rewriter.create<vector::TransposeOp>(loc, newValue, permutation);
+    }
+
     rewriter.replaceOp(op, newValue);
 
     return success();
@@ -1076,7 +1177,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
     auto scope = tdescTy.getMemorySpace();
 
@@ -1129,7 +1230,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSize();
+    auto chunkSize = tdescTy.getChunkSizeAsInt();
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType
@@ -1141,10 +1242,22 @@ public:
     auto l1hint = op.getL1Hint();
     // auto l2hint = op.getL2Hint();
     auto l3hint = op.getL3Hint();
+
+    Value data = adaptor.getValue();
+    // transpose the value because of the difference between hardware
+    // implementation and the XeGPU definition.
+    if (tdescTy.getRank() > 1) {
+      Type flatVecTy =
+          data.getType(); // 1D VectorType expected by the intrinsic
+      SmallVector<int64_t> permutation =
+          generateFullPermutation(tdescTy.getRank());
+      data = rewriter.create<vector::ShapeCastOp>(loc, op.getValueType(), data);
+      data = rewriter.create<vector::TransposeOp>(loc, data, permutation);
+      data = rewriter.create<vector::ShapeCastOp>(loc, flatVecTy, data);
+    }
     auto callOp = genStoreIntrinsicCallWithC32BConversion(
         rewriter, loc, simd_lanes, op.getMask(), l1hint, l3hint, elemTy,
-        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(),
-        adaptor.getValue());
+        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(), data);
 
     rewriter.replaceOp(op, callOp);
     return success();
@@ -1203,7 +1316,7 @@ public:
     Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32Ty = VectorType::get(16, i32Type);
-    Value undef = rewriter.create<mlir::spirv::UndefOp>(loc, v16i32Ty);
+    Value undef = rewriter.create<mlir::ub::PoisonOp>(loc, v16i32Ty);
     Value src0 = undef;
     if (op.getValue()) {
       src0 = op.getValue();
@@ -1238,9 +1351,9 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto pred = i1_val(1);
-    uint8_t fence_op, sfid, fence_scope;
+    uint8_t fence_op_flush, sfid, fence_scope;
 
-    enum lscFenceOp {
+    enum lscFenceOpFlush {
       NONE = 0,
       EVICT = 1,
       INVALIDATE = 2,
@@ -1248,6 +1361,7 @@ public:
       CLEAN = 4,
       FLUSHL3 = 5
     };
+    // Fence scope values aligns with bspec but not all of them used
     enum lscFenceScope {
       GROUP = 0,
       LOCAL = 1,
@@ -1259,8 +1373,7 @@ public:
     };
     enum lscSFID { UGM = 0, UGML = 1, TGM = 3, SLM = 4 };
 
-    // the design limits the fence_op to NONE
-    fence_op = lscFenceOp::NONE;
+    fence_op_flush = lscFenceOpFlush::NONE;
     sfid = lscSFID::UGM;
     fence_scope = lscFenceScope::GROUP;
 
@@ -1277,12 +1390,39 @@ public:
     case xegpu::FenceScope::Workgroup:
       fence_scope = lscFenceScope::GROUP;
       break;
+    case xegpu::FenceScope::Local:
+      fence_scope = lscFenceScope::LOCAL;
+      break;
+    case xegpu::FenceScope::Tile:
+      fence_scope = lscFenceScope::TILE;
+      break;
     case xegpu::FenceScope::GPU:
       fence_scope = lscFenceScope::GPU;
       break;
+    case xegpu::FenceScope::System:
+      fence_scope = lscFenceScope::SYSTEM;
+      break;
     }
 
-    SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op),
+    auto flushValue = op.getFenceOpFlush();
+    if (flushValue.has_value()) {
+      switch (flushValue.value()) {
+      case xegpu::FenceOpFlush::None:
+        fence_op_flush = lscFenceOpFlush::NONE;
+        break;
+      case xegpu::FenceOpFlush::Evict:
+        fence_op_flush = lscFenceOpFlush::EVICT;
+        break;
+      case xegpu::FenceOpFlush::Invalidate:
+        fence_op_flush = lscFenceOpFlush::INVALIDATE;
+        break;
+      case xegpu::FenceOpFlush::Discard:
+        fence_op_flush = lscFenceOpFlush::DISCARD;
+        break;
+      }
+    }
+
+    SmallVector<Value> args{pred, i8_val(sfid), i8_val(fence_op_flush),
                             i8_val(fence_scope)};
 
     std::string funcName = "llvm.genx.lsc.fence.i1";

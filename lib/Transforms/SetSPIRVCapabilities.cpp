@@ -96,7 +96,7 @@ public:
       if (!oldAttr) {
         if (m_clientAPI == "opencl") {
           auto triple = spirv::VerCapExtAttr::get(
-              spirv::Version::V_1_0, caps_opencl, exts_opencl, context);
+              spirv::Version::V_1_4, caps_opencl, exts_opencl, context);
           auto attr = spirv::TargetEnvAttr::get(
               triple, spirv::getDefaultResourceLimits(context),
               spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
@@ -105,7 +105,7 @@ public:
           gmod->setAttr(spirv::getTargetEnvAttrName(), attr);
         } else if (m_clientAPI == "vulkan") {
           auto triple = spirv::VerCapExtAttr::get(
-              spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
+              spirv::Version::V_1_4, caps_vulkan, exts_vulkan, context);
           auto attr = spirv::TargetEnvAttr::get(
               triple, spirv::getDefaultResourceLimits(context),
               spirv::ClientAPI::Vulkan, spirv::Vendor::Unknown,

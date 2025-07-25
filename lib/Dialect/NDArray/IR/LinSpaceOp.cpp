@@ -46,8 +46,8 @@ public:
     auto newOp = rewriter.create<imex::ndarray::LinSpaceOp>(
         loc, newReturnType, op.getStart(), op.getStop(), num, op.getEndpoint());
     // cast to original type
-    rewriter.replaceOpWithNewOp<imex::ndarray::CastOp>(op, oldReturnType,
-                                                       newOp);
+    rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(op, oldReturnType,
+                                                        newOp);
 
     return mlir::success();
   }

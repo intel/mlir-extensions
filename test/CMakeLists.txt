@@ -6,6 +6,7 @@ endif()
 set(IMEX_TEST_DEPENDS
         imex-opt
         imex-cpu-runner
+        mlir-runner
         mlir_c_runner_utils
         mlir_runner_utils
         imex_runner_utils
@@ -46,6 +47,12 @@ if(IMEX_ENABLE_VULKAN_RUNNER)
         )
 endif()
 
+if(MLIR_ENABLE_SYCL_RUNNER)
+    list(APPEND IMEX_TEST_DEPENDS
+        mlir_sycl_runtime
+        )
+endif()
+
 if(IMEX_ENABLE_SYCL_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
         sycl-runtime
@@ -61,6 +68,12 @@ endif()
 if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
         l0-fp64-checker
+        )
+endif()
+
+if(IMEX_ENABLE_BINDINGS_PYTHON)
+    list(APPEND IMEX_TEST_DEPENDS
+        ImexPythonModules
         )
 endif()
 

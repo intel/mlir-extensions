@@ -32,6 +32,8 @@
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
+#define DEBUG_TYPE "xetile-ops"
+
 namespace imex {
 namespace xetile {
 
@@ -175,7 +177,7 @@ mlir::LogicalResult InitTileOp::verify() {
     // Check if all shape and stride values are constant.
     if (!llvm::all_of(dynamicShape, isConstantIndex) ||
         !llvm::all_of(dynamicStrides, isConstantIndex)) {
-      llvm::dbgs() << "Assuming user has verified the layout\n";
+      LLVM_DEBUG(llvm::dbgs() << "Assuming user has verified the layout\n");
       return mlir::success();
     }
 
@@ -194,7 +196,7 @@ mlir::LogicalResult InitTileOp::verify() {
           "memref operand is expected to have a column-major layout");
     }
   } else if (isSourceMemRef() && !sourceMemRefHasStaticShape())
-    llvm::dbgs() << "Assuming user has verified the layout\n";
+    LLVM_DEBUG(llvm::dbgs() << "Assuming user has verified the layout\n");
 
   return mlir::success();
 }
@@ -320,9 +322,28 @@ mlir::LogicalResult TransposeOp::verify() {
 mlir::LogicalResult ReductionOp::verify() {
   auto dims = getReductionDims();
   auto resShape = getResult().getType().getShape();
-  for (auto i : dims)
-    if (resShape[i] != 1)
-      return emitOpError("reduction dimension of result must have size 1");
+  if (getReductionSize() > 0) {
+    if (dims.size() > 1)
+      // When reduction size is specified,
+      // only a single dimension can be reduced.
+      return emitOpError(
+          "when reduction size is specified, only a single reduction "
+          "dimension is allowed.");
+    auto srcTy = getSource().getType();
+    if (srcTy.getRank() != 2)
+      return emitOpError(
+          "when reduction size is specified, source must be a 2D vector.");
+    auto redDim = dims.front();
+    if (resShape[redDim] !=
+        srcTy.getShape()[redDim] / static_cast<int64_t>(getReductionSize()))
+      return emitOpError(
+          "reduction size does not match the expected size of the result "
+          "dimension after reduction.");
+  } else {
+    for (auto i : dims)
+      if (resShape[i] != 1)
+        return emitOpError("reduction dimension of result must have size 1");
+  }
   return mlir::success();
 }
 

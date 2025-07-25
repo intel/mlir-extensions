@@ -97,7 +97,7 @@ public:
                   mlir::PatternRewriter &rewriter) const override {
     auto tileTy = initTileOp.getType();
     // Skip if tile is scattered
-    if (tileTy.getScatterAttr()) {
+    if (tileTy.isScattered()) {
       return mlir::failure();
     }
     // Skip 1D tile
@@ -122,6 +122,12 @@ public:
     if (srcShape.size() != 2) {
       return mlir::failure();
     }
+
+    // Cannot handle sub byte element type
+    if (tileTy.getElementTypeBitWidth() < 8) {
+      return mlir::failure();
+    }
+
     // Check if memspace is SLM
     auto memorySpace = initTileOp.getSourceMemorySpaceAsInt();
     bool isSLM = memorySpace == 3;
@@ -284,9 +290,9 @@ struct LoadTileOpPattern final
   mlir::LogicalResult
   matchAndRewrite(imex::xetile::LoadTileOp loadTileOp,
                   mlir::PatternRewriter &rewriter) const override {
-    auto tile = loadTileOp.getSource();
+    auto tile = loadTileOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
@@ -296,7 +302,7 @@ struct LoadTileOpPattern final
         loadTileOp.getLoc(),
         mlir::VectorType::get(tileTy.getShape(), rewriter.getI1Type()), one);
     rewriter.replaceOpWithNewOp<imex::xetile::LoadGatherOp>(
-        loadTileOp, loadTileOp.getType(), tile, mask,
+        loadTileOp, loadTileOp.getType(0), tile, mask,
         loadTileOp.getPaddingAttr(), loadTileOp.getL1HintAttr(),
         loadTileOp.getL2HintAttr(), loadTileOp.getL3HintAttr());
     return mlir::success();
@@ -312,7 +318,7 @@ struct StoreTileOpPattern final
                   mlir::PatternRewriter &rewriter) const override {
     auto tile = storeTileOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
@@ -375,7 +381,7 @@ struct UpdateTileOffsetOpPattern final
                   mlir::PatternRewriter &rewriter) const override {
     auto tile = updateTileOffsetOp.getTile();
     auto tileTy = tile.getType();
-    if (!tileTy.getScatterAttr()) {
+    if (!tileTy.isScattered()) {
       return mlir::failure();
     }
     // Return if indices are already set
@@ -440,10 +446,10 @@ struct SCFForOpPattern final : public mlir::OpRewritePattern<mlir::scf::ForOp> {
           return rewriter.notifyMatchFailure(scfForOp, "TileType mismatch.");
         }
         auto initTileTy = mlir::dyn_cast<imex::xetile::TileType>(initTy);
-        if (initTileTy.getScatterAttr()) {
+        if (initTileTy.isScattered()) {
           auto argTileTy =
               mlir::dyn_cast<imex::xetile::TileType>(arg.getType());
-          if (argTileTy.getScatterAttr()) {
+          if (argTileTy.isScattered()) {
             continue;
           }
           auto scatterTileTy = addScatterAttr(argTileTy);
@@ -521,7 +527,7 @@ analyzeAtomicRMWOp(mlir::Operation *op,
 
   op->walk([&](imex::xetile::AtomicRMWOp atomicrmwOp) -> mlir::WalkResult {
     auto tileTy = atomicrmwOp.getTile().getType();
-    if (tileTy.getScatterAttr()) {
+    if (tileTy.isScattered()) {
       return mlir::WalkResult::advance();
     }
     mlir::Value tile = atomicrmwOp->getOperand(1);
@@ -574,10 +580,10 @@ public:
     analyzeAtomicRMWOp(op, convertToScatteredType);
     mlir::RewritePatternSet patterns(context);
     mlir::GreedyRewriteConfig config;
-    config.enableRegionSimplification =
-        mlir::GreedySimplifyRegionLevel::Disabled;
-    config.useTopDownTraversal = true;
-    config.strictMode = mlir::GreedyRewriteStrictness::ExistingAndNewOps;
+    config.setRegionSimplificationLevel(
+        mlir::GreedySimplifyRegionLevel::Disabled);
+    config.setUseTopDownTraversal(true);
+    config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
     patterns.add<InitTileOpPattern>(context, uArchInterface,
                                     convertToScatteredType);
     patterns.add<LoadTileOpPattern, StoreTileOpPattern,

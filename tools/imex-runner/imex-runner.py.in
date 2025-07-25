@@ -53,10 +53,12 @@ import subprocess
 imex_enable_vulkan_runner = @IMEX_ENABLE_VULKAN_RUNNER@
 imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
+imex_enable_spirv_backend = @IMEX_SPIRV_BACKEND_ENABLED@
+mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
 
-runner_choices = ['imex-cpu-runner']
+runner_choices = ['imex-cpu-runner', 'mlir-runner']
 enabled_features = []
-all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime', 'igpu-fp64']
+all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime', 'igpu-fp64', 'spirv-backend', 'mlir-sycl-runtime']
 if imex_enable_vulkan_runner:
     runner_choices.append('mlir-vulkan-runner')
     enabled_features.append('vulkan-runner')
@@ -64,6 +66,10 @@ if imex_enable_l0_runtime:
     enabled_features.append('l0-runtime')
 if imex_enable_sycl_runtime:
     enabled_features.append('sycl-runtime')
+if imex_enable_spirv_backend:
+    enabled_features.append('spirv-backend')
+if mlir_enable_sycl_runtime:
+    enabled_features.append('mlir-sycl-runtime')
 
 class SplitArgs(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):

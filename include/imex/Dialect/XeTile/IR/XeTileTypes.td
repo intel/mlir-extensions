@@ -110,6 +110,13 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       return xetile::WorkGroupMapAttr();
     }
 
+    mlir::IntegerAttr getArrayLength() {
+      auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
+      if (encoding)
+        return encoding.getArrayLength();
+      return mlir::IntegerAttr();
+    }
+
     mlir::DenseI32ArrayAttr getOrder() {
       auto encoding = llvm::dyn_cast_if_present<xetile::XeTileAttr>(getEncoding());
       if (encoding)
@@ -141,6 +148,11 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       if (encoding)
         return encoding.getScattered();
       return mlir::BoolAttr();
+    }
+
+    bool isScattered() {
+      auto attr = getScatterAttr();
+      return attr && attr.getValue() == true;
     }
 
   }];

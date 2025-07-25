@@ -26,7 +26,9 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVAttributes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
+#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
@@ -687,11 +689,13 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     target.addLegalDialect<func::FuncDialect, arith::ArithDialect,
                            memref::MemRefDialect, vector::VectorDialect,
-                           spirv::SPIRVDialect>();
+                           ub::UBDialect, spirv::SPIRVDialect>();
     target.addIllegalDialect<xegpu::XeGPUDialect>();
 
     // TODO: can we change it to addDynamicLegalOp?
     target.addLegalOp<mlir::UnrealizedConversionCastOp>();
+
+    target.addIllegalOp<mlir::vector::MultiDimReductionOp>();
 
     // Don't convert other types, e.g., IndexType
     typeConverter.addConversion([&](Type type) { return type; });
@@ -739,7 +743,6 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
       return nullptr;
     };
-    typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);
 
@@ -760,6 +763,9 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     populateArithToVCPatterns(typeConverter, patterns);
 
     populateMathToVCPatterns(typeConverter, patterns);
+
+    mlir::vector::populateVectorMultiReductionLoweringPatterns(
+        patterns, mlir::vector::VectorMultiReductionLowering::InnerReduction);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       return signalPassFailure();

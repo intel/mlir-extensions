@@ -279,7 +279,6 @@ struct RemoveSingleElemVectorPass final
           .getResult();
     };
 
-    typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);
 

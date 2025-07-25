@@ -344,3 +344,33 @@ gpu.module @test_module {
 //CHECK: %[[transpose:.*]] = memref.transpose %[[arg0]] (d0, d1) -> (d1, d0) : memref<512x128xf16, 3> to memref<128x512xf16, strided<[1, 128]>, 3>
 //CHECK: %[[r2:.*]] = xetile.init_tile %[[transpose]][16, 32] : memref<128x512xf16, strided<[1, 128]>, 3> -> !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
 //CHECK: xetile.store_tile %[[r1]],  %[[r2]] : vector<16x32xf16>, !xetile.tile<16x32xf16, #xetile.tile_attr<order = [0, 1], memory_space = 3 : i64>>
+
+// -----
+gpu.module @test_module {
+  // CHECK-LABEL: gpu.func @test_reduction_size
+  // CHECK-SAME: (%[[ARG0:.*]]: vector<64x256xf32>
+  gpu.func @test_reduction_size(%arg0: vector<64x256xf32>, %arg1: memref<64x8xf32>) {
+    %cst0 = arith.constant 0 : index
+    // CHECK: %[[V0:.*]] = vector.shape_cast %[[ARG0]] : vector<64x256xf32> to vector<512x32xf32>
+    // CHECK: %[[V1:.*]] = xetile.reduction <add>, %[[V0]] [1] : vector<512x32xf32> -> vector<512x1xf32>
+    // CHECK: %[[V2:.*]] = vector.shape_cast %[[V1]] : vector<512x1xf32> to vector<64x8xf32>
+    %reduced = xetile.reduction <add>, %arg0 [1] { reduction_size = 32 : i64 } : vector<64x256xf32> -> vector<64x8xf32>
+    vector.store %reduced, %arg1[%cst0, %cst0] : memref<64x8xf32>, vector<64x8xf32>
+    gpu.return
+  }
+}
+
+// -----
+gpu.module @test_module {
+  // CHECK-LABEL: gpu.func @test_reduction_size
+  // CHECK-SAME: (%[[ARG0:.*]]: vector<64x256xf32>
+  gpu.func @test_reduction_size(%arg0: vector<64x256xf32>, %arg1: memref<2x256xf32>) {
+    %cst0 = arith.constant 0 : index
+    // CHECK: %[[V0:.*]] = vector.shape_cast %[[ARG0]] : vector<64x256xf32> to vector<32x512xf32>
+    // CHECK: %[[V1:.*]] = xetile.reduction <add>, %[[V0]] [0] : vector<32x512xf32> -> vector<1x512xf32>
+    // CHECK: %[[V2:.*]] = vector.shape_cast %[[V1]] : vector<1x512xf32> to vector<2x256xf32>
+    %reduced = xetile.reduction <add>, %arg0 [0] { reduction_size = 32 : i64 } : vector<64x256xf32> -> vector<2x256xf32>
+    vector.store %reduced, %arg1[%cst0, %cst0] : memref<2x256xf32>, vector<2x256xf32>
+    gpu.return
+  }
+}

@@ -9,6 +9,5 @@ add_imex_conversion_library(IMEXNDArrayToLinalg
 
   LINK_LIBS PUBLIC
   IMEXNDArrayDialect
-  IMEXRegionTransforms
   MLIRLinalgDialect
 )

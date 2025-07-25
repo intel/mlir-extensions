@@ -26,7 +26,6 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Value.h>
 #include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/OneToNTypeConversion.h>
 
 using namespace mlir::xegpu;
 
@@ -153,7 +152,7 @@ public:
 
     op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::LoadTileOp op) {
       Usage[op] = (uint)UsageType::None;
-      llvm::SmallVector<mlir::Value> q({op});
+      llvm::SmallVector<mlir::Value> q(op.getValues());
       while (q.size()) {
         auto curr = q.pop_back_val();
         for (mlir::Operation *user : curr.getUsers()) {

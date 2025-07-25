@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"
+#include "mlir/Target/LLVMIR/Dialect/All.h"
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/SourceMgr.h>
@@ -26,6 +27,7 @@
 #include <mlir/Support/FileUtilities.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
+#include "imex/Dialect/NDArray/Extensions/AllExtensions.h"
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
 #include <imex/Transforms/Passes.h>
@@ -38,6 +40,9 @@ int main(int argc, char **argv) {
   ::mlir::registerAllDialects(registry);
   ::mlir::registerAllExtensions(registry);
   ::imex::registerAllDialects(registry);
+  ::imex::ndarray::registerAllExtensions(registry);
+
+  ::mlir::registerAllGPUToLLVMIRTranslations(registry);
 
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));

@@ -39,6 +39,8 @@ if config.enable_vulkan_runner:
     config.substitutions.append(('%vulkan_runtime_wrappers', config.vulkan_runtime_wrappers))
 config.substitutions.append(('%imex_runner', config.imex_runner))
 config.substitutions.append(('%python_executable', config.python_executable))
+if config.mlir_enable_sycl_runtime:
+    config.substitutions.append(('%mlir_sycl_runtime', config.mlir_sycl_runtime))
 if config.imex_enable_sycl_runtime:
     config.substitutions.append(('%sycl_runtime', config.sycl_runtime))
 if config.imex_enable_l0_runtime:
@@ -72,3 +74,11 @@ tools = [
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+llvm_config.with_environment(
+    "PYTHONPATH",
+    [
+        os.path.join(config.imex_obj_root, "python_packages"),
+    ],
+    append_path=True,
+)

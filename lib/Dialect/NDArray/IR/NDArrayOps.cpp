@@ -27,105 +27,27 @@ void NDArrayDialect::initialize() {
 #define GET_TYPEDEF_LIST
 #include <imex/Dialect/NDArray/IR/NDArrayOpsTypes.cpp.inc>
       >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include <imex/Dialect/NDArray/IR/NDArrayOpsAttrs.cpp.inc>
+      >();
   addOperations<
 #define GET_OP_LIST
 #include <imex/Dialect/NDArray/IR/NDArrayOps.cpp.inc>
       >();
 }
 
-} // namespace ndarray
-} // namespace imex
-
-namespace imex {
-namespace ndarray {
-
-NDArrayType NDArrayType::get(::mlir::MLIRContext *context,
-                             ::llvm::ArrayRef<int64_t> shape,
-                             ::mlir::Type elementType,
-                             ::llvm::ArrayRef<::mlir::Attribute> environments,
-                             ::mlir::StringAttr layout) {
-  ::mlir::SmallVector<::mlir::Attribute> envs(environments);
-  struct {
-    bool operator()(::mlir::Attribute a_, ::mlir::Attribute b_) const {
-      return ::mlir::hash_value(a_) < ::mlir::hash_value(b_);
-    }
-  } attrSort;
-  std::sort(envs.begin(), envs.end(), attrSort);
-  return Base::get(context, std::move(shape), std::move(elementType),
-                   std::move(envs), std::move(layout));
-}
-
-NDArrayType NDArrayType::get(::llvm::ArrayRef<int64_t> shape,
-                             ::mlir::Type elementType,
-                             ::mlir::ArrayRef<::mlir::Attribute> environments,
-                             std::optional<::llvm::StringRef> layout) {
-  auto ctx = elementType.getContext();
-  auto l =
-      layout ? ::mlir::StringAttr::get(ctx, *layout) : ::mlir::StringAttr{};
-  return get(ctx, shape, elementType, environments, l);
-}
-
-NDArrayType NDArrayType::get(::llvm::ArrayRef<int64_t> shape,
-                             ::mlir::Type elementType,
-                             ::mlir::ArrayRef<::mlir::Attribute> environments,
-                             ::mlir::StringAttr layout) {
-  auto ctx = elementType.getContext();
-  return get(ctx, shape, elementType, environments, layout);
-}
-
-::mlir::MemRefType NDArrayType::getMemRefType(::mlir::Value val) const {
-  if (val) {
-    auto defOp = val.getDefiningOp<::mlir::bufferization::ToTensorOp>();
-    if (defOp) {
-      auto ty =
-          defOp.getMemref().getType().cloneWith(getShape(), getElementType());
-      return mlir::cast<::mlir::MemRefType>(ty);
-    }
-  }
-  return ::imex::getMemRefType(getContext(), getShape(), getElementType());
-}
-
-::mlir::RankedTensorType NDArrayType::getTensorType() const {
-  return ::imex::getTensorType(getContext(), getShape(), getElementType());
-}
-
-NDArrayType NDArrayType::cloneWithDynDims() const {
-  if (hasZeroSize() || hasUnitSize()) {
-    return mlir::cast<NDArrayType>(cloneWith(getShape(), getElementType()));
-  }
-  return NDArrayType::get(
-      ::mlir::SmallVector<int64_t>(getRank(), ::mlir::ShapedType::kDynamic),
-      getElementType(), getEnvironments(), getLayout());
+void ReshapeOp::build(::mlir::OpBuilder &odsBuilder,
+                      ::mlir::OperationState &odsState,
+                      ::mlir::Type resultType0, ::mlir::Value source,
+                      ::mlir::ValueRange shape) {
+  odsState.addOperands(source);
+  odsState.addOperands(shape);
+  odsState.addTypes(resultType0);
 }
 
 } // namespace ndarray
 } // namespace imex
-
-bool imex::ndarray::NDArrayBase::hasRank() const { return true; }
-
-llvm::ArrayRef<int64_t> imex::ndarray::NDArrayBase::getShape() const {
-  return mlir::cast<NDArrayType>(*this).getShape();
-}
-
-imex::ndarray::NDArrayBase imex::ndarray::NDArrayBase::cloneWith(
-    std::optional<llvm::ArrayRef<int64_t>> shape, Type elementType) const {
-  auto t = mlir::cast<NDArrayType>(*this);
-  return NDArrayType::get(shape.value_or(getShape()), elementType,
-                          t.getEnvironments(), t.getLayout());
-}
-
-imex::ndarray::NDArrayBase
-imex::ndarray::NDArrayBase::cloneWithEnv(::mlir::Attribute env) const {
-  auto t = mlir::cast<NDArrayType>(*this);
-  ::mlir::SmallVector<::mlir::Attribute> envs(t.getEnvironments());
-  envs.emplace_back(env);
-  return NDArrayType::get(t.getShape(), t.getElementType(), envs,
-                          t.getLayout());
-}
-
-bool imex::ndarray::NDArrayBase::isValidElementType(Type type) {
-  return type.isIntOrIndexOrFloat();
-}
 
 bool imex::ndarray::isUnitShape(const llvm::ArrayRef<int64_t> shp) {
   for (auto d : shp) {
@@ -135,12 +57,8 @@ bool imex::ndarray::isUnitShape(const llvm::ArrayRef<int64_t> shp) {
   return true;
 }
 
-bool imex::ndarray::NDArrayType::hasUnitSize() const {
-  return isUnitShape(getShape());
-}
-
-bool imex::ndarray::NDArrayType::hasZeroSize() const {
-  for (auto d : getShape()) {
+bool imex::ndarray::hasZeroSize(const llvm::ArrayRef<int64_t> shp) {
+  for (auto d : shp) {
     if (d == 0)
       return true;
   }
@@ -150,5 +68,7 @@ bool imex::ndarray::NDArrayType::hasZeroSize() const {
 #include <imex/Dialect/NDArray/IR/NDArrayOpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/NDArray/IR/NDArrayOpsTypes.cpp.inc>
+#define GET_ATTRDEF_CLASSES
+#include <imex/Dialect/NDArray/IR/NDArrayOpsAttrs.cpp.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/NDArray/IR/NDArrayOps.cpp.inc>

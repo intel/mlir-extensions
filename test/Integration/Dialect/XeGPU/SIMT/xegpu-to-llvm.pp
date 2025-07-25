@@ -1,0 +1,25 @@
+builtin.module(
+    cse
+    xevm-attach-target
+    gpu.module(
+        convert-xegpu-to-xevm
+        convert-gpu-to-llvm-spv{use-64bit-index=true}
+        convert-xevm-to-llvm
+	    cse
+    )
+    reconcile-unrealized-casts
+    convert-vector-to-scf
+    convert-scf-to-cf
+    expand-strided-metadata
+    finalize-memref-to-llvm
+    convert-cf-to-llvm
+    convert-vector-to-llvm
+    convert-arith-to-llvm
+    convert-index-to-llvm
+    convert-func-to-llvm
+    convert-math-to-llvm
+    gpu-to-llvm
+    lower-affine
+    reconcile-unrealized-casts
+    cse
+    gpu-module-to-binary)

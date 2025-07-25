@@ -149,7 +149,13 @@ private:
           // If current user is a forOp, we need to get the block argument.
           if (auto forOp = llvm::dyn_cast_if_present<scf::ForOp>(user)) {
             auto opArgs = imex::getArgsForOperand(forOp, currOp->getResult(0));
-            assert(opArgs.size() == 1 && "Duplicated tiles are not supported");
+            // UnrollAndJam and CSE may cause the same CreateNdDescOp to be used
+            // multiple times as iterOperand of `forOp`. We do not support such
+            // case, so we just return empty `loadNdOpsFound`.
+            if (opArgs.size() != 1) {
+              loadNdOpsFound.clear();
+              return;
+            }
             auto blockArg = opArgs[0];
             for (auto user : blockArg.getUsers())
               worklist.insert(user);
@@ -328,7 +334,8 @@ enum TransposeUsageType { PACKED = 1, NON_PACKED = 2 };
 
 // Helper function to pack the given value in vnni format.
 // to 32-bit representation. e.g., vector<8x8x2xf16> to vector<8x8xf32>
-static Value pack(Value value, PatternRewriter &rewriter) {
+static TypedValue<::mlir::VectorType> pack(TypedValue<::mlir::VectorType> value,
+                                           PatternRewriter &rewriter) {
   auto type = dyn_cast<VectorType>(value.getType());
   if (!type || type.getRank() != 3)
     return value;
@@ -366,8 +373,8 @@ static void createStoreScatter(Value data, Value slm, Value base,
 
   auto loc = data.getLoc();
   auto shape = type.getShape();
-  auto chunkSize = type.getRank() == 2 ? shape[0] : 1;
-  auto simdLanes = type.getRank() == 2 ? shape[1] : shape[0];
+  auto chunkSize = type.getRank() == 2 ? shape[1] : 1;
+  auto simdLanes = type.getRank() == 2 ? shape[0] : shape[1];
 
   llvm::SmallVector<int64_t> staticOffsets;
   for (auto i = 0; i < simdLanes; i++) {
@@ -386,13 +393,11 @@ static void createStoreScatter(Value data, Value slm, Value base,
                                             chunkSize, xegpu::MemorySpace::SLM);
   auto desc = rewriter.create<xegpu::CreateDescOp>(loc, tdescTy, slm, offsets);
 
-  auto transposeAttr = rewriter.getUnitAttr();
   auto maskTy = VectorType::get(simdLanes, rewriter.getI1Type());
   auto mask = rewriter.create<arith::ConstantOp>(
       loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
-  rewriter.create<xegpu::StoreScatterOp>(loc, data, desc, mask, transposeAttr,
-                                         nullptr /*L1*/, nullptr /*L2*/,
-                                         nullptr /*L3*/);
+  rewriter.create<xegpu::StoreScatterOp>(loc, data, desc, mask, nullptr /*L1*/,
+                                         nullptr /*L2*/, nullptr /*L3*/);
 }
 
 static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
@@ -471,7 +476,7 @@ struct CreateNdDescOpPattern
     auto newTdescTy = xegpu::TensorDescType::get(
         tdescTy.getShape(), tdescTy.getElementType(), /*array_length=*/1,
         tdescTy.getBoundaryCheck(), tdescTy.getMemorySpace(),
-        tdescTy.getSgMap());
+        tdescTy.getLayout());
     auto origOffsetY = op.getOffsets().back();
     for (int64_t i = 0; i < arrayLength; ++i) {
       auto attr = rewriter.getIndexAttr(i * tdescTy.getShape()[1]);
@@ -654,7 +659,7 @@ struct UpdateNdOffsetOpPattern final
 //
 // Following:
 // clang-format off
-// %0 = load ...
+// %0 = load %t ...
 // %1 = transpose %0 ...
 // %2 = shape_cast %1 ...
 // %3 = shuffle %2 ...
@@ -664,8 +669,7 @@ struct UpdateNdOffsetOpPattern final
 //
 // is replaced with:
 // clang-format off
-// %0 = load ...
-// %1 = load+transpose %0 ...
+// %1 = load+transpose %t...
 // ... DPAS B usage ...
 // clang-format on
 struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
@@ -791,6 +795,9 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
           loc, rewriter.getIndexType(), nullptr /* upper_bound*/);
       auto offset = rewriter.create<arith::MulIOp>(
           loc, sgId, index_val(numElems), nullptr /* overflowFlags */);
+
+      data =
+          rewriter.create<vector::TransposeOp>(loc, data, op.getPermutation());
 
       // store data using store_scatter to SLM at the given offset.
       createStoreScatter(data, slm, offset, rewriter);
@@ -947,9 +954,9 @@ private:
     auto *context = &getContext();
     RewritePatternSet patterns(context);
     GreedyRewriteConfig config;
-    config.enableRegionSimplification = GreedySimplifyRegionLevel::Disabled;
-    config.useTopDownTraversal = true;
-    config.strictMode = GreedyRewriteStrictness::ExistingAndNewOps;
+    config.setRegionSimplificationLevel(GreedySimplifyRegionLevel::Disabled);
+    config.setUseTopDownTraversal(true);
+    config.setStrictness(GreedyRewriteStrictness::ExistingOps);
     patterns.add<TransposeRewritePattern>(context, analysis, uArchInterface);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
                                      config))) {

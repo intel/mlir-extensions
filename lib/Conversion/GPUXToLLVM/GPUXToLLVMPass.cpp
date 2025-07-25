@@ -314,7 +314,7 @@ private:
             ->getResult(0);
 
     // Create the MemRef descriptor.
-    auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
+    auto memrefDesc = mlir::MemRefDescriptor::poison(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();
     memrefDesc.setAllocatedPtr(
         rewriter, loc,

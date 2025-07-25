@@ -104,8 +104,9 @@ public:
         builder.setInsertionPoint(alloc);
         auto allocResult = builder.create<::mlir::gpu::AllocOp>(
             alloc.getLoc(), alloc.getType(), /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
-            alloc.getSymbolOperands(), /*hostShared*/ hostShared);
+            /*asyncDependencies*/ llvm::ArrayRef<mlir::Value>(),
+            alloc.getDynamicSizes(), alloc.getSymbolOperands(),
+            /*hostShared*/ hostShared);
         alloc.replaceAllUsesWith(allocResult);
         alloc.erase();
       }
@@ -114,7 +115,8 @@ public:
       for (auto dealloc : deallocOpsInGpuRegion) {
         builder.setInsertionPoint(dealloc);
         (void)builder.create<::mlir::gpu::DeallocOp>(
-            dealloc.getLoc(), std::nullopt /*async*/, dealloc.getMemref());
+            dealloc.getLoc(), llvm::ArrayRef<mlir::Type>() /*async*/,
+            dealloc.getMemref());
         dealloc.erase();
       }
 
@@ -162,6 +164,25 @@ public:
       } else if (auto init_xedesc =
                      mlir::dyn_cast<mlir::xegpu::CreateNdDescOp>(op)) {
         return {{init_xedesc.getSource()}};
+      } else if (auto store_nd = mlir::dyn_cast<mlir::xegpu::StoreNdOp>(op)) {
+        auto defOp = store_nd.getOperands()[1].getDefiningOp();
+        if (auto init_xedesc =
+                mlir::dyn_cast_if_present<mlir::xegpu::CreateNdDescOp>(defOp)) {
+          return {{init_xedesc.getSource()}};
+        } else {
+          op->emitError("Incorrect XeGPU op in gpu region");
+          return std::nullopt;
+        }
+      } else if (auto load_nd = mlir::dyn_cast<mlir::xegpu::LoadNdOp>(op)) {
+        // get create tensor desc op
+        auto defOp = load_nd.getOperand().getDefiningOp();
+        if (auto init_xedesc =
+                mlir::dyn_cast_if_present<mlir::xegpu::CreateNdDescOp>(defOp)) {
+          return {{init_xedesc.getSource()}};
+        } else {
+          op->emitError("Incorrect XeGPU op in gpu region");
+          return std::nullopt;
+        }
       } else {
         op->emitError("Uhhandled mem op in gpu region");
         return std::nullopt;
@@ -410,8 +431,8 @@ public:
         bool hostShared = access.hostRead || access.hostWrite;
         auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
             loc, alloc.getType(), /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
-            alloc.getSymbolOperands(), hostShared);
+            /*asyncDependencies*/ llvm::ArrayRef<mlir::Value>(),
+            alloc.getDynamicSizes(), alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         builder.setInsertionPoint(term);
         for (mlir::OpOperand &use : alloc.getResult().getUses()) {
@@ -434,7 +455,8 @@ public:
         }
 
         alloc.replaceAllUsesWith(allocResult);
-        builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
+        builder.create<mlir::gpu::DeallocOp>(loc, llvm::ArrayRef<mlir::Type>(),
+                                             allocResult);
         alloc.erase();
       }
     }
@@ -465,8 +487,8 @@ public:
         bool hostShared = access.hostRead || access.hostWrite;
         auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
             loc, allocType, /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ std::nullopt, dims,
-            /*symbolOperands*/ std::nullopt, hostShared);
+            /*asyncDependencies*/ llvm::ArrayRef<mlir::Value>(), dims,
+            /*symbolOperands*/ llvm::ArrayRef<mlir::Value>(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         if (access.hostWrite && access.deviceRead) {
           auto copy =
@@ -483,15 +505,16 @@ public:
           if (access.hostRead && access.deviceWrite) {
             builder.create<mlir::memref::CopyOp>(loc, castedAllocResult, op);
           }
-          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt,
-                                               castedAllocResult);
+          builder.create<mlir::gpu::DeallocOp>(
+              loc, llvm::ArrayRef<mlir::Type>(), castedAllocResult);
         } else {
           op.replaceAllUsesExcept(allocResult, filter);
           builder.setInsertionPoint(term);
           if (access.hostRead && access.deviceWrite) {
             builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
           }
-          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
+          builder.create<mlir::gpu::DeallocOp>(
+              loc, llvm::ArrayRef<mlir::Type>(), allocResult);
         }
       } else if (m_clientAPI == "vulkan") {
         auto gpuAlloc =
