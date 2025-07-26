@@ -693,18 +693,18 @@ An example on how to perform transpose using load with chunk_size in SIMT flavor
 
 ## layout attributes to support work group level semantic
 
-By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler instead of multiple level nested loop IR for subgroup and work item level operation. To enable XeGPU operate the workgroup level, we introduce `layout` attribute to specify how the data is distributed across subgroups. `layout` enables tensor compiler to express the cooperative operation among subgroups by specifying a `layout` to partition data among subgroups without manipulating a nested IR representation. The attribute allows tensor compiler to control the block size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tensor size per subgroups are critical performance knobs.
+By allowing XeGPU operating on workgroup level data size, it provides a concise IR for tensor compiler instead of multiple level nested loop IR for subgroup and work item level operation. To enable XeGPU operate the workgroup level, we introduce `layout` attribute to specify how the data is distributed across subgroups. `layout` enables tensor compiler to express the cooperative operation among subgroups by specifying a `layout` to partition data among subgroups without manipulating a nested IR representation. The attribute allows tensor compiler to control the tile size for both the workgroup and subgroup and perform autotuning as the number of subgroups, layout, and tile size are critical performance knobs.
 
-`layout` attribute can be viewed as upgraded version of `sg_map`. It includes all the parameters in `sg_map`, and adds a few more to support workgroup semantics. `layout` attribute supports multiple dimensions, whereas `sg_map` is limited to 2D.
+`layout` attribute also includes parameters to support subgroup to work item distribution. `layout` attribute supports multiple dimensions.
 
-**xegpu.layout (upgraded from xegpu.sg_map)**
+**xegpu.layout**
 
-`layout` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroup within a workgroup. `layout` consists of six parameters:
+`layout` specifies how a n-d tensor (defined by the tensor descriptor) is partitioned among subgroups and work items within a workgroup. `layout` consists of six parameters:
   * sg_layout: Defines the n-d arrangement of subgroups within the workgroup.
   * sg_data: Specifies the shape of the tensor for each subgroup after decomposition.
-  * inst_data: Specifies the shape of the tensor for each instruction at subgroup level. It maybe identical to sg_data.
-  * lane_layout: Defines the n-d arrangement of WIs within the subgroup. It is renamed from sgmap's `wi_layout`.
-  * lane_data: Specifies the shape of the tensor fragment that each WI owns. The lane_data must be contiguous. One instruction may owns multiple lane_data. It is renamed from sgmap's `wi_data`.
+  * inst_data: Specifies the shape of the tensor for each instruction at subgroup level. It maybe identical to or a fraction of sg_data.
+  * lane_layout: Defines the n-d arrangement of work items within the subgroup. It is also knowns as sgmap's `wi_layout`.
+  * lane_data: Specifies the shape of the tensor fragment that each work item owns. The lane_data must be contiguous. Each lane may owns multiple lane_data within one instruction. It is also known as sgmap's `wi_data`.
   * order: The dimension order used to linearize n-d subgroup ids and lane ids. The first dimension in the order list is the fastest-changing dimension.
 
 Example of linerized subgourp id regarding order[1, 0] vs. order [0, 1]. 
@@ -719,40 +719,71 @@ For a subgroup in 3-d sg_layout [dim_0, dim_1, dim_2], order[2, 1, 0] maps a sub
 
 User may specify all these parameters and expect xegpu mechanically and gradually lowers to xevm dialect. After subgroup distribution, `sg_layout` and `sg_data` will be droped. After work item distribution, `lane_layout`, `lane_data`, and `lane_order` will be droped.
 
-User may just specify `sg_layout`,`sg_data`, and `order` attributes, and use xegpu passes to automatically fill the rest parameters before lowering.    
+User may just specify `sg_layout`,`sg_data`, and `order` attributes, and use xegpu passes to automatically fill the rest parameters before lowering.
+
+**distribution rule**
+
+The workgroup-level tile, referred to as wg_data, is initially partitioned into sg_data at the subgroup level. It is then further blocked into inst_data to align with the instruction data size, followed by a final distribution into lane_data fragments at the work item level.
 
 **Constraints**
 
 Given these definitions:
 ```mlir
 lane_data_size = lane_data[0] × lane_data[1]
-subgroup_size = lane_layout[0] × lane_layout[1]
-sg_data_size = sg_data[0] × sg_data[1]
-workgroup_size = sg_layout[0] × sg_layout[1]
-tensor_size = tensor_shape[0] × tensor_shape[1]
+sg_size = lane_layout[0] × lane_layout[1]
+sg_tile_size = sg_data[0] × sg_data[1]
+wg_size = sg_layout[0] × sg_layout[1]
+wg_tile_size = wg_data[0] × wg_data[1]
+lane_distribution_unit_size = lane_layout x lane_data
+sg_distribution_unit_size = sg_layout x sg_data
 ```
 
 The following conditions must hold:
 ```mlir
-* subgroup_size must represent the number of work items (lanes) in a subgroup for a kernel.
-* workgroup_size must represent the number of subgroups in a workgroup for a kernel. User may explicitly specify the nubmer of subgroups and their id ranges.
-* for any dimension i, tensor_shape[i] must be either evenly divisible by sg_layout[i] × sg_data[i], or equal to sg_data[i].
-* for any dimension i, sg_data[i] must be evenly divisible by inst_data[i].
-* for any dimension i, inst_data[i] must be evenly divisible by lane_layout[i] x lane_data[i].
+* sg_size must represent the number of work items (lanes) in a subgroup for a kernel.
+* wg_size must represent the number of subgroups in a workgroup for a kernel. The user may explicitly specify the number of subgroups and their id ranges.
+* For any dimension i, wg_data[i] must be either evenly divisible by sg_distribution_unit_size (i.e., wg_data % sg_distribution_unit_size == 0), or equal to sg_data[i].
+* For any dimension i, sg_data[i] must be evenly divisible by inst_data[i].
+* For any dimension i, inst_data[i] must be evenly divisible by sg_distribution_unit_size (i.e., sg_data % lane_distribution_unit_size == 0).
 * When lane_data contains multiple elements, they must be contiguous and come from a single dimension.
 ```
 
-**distribution rule**
 
-The workgroup level tensor is first distributed to subgroup and then work item level. 
+***workgroup to subgroup distribution rule***
+The tensor is first distributed to sg_data along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < wg_tile[i], after all subgroups are assigned for the first round, the rest data will wrap around and be assigned to the first subgroup until the data is completely assigned. If sg_data[i] is equal to tensor_shape[i], the tensor data is broadcasted to all subgroups along the dimension i.
+Below is the pseudo code to compute the offsets of subgroup tiles for a given subgroup. 
+```mlir
+	// Each subgroup may recieve multiple distribution of sg_data tile. 
+  // sg_dist[i] represents the distribution count along the ith dimension. 
+  // When wg_data size matches sg_data, it is broadcast to all subgroups along that dimension. 
 
-***subgroup distribution rule***
-The tensor is first distributed to sg_data along each dimension in a round-robin fashion. If sg_data[i] x sg_layout[i] < tensor_shape[i], after all subgroups are assigned for the first round, the rest data will wrap around and be assigned to the first subgroup until the data is completely assigned. If sg_data[i] is equal to tensor_shape[i], the tensor data is broadcasted to all subgroups along the dimension i.
+	sg_dist[i] = wg_data[i]==sg_data[i] ? 1 : wg_data[i] / (sg_layout[i] * sg_data[i])
+	
+	offset[i] = wg_data[i]==sg_data[i] ? 0 : sg_id[i] * lane_data[i] * [1:sg_dist[i]]
+```
 
-***work item distribution rule***
-As sg_data is evenly divisible by distribution_unit_size (i.e., sg_data % distribution_unit_size == 0), and each work item will recieve the distribution unit multiple times, with each unit having lane_data_size.
+***blocking rule***
 
-Conceptually, the work item (WI) distribution process can be broken down into two steps. The first step divides the sg_data tensor according to `lane_layout` to obtain a subtensor. The second step linerize the elements as a 1D tensor. The order of elements with the linerized tensor are determined by the order: lane_data, distribution of lane_data within inst_data, and inst_data within sg_data accoring to the order attribute.
+With each subgroup tile, it may be decomposed into even smaller tiles. The offsets computed from the following rules are relative to the
+subgroup offsets. 
+```mlir
+	inst_dist[i] = sg_data[i] / inst_data[i]
+
+	offset[i] = inst_data[i] * [0:inst_dist[i])
+```	
+
+***subgroup to work item distribution rule***
+As inst_data is evenly divisible by lane_distribution_unit_size , and each work item will recieve the distribution unit multiple times, with each unit having lane_data_size.
+
+```mlir
+	lane_dist[i] = inst_data[i] / (lane_layout[i] * lane_data[i])
+	offset[i] = sg_id[i] * lane_data[i] * [1:lane_dist[i]]
+```	
+
+The distribution process can be broken down into two steps. The first step divides the sg_data tensor according to lane_layout to obtain a subtensor. The second step linearizes the elements as a 1D tensor. Each lane gets multiple distributions of data fragments, and these fragments are packed into 1D. The data within lane_data is packed first, followed by the packing of data fragments in row-major order.
+
+**xegpu.slice**
+`slice` builds upon xegpu.layout attribute to define the data distribution following a reduction operation. It consists of a base LayoutAttr, which maintains the same rank as the tensor and ensures an even distribution of the data across all subgroups and work-items. In contrast, `slice` modifies this distribution by focusing on the reduced tensor, which is distributed among a subset of subgroups and work-items. For the remaining subgroups and work-items that are not part of the reduction, `slice` ensures that the data is broadcast accordingly. `slice`is frequently employed in operations like vector.multi_reduction and vector.broadcast.
 
 **Examples of workgroup distribution with xegpu.layout**
 
@@ -785,7 +816,7 @@ The table below illustrates the result tensor for each subgroup and its linear s
 | [ 64:95, 0:127] | [0, 0], [0, 1] | 0 , 1 |
 | [ 96:127, 0:127] | [1, 0], [1, 1] | 2 , 3 |
 
-The `layout` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `layout` attribute to MLIR vector data type, we attach the attribute to vector type-based operations within the workgroup distribution pass. The `layout` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
+The `layout` attribute propagates from the matrix multiplication ops to other ops. Since we can't attatch the `layout` attribute to MLIR vector data type, we attach the attribute to vector type-based operations. The `layout` attribute propagation can be performed from output to input, or the other direction. We describes below the propagation rules from output to input for typical operations including dpas, reduction, broadcast, shape_cast, and transpose.
 
 For `dpas`, the `layout` attribute of input operands must have the same `sg_layout`, and `sg_data` for m and n dimension as output, and `sg_data` for k dimension must be same as operand A and B. `order` must be same as output.
 ```mlir
