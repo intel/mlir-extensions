@@ -256,9 +256,16 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
   return mlir::success();
 }
 
+static int getInMemoryBitWidth(int elemTyBitWidth) {
+  if (elemTyBitWidth == 19)
+    return 32; // TF32 is stored in 32 bits;
+  // TODO: add support for other loosely packed types
+  return elemTyBitWidth;
+}
+
 mlir::LogicalResult XeuArchInterface::verify2dBlockRestriction(
     mlir::Operation *op, int width, int height, int array_len,
-    int elemTyByteWidth, bool transpose, bool vnni,
+    int elemTyBitWidth, bool transpose, bool vnni,
     LoadStore2DConfig configParams, bool isLoad) {
 
   if (!llvm::isPowerOf2_32(array_len))
@@ -271,15 +278,15 @@ mlir::LogicalResult XeuArchInterface::verify2dBlockRestriction(
 
   if ((width < configParams.blockWidth.min ||
        width > configParams.blockWidth.max ||
-       (width * elemTyByteWidth) % 4 != 0))
+       (width * getInMemoryBitWidth(elemTyBitWidth) / 8) % 4 != 0))
     return op->emitOpError()
            << "Invalid width size for 2D block load.  "
            << "The specification expects the value to "
            << "be in range [" << configParams.blockWidth.min << ", "
            << configParams.blockWidth.max << "], and "
            << "the total data size (width * elemTyBytes) to be multiple of 4. "
-           << "Given width: " << width
-           << " and data size: " << width * elemTyByteWidth;
+           << "Given width: " << width << " and data size: "
+           << width * getInMemoryBitWidth(elemTyBitWidth) / 8;
 
   if (height < configParams.blockHeight.min ||
       height > configParams.blockHeight.max)
@@ -288,7 +295,8 @@ mlir::LogicalResult XeuArchInterface::verify2dBlockRestriction(
                              << "be in range [" << configParams.blockHeight.min
                              << ", " << configParams.blockHeight.max << "].";
 
-  int GRFSize = width * height * array_len * elemTyByteWidth;
+  int GRFSize =
+      width * height * array_len * getInMemoryBitWidth(elemTyBitWidth) / 8;
   int supportedSize =
       isLoad ? configParams.GRFDataSize.load : configParams.GRFDataSize.store;
 
@@ -331,11 +339,10 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
       auto width = tdescTy.getShape()[1];
       auto height = tdescTy.getShape()[0];
       auto array_len = tdescTy.getArrayLength();
-      auto elemTyByteWidth =
-          tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
+      auto elemTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
       return verify2dBlockRestriction(op, width, height, array_len,
-                                      elemTyByteWidth, transpose, vnni,
+                                      elemTyBitWidth, transpose, vnni,
                                       *configParams);
     } else {
       return loadOp->emitOpError("Invalid 2d block load parameters!\n");
@@ -365,11 +372,10 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
       auto width = tdescTy.getShape()[1];
       auto height = tdescTy.getShape()[0];
       auto array_len = tdescTy.getArrayLength();
-      auto elemTyByteWidth =
-          tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
+      auto elemTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
       return verify2dBlockRestriction(op, width, height, array_len,
-                                      elemTyByteWidth, transpose, vnni,
+                                      elemTyBitWidth, transpose, vnni,
                                       *configParams, false);
     } else {
       return storeOp->emitOpError()
@@ -395,11 +401,10 @@ mlir::LogicalResult XeuArchInterface::isLegalPrefetch2dOp(mlir::Operation *op) {
       auto width = tdescTy.getShape()[1];
       auto height = tdescTy.getShape()[0];
       auto array_len = tdescTy.getArrayLength();
-      auto elemTyByteWidth =
-          tdescTy.getElementType().getIntOrFloatBitWidth() / 8;
+      auto elemTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
       return verify2dPrefetchRestriction(op, width, height, array_len,
-                                         elemTyByteWidth, *configParams);
+                                         elemTyBitWidth, *configParams);
     } else {
       return prefetchOp->emitOpError()
              << "Invalid 2d block load parameters for prefetch operation!\n";

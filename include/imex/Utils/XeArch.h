@@ -99,14 +99,14 @@ public:
 
   mlir::LogicalResult verify2dBlockRestriction(mlir::Operation *op, int width,
                                                int height, int array_len,
-                                               int elemTyByteWidth,
+                                               int elemTyBitWidth,
                                                bool transpose, bool vnni,
                                                LoadStore2DConfig configParams,
                                                bool isLoad = true);
 
   virtual mlir::LogicalResult
   verify2dPrefetchRestriction(mlir::Operation *op, int width, int height,
-                              int array_len, int elemTyByteWidth,
+                              int array_len, int elemTyBitWidth,
                               LoadStore2DConfig configParams) = 0;
   mlir::LogicalResult isLegalDpasOp(mlir::Operation *op);
 
@@ -192,10 +192,10 @@ public:
 
   mlir::LogicalResult
   verify2dPrefetchRestriction(mlir::Operation *op, int width, int height,
-                              int array_len, int elemTyByteWidth,
+                              int array_len, int elemTyBitWidth,
                               LoadStore2DConfig configParams) override {
     return verify2dBlockRestriction(op, width, height, array_len,
-                                    elemTyByteWidth, false, false, configParams,
+                                    elemTyBitWidth, false, false, configParams,
                                     true);
   }
   virtual mlir::FailureOr<LoadStore2DConfig>
