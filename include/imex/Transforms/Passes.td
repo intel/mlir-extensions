@@ -65,7 +65,7 @@ def SetSPIRVCapabilities : Pass<"set-spirv-capabilities"> {
   ];
 }
 
-def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attrs", "::mlir::gpu::GPUModuleOp"> {
+def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attrs"> {
   let summary = "Sets Spirv Abi attribute";
   let constructor = "imex::createSetSPIRVAbiAttributePass()";
   let dependentDialects = ["::mlir::gpu::GPUDialect",
