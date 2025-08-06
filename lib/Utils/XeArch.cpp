@@ -17,6 +17,13 @@
 
 namespace imex {
 
+static int getInMemoryBitWidth(int elemTyBitWidth) {
+  if (elemTyBitWidth == 19)
+    return 32; // TF32 is stored in 32 bits;
+  // TODO: add support for other loosely packed types
+  return elemTyBitWidth;
+}
+
 /// Checks Given A,B, C, D Matrix Data types to HW supported configs and
 /// verifies HW restrictions for supported combinations.
 mlir::LogicalResult XePVCuArch::checkSupportedDpasTypes(mlir::Operation *op,
@@ -256,13 +263,6 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
   return mlir::success();
 }
 
-static int getInMemoryBitWidth(int elemTyBitWidth) {
-  if (elemTyBitWidth == 19)
-    return 32; // TF32 is stored in 32 bits;
-  // TODO: add support for other loosely packed types
-  return elemTyBitWidth;
-}
-
 mlir::LogicalResult XeuArchInterface::verify2dBlockRestriction(
     mlir::Operation *op, int width, int height, int array_len,
     int elemTyBitWidth, bool transpose, bool vnni,
@@ -314,12 +314,11 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
 
   if (auto loadOp = llvm::dyn_cast<mlir::xegpu::LoadNdOp>(op)) {
     auto tdescTy = loadOp.getTensorDescType();
+    auto elemTyBitWidth = tdescTy.getElementTypeBitWidth();
 
     // TODO: need more thinking on SLM
     if (tdescTy.getMemorySpace() == mlir::xegpu::MemorySpace::SLM)
       return mlir::success();
-
-    int elementSize = loadOp.getTensorDescType().getElementTypeBitWidth();
 
     LoadStore2DConfig loadParams;
     bool vnni = loadOp.getPacked().value_or(false);
@@ -333,7 +332,7 @@ mlir::LogicalResult XeuArchInterface::isLegalLoad2dOp(mlir::Operation *op) {
     }
 
     mlir::FailureOr<LoadStore2DConfig> configParams =
-        this->get2DLoadConfig(op, elementSize, vnni, transpose);
+        this->get2DLoadConfig(op, elemTyBitWidth, vnni, transpose);
     if (mlir::succeeded(configParams)) {
 
       auto width = tdescTy.getShape()[1];
@@ -355,7 +354,7 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
 
   if (auto storeOp = llvm::dyn_cast<mlir::xegpu::StoreNdOp>(op)) {
     auto tdescTy = storeOp.getTensorDescType();
-    int elementSize = tdescTy.getElementTypeBitWidth();
+    auto elemTyBitWidth = tdescTy.getElementTypeBitWidth();
 
     // TODO: need more thinking on SLM
     if (tdescTy.getMemorySpace() == mlir::xegpu::MemorySpace::SLM)
@@ -366,13 +365,12 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
     bool transpose = false;
 
     mlir::FailureOr<LoadStore2DConfig> configParams =
-        this->get2DStoreConfig(elementSize);
+        this->get2DStoreConfig(elemTyBitWidth);
     if (mlir::succeeded(configParams)) {
 
       auto width = tdescTy.getShape()[1];
       auto height = tdescTy.getShape()[0];
       auto array_len = tdescTy.getArrayLength();
-      auto elemTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
       return verify2dBlockRestriction(op, width, height, array_len,
                                       elemTyBitWidth, transpose, vnni,
@@ -380,7 +378,7 @@ mlir::LogicalResult XeuArchInterface::isLegalStore2dOp(mlir::Operation *op) {
     } else {
       return storeOp->emitOpError()
              << "unsupported data sizes for 2d block store. "
-             << "Given element data size: d" << elementSize;
+             << "Given element data size: d" << elemTyBitWidth;
     }
   }
 
@@ -391,17 +389,15 @@ mlir::LogicalResult XeuArchInterface::isLegalPrefetch2dOp(mlir::Operation *op) {
 
   if (auto prefetchOp = llvm::dyn_cast<mlir::xegpu::PrefetchNdOp>(op)) {
     auto tdescTy = prefetchOp.getTensorDescType();
-
-    int elementSize = prefetchOp.getTensorDescType().getElementTypeBitWidth();
+    auto elemTyBitWidth = tdescTy.getElementTypeBitWidth();
 
     mlir::FailureOr<LoadStore2DConfig> configParams =
-        this->get2DPrefetchConfig(op, elementSize);
+        this->get2DPrefetchConfig(op, elemTyBitWidth);
     if (mlir::succeeded(configParams)) {
 
       auto width = tdescTy.getShape()[1];
       auto height = tdescTy.getShape()[0];
       auto array_len = tdescTy.getArrayLength();
-      auto elemTyBitWidth = tdescTy.getElementType().getIntOrFloatBitWidth();
 
       return verify2dPrefetchRestriction(op, width, height, array_len,
                                          elemTyBitWidth, *configParams);
