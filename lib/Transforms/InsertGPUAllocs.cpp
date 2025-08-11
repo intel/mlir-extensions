@@ -175,7 +175,7 @@ public:
         }
       } else if (auto load_nd = mlir::dyn_cast<mlir::xegpu::LoadNdOp>(op)) {
         // get create tensor desc op
-        auto defOp = load_nd.getOperand().getDefiningOp();
+        auto defOp = load_nd.getOperand(0).getDefiningOp();
         if (auto init_xedesc =
                 mlir::dyn_cast_if_present<mlir::xegpu::CreateNdDescOp>(defOp)) {
           return {{init_xedesc.getSource()}};

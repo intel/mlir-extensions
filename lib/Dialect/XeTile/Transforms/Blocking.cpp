@@ -1042,10 +1042,8 @@ public:
       for (auto v : intermediates) {
         auto resultTy = VectorType::get({1, 1}, elemTy);
         for (auto i = 0; i < blkSize[1]; i++) {
-          auto pos =
-              rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(i));
           auto extractOp =
-              rewriter.create<vector::ExtractElementOp>(loc, v, pos);
+              rewriter.create<vector::ExtractOp>(loc, v, rewriter.getIndexAttr(i));
           auto splatOp = rewriter.create<vector::SplatOp>(op.getLoc(), resultTy,
                                                           extractOp);
           newOps.push_back(splatOp);

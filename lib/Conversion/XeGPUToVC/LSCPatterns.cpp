@@ -1145,7 +1145,7 @@ public:
     auto resultTy = cast<VectorType>(op.getType());
     auto newValue = genLoadIntrinsicCallWithC32BConversion(
         rewriter, loc, resultTy, simd_lanes, op.getMask(), l1hint, l3hint,
-        elemTy, chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc());
+        elemTy, chunkSize, tdescTy.getMemorySpace(), adaptor.getSource());
 
     // transpose the result because of the difference between hardware
     // implementation and the XeGPU definition.
@@ -1200,7 +1200,7 @@ public:
 
     auto callOp = genPrefetchIntrinsicCall(rewriter, loc, simd_lanes, l1hint,
                                            l3hint, elemTy, chunkSize, scope,
-                                           adaptor.getTensorDesc());
+                                           adaptor.getSource());
 
     rewriter.replaceOp(op, callOp);
     return success();
@@ -1257,7 +1257,7 @@ public:
     }
     auto callOp = genStoreIntrinsicCallWithC32BConversion(
         rewriter, loc, simd_lanes, op.getMask(), l1hint, l3hint, elemTy,
-        chunkSize, tdescTy.getMemorySpace(), adaptor.getTensorDesc(), data);
+        chunkSize, tdescTy.getMemorySpace(), adaptor.getDest(), data);
 
     rewriter.replaceOp(op, callOp);
     return success();

@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   mlir::registerAllToLLVMIRTranslations(registry);
-  imex::xevm::registerXeVMDialectTranslation(registry);
+  mlir::registerXeVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry);
 }

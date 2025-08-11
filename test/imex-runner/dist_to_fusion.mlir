@@ -1,11 +1,11 @@
-// RUN: imex-opt --pass-pipeline="builtin.module(func.func(sharding-propagation),coalesce-shard-ops,canonicalize,func.func(mesh-spmdization),canonicalize,convert-mesh-to-mpi,canonicalize,convert-ndarray-to-linalg,linalg-generalize-named-ops,linalg-fuse-elementwise-ops,empty-tensor-to-alloc-tensor,canonicalize,one-shot-bufferize,canonicalize,imex-remove-temporaries)" %s -o - | FileCheck %s
+// RUN: imex-opt --pass-pipeline="builtin.module(func.func(sharding-propagation),coalesce-shard-ops,canonicalize,func.func(shard-partition),canonicalize,convert-shard-to-mpi,canonicalize,convert-ndarray-to-linalg,linalg-generalize-named-ops,linalg-fuse-elementwise-ops,empty-tensor-to-alloc-tensor,canonicalize,one-shot-bufferize,canonicalize,imex-remove-temporaries)" %s -o - | FileCheck %s
 
 builtin.module attributes {dlti.map = #dlti.map<"MPI:Implementation" = "MPICH", "MPI:comm_world_rank" = 0 : i32>}{
     memref.global constant @static_mpi_rank : memref<index> = dense<10>
-    mesh.mesh @mesh4x4(shape = 4x4)
+    shard.grid @mesh4x4(shape = 4x4)
     func.func @test_shard_propagate_insert_slice_2d(%arg0: tensor<1200x1200xi64>) -> tensor<1200x1200xi64> {
-        %s = mesh.sharding @mesh4x4 split_axes = [[0], [1]] : !mesh.sharding
-        %0 = mesh.shard %arg0 to %s : tensor<1200x1200xi64>
+        %s = shard.sharding @mesh4x4 split_axes = [[0], [1]] : !shard.sharding
+        %0 = shard.shard %arg0 to %s : tensor<1200x1200xi64>
         %1 = ndarray.subview %0[0, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
         %2 = ndarray.subview %0[0, 4][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
         %3 = ndarray.subview %0[4, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
@@ -17,7 +17,7 @@ builtin.module attributes {dlti.map = #dlti.map<"MPI:Implementation" = "MPICH", 
         return %6 : tensor<1200x1200xi64>
     }
 }
-// CHECK: mesh.mesh @mesh4x4(shape = 4x4)
+// CHECK: shard.grid @mesh4x4(shape = 4x4)
 // CHECK-LABEL: func.func @test_shard_propagate_insert_slice_2d(
 // CHECK-SAME: [[varg0:%.*]]: tensor<300x300xi64>) -> tensor<304x304xi64> {
 // CHECK: mpi.send

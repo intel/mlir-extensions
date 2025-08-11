@@ -23,54 +23,24 @@ module {
       %8 = vector.shuffle %7, %2 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127] : vector<128xf16>, vector<128xf16>
       %9 = vector.shuffle %8, %2 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127] : vector<128xf16>, vector<128xf16>
       %10 = vector.shuffle %9, %2 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143] : vector<128xf16>, vector<128xf16>
+      //CHECK:  %{{.*}} = vector.shape_cast %{{.*}} : vector<128xf16> to vector<8x16xf16>
       %11 = vector.shape_cast %10 : vector<128xf16> to vector<8x16xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [0], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
+      //CHECK-COUNT-16: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<16x1xf16>
       %12 = vector.extract_strided_slice %0 {offsets = [0], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [1], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %13 = vector.extract_strided_slice %0 {offsets = [1], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [2], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %14 = vector.extract_strided_slice %0 {offsets = [2], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [3], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %15 = vector.extract_strided_slice %0 {offsets = [3], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [4], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %16 = vector.extract_strided_slice %0 {offsets = [4], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [5], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %17 = vector.extract_strided_slice %0 {offsets = [5], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [6], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %18 = vector.extract_strided_slice %0 {offsets = [6], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [7], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %19 = vector.extract_strided_slice %0 {offsets = [7], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [8], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %20 = vector.extract_strided_slice %0 {offsets = [8], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [9], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %21 = vector.extract_strided_slice %0 {offsets = [9], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [10], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %22 = vector.extract_strided_slice %0 {offsets = [10], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [11], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %23 = vector.extract_strided_slice %0 {offsets = [11], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [12], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %24 = vector.extract_strided_slice %0 {offsets = [12], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [13], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %25 = vector.extract_strided_slice %0 {offsets = [13], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [14], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %26 = vector.extract_strided_slice %0 {offsets = [14], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [15], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      //CHECK: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<1xf16>
       %27 = vector.extract_strided_slice %0 {offsets = [15], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
       //CHECK-COUNT-16: {{.*}} = math.exp %{{.*}} : f16
       %28 = math.exp %12 : vector<1xf16>
@@ -91,37 +61,37 @@ module {
       %43 = math.exp %27 : vector<1xf16>
       %c0_i32 = arith.constant 0 : i32
       // CHECK-COUNT-16: %{{.*}} = vector.splat %{{.*}} : vector<16xf16>
-      %44 = vector.extractelement %28[%c0_i32 : i32] : vector<1xf16>
+      %44 = vector.extract %28[0] : f16 from vector<1xf16>
       %45 = vector.splat %44 : vector<16xf16>
-      %46 = vector.extractelement %29[%c0_i32 : i32] : vector<1xf16>
+      %46 = vector.extract %29[0] : f16 from vector<1xf16>
       %47 = vector.splat %46 : vector<16xf16>
-      %48 = vector.extractelement %30[%c0_i32 : i32] : vector<1xf16>
+      %48 = vector.extract %30[0] : f16 from vector<1xf16>
       %49 = vector.splat %48 : vector<16xf16>
-      %50 = vector.extractelement %31[%c0_i32 : i32] : vector<1xf16>
+      %50 = vector.extract %31[0] : f16 from vector<1xf16>
       %51 = vector.splat %50 : vector<16xf16>
-      %52 = vector.extractelement %32[%c0_i32 : i32] : vector<1xf16>
+      %52 = vector.extract %32[0] : f16 from vector<1xf16>
       %53 = vector.splat %52 : vector<16xf16>
-      %54 = vector.extractelement %33[%c0_i32 : i32] : vector<1xf16>
+      %54 = vector.extract %33[0] : f16 from vector<1xf16>
       %55 = vector.splat %54 : vector<16xf16>
-      %56 = vector.extractelement %34[%c0_i32 : i32] : vector<1xf16>
+      %56 = vector.extract %34[0] : f16 from vector<1xf16>
       %57 = vector.splat %56 : vector<16xf16>
-      %58 = vector.extractelement %35[%c0_i32 : i32] : vector<1xf16>
+      %58 = vector.extract %35[0] : f16 from vector<1xf16>
       %59 = vector.splat %58 : vector<16xf16>
-      %60 = vector.extractelement %36[%c0_i32 : i32] : vector<1xf16>
+      %60 = vector.extract %36[0] : f16 from vector<1xf16>
       %61 = vector.splat %60 : vector<16xf16>
-      %62 = vector.extractelement %37[%c0_i32 : i32] : vector<1xf16>
+      %62 = vector.extract %37[0] : f16 from vector<1xf16>
       %63 = vector.splat %62 : vector<16xf16>
-      %64 = vector.extractelement %38[%c0_i32 : i32] : vector<1xf16>
+      %64 = vector.extract %38[0] : f16 from vector<1xf16>
       %65 = vector.splat %64 : vector<16xf16>
-      %66 = vector.extractelement %39[%c0_i32 : i32] : vector<1xf16>
+      %66 = vector.extract %39[0] : f16 from vector<1xf16>
       %67 = vector.splat %66 : vector<16xf16>
-      %68 = vector.extractelement %40[%c0_i32 : i32] : vector<1xf16>
+      %68 = vector.extract %40[0] : f16 from vector<1xf16>
       %69 = vector.splat %68 : vector<16xf16>
-      %70 = vector.extractelement %41[%c0_i32 : i32] : vector<1xf16>
+      %70 = vector.extract %41[0] : f16 from vector<1xf16>
       %71 = vector.splat %70 : vector<16xf16>
-      %72 = vector.extractelement %42[%c0_i32 : i32] : vector<1xf16>
+      %72 = vector.extract %42[0] : f16 from vector<1xf16>
       %73 = vector.splat %72 : vector<16xf16>
-      %74 = vector.extractelement %43[%c0_i32 : i32] : vector<1xf16>
+      %74 = vector.extract %43[0] : f16 from vector<1xf16>
       %75 = vector.splat %74 : vector<16xf16>
       %76 = vector.shuffle %45, %47 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16xf16>, vector<16xf16>
       %77 = vector.shuffle %49, %51 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] : vector<16xf16>, vector<16xf16>

@@ -8,8 +8,8 @@
 
 #include "imex/Dialect/NDArray/IR/NDArrayOps.h"
 #include "imex/Dialect/NDArray/Transforms/Utils.h"
-#include "mlir/Dialect/Mesh/Interfaces/ShardingInterface.h"
-#include "mlir/Dialect/Mesh/Interfaces/ShardingInterfaceImpl.h"
+#include "mlir/Dialect/Shard/Interfaces/ShardingInterface.h"
+#include "mlir/Dialect/Shard/Interfaces/ShardingInterfaceImpl.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "llvm/Support/Debug.h"
 #include <sstream>
@@ -20,7 +20,7 @@
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE << "]: ")
 
 using namespace mlir;
-using namespace mlir::mesh;
+using namespace mlir::shard;
 using imex::easyI64;
 using imex::easyIdx;
 
@@ -42,7 +42,7 @@ static std::vector<int> convertStringToVector(const std::string &str) {
 // If the environment variable "DEBUG_MESH_INDEX" is set, it uses the value
 // from the environment variable. Otherwise, it creates a ProcessMultiIndexOp
 // to get the index.
-static SmallVector<Value> getMyMultiIndex(OpBuilder &b, ::MeshOp mesh,
+static SmallVector<Value> getMyMultiIndex(OpBuilder &b, ::GridOp mesh,
                                           bool asI64 = false) {
   if (auto envStr = getenv("DEBUG_MESH_INDEX")) {
     auto myIdx = convertStringToVector(envStr);
@@ -99,13 +99,13 @@ static T getBaseShardDimOff(T shard, T numShards, T extend) {
                   shard - (numShards - (extend % numShards)));
 }
 
-static MeshSharding ShardingFromOption(const ShardingOption &option,
+static Sharding ShardingFromOption(const ShardingOption &option,
                                        MLIRContext *ctxt) {
-  SmallVector<MeshAxesAttr> res;
+  SmallVector<GridAxesAttr> res;
   for (const auto &v : option.shardingArray) {
-    res.emplace_back(MeshAxesAttr::get(ctxt, v));
+    res.emplace_back(GridAxesAttr::get(ctxt, v));
   }
-  return MeshSharding::get(option.mesh, res);
+  return Sharding::get(option.grid, res);
 }
 
 //===----------------------------------------------------------------------===//
@@ -117,7 +117,7 @@ static MeshSharding ShardingFromOption(const ShardingOption &option,
 // non-copying subview operation. ShardSizes are represented as relative
 // offsets to the previous shard.
 // Requires sharding of input tensor.
-static FailureOr<MeshSharding>
+static FailureOr<Sharding>
 getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
   SymbolTableCollection symbolTable;
   auto aryType = cast<RankedTensorType>(ary.getType());
@@ -127,7 +127,7 @@ getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
   auto aryShape = aryType.getShape();
   auto rank = cast<RankedTensorType>(ary.getType()).getRank();
 
-  auto aryShardOp = ary.getDefiningOp<mesh::ShardOp>();
+  auto aryShardOp = ary.getDefiningOp<shard::ShardOp>();
   // currently no support for non-sharded source
   if (!aryShardOp)
     return op->emitOpError("Exptected a ShardOp on input, got ")
@@ -141,13 +141,13 @@ getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
       ShapedType::isDynamicShape(strides))
     return op->emitOpError("Dynamic offsets/sizes/strides are not supported");
 
-  auto arySharding = aryShardOp.getSharding().getDefiningOp<mesh::ShardingOp>();
+  auto arySharding = aryShardOp.getSharding().getDefiningOp<shard::ShardingOp>();
   // currently no support for sharding dims sizes on input
   if (!arySharding.getStaticShardedDimsOffsets().empty())
     return op->emitOpError(
         "Sharded dims sizes on input are not supported yet.");
 
-  auto mesh = getMesh(arySharding, symbolTable);
+  auto mesh = getGrid(arySharding, symbolTable);
   if (!mesh)
     return op->emitOpError("Invalid mesh.");
   auto meshShape = mesh.getShape();
@@ -190,10 +190,8 @@ getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
     }
   }
 
-  return MeshSharding::get(
-      arySharding.getMeshAttr(), arySharding.getSplitAxes().getAxes(),
-      arySharding.getPartialAxes().value_or(llvm::ArrayRef<MeshAxis>{}),
-      arySharding.getPartialType().value_or(ReductionKind::Sum),
+  return Sharding::get(
+      arySharding.getGridAttr(), arySharding.getSplitAxes().getAxes(),
       {}, // static halo
       splitOffs, {}, {});
 }
@@ -218,7 +216,7 @@ getOffsetAndSize(const EasyI64 &myID, const EasyI64 &zero, const EasyI64 &one,
 // ***************************************************************************
 static std::array<Value, 2> getShardSliceOffAndSz(
     ValueRange myIdx, int64_t dim, ArrayRef<int64_t> meshShape,
-    ArrayRef<MeshAxesAttr> splitAxes, Value targetOffs,
+    ArrayRef<GridAxesAttr> splitAxes, Value targetOffs,
     ArrayRef<int64_t> srcShape, const SmallVector<OpFoldResult> &slcOffs,
     const SmallVector<OpFoldResult> &slcSizes,
     const SmallVector<OpFoldResult> &slcStrides,
@@ -270,9 +268,9 @@ template <typename OP>
 FailureOr<std::tuple<SmallVector<OpFoldResult>, SmallVector<OpFoldResult>,
                      SmallVector<OpFoldResult>>>
 getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
-                             const MeshSharding &haloSharding,
-                             const MeshSharding &offsSharding,
-                             const MeshSharding &splitSharding,
+                             const Sharding &haloSharding,
+                             const Sharding &offsSharding,
+                             const Sharding &splitSharding,
                              SymbolTableCollection &symbolTableCollection,
                              OpBuilder &builder) {
 
@@ -296,7 +294,7 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
   auto loc = op->getLoc();
   auto rank = slcOffs.size();
   auto splitAxes = splitSharding.getSplitAxes();
-  auto mesh = getMesh(op, offsSharding.getMeshAttr(), symbolTableCollection);
+  auto mesh = getGrid(op, offsSharding.getGridAttr(), symbolTableCollection);
   auto myIdx = getMyMultiIndex(builder, mesh);
 
   auto haloSizes =
@@ -403,8 +401,8 @@ struct SubviewShardingInterface
   addShardingAnnotations(::mlir::Operation *op, OpBuilder &b,
                          const ShardingOption &shardingOption) const {
     auto svop = cast<SubviewOp>(op);
-    auto srcShardOp = svop.getSource().getDefiningOp<mesh::ShardOp>();
-    MeshSharding srcSharding;
+    auto srcShardOp = svop.getSource().getDefiningOp<shard::ShardOp>();
+    Sharding srcSharding;
     if (srcShardOp) {
       srcSharding = srcShardOp.getSharding();
     } else {
@@ -423,8 +421,8 @@ struct SubviewShardingInterface
   }
 
   LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<MeshSharding> operandShardings,
-                        ArrayRef<MeshSharding> resultShardings,
+                        ArrayRef<Sharding> operandShardings,
+                        ArrayRef<Sharding> resultShardings,
                         IRMapping &spmdizationMap,
                         SymbolTableCollection &symbolTableCollection,
                         OpBuilder &builder) const {
@@ -460,7 +458,7 @@ struct InsertSliceShardingInterface
                          const ShardingOption &shardingOption) const {
     LLVM_DEBUG(DBGS() << "addShardingAnnotations\n");
     auto svop = cast<InsertSliceOp>(op);
-    MeshSharding srcSharding(shardingOption.mesh);
+    Sharding srcSharding(shardingOption.grid);
     auto srcRank = svop.getSource().getType().getRank();
 
     if (srcRank > 0) {
@@ -480,8 +478,8 @@ struct InsertSliceShardingInterface
   }
 
   LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<MeshSharding> operandShardings,
-                        ArrayRef<MeshSharding> resultShardings,
+                        ArrayRef<Sharding> operandShardings,
+                        ArrayRef<Sharding> resultShardings,
                         IRMapping &spmdizationMap,
                         SymbolTableCollection &symbolTableCollection,
                         OpBuilder &builder) const {
@@ -543,8 +541,8 @@ struct InsertSliceShardingInterface
 
     auto res = builder.create<UpdateHaloOp>(
         loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
-        dstSharding.getMeshAttr(),
-        MeshAxesArrayAttr::get(op->getContext(), dstSharding.getSplitAxes()),
+        dstSharding.getGridAttr(),
+        GridAxesArrayAttr::get(op->getContext(), dstSharding.getSplitAxes()),
         dstSharding.getDynamicHaloSizes(),
         DenseI64ArrayAttr::get(op->getContext(),
                                dstSharding.getStaticHaloSizes()));
@@ -572,8 +570,8 @@ struct LinspaceShardingInterface
   }
 
   LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<MeshSharding> operandShardings,
-                        ArrayRef<MeshSharding> resultShardings,
+                        ArrayRef<Sharding> operandShardings,
+                        ArrayRef<Sharding> resultShardings,
                         IRMapping &spmdizationMap,
                         SymbolTableCollection &symbolTableCollection,
                         OpBuilder &builder) const {
@@ -598,7 +596,7 @@ struct LinspaceShardingInterface
 
     auto splitAxes = sharding.getSplitAxes()[0];
     SymbolTableCollection symbolTable;
-    auto mesh = getMesh(op, sharding.getMeshAttr(), symbolTable);
+    auto mesh = getGrid(op, sharding.getGridAttr(), symbolTable);
 
     // get number of procs to distribute linspace
     auto nProcs = collectiveProcessGroupSize(splitAxes.asArrayRef(), mesh);
@@ -610,7 +608,7 @@ struct LinspaceShardingInterface
     auto one = easyI64(loc, builder, 1);
 
     // pRank is the canonicalized index of the local process along the split
-    // axes (only). Notice: this is not the same as mesh::ProcessLinearIndexOp
+    // axes (only). Notice: this is not the same as shard::ProcessLinearIndexOp
     //         because the latter includes replication axes.
     auto myMIdx = getMyMultiIndex(builder, mesh, true);
     auto tileSz = one;
@@ -721,7 +719,7 @@ struct ReshapeShardingInterface
     //   return op->emitOpError("Only full replication is implemented.");
 
     // auto sharding = ShardingFromOption(shardingOption, op->getContext());
-    MeshSharding sharding = MeshSharding::get(shardingOption.mesh, {});
+    Sharding sharding = Sharding::get(shardingOption.grid, {});
     maybeInsertSourceShardingAnnotation(sharding, op->getOpOperand(0), b);
     maybeInsertTargetShardingAnnotation(sharding, op->getResult(0), b);
 

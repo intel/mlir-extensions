@@ -1,7 +1,7 @@
-From 4cb4411e2451b1549bafd6a8a3723f78251ef6f3 Mon Sep 17 00:00:00 2001
-From: izamyati <igor.zamyatin@intel.com>
-Date: Tue, 1 Oct 2024 08:59:35 -0500
-Subject: [PATCH] Add serialization and deserialization support for s
+From 89e527e48b727a1479aa47fdbe3d2d178d8969a7 Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Mon, 4 Aug 2025 17:50:56 +0200
+Subject: [PATCH] Add serilialization and deserialization for spirv
 
 ---
  mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 6 ++++++
@@ -9,10 +9,10 @@ Subject: [PATCH] Add serialization and deserialization support for s
  2 files changed, 12 insertions(+)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 6c7fe4106982..b1be812e74eb 100644
+index 88931b53a688..f1c22d09cc8e 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -259,6 +259,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -282,6 +282,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
          symbol, FPRoundingModeAttr::get(opBuilder.getContext(),
                                          static_cast<FPRoundingMode>(words[2])));
      break;
@@ -20,7 +20,7 @@ index 6c7fe4106982..b1be812e74eb 100644
    case spirv::Decoration::DescriptorSet:
    case spirv::Decoration::Binding:
      if (words.size() != 3) {
-@@ -320,6 +321,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -343,6 +344,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
    case spirv::Decoration::Constant:
@@ -31,19 +31,19 @@ index 6c7fe4106982..b1be812e74eb 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -330,6 +335,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-     // it is needed for many validation rules.
-     decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
+@@ -351,6 +356,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      break;
-+  case spirv::Decoration::FuncParamIOKindINTEL:
    case spirv::Decoration::Location:
    case spirv::Decoration::SpecId:
++  case spirv::Decoration::FuncParamIOKindINTEL:
      if (words.size() != 3) {
+       return emitError(unknownLoc, "OpDecoration with ")
+              << decorationName << "needs a single integer literal";
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index f355982e9ed8..d6080185eefe 100644
+index 737f29662f64..cd925b02b6a6 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -252,8 +252,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -283,8 +283,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
      }
      return emitError(loc, "expected FPRoundingModeAttr attribute for ")
             << stringifyDecoration(decoration);
@@ -54,7 +54,7 @@ index f355982e9ed8..d6080185eefe 100644
    case spirv::Decoration::Location:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -287,6 +289,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -318,6 +320,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::RestrictPointer:
    case spirv::Decoration::NoContraction:
    case spirv::Decoration::Constant:
@@ -62,8 +62,9 @@ index f355982e9ed8..d6080185eefe 100644
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
 +  case spirv::Decoration::VectorComputeVariableINTEL:
+   case spirv::Decoration::Block:
      // For unit attributes and decoration attributes, the args list
      // has no values so we do nothing.
-     if (isa<UnitAttr, DecorationAttr>(attr))
---
+-- 
 2.34.1
+

@@ -16,19 +16,19 @@ gpu.module @test_kernel {
     // CHECK-NEXT: %[[SRC_AS_INT:.*]] = arith.index_cast %[[SRC_AS_INDEX]] : index to i64
     %src_as_int = arith.index_cast %src_as_index : index to i64
 
-    //CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg0]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    //CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg0]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
     %static_memref_src = xetile.init_tile %a[0, 32] : memref<1024x1024xf32> -> !xetile.tile<32x32xf32>
 
-    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg2]][{{.*}}], shape : [%c1024, %c1024, %c1024], strides : [%c1024, %c1, %c1] : memref<?x128x96xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg2]][{{.*}}], shape : [%c1024, %c1024, %c1024], strides : [%c1024, %c1, %c1] : memref<?x128x96xf32> -> !xegpu.tensor_desc<8x16xf32>
     %batch_dynamic_memref_src = xetile.init_tile %c[%c0, %c0, %c32],[%c1024, %c1024, %c1024], [%c1024, %c1, %c1]  : memref<?x128x96xf32> -> !xetile.tile<32x32xf32>
 
-    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg1]][{{.*}}], shape : [%c1024, %c1024], strides : [%c1024, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[arg1]][{{.*}}], shape : [%c1024, %c1024], strides : [%c1024, %c1] : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
     %dynamic_memref_src = xetile.init_tile %b[%c0, %c32],[%c1024, %c1024], [%c1024, %c1]  : memref<?x?xf32> -> !xetile.tile<32x32xf32>
 
-    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[SRC_AS_INT]][{{.*}}], shape : [%c1024, %c1024], strides : [%c1024, %c1] : i64 -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    // CHECK-COUNT-8: {{.*}} = xegpu.create_nd_tdesc %[[SRC_AS_INT]][{{.*}}], shape : [%c1024, %c1024], strides : [%c1024, %c1] : i64 -> !xegpu.tensor_desc<8x16xf32>
     %int_src = xetile.init_tile %src_as_int[%c0, %c32], [%c1024, %c1024], [%c1024, %c1]  : i64 -> !xetile.tile<32x32xf32>
 
-    //CHECK-COUNT-32: xegpu.store_nd {{.*}} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    //CHECK-COUNT-32: xegpu.store_nd {{.*}} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
 		xetile.store_tile %result, %static_memref_src: vector<32x32xf32>, !xetile.tile<32x32xf32>
     xetile.store_tile %result, %dynamic_memref_src: vector<32x32xf32>, !xetile.tile<32x32xf32>
     xetile.store_tile %result, %batch_dynamic_memref_src: vector<32x32xf32>, !xetile.tile<32x32xf32>

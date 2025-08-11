@@ -31,13 +31,13 @@ namespace imex {
 
 namespace {
 
-struct VectorExtractElementOpConversion final
-    : public mlir::OpConversionPattern<mlir::vector::ExtractElementOp> {
+struct VectorExtractOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::ExtractOp> {
   using mlir::OpConversionPattern<
-      mlir::vector::ExtractElementOp>::OpConversionPattern;
+      mlir::vector::ExtractOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::vector::ExtractElementOp extractOp, OpAdaptor adaptor,
+  matchAndRewrite(mlir::vector::ExtractOp extractOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
     if (adaptor.getVector().getType() == extractOp.getType()) {
@@ -84,10 +84,8 @@ struct VectorExtractStridedSliceConversion final
 
     // We only convert ops extracting a single element from a 1D vector.
     if (resType.getNumElements() == 1 && srcVector.getType().getRank() == 1) {
-      auto pos = rewriter.create<mlir::arith::ConstantOp>(
-          extractOp.getLoc(), mlir::cast<mlir::IntegerAttr>(offsets[0]));
-      rewriter.replaceOpWithNewOp<mlir::vector::ExtractElementOp>(
-          extractOp, srcVector, pos);
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractOp>(
+          extractOp, srcVector, offsets[0]);
       return mlir::success();
     }
     return mlir::failure();
@@ -125,7 +123,7 @@ struct VectorizableOpPattern final
 
 template <typename OpTy>
 static mlir::Value
-createInsertElementOps(OpTy op, mlir::ValueRange operands,
+createInsertOps(OpTy op, mlir::ValueRange operands,
                        mlir::ConversionPatternRewriter &rewriter) {
   auto loc = op.getLoc();
   auto type = op.getType();
@@ -141,10 +139,8 @@ createInsertElementOps(OpTy op, mlir::ValueRange operands,
   mlir::Value newOp =
       rewriter.create<mlir::arith::ConstantOp>(loc, type, denseAttr);
   for (auto [i, opr] : llvm::enumerate(operands)) {
-    mlir::Value pos = rewriter.create<mlir::arith::ConstantOp>(
-        loc, rewriter.getI64IntegerAttr(i));
     newOp =
-        rewriter.create<mlir::vector::InsertElementOp>(loc, opr, newOp, pos);
+        rewriter.create<mlir::vector::InsertOp>(loc, opr, newOp, i);
   }
   return newOp;
 }
@@ -160,7 +156,7 @@ struct VectorShffleOpConversion final
     auto vec2 = adaptor.getV2();
     if (vec1.getType().isIntOrIndexOrFloat() &&
         vec2.getType().isIntOrIndexOrFloat()) {
-      auto newOp = createInsertElementOps(shuffleOp, {vec1, vec2}, rewriter);
+      auto newOp = createInsertOps(shuffleOp, {vec1, vec2}, rewriter);
       rewriter.replaceOp(shuffleOp, newOp);
       return mlir::success();
     }
@@ -182,7 +178,7 @@ struct VectorInterleaveOpConversion final
 
     if (vec1.getType().isIntOrIndexOrFloat() &&
         vec2.getType().isIntOrIndexOrFloat()) {
-      auto newOp = createInsertElementOps(interleaveOp, {vec1, vec2}, rewriter);
+      auto newOp = createInsertOps(interleaveOp, {vec1, vec2}, rewriter);
       rewriter.replaceOp(interleaveOp, newOp);
       return mlir::success();
     }
@@ -217,7 +213,7 @@ struct VectorSplatOpConversion final
 // vector.store %vector, %memref[%idx] : memref<4xf32>, vector<1xf32>
 
 // Output:
-// %scalar = vector.extractelement %vector[%c0:i32] : vector<1xf32>
+// %scalar = vector.extract %vector[%c0:i32] : vector<1xf32>
 // memref.store %scalar, %memref[%idx] : memref<4xf32>
 
 struct VectorStoreOpConversion final
@@ -239,12 +235,10 @@ struct VectorStoreOpConversion final
     auto indices = storeOp.getIndices();
 
     // Create a i32 constant of value 0 for index
-    auto zero = rewriter.create<mlir::arith::ConstantOp>(
-        storeOp.getLoc(), rewriter.getI32IntegerAttr(0));
 
     // Extract the single element from the vector as a scalar
-    auto scalar = rewriter.create<mlir::vector::ExtractElementOp>(
-        storeOp.getLoc(), vector, zero);
+    auto scalar = rewriter.create<mlir::vector::ExtractOp>(
+        storeOp.getLoc(), vector, rewriter.getI32IntegerAttr(0));
 
     // Create a memref.store op with the scalar value
     auto memrefStoreOp = rewriter.create<mlir::memref::StoreOp>(
@@ -262,7 +256,7 @@ struct RemoveSingleElemVectorPass final
   void runOnOperation() override {
     auto *context = &getContext();
     mlir::TypeConverter typeConverter;
-    // convert a value from vector<1xT> to T using vector::ExtractElementOp
+    // convert a value from vector<1xT> to T using vector::ExtractOp
     auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type resultType,
                               mlir::ValueRange inputs, mlir::Location loc) {
       if (inputs.size() != 1)
@@ -272,10 +266,8 @@ struct RemoveSingleElemVectorPass final
       if (!vecTy || vecTy.getNumElements() != 1)
         return mlir::Value();
 
-      auto zero =
-          builder.create<mlir::arith::ConstantOp>(loc, builder.getIndexAttr(0));
       return builder
-          .create<mlir::vector::ExtractElementOp>(loc, inputs[0], zero)
+          .create<mlir::vector::ExtractOp>(loc, inputs[0], builder.getIndexAttr(0))
           .getResult();
     };
 
@@ -292,9 +284,9 @@ struct RemoveSingleElemVectorPass final
     mlir::ConversionTarget target(*context);
     target.addLegalOp<mlir::memref::StoreOp>();
     target.addLegalOp<mlir::arith::ConstantOp>();
-    target.addLegalOp<mlir::vector::InsertElementOp>();
-    target.addDynamicallyLegalOp<mlir::vector::ExtractElementOp>(
-        [&](mlir::vector::ExtractElementOp op) {
+    target.addLegalOp<mlir::vector::InsertOp>();
+    target.addDynamicallyLegalOp<mlir::vector::ExtractOp>(
+        [&](mlir::vector::ExtractOp op) {
           auto vecTy = op.getVector().getType();
           return vecTy.getNumElements() != 1;
         });
@@ -320,7 +312,7 @@ struct RemoveSingleElemVectorPass final
     // xetile-blockop-fallback pass
     patterns.add</*VectorExtractStridedSliceConversion,*/ VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
-                 VectorSplatOpConversion, VectorExtractElementOpConversion,
+                 VectorSplatOpConversion, VectorExtractOpConversion,
                  VectorStoreOpConversion>(typeConverter, context);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
