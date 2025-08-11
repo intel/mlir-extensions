@@ -191,21 +191,6 @@ gpu.module @test_kernel {
   // CHECK-SAME: (%[[arg0:.*]]: memref<128x256xf16>, %[[arg1:.*]]: memref<128x256xf16>)
   gpu.func @inner_reduction(%a: memref<128x256xf16>, %b: memref<128x256xf16>) {
     //CHECK: %[[cst:.*]] = arith.constant dense<0.000000e+00> : vector<16x1xf16>
-    //CHECK: %[[c15:.*]] = arith.constant 15 : index
-    //CHECK: %[[c14:.*]] = arith.constant 14 : index
-    //CHECK: %[[c13:.*]] = arith.constant 13 : index
-    //CHECK: %[[c12:.*]] = arith.constant 12 : index
-    //CHECK: %[[c11:.*]] = arith.constant 11 : index
-    //CHECK: %[[c10:.*]] = arith.constant 10 : index
-    //CHECK: %[[c9:.*]] = arith.constant 9 : index
-    //CHECK: %[[c8:.*]] = arith.constant 8 : index
-    //CHECK: %[[c7:.*]] = arith.constant 7 : index
-    //CHECK: %[[c6:.*]] = arith.constant 6 : index
-    //CHECK: %[[c5:.*]] = arith.constant 5 : index
-    //CHECK: %[[c4:.*]] = arith.constant 4 : index
-    //CHECK: %[[c3:.*]] = arith.constant 3 : index
-    //CHECK: %[[c2:.*]] = arith.constant 2 : index
-    //CHECK: %[[c1:.*]] = arith.constant 1 : index
     //CHECK: %[[c0:.*]] = arith.constant 0 : index
     //CHECK: %[[r0:.*]] = xetile.init_tile %[[arg0]][%[[c0]], %[[c0]]] : memref<128x256xf16> -> !xetile.tile<16x32xf16>
     //CHECK: %[[r1:.*]] = xetile.load_tile %[[r0]] : !xetile.tile<16x32xf16> -> vector<16x32xf16>
@@ -305,37 +290,37 @@ gpu.module @test_kernel {
     //CHECK: %[[r95:.*]] = vector.shuffle %[[r94]], %[[r94]] [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r96:.*]] = vector.shuffle %[[r94]], %[[r94]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r97:.*]] = arith.addf %[[r95]], %[[r96]] : vector<16xf16>
-    //CHECK: %[[r98:.*]] = vector.extractelement %[[r97]][%[[c0]] : index] : vector<16xf16>
+    //CHECK: %[[r98:.*]] = vector.extract %[[r97]][0] : f16 from vector<16xf16>
     //CHECK: %[[r99:.*]] = vector.splat %[[r98]] : vector<1x1xf16>
-    //CHECK: %[[r100:.*]] = vector.extractelement %[[r97]][%[[c1]] : index] : vector<16xf16>
+    //CHECK: %[[r100:.*]] = vector.extract %[[r97]][1] : f16 from vector<16xf16>
     //CHECK: %[[r101:.*]] = vector.splat %[[r100]] : vector<1x1xf16>
-    //CHECK: %[[r102:.*]] = vector.extractelement %[[r97]][%[[c2]] : index] : vector<16xf16>
+    //CHECK: %[[r102:.*]] = vector.extract %[[r97]][2] : f16 from vector<16xf16>
     //CHECK: %[[r103:.*]] = vector.splat %[[r102]] : vector<1x1xf16>
-    //CHECK: %[[r104:.*]] = vector.extractelement %[[r97]][%[[c3]] : index] : vector<16xf16>
+    //CHECK: %[[r104:.*]] = vector.extract %[[r97]][3] : f16 from vector<16xf16>
     //CHECK: %[[r105:.*]] = vector.splat %[[r104]] : vector<1x1xf16>
-    //CHECK: %[[r106:.*]] = vector.extractelement %[[r97]][%[[c4]] : index] : vector<16xf16>
+    //CHECK: %[[r106:.*]] = vector.extract %[[r97]][4] : f16 from vector<16xf16>
     //CHECK: %[[r107:.*]] = vector.splat %[[r106]] : vector<1x1xf16>
-    //CHECK: %[[r108:.*]] = vector.extractelement %[[r97]][%[[c5]] : index] : vector<16xf16>
+    //CHECK: %[[r108:.*]] = vector.extract %[[r97]][5] : f16 from vector<16xf16>
     //CHECK: %[[r109:.*]] = vector.splat %[[r108]] : vector<1x1xf16>
-    //CHECK: %[[r110:.*]] = vector.extractelement %[[r97]][%[[c6]] : index] : vector<16xf16>
+    //CHECK: %[[r110:.*]] = vector.extract %[[r97]][6] : f16 from vector<16xf16>
     //CHECK: %[[r111:.*]] = vector.splat %[[r110]] : vector<1x1xf16>
-    //CHECK: %[[r112:.*]] = vector.extractelement %[[r97]][%[[c7]] : index] : vector<16xf16>
+    //CHECK: %[[r112:.*]] = vector.extract %[[r97]][7] : f16 from vector<16xf16>
     //CHECK: %[[r113:.*]] = vector.splat %[[r112]] : vector<1x1xf16>
-    //CHECK: %[[r114:.*]] = vector.extractelement %[[r97]][%[[c8]] : index] : vector<16xf16>
+    //CHECK: %[[r114:.*]] = vector.extract %[[r97]][8] : f16 from vector<16xf16>
     //CHECK: %[[r115:.*]] = vector.splat %[[r114]] : vector<1x1xf16>
-    //CHECK: %[[r116:.*]] = vector.extractelement %[[r97]][%[[c9]] : index] : vector<16xf16>
+    //CHECK: %[[r116:.*]] = vector.extract %[[r97]][9] : f16 from vector<16xf16>
     //CHECK: %[[r117:.*]] = vector.splat %[[r116]] : vector<1x1xf16>
-    //CHECK: %[[r118:.*]] = vector.extractelement %[[r97]][%[[c10]] : index] : vector<16xf16>
+    //CHECK: %[[r118:.*]] = vector.extract %[[r97]][10] : f16 from vector<16xf16>
     //CHECK: %[[r119:.*]] = vector.splat %[[r118]] : vector<1x1xf16>
-    //CHECK: %[[r120:.*]] = vector.extractelement %[[r97]][%[[c11]] : index] : vector<16xf16>
+    //CHECK: %[[r120:.*]] = vector.extract %[[r97]][11] : f16 from vector<16xf16>
     //CHECK: %[[r121:.*]] = vector.splat %[[r120]] : vector<1x1xf16>
-    //CHECK: %[[r122:.*]] = vector.extractelement %[[r97]][%[[c12]] : index] : vector<16xf16>
+    //CHECK: %[[r122:.*]] = vector.extract %[[r97]][12] : f16 from vector<16xf16>
     //CHECK: %[[r123:.*]] = vector.splat %[[r122]] : vector<1x1xf16>
-    //CHECK: %[[r124:.*]] = vector.extractelement %[[r97]][%[[c13]] : index] : vector<16xf16>
+    //CHECK: %[[r124:.*]] = vector.extract %[[r97]][13] : f16 from vector<16xf16>
     //CHECK: %[[r125:.*]] = vector.splat %[[r124]] : vector<1x1xf16>
-    //CHECK: %[[r126:.*]] = vector.extractelement %[[r97]][%[[c14]] : index] : vector<16xf16>
+    //CHECK: %[[r126:.*]] = vector.extract %[[r97]][14] : f16 from vector<16xf16>
     //CHECK: %[[r127:.*]] = vector.splat %[[r126]] : vector<1x1xf16>
-    //CHECK: %[[r128:.*]] = vector.extractelement %[[r97]][%[[c15]] : index] : vector<16xf16>
+    //CHECK: %[[r128:.*]] = vector.extract %[[r97]][15] : f16 from vector<16xf16>
     //CHECK: %[[r129:.*]] = vector.splat %[[r128]] : vector<1x1xf16>
 
     //CHECK: %[[r130:.*]] = vector.insert_strided_slice %[[r99]], %[[cst]] {offsets = [0, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
@@ -770,7 +755,7 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[{{.*}} : index] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
 
     //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
@@ -1018,7 +1003,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r222:.*]] = vector.shuffle %[[r218]], %[[r221]] [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r223:.*]] = vector.shuffle %[[r218]], %[[r221]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r224:.*]] = arith.addf %[[r222]], %[[r223]] : vector<32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
 
     //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
@@ -1100,7 +1085,7 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = vector.shuffle %{{.*}}, %{{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
 
     //CHECK-COUNT-8: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
@@ -1124,7 +1109,7 @@ gpu.module @test_kernel {
   //CHECK-SAME(%[[arg0:.*]]: memref<1024x1024xf16>)
   gpu.func @sglevel_softmax_transpose(%a: memref<1024x1024xf16>) {
 
-    //CHECK-COUNT-32: %{{.*}} = vector.extractelement %{{.*}}[%{{.*}} : index] : vector<32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
     //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
     //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [32, 8], strides = [1, 1]} : vector<32x64xf16> to vector<32x8xf16>

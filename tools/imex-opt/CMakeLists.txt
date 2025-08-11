@@ -9,6 +9,9 @@ set(LIBS
         ${mlir_conversion_libs}
         ${mlir_extension_libs}
         MLIRToLLVMIRTranslationRegistration
+        MLIRRegisterAllDialects
+        MLIRRegisterAllPasses
+        MLIRRegisterAllExtensions
         ${imex_dialect_libs}
         ${imex_conversion_libs}
         ${imex_extension_libs}

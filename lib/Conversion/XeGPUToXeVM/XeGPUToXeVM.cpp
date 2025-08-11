@@ -461,20 +461,24 @@ class LoadStoreToXeVMPattern : public OpConversionPattern<OpType> {
     auto tdesc = op.getTensorDescType();
     auto ptrTypeLLVM = LLVM::LLVMPointerType::get(
         ctxt, getNumericXeVMAddrSpace(tdesc.getMemorySpace()));
-    Value basePtrI64 = rewriter.create<arith::IndexCastOp>(
-        loc, rewriter.getI64Type(), adaptor.getTensorDesc());
-    Value basePtrLLVM =
-        rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
     VectorType srcOrDstVecTy = cast<VectorType>(op.getValue().getType());
     VectorType srcOrDstFlatVecTy = VectorType::get(
         srcOrDstVecTy.getNumElements(), srcOrDstVecTy.getElementType());
     if constexpr (std::is_same_v<OpType, LoadGatherOp>) {
+      Value basePtrI64 = rewriter.create<arith::IndexCastOp>(
+          loc, rewriter.getI64Type(), adaptor.getSource());
+      Value basePtrLLVM =
+          rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
       Value loaded =
           rewriter.create<LLVM::LoadOp>(loc, srcOrDstFlatVecTy, basePtrLLVM);
       auto newOp =
           rewriter.create<vector::ShapeCastOp>(loc, srcOrDstVecTy, loaded);
       rewriter.replaceOp(op, newOp);
     } else {
+      Value basePtrI64 = rewriter.create<arith::IndexCastOp>(
+          loc, rewriter.getI64Type(), adaptor.getDest());
+      Value basePtrLLVM =
+          rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
       Value srcFlatVec = rewriter.create<vector::ShapeCastOp>(
           loc, srcOrDstFlatVecTy, op.getValue());
       rewriter.create<LLVM::StoreOp>(loc, srcFlatVec, basePtrLLVM);
@@ -495,7 +499,7 @@ class PrefetchToXeVMPattern : public OpConversionPattern<xegpu::PrefetchOp> {
     auto ptrTypeLLVM = LLVM::LLVMPointerType::get(
         ctxt, getNumericXeVMAddrSpace(tdescTy.getMemorySpace()));
     Value basePtrI64 = rewriter.create<arith::IndexCastOp>(
-        loc, rewriter.getI64Type(), adaptor.getTensorDesc());
+        loc, rewriter.getI64Type(), adaptor.getSource());
     Value ptrLLVM =
         rewriter.create<LLVM::IntToPtrOp>(loc, ptrTypeLLVM, basePtrI64);
     rewriter.create<xevm::PrefetchOp>(

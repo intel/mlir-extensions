@@ -12,20 +12,20 @@ gpu.module @test_kernel {
     %m = arith.muli %block_id_x, %c64 : index
     %n = arith.muli %block_id_y, %c64 : index
 
-    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
-    //CHECK-COUNT-8: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<>>
+    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+    //CHECK-COUNT-8: xegpu.create_nd_tdesc %[[C]][{{.*}}] : memref<1024x1024xf32> -> !xegpu.tensor_desc<32x16xf32>
     %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32> -> !xetile.tile<64x64xf32>
-    //CHECK-COUNT-8: {{.*}} = xegpu.load_nd {{.*}} : !xegpu.tensor_desc<32x16xf32, #xegpu.block_tdesc_attr<>> -> vector<32x16xf32>
+    //CHECK-COUNT-8: {{.*}} = xegpu.load_nd {{.*}} : !xegpu.tensor_desc<32x16xf32> -> vector<32x16xf32>
     %c_init_value = xetile.load_tile %c_init_tile : !xetile.tile<64x64xf32> -> vector<64x64xf32>
     //CHECK-COUNT-4: xegpu.create_nd_tdesc %[[A]][{{.*}}] : memref<1024x1024xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
     %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<64x64xf16>
@@ -67,7 +67,7 @@ gpu.module @test_kernel {
       scf.yield %a_next_tile, %b_next_tile, %c_new_value
         : !xetile.tile<64x64xf16>, !xetile.tile<64x64xf16>, vector<64x64xf32>
     }
-    //CHECK-COUNT-32: xegpu.store_nd {{.*}} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<>>
+    //CHECK-COUNT-32: xegpu.store_nd {{.*}} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
     xetile.store_tile %out#2, %c_init_tile: vector<64x64xf32>, !xetile.tile<64x64xf32>
 
     gpu.return

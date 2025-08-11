@@ -139,7 +139,7 @@ struct VectorLinearizePass final
 
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
-    target.addLegalOp<mlir::vector::ExtractElementOp>();
+    target.addLegalOp<mlir::vector::ExtractOp>();
     target.addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
     patterns.add<UBPoisonOpConversion>(typeConverter, context);

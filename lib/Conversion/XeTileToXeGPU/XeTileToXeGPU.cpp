@@ -492,6 +492,7 @@ public:
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
     auto ldOp = rewriter.create<xegpu::LoadNdOp>(loc, vecTy, adaptor.getTile(),
+                                                 ValueRange(), DenseI64ArrayAttr(),
                                                  packAttr, transAttr,
                                                  bitWidthAttr, L1, L2, L3);
 

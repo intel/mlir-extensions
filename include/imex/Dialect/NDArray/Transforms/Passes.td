@@ -41,7 +41,7 @@ def CoalesceShardOps : Pass<"coalesce-shard-ops"> {
     subview operations.
   }];
   let constructor = "imex::createCoalesceShardOpsPass()";
-  let dependentDialects = ["::mlir::mesh::MeshDialect",
+  let dependentDialects = ["::mlir::shard::ShardDialect",
                            "::mlir::arith::ArithDialect",
                            "::mlir::tensor::TensorDialect",
                            "::mlir::memref::MemRefDialect"];
