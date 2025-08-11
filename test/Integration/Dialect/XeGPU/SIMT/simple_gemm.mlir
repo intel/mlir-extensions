@@ -41,21 +41,18 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
-    %t = gpu.wait async
-    %memref_a, %t1 = gpu.alloc async [%t] () : memref<256x256xf16>
-    %t2 = gpu.memcpy async [%t1] %memref_a, %a : memref<256x256xf16>, memref<256x256xf16>
-    %memref_b, %t3 = gpu.alloc async [%t2] () : memref<256x256xf16>
-    %t4 = gpu.memcpy async [%t3] %memref_b, %b : memref<256x256xf16>, memref<256x256xf16>
-    %memref_c, %t5 = gpu.alloc async [%t4] () : memref<256x256xf32>
-    %t6 = gpu.memcpy async [%t5] %memref_c, %c : memref<256x256xf32>, memref<256x256xf32>
-    %t7 = gpu.launch_func async [%t6] @kernel::@simple_gemm blocks in (%c32, %c16, %c1) threads in (%c16, %c1, %c1) args(%memref_a : memref<256x256xf16>, %memref_b : memref<256x256xf16>, %memref_c : memref<256x256xf32>)
-    gpu.wait [%t6] // Wait for the kernel to finish.
-    %t8 = gpu.wait async
-    %t9 = gpu.memcpy async [%t8] %c, %memref_c : memref<256x256xf32>, memref<256x256xf32>
-    %t10 = gpu.dealloc async [%t9] %memref_a : memref<256x256xf16>
-    %t11 = gpu.dealloc async [%t10] %memref_b : memref<256x256xf16>
-    %t12 = gpu.dealloc async [%t11] %memref_c : memref<256x256xf32>
-    gpu.wait [%t12]
+    %memref_a = gpu.alloc  () : memref<256x256xf16>
+    gpu.memcpy %memref_a, %a : memref<256x256xf16>, memref<256x256xf16>
+    %memref_b = gpu.alloc  () : memref<256x256xf16>
+    gpu.memcpy %memref_b, %b : memref<256x256xf16>, memref<256x256xf16>
+    %memref_c = gpu.alloc  () : memref<256x256xf32>
+    gpu.memcpy %memref_c, %c : memref<256x256xf32>, memref<256x256xf32>
+    gpu.launch_func @kernel::@simple_gemm blocks in (%c32, %c16, %c1) threads in (%c16, %c1, %c1) args(%memref_a : memref<256x256xf16>, %memref_b : memref<256x256xf16>, %memref_c : memref<256x256xf32>)
+    gpu.wait // Wait for the kernel to finish.
+    gpu.memcpy %c, %memref_c : memref<256x256xf32>, memref<256x256xf32>
+    gpu.dealloc %memref_a : memref<256x256xf16>
+    gpu.dealloc %memref_b : memref<256x256xf16>
+    gpu.dealloc %memref_c : memref<256x256xf32>
     return %c : memref<256x256xf32>
   }
 

@@ -30,14 +30,19 @@ module @gemm attributes {gpu.container_module} {
   func.func @test(%src : memref<8x16xf16>) -> memref<8x16xf16> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
-    %memref_src = gpu.alloc host_shared () : memref<8x16xf16>
-    memref.copy %src, %memref_src : memref<8x16xf16> to memref<8x16xf16>
-    %memref_dst = gpu.alloc host_shared () : memref<8x16xf16>
+    %memref_src = gpu.alloc  () : memref<8x16xf16>
+    gpu.memcpy %memref_src, %src : memref<8x16xf16>, memref<8x16xf16>
+    %memref_dst = gpu.alloc  () : memref<8x16xf16>
     %srcc = memref.memory_space_cast %memref_src : memref<8x16xf16> to memref<8x16xf16, 1>
     %dstt = memref.memory_space_cast %memref_dst : memref<8x16xf16> to memref<8x16xf16, 1>
 
     gpu.launch_func @kernel::@load_store_2d blocks in (%c1, %c1, %c1) threads in (%c16, %c1, %c1) args(%srcc : memref<8x16xf16, 1>, %dstt : memref<8x16xf16, 1>)
-    return %memref_dst : memref<8x16xf16>
+    gpu.wait
+    %out = memref.alloc () : memref<8x16xf16>
+    gpu.memcpy %out, %memref_dst : memref<8x16xf16>, memref<8x16xf16>
+    gpu.dealloc %memref_src : memref<8x16xf16>
+    gpu.dealloc %memref_dst : memref<8x16xf16>
+    return %out : memref<8x16xf16>
   }
 
   func.func @main() attributes {llvm.emit_c_interface} {

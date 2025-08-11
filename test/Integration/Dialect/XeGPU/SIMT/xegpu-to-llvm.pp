@@ -7,6 +7,7 @@ builtin.module(
         convert-xevm-to-llvm
 	    cse
     )
+    func.func(gpu-async-region)
     reconcile-unrealized-casts
     convert-vector-to-scf
     convert-scf-to-cf
