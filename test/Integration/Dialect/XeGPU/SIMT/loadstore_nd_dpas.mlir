@@ -33,19 +33,24 @@ module @gemm attributes {gpu.container_module} {
   func.func @test(%a : memref<8x16xf16>, %b : memref<16x16xf16>, %c : memref<8x16xf32>) -> memref<8x16xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
-    %memref_a = gpu.alloc host_shared () : memref<8x16xf16>
-    memref.copy %a, %memref_a : memref<8x16xf16> to memref<8x16xf16>
-    %memref_b = gpu.alloc host_shared () : memref<16x16xf16>
-    memref.copy %b, %memref_b : memref<16x16xf16> to memref<16x16xf16>
-    %memref_c = gpu.alloc host_shared () : memref<8x16xf32>
-    memref.copy %c, %memref_c : memref<8x16xf32> to memref<8x16xf32>
+    %memref_a = gpu.alloc  () : memref<8x16xf16>
+    gpu.memcpy %memref_a, %a : memref<8x16xf16>, memref<8x16xf16>
+    %memref_b = gpu.alloc  () : memref<16x16xf16>
+    gpu.memcpy %memref_b, %b : memref<16x16xf16>, memref<16x16xf16>
+    %memref_c = gpu.alloc  () : memref<8x16xf32>
+    gpu.memcpy %memref_c, %c : memref<8x16xf32>, memref<8x16xf32>
 
     %a_gpu = memref.memory_space_cast %memref_a : memref<8x16xf16> to memref<8x16xf16, 1>
     %b_gpu = memref.memory_space_cast %memref_b : memref<16x16xf16> to memref<16x16xf16, 1>
     %c_gpu = memref.memory_space_cast %memref_c : memref<8x16xf32> to memref<8x16xf32, 1>
 
     gpu.launch_func @kernel::@load_store_2d_dpas blocks in (%c1, %c1, %c1) threads in (%c16, %c1, %c1) args(%a_gpu : memref<8x16xf16, 1>, %b_gpu : memref<16x16xf16, 1>, %c_gpu : memref<8x16xf32, 1>)
-    return %memref_c : memref<8x16xf32>
+    gpu.wait
+    gpu.memcpy %c, %memref_c : memref<8x16xf32>, memref<8x16xf32>
+    gpu.dealloc %memref_a : memref<8x16xf16>
+    gpu.dealloc %memref_b : memref<16x16xf16>
+    gpu.dealloc %memref_c : memref<8x16xf32>
+    return %c : memref<8x16xf32>
   }
 
   func.func @main() attributes {llvm.emit_c_interface} {

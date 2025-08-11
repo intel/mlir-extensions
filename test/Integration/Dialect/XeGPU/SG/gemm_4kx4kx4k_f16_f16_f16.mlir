@@ -12,23 +12,20 @@ module @gemm attributes {gpu.container_module} {
     %c64 = arith.constant 64 : index
     %c128 = arith.constant 128 : index
     %c512 = arith.constant 512 : index
-    %t0 = gpu.wait async
-    %A_gpu, %t1 = gpu.alloc async [%t0] () : memref<4096x4096xf16>
-    %t2 = gpu.memcpy async [%t1] %A_gpu, %A : memref<4096x4096xf16>, memref<4096x4096xf16>
-    %B_gpu, %t3 = gpu.alloc  async [%t2] () : memref<4096x4096xf16>
-    %t4 = gpu.memcpy async [%t3] %B_gpu, %B : memref<4096x4096xf16>, memref<4096x4096xf16>
-    %C_gpu, %t5 = gpu.alloc async [%t4]  () : memref<4096x4096xf16>
-    %t6 = gpu.memcpy async [%t5] %C_gpu, %C : memref<4096x4096xf16>, memref<4096x4096xf16>
+    %A_gpu = gpu.alloc () : memref<4096x4096xf16>
+    gpu.memcpy %A_gpu, %A : memref<4096x4096xf16>, memref<4096x4096xf16>
+    %B_gpu = gpu.alloc () : memref<4096x4096xf16>
+    gpu.memcpy %B_gpu, %B : memref<4096x4096xf16>, memref<4096x4096xf16>
+    %C_gpu = gpu.alloc () : memref<4096x4096xf16>
+    gpu.memcpy %C_gpu, %C : memref<4096x4096xf16>, memref<4096x4096xf16>
     // NOTE: Here we can't use [8, 64] wi threads following the SG thread layout of [8, 4]. Because runtime will linearize the x dimension first (we need y dimension to be linearized first).
     // So just use linearized thread layout of [512, 1] wi threads.
-    %t7 = gpu.launch_func async [%t6]  @test_kernel::@test_kernel blocks in (%c16, %c16, %c1) threads in (%c512, %c1, %c1) args(%A_gpu : memref<4096x4096xf16>, %B_gpu : memref<4096x4096xf16>, %C_gpu : memref<4096x4096xf16>)
-    gpu.wait [%t7] // Wait for the kernel to finish.
-    %t12 = gpu.wait async
-    %t8 = gpu.memcpy async [%t12] %C, %C_gpu : memref<4096x4096xf16>, memref<4096x4096xf16>
-    %t9 = gpu.dealloc async [%t8]  %A_gpu : memref<4096x4096xf16>
-    %t10 = gpu.dealloc async [%t9] %B_gpu : memref<4096x4096xf16>
-    %t11 = gpu.dealloc async [%t10] %C_gpu : memref<4096x4096xf16>
-    gpu.wait [%t11]
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c16, %c16, %c1) threads in (%c512, %c1, %c1) args(%A_gpu : memref<4096x4096xf16>, %B_gpu : memref<4096x4096xf16>, %C_gpu : memref<4096x4096xf16>)
+    gpu.wait  // Wait for the kernel to finish.
+    gpu.memcpy %C, %C_gpu : memref<4096x4096xf16>, memref<4096x4096xf16>
+    gpu.dealloc %A_gpu : memref<4096x4096xf16>
+    gpu.dealloc %B_gpu : memref<4096x4096xf16>
+    gpu.dealloc %C_gpu : memref<4096x4096xf16>
     return %C : memref<4096x4096xf16>
   }
 
