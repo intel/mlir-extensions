@@ -100,7 +100,7 @@ static T getBaseShardDimOff(T shard, T numShards, T extend) {
 }
 
 static Sharding ShardingFromOption(const ShardingOption &option,
-                                       MLIRContext *ctxt) {
+                                   MLIRContext *ctxt) {
   SmallVector<GridAxesAttr> res;
   for (const auto &v : option.shardingArray) {
     res.emplace_back(GridAxesAttr::get(ctxt, v));
@@ -141,7 +141,8 @@ getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
       ShapedType::isDynamicShape(strides))
     return op->emitOpError("Dynamic offsets/sizes/strides are not supported");
 
-  auto arySharding = aryShardOp.getSharding().getDefiningOp<shard::ShardingOp>();
+  auto arySharding =
+      aryShardOp.getSharding().getDefiningOp<shard::ShardingOp>();
   // currently no support for sharding dims sizes on input
   if (!arySharding.getStaticShardedDimsOffsets().empty())
     return op->emitOpError(
@@ -190,10 +191,9 @@ getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
     }
   }
 
-  return Sharding::get(
-      arySharding.getGridAttr(), arySharding.getSplitAxes().getAxes(),
-      {}, // static halo
-      splitOffs, {}, {});
+  return Sharding::get(arySharding.getGridAttr(),
+                       arySharding.getSplitAxes().getAxes(), {}, // static halo
+                       splitOffs, {}, {});
 }
 
 static std::pair<Value, Value>

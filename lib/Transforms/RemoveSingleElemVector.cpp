@@ -33,8 +33,7 @@ namespace {
 
 struct VectorExtractOpConversion final
     : public mlir::OpConversionPattern<mlir::vector::ExtractOp> {
-  using mlir::OpConversionPattern<
-      mlir::vector::ExtractOp>::OpConversionPattern;
+  using mlir::OpConversionPattern<mlir::vector::ExtractOp>::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::vector::ExtractOp extractOp, OpAdaptor adaptor,
@@ -84,8 +83,8 @@ struct VectorExtractStridedSliceConversion final
 
     // We only convert ops extracting a single element from a 1D vector.
     if (resType.getNumElements() == 1 && srcVector.getType().getRank() == 1) {
-      rewriter.replaceOpWithNewOp<mlir::vector::ExtractOp>(
-          extractOp, srcVector, offsets[0]);
+      rewriter.replaceOpWithNewOp<mlir::vector::ExtractOp>(extractOp, srcVector,
+                                                           offsets[0]);
       return mlir::success();
     }
     return mlir::failure();
@@ -122,9 +121,8 @@ struct VectorizableOpPattern final
 };
 
 template <typename OpTy>
-static mlir::Value
-createInsertOps(OpTy op, mlir::ValueRange operands,
-                       mlir::ConversionPatternRewriter &rewriter) {
+static mlir::Value createInsertOps(OpTy op, mlir::ValueRange operands,
+                                   mlir::ConversionPatternRewriter &rewriter) {
   auto loc = op.getLoc();
   auto type = op.getType();
   auto elemType = type.getElementType();
@@ -139,8 +137,7 @@ createInsertOps(OpTy op, mlir::ValueRange operands,
   mlir::Value newOp =
       rewriter.create<mlir::arith::ConstantOp>(loc, type, denseAttr);
   for (auto [i, opr] : llvm::enumerate(operands)) {
-    newOp =
-        rewriter.create<mlir::vector::InsertOp>(loc, opr, newOp, i);
+    newOp = rewriter.create<mlir::vector::InsertOp>(loc, opr, newOp, i);
   }
   return newOp;
 }
@@ -267,7 +264,8 @@ struct RemoveSingleElemVectorPass final
         return mlir::Value();
 
       return builder
-          .create<mlir::vector::ExtractOp>(loc, inputs[0], builder.getIndexAttr(0))
+          .create<mlir::vector::ExtractOp>(loc, inputs[0],
+                                           builder.getIndexAttr(0))
           .getResult();
     };
 
