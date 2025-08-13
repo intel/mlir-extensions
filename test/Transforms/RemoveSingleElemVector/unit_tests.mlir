@@ -60,7 +60,7 @@ module {
       %42 = math.exp %26 : vector<1xf16>
       %43 = math.exp %27 : vector<1xf16>
       %c0_i32 = arith.constant 0 : i32
-      // CHECK-COUNT-16: %{{.*}} = vector.splat %{{.*}} : vector<16xf16>
+      // CHECK-COUNT-16: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<16xf16>
       %44 = vector.extract %28[0] : f16 from vector<1xf16>
       %45 = vector.splat %44 : vector<16xf16>
       %46 = vector.extract %29[0] : f16 from vector<1xf16>

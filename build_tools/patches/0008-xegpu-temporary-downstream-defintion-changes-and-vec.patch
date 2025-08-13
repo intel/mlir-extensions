@@ -14,7 +14,7 @@ index 7f4d4f1381df..ebd4f1a3f66a 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 @@ -373,6 +373,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
-                        OptionalAttr<DenseI64ArrayAttr>: $const_offsets,  
+                        OptionalAttr<DenseI64ArrayAttr>: $const_offsets,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
 +                       OptionalAttr<I32Attr>: $transpose_bit_width,
@@ -24,7 +24,7 @@ index 7f4d4f1381df..ebd4f1a3f66a 100644
 @@ -1147,4 +1148,9 @@ def XeGPU_ConvertLayoutOp: XeGPU_Op<"convert_layout", [Pure, AllTypesMatch<["sou
      let hasCanonicalizer = 1;
  }
- 
+
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
 +  let summary = "prevents the compiler from scheduling.";
 +  let assemblyFormat = [{ attr-dict }];
@@ -68,27 +68,26 @@ index 33450f3fa229..528b9d55ee61 100644
 +         kind == CachePolicy::STREAMING ||
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
- 
+
 @@ -419,8 +420,8 @@ void LoadNdOp::build(OpBuilder &builder, OperationState &state, Type retType,
                       xegpu::CachePolicyAttr l3_hint) {
- 
+
    return build(builder, state, retType, tensorDesc, ValueRange(),
 -               DenseI64ArrayAttr(), packed, transpose, l1_hint, l2_hint,
 -               l3_hint);
 +               DenseI64ArrayAttr(), packed, transpose, nullptr,
 +               l1_hint, l2_hint, l3_hint);
  }
- 
+
  LogicalResult LoadNdOp::verify() {
 @@ -482,7 +483,7 @@ LogicalResult LoadNdOp::verify() {
        mlir::emitWarning(getLoc()) << "Invalid transpose attr. It is ignored.";
    }
- 
+
 -  if (getPacked()) {
 +  if (getPacked() || getTransposeBitWidth() == 32) {
      if (tdescTy.getRank() == 2) {
        const int axis = 0;
        auto vnni_factor = valueShape.back();
--- 
+--
 2.34.1
-

@@ -1198,9 +1198,9 @@ public:
     // auto l2hint = op.getL2Hint();
     auto l3hint = op.getL3Hint();
 
-    auto callOp = genPrefetchIntrinsicCall(rewriter, loc, simd_lanes, l1hint,
-                                           l3hint, elemTy, chunkSize, scope,
-                                           adaptor.getSource());
+    auto callOp =
+        genPrefetchIntrinsicCall(rewriter, loc, simd_lanes, l1hint, l3hint,
+                                 elemTy, chunkSize, scope, adaptor.getSource());
 
     rewriter.replaceOp(op, callOp);
     return success();
