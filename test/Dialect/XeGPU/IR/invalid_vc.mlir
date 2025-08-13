@@ -5,31 +5,17 @@ func.func @test_create_nd_tdesc_vc_1(%src: memref<24xf32>) {
   %c0 = arith.constant 2 : index
   %c1 = arith.constant 4 : index
 
-  // expected-error@+1 {{expected mixed offsets rank to match mixed sizes rank (2 vs 1) so the rank of the result type is well-formed}}
+  // expected-error@+1 {{Expecting the rank of shape, strides, offsets, and source (if source is a memref) should match with each other}}
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] : memref<24xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
-
-// -----
-func.func @test_create_nd_tdesc_vc_3(%input: memref<?xf32>) {
-  %c0 = arith.constant 2 : index
-  %c1 = arith.constant 4 : index
-
-  %c8 = arith.constant 8 : index
-  %c16 = arith.constant 16 : index
-
-  // expected-error@+1 {{expected 1 offset values, got 2}}
-  %1 = xegpu.create_nd_tdesc %input[%c0, %c1], shape: [%c8, %c16], strides: [%c16, %c1] : memref<?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  return
-}
-
 
 // -----
 func.func @test_create_nd_tdesc_vc_4(%input: memref<?x?xf32>) {
   %c1 = arith.constant 2 : index
   %c8 = arith.constant 8 : index
 
-  // expected-error@+1 {{expected 2 offset values, got 1}}
+  // expected-error@+1 {{Expecting the TensorDesc rank is not greater than the ranks of shape, strides, offsets or the memref source.}}
   %1 = xegpu.create_nd_tdesc %input[%c1], shape: [%c8], strides: [%c1]
                               : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return

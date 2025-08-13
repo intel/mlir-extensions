@@ -14,7 +14,7 @@ index 7f4d4f1381df..ebd4f1a3f66a 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 @@ -373,6 +373,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
-                        OptionalAttr<DenseI64ArrayAttr>: $const_offsets,  
+                        OptionalAttr<DenseI64ArrayAttr>: $const_offsets,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
 +                       OptionalAttr<I32Attr>: $transpose_bit_width,
