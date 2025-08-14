@@ -354,9 +354,9 @@ To represent a matrix stored in shared local memory (SLM), users must create a m
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
 |create_matrix_desc	| operation ::= xegpu.create_matrix_desc $mref attr-dict :type($mref), type(\$mdesc)	| %mdesc_a = xegpu.create_matrix_desc %m: memref<65536xi8, 3> -> matrix_desc<256x128xbf16> |
-|matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview \$mdesc, DynamicIndexList<\$coord>  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16, @stride=[256,1],  @block=[8, 16]> -> matrix_desc<128x128xbf16, @stride=[256,1],  @block=[8, 16]> |
-|load_matrix	| operation ::= xegpu.load_matrix  $mdesc attr-dict : type($mdesc), {type(coords)} -> type($res)	| %result = xegpu.load_matrix %mdesc : matrix_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
-|store_matrix	| operation ::= xegpu.store_matrix  $mdesc, $val attr-dict : type($mdesc), {type(coords)}, type($val)	| %result = xegpu.store_matrix %mdesc, %val : matrix_desc<128x256xbf16, @block=[8, 16]>, vector<128x256xbf16> |
+|matrix_desc_subview	| operation ::= xegpu.matrix_desc_subview $mdesc[$offsets]  attr-dict : type(\$mdesc) -> type(\$mdesc)	| %mdesc_coop = xegpu.matrix_desc_subview %mdesc[128, 0]:matrix_desc<256x256xbf16, @stride=[256,1],  @block=[8, 16]> -> matrix_desc<128x128xbf16, @stride=[256,1],  @block=[8, 16]> |
+|load_matrix	| operation ::= xegpu.load_matrix $mdesc[$offsets] attr-dict : type($mdesc), type(offsets) -> type($res)	| %result = xegpu.load_matrix %mdesc[0, 0] : matrix_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
+|store_matrix	| operation ::= xegpu.store_matrix $val, $mdesc[$offsets] attr-dict : type($val), type($mdesc), type(offsets) 	| %result = xegpu.store_matrix %val %mdesc[0, 0] : vector<128x256xbf16>, matrix_desc<128x256xbf16, @block=[8, 16]> |
 
 Users create a `matrix_desc` to represent a matrix stored in shared local memory (SLM). The operation takes a memory buffer (1D int8 memref with empty layout) and create a structured representation of the share local memory. The result matrix_desc has proper information including shape, element type, and memory layout attributes (@block and @strides). The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
 
@@ -377,12 +377,14 @@ Users can create a subview of a matrix_desc to represent a sliced or partitioned
 ```
 Users can load a matrix from shared local memory into a vector value using the load_matrix operation. The result is a vector type in the IR, representing a tile stored in registers.
 ```mlir
-vec_a = load_matrix matrix_desc_a: matrix_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
+vec_a = load_matrix matrix_desc_a[0, 0]: matrix_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
+%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0] : matrix_desc<256x32xf16, @block=[16, 16]> -> vector<32x32xf16>
 ```
 
 Users can store a matrix from a vector value into shared local memory using the store_matrix operation.
 ```mlir
-store_matrix matrix_desc_b, vec_a :matrix_desc<256x128xbf16, @block=[8, 16]>, vector<256x128xbf6>
+store_matrix vec_a, matrix_desc_b[0, 0] : vector<256x128xbf6>, matrix_desc<256x128xbf16, @block=[8, 16]>
+xegpu.store_matrix %at, %mt[%sg_idy * 8, %sg_idx * 32] : vector<8x32xf16>, matrix_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 ```
 
 **Cooperative Transpose Example**
