@@ -337,7 +337,7 @@ To streamline programming of shared local memory (SLM) on Intel Xe architecture,
 
 On Xe2 GPUs, SLM remains accessible for direct use by programmers. However, in tile-based programming — particularly when applying layout transformations such as transpose, re-layout — SLM is more commonly used as a backing store to facilitate structured tile movement across subgroups and lanes.
 
-Prior to the introduction of mem_desc, SLM usage was modeled using the nd_tdesc type, which was originally designed for global memory access. As such, it lacked layout-specific attributes like blocking and stride metadata, which are essential for modeling tiled or transposed views in SLM. Developers were responsible for manually computing physical addresses — a process that became particularly complex when applying transformations such as transpose or blocking as required by chunked load or 1D block load. 
+Prior to the introduction of mem_desc, SLM usage was modeled using the nd_tdesc type, which was originally designed for global memory access. As such, it lacked layout-specific attributes like blocking and stride metadata, which are essential for modeling tiled or transposed views in SLM. Developers were responsible for manually computing physical addresses — a process that became particularly complex when applying transformations such as transpose or blocking as required by chunked load or 1D block load.
 
 This complexity was further compounded by hierarchical distribution, where workgroup-level tiles are subdivided across subgroups, instructions, and individual lanes — each step requiring separate address transformation logic. This made the code error-prone and difficult to optimize.
 
@@ -349,7 +349,7 @@ This separation simplifies distribution and unrolling passes and enables systema
 
 **Basic Usage**
 
-To represent a matrix stored in shared local memory (SLM), users must create a mem_desc object. Create_mem_desc initializes a mem_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). The mem_desc_subview creates a subview on top of the mem_desc, inheriting all of its layout attributes. Load_matrix and store_matrix perform data movement between SLM and vector registers. xegpu.layout attribute is added to load_matrix and store_matrix to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix. 
+To represent a matrix stored in shared local memory (SLM), users must create a mem_desc object. Create_mem_desc initializes a mem_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). The mem_desc_subview creates a subview on top of the mem_desc, inheriting all of its layout attributes. Load_matrix and store_matrix perform data movement between SLM and vector registers. xegpu.layout attribute is added to load_matrix and store_matrix to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
@@ -364,7 +364,7 @@ Users create a `mem_desc` to represent a matrix stored in shared local memory (S
 %mdesc_a = xegpu.create_mem_desc: mem_desc<256x128xbf16>
 %mdesc_b = xegpu.create_mem_desc %m : memref<16384xi8, 3>-> mem_desc<32x256xf16, @strides=[1, 32]>
 ```
-Users can create a subview of a mem_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. Subview inherits memory layout attributes from the base mem_desc. For GEMM use case, matrix operations typically work on 2D mem_desc. If the original matrix is higher-dimensional, it can be subviewed to a 2D shape before it is used with these operations. 
+Users can create a subview of a mem_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. Subview inherits memory layout attributes from the base mem_desc. For GEMM use case, matrix operations typically work on 2D mem_desc. If the original matrix is higher-dimensional, it can be subviewed to a 2D shape before it is used with these operations.
 
 ```mlir
 %mdesc_a = xegpu.mem_desc_subview %mdescs_a[%mma_cycle_i, 0, 0]
@@ -395,7 +395,7 @@ This example demonstrates a cooperative transpose pattern in which a matrix tile
 
 %at = xegpu.load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
 %a = vector.transpose %1 {layout_result_0 = #Coop_wg}: vector<32x256xf16> to vector<256x32xf16>
-%a_dpas = xegpu.conv_layout %2 <{from = #Coop_wg, to = #dpas_wg}>: vector<256x32xf16> 
+%a_dpas = xegpu.conv_layout %2 <{from = #Coop_wg, to = #dpas_wg}>: vector<256x32xf16>
 ```
 In this flow:
 
@@ -411,7 +411,7 @@ The code is transformed to use store_matrix and load_matrix to implement the tra
 
 It is generally preferred to detect the “transpose + convert_layout” pattern and fuse them earlier in the pipeline, as this affects the blocking strategy for load_matrix and store_matrix (which are the lowered forms of the logical layout conversion and transpose). Early fusion enables better alignment with optimal hardware load instructions.
 
-```mlir 
+```mlir
 #Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], order = [0, 1] }  // original layout
 #dpas_t_wg  = { sg_layout = [8, 4], sg_data = [32, 32], order = [1, 0] } // target DPAS layout
 
@@ -427,7 +427,7 @@ gpu.barrier
 **Layout Assignment**
 ***Basic Blocking: Using regular load and store instruction***
 
-In this example, the xegpu.layout is extended to support instruction-level blocking. The basic blocking assumes 16 lanes, and each lane handles 2 f16 elements (32 bits). This basic instruction blocking does not try to block memory layout. It lowers to instructions like chunked store and load_gather. 
+In this example, the xegpu.layout is extended to support instruction-level blocking. The basic blocking assumes 16 lanes, and each lane handles 2 f16 elements (32 bits). This basic instruction blocking does not try to block memory layout. It lowers to instructions like chunked store and load_gather.
 
 ```mlir
 #Coop_t_wg  = { sg_layout = [4, 8], sg_data = [8, 32], inst_data = [1, 32], order = [0, 1] }
@@ -553,19 +553,19 @@ Key Concepts:
 // Compute blocked offset vectors for SLM store
 %blk_y=sg_idy*8 /16: index
 %blk_in_y=sg_idy*8 %16: index
-%sg_idx_vec = %sg_idx*32 + [0..15] : vector<16xindex> 
-%blk_x=%sg_idx_vec /16: vector<16xindex > 
+%sg_idx_vec = %sg_idx*32 + [0..15] : vector<16xindex>
+%blk_x=%sg_idx_vec /16: vector<16xindex >
 %blk_in_x=%sg_idx_vec %16: vector<16xindex >
 
 // calculate physic addresses with pre-computed strides of the blocked matrix.
-// [32x256, strides=1x32] blocked as [2x16x16x16, strides=256x512x1x16] 
+// [32x256, strides=1x32] blocked as [2x16x16x16, strides=256x512x1x16]
 %offset_vec0 = %blk_y * 256+ + %blk_x * 512 + %blk_in_y + %blk_in_x*16
 xegpu.store %at0_t, %m, %offset_vec0 @chunk_size=8: vector<16x8xf16>, memref<8192xf16, 3>, vector<16xindex>
 
 // Repeat for second tile
 %at1_t = vector.transpose %at1 : vector<8x16xf16> -> vector<16x8xf16>
-%sg_idx_vec2 = %sg_idx*32 + [16..31] : vector<16xindex> 
-%blk_x2=%sg_idx_vec2 /16: vector<16xindex > 
+%sg_idx_vec2 = %sg_idx*32 + [16..31] : vector<16xindex>
+%blk_x2=%sg_idx_vec2 /16: vector<16xindex >
 %blk_in_x2=%sg_idx_vec2 %16: vector<16xindex >
 %offset_vec1 = %blk_y * 256+ + %blk_x2 * 512 + %blk_in_y+ %blk_in_x2*16
 xegpu.store %at1_t, %m, %offset_vec1: @chunk_size=8: vector<16x8xf16>, memref<8192xf16, 3>, vector<16xindex>
