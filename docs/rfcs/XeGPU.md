@@ -349,7 +349,7 @@ This separation simplifies distribution and unrolling passes and enables systema
 
 **Basic Usage**
 
-To represent a matrix stored in shared local memory (SLM), users must create a mem_desc object. Create_mem_desc initializes a mem_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). The mem_desc_subview creates a subview on top of the mem_desc, inheriting all of its layout attributes. Load_matrix and store_matrix performs data movement between SLM and vector registers. xegpu.layout attribute is added to load_matrix and store_matrix to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix. 
+To represent a matrix stored in shared local memory (SLM), users must create a mem_desc object. Create_mem_desc initializes a mem_desc instance with memory layout attributes such as @block and @stride. These attributes define the blocking and striding parameters, which govern physical address computation when accessing shared local memory (SLM). The mem_desc_subview creates a subview on top of the mem_desc, inheriting all of its layout attributes. Load_matrix and store_matrix perform data movement between SLM and vector registers. xegpu.layout attribute is added to load_matrix and store_matrix to specify the mapping of lanes and registers to fragments of the matrix, guiding tile distribution based on the assumed row-major view of the matrix. 
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
@@ -362,7 +362,7 @@ Users create a `mem_desc` to represent a matrix stored in shared local memory (S
 
 ```mlir
 %mdesc_a = xegpu.create_mem_desc: mem_desc<256x128xbf16>
-%mdesc_b = xegpu. create_mem_desc %m : memref<16384xi8, 3>-> mem_desc<32x256xf16, @strides=[1, 32]>
+%mdesc_b = xegpu.create_mem_desc %m : memref<16384xi8, 3>-> mem_desc<32x256xf16, @strides=[1, 32]>
 ```
 Users can create a subview of a mem_desc to represent a sliced or partitioned view of the original matrix. Subviews may reduce the rank of the matrix, allowing users to extract a lower-dimensional matrix from a higher-dimensional one. Subview inherits memory layout attributes from the base mem_desc. For GEMM use case, matrix operations typically work on 2D mem_desc. If the original matrix is higher-dimensional, it can be subviewed to a 2D shape before it is used with these operations. 
 
@@ -393,9 +393,9 @@ This example demonstrates a cooperative transpose pattern in which a matrix tile
 #Coop_wg = {sg_layout = [8, 4] , sg_data= [32, 8], order=[1, 0] }
 #dpas_wg = {sg_layout = [8, 4],  sg_data= [32, 32], order=[1, 0] }
 
-%at = load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
+%at = xegpu.load_nd %tdesc: tensor_desc<32x256xf16, #Coop_t_wg> -> vector<32x256xf16>
 %a = vector.transpose %1 {layout_result_0 = #Coop_wg}: vector<32x256xf16> to vector<256x32xf16>
-%a_dpas = Conv_layout %2 <{from = #Coop_wg, to = #dpas_wg}>: vector<256x32xf16> 
+%a_dpas = xegpu.conv_layout %2 <{from = #Coop_wg, to = #dpas_wg}>: vector<256x32xf16> 
 ```
 In this flow:
 
