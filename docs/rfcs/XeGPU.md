@@ -360,8 +360,6 @@ To represent a matrix stored in shared local memory (SLM), users must create a m
 
 Users create a `mem_desc` to represent a matrix stored in shared local memory (SLM). The operation takes a memory buffer (1D int8 memref with empty layout) and create a structured representation of the share local memory. The result mem_desc has proper information including shape, element type, and memory layout attributes (@block and @strides). The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
 
-When there is no input memref operand, it allocates SLM for the matrix, assuming a row-major contiguous layout.
-
 ```mlir
 %mdesc_a = xegpu.create_mem_desc: mem_desc<256x128xbf16>
 %mdesc_b = xegpu. create_mem_desc %m : memref<16384xi8, 3>-> mem_desc<32x256xf16, @strides=[1, 32]>
