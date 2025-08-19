@@ -41,7 +41,6 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   ndarray::registerAllExtensions(registry);
   // Register all external models.
   region::registerBufferizableOpInterfaceExternalModels(registry);
-  xevm::registerXeVMTargetInterfaceExternalModels(registry);
 }
 
 /// Append all the IMEX dialects to the registry contained in the given context.
