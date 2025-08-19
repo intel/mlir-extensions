@@ -118,4 +118,19 @@ extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMaxErrorF32(UnrankedMemRefType<float> *M,
                               UnrankedMemRefType<float> *N);
 
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_gemmF16F16F16(UnrankedMemRefType<f16> *A,
+                           UnrankedMemRefType<f16> *B,
+                           UnrankedMemRefType<float> *C);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_gemmF16F16F32(UnrankedMemRefType<f16> *A,
+                           UnrankedMemRefType<f16> *B,
+                           UnrankedMemRefType<float> *C);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_gemmBF16BF16F32(UnrankedMemRefType<bf16> *A,
+                             UnrankedMemRefType<bf16> *B,
+                             UnrankedMemRefType<float> *C);
+
 #endif // IMEX_EXECUTIONENGINE_IMEXRUNNERUTILS_H

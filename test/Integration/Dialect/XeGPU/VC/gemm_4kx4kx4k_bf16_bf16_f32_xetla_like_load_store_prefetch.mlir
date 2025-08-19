@@ -507,34 +507,6 @@ module @gemm attributes {gpu.container_module} {
     }
   }
 
-  // compute CPU reference (takes minutes)
-  func.func @cpu_reference(%A : memref<4096x4096xbf16>, %B : memref<4096x4096xbf16>, %C : memref<4096x4096xf32>) {
-    %c4096 = arith.constant 4096 : index
-    %c16 = arith.constant 16 : index
-    %c1 = arith.constant 1 : index
-    %c0 = arith.constant 0 : index
-    scf.for %i = %c0 to %c4096 step %c1 {
-      scf.for %j = %c0 to %c4096 step %c1 {
-        %c_curr = memref.load %C[%i, %j] : memref<4096x4096xf32>
-        %c_val = scf.for %k_tile = %c0 to %c4096 step %c16 iter_args(%c_partial = %c_curr) -> f32 {
-          %c_val_dpas = scf.for %k = %c0 to %c16 step %c1 iter_args(%c_dpas_partial = %c_partial) -> f32 {
-            %k_dpas = arith.addi %k_tile, %k : index
-            %a_val = memref.load %A[%i, %k_dpas] : memref<4096x4096xbf16>
-            %b_val = memref.load %B[%k_dpas, %j] : memref<4096x4096xbf16>
-            %a_cast = arith.extf %a_val : bf16 to f32
-            %b_cast = arith.extf %b_val : bf16 to f32
-            %t = arith.mulf %a_cast, %b_cast : f32
-            %c_sum = arith.addf %t, %c_dpas_partial : f32
-            scf.yield %c_sum : f32
-          }
-          scf.yield %c_val_dpas : f32
-        }
-        memref.store %c_val , %C[%i, %j] : memref<4096x4096xf32>
-      }
-    }
-    return
-  }
-
   func.func @main() attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
@@ -596,16 +568,18 @@ module @gemm attributes {gpu.container_module} {
       }
     }
 
-    // run GPU
+    // Run GPU
     %2 = call @test(%A, %B, %C) : (memref<4096x4096xbf16>, memref<4096x4096xbf16>, memref<4096x4096xf32>) -> memref<4096x4096xf32>
-
-    // run CPU
-    call @cpu_reference(%A, %B, %C_ref) : (memref<4096x4096xbf16>, memref<4096x4096xbf16>, memref<4096x4096xf32>) -> ()
-
     %cast_C = memref.cast %2 : memref<4096x4096xf32> to memref<*xf32>
-    %cast_C_ref = memref.cast %C_ref : memref<4096x4096xf32> to memref<*xf32>
+
+    // Run CPU.
+    %A_cast = memref.cast %A : memref<4096x4096xbf16> to memref<*xbf16>
+    %B_cast = memref.cast %B : memref<4096x4096xbf16> to memref<*xbf16>
+    %C_cast = memref.cast %C_ref : memref<4096x4096xf32> to memref<*xf32>
+    call @gemmBF16BF16F32(%A_cast, %B_cast, %C_cast) : (memref<*xbf16>, memref<*xbf16>, memref<*xf32>) -> ()
+
     // CHECK: [ALLCLOSE: TRUE]
-    call @printAllcloseF32(%cast_C, %cast_C_ref) : (memref<*xf32>, memref<*xf32>) -> ()
+    call @printAllcloseF32(%cast_C, %C_cast) : (memref<*xf32>, memref<*xf32>) -> ()
     memref.dealloc %A : memref<4096x4096xbf16>
     memref.dealloc %B : memref<4096x4096xbf16>
     memref.dealloc %C : memref<4096x4096xf32>
@@ -617,5 +591,6 @@ module @gemm attributes {gpu.container_module} {
   func.func private @printAllcloseBF16(memref<*xbf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @fillResource1DRandomBF16(memref<*xbf16>, f32, f32, i1) attributes {llvm.emit_c_interface}
+  func.func private @gemmBF16BF16F32(memref<*xbf16>, memref<*xbf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
 
 }
