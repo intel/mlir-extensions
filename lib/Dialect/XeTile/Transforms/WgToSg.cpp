@@ -191,6 +191,9 @@ public:
             globalOffsets.push_back(globalOffset);
           }
         };
+
+    if(offsets.size() < 2)
+      return failure();
     // Look up the map if the init_tile has a layout_order [0, 1]
     // If it does, tranpose the sg ids to get the correct tile.
     auto it = sgLayoutMap.find(op.getResult());
