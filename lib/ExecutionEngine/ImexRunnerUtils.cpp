@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/ExecutionEngine/ImexRunnerUtils.h"
+#include "mlir/ExecutionEngine/CRunnerUtils.h"
+#include "mlir/ExecutionEngine/Float16bits.h"
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -239,6 +241,89 @@ void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
             << '\n';
 }
 
+template <typename ABTy, typename CTy>
+void _mlir_ciface_gemm(UnrankedMemRefType<ABTy> *A, UnrankedMemRefType<ABTy> *B,
+                       UnrankedMemRefType<float> *C) {
+  DynamicMemRefType<ABTy> DA = DynamicMemRefType<ABTy>(*A);
+  DynamicMemRefType<ABTy> DB = DynamicMemRefType<ABTy>(*B);
+  DynamicMemRefType<float> DC = DynamicMemRefType<float>(*C);
+  if (DA.rank != 2 || DB.rank != 2 || DC.rank != 2) {
+    std::cout << "Expecting 2D memrefs, got A rank: " << DA.rank
+              << ", B rank: " << DB.rank << ", C rank: " << DC.rank << '\n';
+    return;
+  }
+  if (DA.sizes[1] != DB.sizes[0] || DA.sizes[0] != DC.sizes[0] ||
+      DB.sizes[1] != DC.sizes[1]) {
+    std::cout << "Incompatible matrix dimensions: A: [" << DA.sizes[0] << ", "
+              << DA.sizes[1] << "], B: [" << DB.sizes[0] << ", " << DB.sizes[1]
+              << "], C: [" << DC.sizes[0] << ", " << DC.sizes[1] << "]\n";
+    return;
+  }
+  if ((DA.strides[0] != DA.sizes[1]) || (DA.strides[1] != 1) ||
+      (DB.strides[0] != DB.sizes[1]) || (DB.strides[1] != 1) ||
+      (DC.strides[0] != DC.sizes[1]) || (DC.strides[1] != 1)) {
+    std::cout << "Expecting A strides to be [M, 1], B strides to be [K, 1], C "
+                 "strides to be [M, 1]\n";
+    return;
+  }
+  int M = DA.sizes[0];
+  int N = DB.sizes[1];
+  int K = DA.sizes[1];
+
+  float *storageA = (float *)malloc(M * K * sizeof(float));
+  float *storageB = (float *)malloc(K * N * sizeof(float));
+  float *storageC = (float *)malloc(M * N * sizeof(float));
+
+  DynamicMemRefIterator<ABTy> aIt(DA);
+  for (int i = 0; i < M * K; ++i) {
+    storageA[i] = getFloat(*aIt);
+    ++aIt;
+  }
+
+  DynamicMemRefIterator<ABTy> bIt(DB);
+  for (int i = 0; i < K * N; ++i) {
+    storageB[i] = getFloat(*bIt);
+    ++bIt;
+  }
+
+  DynamicMemRefIterator<float> cIt(DC);
+  for (int i = 0; i < M * N; ++i) {
+    storageC[i] = getFloat(*cIt);
+    ++cIt;
+  }
+
+  for (int i = 0; i < M; ++i) {
+    for (int k = 0; k < K; ++k) {
+      for (int j = 0; j < N; ++j) {
+        int a_idx = i * DA.strides[0] + k;
+        int b_idx = k * DB.strides[0] + j;
+        int c_idx = i * DC.strides[0] + j;
+        storageC[c_idx] += storageA[a_idx] * storageB[b_idx];
+      }
+    }
+  }
+
+  // Store the result back to C.
+  DynamicMemRefIterator<float> resultIt(DC);
+  for (int i = 0; i < M * N; ++i) {
+    float r = storageC[i];
+    if constexpr (std::is_same_v<CTy, f16>) {
+      f16 casted(r);
+      *resultIt = getFloat(casted);
+    } else if constexpr (std::is_same_v<CTy, bf16>) {
+      bf16 casted(r);
+      *resultIt = getFloat(casted);
+    } else if constexpr (std::is_same_v<CTy, float>) {
+      *resultIt = storageC[i];
+    }
+    ++resultIt;
+  }
+
+  free(storageC);
+  free(storageA);
+  free(storageB);
+}
+
 extern "C" void _mlir_ciface_printMaxErrorF16(UnrankedMemRefType<f16> *M,
                                               UnrankedMemRefType<f16> *N) {
   _mlir_ciface_printMaxError(M, N);
@@ -282,6 +367,24 @@ extern "C" void _mlir_ciface_printAllcloseBF16(UnrankedMemRefType<bf16> *M,
 extern "C" void _mlir_ciface_printAllcloseF32(UnrankedMemRefType<float> *M,
                                               UnrankedMemRefType<float> *N) {
   _mlir_ciface_printAllclose(M, N);
+}
+
+extern "C" void _mlir_ciface_gemmF16F16F32(UnrankedMemRefType<f16> *A,
+                                           UnrankedMemRefType<f16> *B,
+                                           UnrankedMemRefType<float> *C) {
+  _mlir_ciface_gemm<f16, float>(A, B, C);
+}
+
+extern "C" void _mlir_ciface_gemmF16F16F16(UnrankedMemRefType<f16> *A,
+                                           UnrankedMemRefType<f16> *B,
+                                           UnrankedMemRefType<float> *C) {
+  _mlir_ciface_gemm<f16, f16>(A, B, C);
+}
+
+extern "C" void _mlir_ciface_gemmBF16BF16F32(UnrankedMemRefType<bf16> *A,
+                                             UnrankedMemRefType<bf16> *B,
+                                             UnrankedMemRefType<float> *C) {
+  _mlir_ciface_gemm<bf16, float>(A, B, C);
 }
 
 // NOLINTEND(*-identifier-naming)
