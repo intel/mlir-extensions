@@ -159,6 +159,8 @@ protected:
 
     configParams.array_length = array_len;
     configParams.restriction = restriction;
+    configParams.minPitch = 64;
+    configParams.pitchMultiple = 16;
     return configParams;
   }
 };
