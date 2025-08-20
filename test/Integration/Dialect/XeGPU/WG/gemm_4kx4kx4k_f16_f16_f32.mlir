@@ -1,5 +1,5 @@
 // RUN: %python_executable %imex_runner --requires=mlir-sycl-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
-// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_sycl_runtime --filecheck
 #a = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data = [8, 16]>

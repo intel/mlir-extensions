@@ -1,13 +1,13 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
-// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils \
 // RUN:                                       --entry-point-result=void --filecheck
 // RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
 // RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --runner mlir-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 #map0 = affine_map<(d0, d1) -> (d0, d1)>

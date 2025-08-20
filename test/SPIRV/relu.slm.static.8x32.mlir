@@ -1,5 +1,5 @@
 // RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/spirv-to-llvm.pp \
-// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --runner mlir-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
 module @test attributes {gpu.container_module} {

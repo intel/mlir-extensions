@@ -5,7 +5,7 @@ else()
 endif()
 set(IMEX_TEST_DEPENDS
         imex-opt
-        imex-cpu-runner
+        mlir-runner
         mlir-runner
         mlir_c_runner_utils
         mlir_runner_utils
