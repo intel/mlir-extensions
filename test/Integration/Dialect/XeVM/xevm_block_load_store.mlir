@@ -2,7 +2,7 @@
 // RUN: | imex-opt -pass-pipeline='builtin.module(cse,func.func(gpu-async-region),xevm-attach-target,gpu.module(convert-gpu-to-llvm-spv{use-64bit-index=true},convert-xevm-to-llvm,cse))' \
 // RUN: | imex-opt -convert-scf-to-cf -convert-cf-to-llvm -convert-vector-to-llvm -convert-arith-to-llvm \
 // RUN: | imex-opt -gpu-to-llvm -reconcile-unrealized-casts -cse -gpu-module-to-binary \
-// RUN: | imex-cpu-runner \
+// RUN: | mlir-runner \
 // RUN:   --shared-libs=%mlir_sycl_runtime \
 // RUN:   --shared-libs=%mlir_runner_utils \
 // RUN:   --shared-libs=%mlir_c_runner_utils \
