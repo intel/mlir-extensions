@@ -39,21 +39,6 @@ namespace imex {
 
 namespace {
 
-struct UBPoisonOpConversion final
-    : public mlir::OpConversionPattern<mlir::ub::PoisonOp> {
-  using OpConversionPattern::OpConversionPattern;
-  mlir::LogicalResult
-  matchAndRewrite(mlir::ub::PoisonOp poisonOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto dstTy = getTypeConverter()->convertType(poisonOp.getType());
-    if (!dstTy)
-      return rewriter.notifyMatchFailure(poisonOp, "cannot convert type.");
-
-    rewriter.replaceOpWithNewOp<mlir::ub::PoisonOp>(poisonOp, dstTy);
-    return mlir::success();
-  }
-};
-
 struct VectorLinearizePass final
     : public imex::impl::VectorLinearizeBase<VectorLinearizePass> {
 
@@ -130,23 +115,11 @@ struct VectorLinearizePass final
     mlir::ConversionTarget target(*context);
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    target.addDynamicallyLegalOp<mlir::ub::PoisonOp>(
-        [&](mlir::ub::PoisonOp op) {
-          auto ty = op->getResult(0).getType();
-          auto vecTy = mlir::dyn_cast_or_null<mlir::VectorType>(ty);
-          return vecTy && vecTy.getRank() == 1;
-        });
-
     target.addIllegalOp<mlir::vector::TransposeOp>();
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractOp>();
     target.addLegalDialect<mlir::xegpu::XeGPUDialect>();
 
-    patterns.add<UBPoisonOpConversion>(typeConverter, context);
-
-    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                  std::move(patterns))))
-      return signalPassFailure();
   }
 };
 } // namespace
@@ -154,3 +127,4 @@ struct VectorLinearizePass final
 std::unique_ptr<mlir::Pass> imex::createVectorLinearizePass() {
   return std::make_unique<VectorLinearizePass>();
 }
+
