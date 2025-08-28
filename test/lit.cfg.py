@@ -41,6 +41,8 @@ config.substitutions.append(('%imex_runner', config.imex_runner))
 config.substitutions.append(('%python_executable', config.python_executable))
 if config.mlir_enable_sycl_runtime:
     config.substitutions.append(('%mlir_sycl_runtime', config.mlir_sycl_runtime))
+if config.mlir_enable_levelzero_runtime:
+    config.substitutions.append(('%mlir_levelzero_runtime', config.mlir_levelzero_runtime))
 if config.imex_enable_sycl_runtime:
     config.substitutions.append(('%sycl_runtime', config.sycl_runtime))
 if config.imex_enable_l0_runtime:

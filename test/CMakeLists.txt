@@ -53,6 +53,12 @@ if(MLIR_ENABLE_SYCL_RUNNER)
         )
 endif()
 
+if(MLIR_ENABLE_LEVELZERO_RUNNER)
+    list(APPEND IMEX_TEST_DEPENDS
+        mlir_levelzero_runtime
+        )
+endif()
+
 if(IMEX_ENABLE_SYCL_RUNTIME)
     list(APPEND IMEX_TEST_DEPENDS
         sycl-runtime
