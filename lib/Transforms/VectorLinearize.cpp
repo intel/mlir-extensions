@@ -119,7 +119,6 @@ struct VectorLinearizePass final
     target.addLegalOp<mlir::vector::ShapeCastOp>();
     target.addLegalOp<mlir::vector::ExtractOp>();
     target.addLegalDialect<mlir::xegpu::XeGPUDialect>();
-
   }
 };
 } // namespace
@@ -127,4 +126,3 @@ struct VectorLinearizePass final
 std::unique_ptr<mlir::Pass> imex::createVectorLinearizePass() {
   return std::make_unique<VectorLinearizePass>();
 }
-
