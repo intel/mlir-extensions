@@ -44,6 +44,7 @@ config.imex_enable_pvc_target = @IMEX_ENABLE_PVC_TARGET@
 config.imex_enable_bmg_target = @IMEX_ENABLE_BMG_TARGET@
 config.imex_enable_bindings_python = @IMEX_ENABLE_BINDINGS_PYTHON@
 config.mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
+config.mlir_enable_levelzero_runtime = @MLIR_ENABLE_LEVELZERO_RUNNER@
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
@@ -58,6 +59,8 @@ if config.imex_enable_sycl_runtime:
     config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
 if config.mlir_enable_sycl_runtime:
     config.mlir_sycl_runtime = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_sycl_runtime" + config.llvm_shlib_ext))
+if config.mlir_enable_levelzero_runtime:
+    config.mlir_levelzero_runtime = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_levelzero_runtime" + config.llvm_shlib_ext))
 if config.imex_enable_l0_runtime:
     config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
 config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime
