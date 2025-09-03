@@ -466,21 +466,4 @@ def ConvertArithToVC : Pass<"convert-arith-to-vc", "::mlir::gpu::GPUModuleOp"> {
   let constructor = "imex::createConvertArithToVCPass()";
 }
 
-//===----------------------------------------------------------------------===//
-// XeGPUToXeVM
-//===----------------------------------------------------------------------===//
-
-def ConvertXeGPUToXeVMPass : Pass<"convert-xegpu-to-xevm"> {
-  let summary = "Convert XeGPU to XeVM dialect";
-  let dependentDialects = [
-    "::mlir::xegpu::XeGPUDialect",
-    "::mlir::xevm::XeVMDialect",
-    "::mlir::vector::VectorDialect",
-    "::mlir::memref::MemRefDialect",
-    "::mlir::arith::ArithDialect",
-  ];
-}
-
-
-
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

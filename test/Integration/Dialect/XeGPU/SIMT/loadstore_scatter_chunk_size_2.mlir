@@ -8,19 +8,18 @@ module @gemm attributes {gpu.container_module} {
         %srcce = memref.memory_space_cast %src : memref<128xf32, 1> to memref<128xf32>
         %dstte = memref.memory_space_cast %dst : memref<128xf32, 1> to memref<128xf32>
 
-        %offsets = arith.constant dense<[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]> : vector<16xindex>
-        %src_tdesc = xegpu.create_tdesc %srcce, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
-        %dst_tdesc = xegpu.create_tdesc %dstte, %offsets : memref<128xf32>, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
-
-        %mask = arith.constant dense<[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]> : vector<16xi1>
-        %loaded = xegpu.load %src_tdesc, %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1> -> vector<2xf32>
-
+        %c2 = arith.constant 2 : index
         %tid_x = gpu.thread_id x
+        %offsets = arith.muli %tid_x, %c2 : index
+
+        %mask = arith.constant 1 : i1
+        %loaded = xegpu.load %srcce[%offsets], %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, chunk_size = 2}> : memref<128xf32>, index, i1 -> vector<2xf32>
+
         %tid_x_i32 = arith.index_cast %tid_x : index to i32
         %tid_x_f32 = arith.sitofp %tid_x_i32 : i32 to f32
         %loaded_modified = vector.insert %tid_x_f32, %loaded[0] : f32 into vector<2xf32>
 
-        xegpu.store %loaded_modified, %dst_tdesc, %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<2xf32>, !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>, vector<16xi1>
+        xegpu.store %loaded_modified, %dstte[%offsets], %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>, chunk_size = 2}> : vector<2xf32>, memref<128xf32>, index, i1
         gpu.return
     }
   }
