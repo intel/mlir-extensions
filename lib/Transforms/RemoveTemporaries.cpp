@@ -460,7 +460,7 @@ struct RemoveTemporaries
     : public imex::impl::RemoveTemporariesBase<RemoveTemporaries> {
   void runOnOperation() override {
     ::mlir::SmallVector<mlir::Operation *> opsToRemove;
-    getOperation()->walk([&](::mlir::CopyOpInterface copyOp) {
+    getOperation()->walk([&](::mlir::Operation* copyOp) {
       transform(copyOp, opsToRemove);
     });
     for (::mlir::Operation *op : opsToRemove) {
@@ -477,15 +477,14 @@ struct RemoveTemporaries
   }
 
 private:
-  void transform(::mlir::CopyOpInterface opi,
+  void transform(::mlir::Operation* opi,
                  ::mlir::SmallVector<mlir::Operation *> &opsToRemove) {
 
-    auto op = opi.getOperation();
-    auto dst = opi.getTarget();
-    auto src = opi.getSource();
-    mlir::IRRewriter rewriter(op->getContext());
+    auto dst = opi->getResult(0);
+    auto src = opi->getOperand(0);
+    mlir::IRRewriter rewriter(opi->getContext());
     DEBUG_MSG("RemoveTemporaries", "------------------------------------------")
-    DEBUG_OP("RemoveTemporaries", "inspecting", op)
+    DEBUG_OP("RemoveTemporaries", "inspecting", opi)
 
     auto srcAllocOp = findAllocOp(src);
     auto srcDeallocOp = findDeallocOp(src);
@@ -498,7 +497,7 @@ private:
       return;
     }
     auto allocOpParentReg = srcAllocOp->getParentRegion();
-    auto copyOpParentReg = op->getParentRegion();
+    auto copyOpParentReg = opi->getParentRegion();
     DEBUG_OP("RemoveTemporaries", "  src alloc op", srcAllocOp)
 
     bool srcIsReturned = findReturn(srcAllocOp->getResult(0));
@@ -524,7 +523,7 @@ private:
       }
       auto &memrefAlias = getAnalysis<mlir::AliasAnalysis>();
       memrefAlias.alias(src, dst);
-      if (!checkReadWriteConflict(op, srcAllocOp, dstDefOp, memrefAlias)) {
+      if (!checkReadWriteConflict(opi, srcAllocOp, dstDefOp, memrefAlias)) {
         DEBUG_MSG("RemoveTemporaries",
                   "found read after write conflict, skipping")
         return;
@@ -533,7 +532,7 @@ private:
       // unless target is defined earlier
       auto &dom = getAnalysis<::mlir::DominanceInfo>();
       if (!dom.dominates(dstDefOp, srcAllocOp) &&
-          !moveAfterIfPossible(dstDefOp, srcAllocOp, op, dom)) {
+          !moveAfterIfPossible(dstDefOp, srcAllocOp, opi, dom)) {
         DEBUG_MSG("RemoveTemporaries", "cannot move dst defining op, skipping")
         return;
       }
@@ -554,8 +553,8 @@ private:
       DEBUG_MSG("RemoveTemporaries", "    with copy op dst value")
       replaceUsesAndPropagateType(rewriter, srcAllocOp, dst, opsToRemove);
     }
-    DEBUG_OP("RemoveTemporaries", "  removing op", op)
-    opsToRemove.push_back(op);
+    DEBUG_OP("RemoveTemporaries", "  removing op", opi)
+    opsToRemove.push_back(opi);
     if (srcDeallocOp) {
       DEBUG_OP("RemoveTemporaries", "  removing src dealloc op", srcDeallocOp)
       opsToRemove.push_back(srcDeallocOp);

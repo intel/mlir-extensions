@@ -16,13 +16,13 @@ module @gemm attributes {gpu.container_module} {
       %c16_i32 = arith.constant 16 : i32
       %c16 = arith.constant 16 : index
       %cst = arith.constant dense<1.0> : vector<16xf16>
-      %in_tdesc = xegpu.create_nd_tdesc %in[%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %c_tdesc = xegpu.create_nd_tdesc %c[%c0, %c0] : memref<1x16xf16> -> !xegpu.tensor_desc<1x16xf16>
-      %in_val = xegpu.load_nd %in_tdesc : !xegpu.tensor_desc<16x16xf16> -> vector<16xf16>
+      %in_tdesc = xegpu.create_nd_tdesc %in : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %c_tdesc = xegpu.create_nd_tdesc %c : memref<1x16xf16> -> !xegpu.tensor_desc<1x16xf16>
+      %in_val = xegpu.load_nd %in_tdesc[%c0, %c0] : !xegpu.tensor_desc<16x16xf16> -> vector<16xf16>
       %reduce = vector.reduction <add>, %in_val : vector<16xf16> into f16
       %out = arith.constant dense<0.0> : vector<1xf16>
       %reduce_1x1 = vector.insert %reduce, %out [0] : f16 into vector<1xf16>
-      xegpu.store_nd %reduce_1x1, %c_tdesc : vector<1xf16>, !xegpu.tensor_desc<1x16xf16>
+      xegpu.store_nd %reduce_1x1, %c_tdesc[%c0, %c0] : vector<1xf16>, !xegpu.tensor_desc<1x16xf16>
       gpu.return
     }
   }
