@@ -45,7 +45,7 @@ module @gemm attributes {gpu.container_module} {
       %c48 = arith.constant 48 : index
       %c16 = arith.constant 16 : index
       %c24 = arith.constant 24 : index
-      %c96 = arith.constant 96 : index      
+      %c96 = arith.constant 96 : index
       %c0 = arith.constant 0 : index
       %c0_i32 = arith.constant 0 : i32
       // get IDs
@@ -150,7 +150,7 @@ module @gemm attributes {gpu.container_module} {
       %B_sg_prefetch_offset_x_plus_64 = arith.addi %B_sg_prefetch_offset_x, %c64 : index
       %B_sg_prefetch_offset_x_plus_96 = arith.addi %B_sg_prefetch_offset_x, %c96 : index
 
-  
+
       // create B prefetch tiles and prefetch
       %B_sg_prefetch_tile = xegpu.create_nd_tdesc %B : memref<4096x4096xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       xegpu.prefetch_nd %B_sg_prefetch_tile[%B_sg_prefetch_offset_y, %B_sg_prefetch_offset_x] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
@@ -162,7 +162,7 @@ module @gemm attributes {gpu.container_module} {
 
       // two 32x16 A tiles from 256x32 WG slice
       %A_tile = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
-      
+
       // create B tiles considering the transposed B matrix.
       // 1. First view the B matrix as 4096x2048xf32 because we need to transpose it in 32 bits.
       // 2. Then create 16x8 B tiles from the 4096x2048 view. Note that we can not use array length > 1 and max size supported for 32 bitwidth is 16x8.
@@ -246,9 +246,9 @@ module @gemm attributes {gpu.container_module} {
 
         // prefetch A and B tiles
         %prefetch_offset = arith.addi %k, %c96 : index
-        %B_prefetch_offset_x = arith.addi %k, %B_sg_prefetch_offset_x_plus_96 : index        
+        %B_prefetch_offset_x = arith.addi %k, %B_sg_prefetch_offset_x_plus_96 : index
         xegpu.prefetch_nd %A_sg_prefetch_tile[%A_sg_prefetch_offset_x, %prefetch_offset] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
-        xegpu.prefetch_nd %B_sg_prefetch_tile[%B_sg_prefetch_offset_y, %B_prefetch_offset_x] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>        
+        xegpu.prefetch_nd %B_sg_prefetch_tile[%B_sg_prefetch_offset_y, %B_prefetch_offset_x] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
 
         %a_val_0_0 = vector.extract_strided_slice %a_val_0 { offsets = [0], sizes = [8], strides = [1]} :

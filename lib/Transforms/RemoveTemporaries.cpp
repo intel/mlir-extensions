@@ -460,9 +460,8 @@ struct RemoveTemporaries
     : public imex::impl::RemoveTemporariesBase<RemoveTemporaries> {
   void runOnOperation() override {
     ::mlir::SmallVector<mlir::Operation *> opsToRemove;
-    getOperation()->walk([&](::mlir::Operation* copyOp) {
-      transform(copyOp, opsToRemove);
-    });
+    getOperation()->walk(
+        [&](::mlir::Operation *copyOp) { transform(copyOp, opsToRemove); });
     for (::mlir::Operation *op : opsToRemove) {
       if (!op->use_empty()) {
         DEBUG_OP("RemoveTemporaries", "cannot remove op", op)
@@ -477,7 +476,7 @@ struct RemoveTemporaries
   }
 
 private:
-  void transform(::mlir::Operation* opi,
+  void transform(::mlir::Operation *opi,
                  ::mlir::SmallVector<mlir::Operation *> &opsToRemove) {
 
     auto dst = opi->getResult(0);
