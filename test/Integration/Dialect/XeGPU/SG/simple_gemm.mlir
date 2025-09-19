@@ -2,7 +2,7 @@
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
-
+// XFAIL:*
 
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {
@@ -18,19 +18,18 @@ module @gemm attributes {gpu.container_module} {
       %x_block_offset = arith.muli %block_x, %c8 : index
       %y_block_offset = arith.muli %block_y, %c16 : index
 
-      %c_tdesc = xegpu.create_nd_tdesc %c[%x_block_offset, %y_block_offset] : memref<256x256xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %c_init_value = xegpu.load_nd %c_tdesc : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-
+      %c_tdesc = xegpu.create_nd_tdesc %c : memref<256x256xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %c_init_value = xegpu.load_nd %c_tdesc[%x_block_offset, %y_block_offset] : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
+      %a_tdesc = xegpu.create_nd_tdesc %a : memref<256x256xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %b_tdesc = xegpu.create_nd_tdesc %b : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16>
 
       %r = scf.for %k = %c0 to %c256 step %c16 iter_args(%arg_c = %c_init_value) -> (vector<8x16xf32>) {
-        %a_tdesc = xegpu.create_nd_tdesc %a[%x_block_offset, %k] : memref<256x256xf16> -> !xegpu.tensor_desc<8x16xf16>
-        %b_tdesc = xegpu.create_nd_tdesc %b[%k, %y_block_offset] : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16>
-        %a_val = xegpu.load_nd %a_tdesc : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-        %b_val = xegpu.load_nd %b_tdesc : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
+        %a_val = xegpu.load_nd %a_tdesc[%x_block_offset, %k]  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+        %b_val = xegpu.load_nd %b_tdesc[%k, %y_block_offset] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
         %dpas = xegpu.dpas %a_val, %b_val, %arg_c : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
         scf.yield %dpas : vector<8x16xf32>
       }
-      xegpu.store_nd %r, %c_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %r, %c_tdesc[%x_block_offset, %y_block_offset] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

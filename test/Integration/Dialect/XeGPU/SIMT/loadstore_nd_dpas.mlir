@@ -15,17 +15,17 @@ module @gemm attributes {gpu.container_module} {
       %b_tdesc_memref = memref.memory_space_cast %b : memref<16x16xf16, 1> to memref<16x16xf16>
       %c_tdesc_memref = memref.memory_space_cast %c : memref<8x16xf32, 1> to memref<8x16xf32>
 
-      %a_tdesc = xegpu.create_nd_tdesc %a_tdesc_memref[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
-      %b_tdesc = xegpu.create_nd_tdesc %b_tdesc_memref[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
-      %c_tdesc = xegpu.create_nd_tdesc %c_tdesc_memref[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
+      %a_tdesc = xegpu.create_nd_tdesc %a_tdesc_memref : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
+      %b_tdesc = xegpu.create_nd_tdesc %b_tdesc_memref : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>>
+      %c_tdesc = xegpu.create_nd_tdesc %c_tdesc_memref : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
 
-      %a_loaded = xegpu.load_nd %a_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf16>
-      %b_loaded = xegpu.load_nd %b_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<16xf16>
-      %c_loaded = xegpu.load_nd %c_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf32>
+      %a_loaded = xegpu.load_nd %a_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf16>
+      %b_loaded = xegpu.load_nd %b_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<16xf16>
+      %c_loaded = xegpu.load_nd %c_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xf32>
 
       %d = xegpu.dpas %a_loaded, %b_loaded, %c_loaded {a_layout = #sg_map_a_f16, b_layout = #sg_map_b_f16, c_layout = #sg_map_c_f32} : vector<8xf16>, vector<16xf16>, vector<8xf32> -> vector<8xf32>
 
-      xegpu.store_nd %d, %c_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
+      xegpu.store_nd %d, %c_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xf32>, !xegpu.tensor_desc<8x16xf32, #xegpu.block_tdesc_attr<memory_space = global>>
       gpu.return
     }
   }

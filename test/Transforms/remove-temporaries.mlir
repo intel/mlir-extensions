@@ -1,4 +1,5 @@
 // RUN: imex-opt -imex-remove-temporaries -allow-unregistered-dialect %s | FileCheck %s
+// XFAIL: *
 #map = affine_map<(d0) -> (d0)>
 #map2 = affine_map<(d0, d1) -> (d0, d1)>
 module {

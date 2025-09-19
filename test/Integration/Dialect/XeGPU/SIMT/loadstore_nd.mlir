@@ -9,9 +9,9 @@ module @gemm attributes {gpu.container_module} {
         %srcce = memref.memory_space_cast %src : memref<8x16xi32, 1> to memref<8x16xi32>
         %dstte = memref.memory_space_cast %dst : memref<8x16xi32, 1> to memref<8x16xi32>
 
-        %src_tdesc = xegpu.create_nd_tdesc %srcce[0, 0] : memref<8x16xi32> -> !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
-        %dst_tdesc = xegpu.create_nd_tdesc %dstte[0, 0] : memref<8x16xi32> -> !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
-        %loaded = xegpu.load_nd %src_tdesc <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xi32>
+        %src_tdesc = xegpu.create_nd_tdesc %srcce : memref<8x16xi32> -> !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
+        %dst_tdesc = xegpu.create_nd_tdesc %dstte : memref<8x16xi32> -> !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
+        %loaded = xegpu.load_nd %src_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>> -> vector<8xi32>
 
         %sg_id = gpu.subgroup_id : index
         %sg_id_i32 = arith.index_cast %sg_id : index to i32
@@ -27,7 +27,7 @@ module @gemm attributes {gpu.container_module} {
         %loaded_modified2 = vector.insert %n_sg_i32, %loaded_modified1[2] : i32 into vector<8xi32>
         %loaded_modified3 = vector.insert %sg_size_i32, %loaded_modified2[3] : i32 into vector<8xi32>
 
-        xegpu.store_nd %loaded_modified3, %dst_tdesc <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xi32>, !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
+        xegpu.store_nd %loaded_modified3, %dst_tdesc[0, 0] <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}>: vector<8xi32>, !xegpu.tensor_desc<8x16xi32, #xegpu.block_tdesc_attr<memory_space = global>>
         gpu.return
     }
   }

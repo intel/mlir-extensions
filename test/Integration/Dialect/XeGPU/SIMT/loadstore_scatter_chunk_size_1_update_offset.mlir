@@ -13,21 +13,19 @@ module @gemm attributes {gpu.container_module} {
         %1 = arith.constant dense<[0]> : vector<1xindex>
         %offsets = vector.insert %tid_x, %1[0] : index into vector<1xindex>
 
-        %mask = arith.constant 1 : i1
-        %src_tdesc = xegpu.create_tdesc %srcce, %offsets : memref<128xf32>, vector<1xindex> -> !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>
-        %dst_tdesc = xegpu.create_tdesc %dstte, %offsets : memref<128xf32>, vector<1xindex> -> !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>
+        %mask = arith.constant dense<1> : vector<1xi1>
 
-        %loaded = xegpu.load %src_tdesc, %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, i1 -> vector<1xf32>
+        %loaded = xegpu.load %srcce[%offsets], %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : memref<128xf32>, vector<1xindex>, vector<1xi1> -> vector<1xf32>
 
         %tid_x_i32 = arith.index_cast %tid_x : index to i32
         %tid_x_f32 = arith.sitofp %tid_x_i32 : i32 to f32
         %loaded_modified = vector.insert %tid_x_f32, %loaded[0] : f32 into vector<1xf32>
 
-        xegpu.store %loaded_modified, %dst_tdesc, %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<1xf32>, !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, i1
+        xegpu.store %loaded_modified, %dstte[%offsets], %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<1xf32>, memref<128xf32>, vector<1xindex>, vector<1xi1>
 
-        %update_offset = arith.constant dense<[16]> : vector<1xindex>
-        %dst_tdesc_new = xegpu.update_offset %dst_tdesc, %update_offset : !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, vector<1xindex>
-        xegpu.store %loaded_modified, %dst_tdesc_new, %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<1xf32>, !xegpu.tensor_desc<1xf32, #xegpu.scatter_tdesc_attr<chunk_size = 1>>, i1
+        %strides = arith.constant dense<[16]> : vector<1xindex>
+        %update_offset = arith.addi %offsets, %strides : vector<1xindex>
+        xegpu.store %loaded_modified, %dstte[%update_offset], %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<1xf32>, memref<128xf32>, vector<1xindex>, vector<1xi1>
         gpu.return
     }
   }

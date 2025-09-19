@@ -206,7 +206,7 @@ public:
     }
 
     if (auto extractOp = mlir::dyn_cast<mlir::vector::ExtractOp>(op)) {
-      auto src = extractOp.getVector();
+      auto src = extractOp.getSource();
       auto srcTy = src.getType();
       Layout layout = results[0]->getValue();
       auto loadOp = src.getDefiningOp<mlir::xegpu::LoadNdOp>();
@@ -357,7 +357,7 @@ static void updateLoadOp(mlir::OpBuilder &builder, mlir::xegpu::LoadNdOp &op,
 static void updateExtractOp(mlir::OpBuilder &builder,
                             mlir::vector::ExtractOp &op,
                             LayoutAnalysis &analysis) {
-  auto src = op.getVector();
+  auto src = op.getSource();
   auto res = op.getResult();
   if (analysis.getLayout(src) && analysis.getLayout(res)) {
     auto packedResType =
@@ -373,7 +373,7 @@ static void updateExtractOp(mlir::OpBuilder &builder,
 static void updateExtractStrideSliceOp(mlir::OpBuilder &builder,
                                        mlir::vector::ExtractStridedSliceOp &op,
                                        LayoutAnalysis &analysis) {
-  auto src = op.getVector();
+  auto src = op.getSource();
   auto result = op.getResult();
   // simply to update offsets and strides when both source and result
   // are in vnni format.

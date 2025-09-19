@@ -17,7 +17,6 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
-include "mlir/Interfaces/CopyOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
@@ -73,7 +72,7 @@ class NDArray_Op<string mnemonic, list<Trait> traits = []> :
     Op<NDArray_Dialect, mnemonic, traits>;
 
 
-def CopyOp : NDArray_Op<"copy", [CopyOpInterface, SameOperandsAndResultShape, SameOperandsAndResultElementType]> {
+def CopyOp : NDArray_Op<"copy", [SameOperandsAndResultShape, SameOperandsAndResultElementType]> {
 
   let description = [{
     Copies the data from the source to the new result array.

@@ -39,12 +39,12 @@ struct VectorExtractOpConversion final
   matchAndRewrite(mlir::vector::ExtractOp extractOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
-    if (adaptor.getVector().getType() == extractOp.getType()) {
-      rewriter.replaceOp(extractOp, adaptor.getVector());
+    if (adaptor.getSource().getType() == extractOp.getType()) {
+      rewriter.replaceOp(extractOp, adaptor.getSource());
       return mlir::success();
     }
 
-    auto vector = extractOp.getVector();
+    auto vector = extractOp.getSource();
     auto vecTy = vector.getType();
     auto constOp = vector.getDefiningOp<mlir::arith::ConstantOp>();
 
@@ -78,7 +78,7 @@ struct VectorExtractStridedSliceConversion final
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto resType = mlir::cast<mlir::VectorType>(extractOp.getType());
-    auto srcVector = extractOp.getVector();
+    auto srcVector = extractOp.getSource();
     auto offsets = extractOp.getOffsets();
 
     // We only convert ops extracting a single element from a 1D vector.
@@ -285,7 +285,7 @@ struct RemoveSingleElemVectorPass final
     target.addLegalOp<mlir::vector::InsertOp>();
     target.addDynamicallyLegalOp<mlir::vector::ExtractOp>(
         [&](mlir::vector::ExtractOp op) {
-          auto vecTy = op.getVector().getType();
+          auto vecTy = op.getSource().getType();
           return vecTy.getNumElements() != 1;
         });
 

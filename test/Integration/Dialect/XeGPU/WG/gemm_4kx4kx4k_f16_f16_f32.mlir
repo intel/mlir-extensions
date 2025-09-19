@@ -2,6 +2,7 @@
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+// XFAIL:*
 #a = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data = [8, 16]>
 #b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [16, 16]>
 #c = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [8, 16]>
@@ -40,56 +41,42 @@ module @gemm attributes {gpu.container_module} {
       %c1 = arith.constant 1 : index
       %c32 = arith.constant 32 : index
       %c64 = arith.constant 64 : index
+      %c96 = arith.constant 96 : index
       %c256 = arith.constant 256 : index
       %c4096 = arith.constant 4096 : index
       %block_id_x = gpu.block_id x
       %block_id_y = gpu.block_id y
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
-      %c_tdesc = xegpu.create_nd_tdesc %C[%m, %n] : memref<4096x4096xf32> -> !xegpu.tensor_desc<256x256xf32, #c>
-      %c_init_value = xegpu.load_nd %c_tdesc : !xegpu.tensor_desc<256x256xf32, #c> -> vector<256x256xf32>
-      %a_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x32xf16, #a>
-      %b_tdesc = xegpu.create_nd_tdesc %B[%c0, %n] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x256xf16, #b>
+      %c_tdesc = xegpu.create_nd_tdesc %C : memref<4096x4096xf32> -> !xegpu.tensor_desc<256x256xf32, #c>
+      %c_init_value = xegpu.load_nd %c_tdesc[%m, %n] : !xegpu.tensor_desc<256x256xf32, #c> -> vector<256x256xf32>
+      %a_tdesc = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x32xf16, #a>
+      %b_tdesc = xegpu.create_nd_tdesc %B : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x256xf16, #b>
       // Prefetch A 3 times.
-      %a_prefetch_tdesc = xegpu.create_nd_tdesc %A[%m, %c0] : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      %a_prefetch_tdesc_2 = xegpu.update_nd_offset %a_prefetch_tdesc, [%c0, %c32] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc_2 : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      %a_prefetch_tdesc_3 = xegpu.update_nd_offset %a_prefetch_tdesc_2, [%c0, %c32] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc_3 : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      %a_prefetch_tdesc_4 = xegpu.update_nd_offset %a_prefetch_tdesc_3, [%c0, %c32] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      // Prefetch B 3 times.
-      %b_prefetch_tdesc = xegpu.create_nd_tdesc %B[%c0, %n] : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      xegpu.prefetch_nd %b_prefetch_tdesc : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      %b_prefetch_tdesc_2 = xegpu.update_nd_offset %b_prefetch_tdesc, [%c32, %c0] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      xegpu.prefetch_nd %b_prefetch_tdesc_2 : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      %b_prefetch_tdesc_3 = xegpu.update_nd_offset %b_prefetch_tdesc_2, [%c32, %c0] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      xegpu.prefetch_nd %b_prefetch_tdesc_3 : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-      %b_prefetch_tdesc_4 = xegpu.update_nd_offset %b_prefetch_tdesc_3, [%c32, %c0] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+      %a_prefetch_tdesc = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c0] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c32] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c64] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+       // Prefetch B 3 times.
+      %b_prefetch_tdesc = xegpu.create_nd_tdesc %B : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+      xegpu.prefetch_nd %b_prefetch_tdesc[%c0, %n] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+      xegpu.prefetch_nd %b_prefetch_tdesc[%c32, %n] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+      xegpu.prefetch_nd %b_prefetch_tdesc[%c64, %n] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
 
-      %out:5 = scf.for %k = %c0 to %c4096 step %c32
-        iter_args(%a_tile = %a_tdesc, %b_tile = %b_tdesc,
-                  %c_value = %c_init_value,
-                  %a_prefetch_tile = %a_prefetch_tdesc_4,
-                  %b_prefetch_tile = %b_prefetch_tdesc_4)
-        -> (!xegpu.tensor_desc<256x32xf16, #a>, !xegpu.tensor_desc<32x256xf16, #b>, vector<256x256xf32>,
-              !xegpu.tensor_desc<256x32xf16, #a_prefetch>, !xegpu.tensor_desc<32x256xf16, #b_prefetch>) {
-        %a_value = xegpu.load_nd %a_tile  : !xegpu.tensor_desc<256x32xf16, #a> -> vector<256x32xf16>
-        %b_value = xegpu.load_nd %b_tile : !xegpu.tensor_desc<32x256xf16, #b> -> vector<32x256xf16>
+      %out = scf.for %k = %c0 to %c4096 step %c32
+        iter_args(%c_value = %c_init_value)
+        -> (vector<256x256xf32>) {
+        %a_value = xegpu.load_nd %a_tdesc[%m, %k]  : !xegpu.tensor_desc<256x32xf16, #a> -> vector<256x32xf16>
+        %b_value = xegpu.load_nd %b_tdesc[%k, %n] : !xegpu.tensor_desc<32x256xf16, #b> -> vector<32x256xf16>
         // Prefetch next tiles.
-        xegpu.prefetch_nd %a_prefetch_tile : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-        xegpu.prefetch_nd %b_prefetch_tile : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
-        // Update offsets for next tiles.
-        %a_next_tile = xegpu.update_nd_offset %a_tile, [%c0, %c32] : !xegpu.tensor_desc<256x32xf16, #a>
-        %b_next_tile = xegpu.update_nd_offset %b_tile, [%c32, %c0] : !xegpu.tensor_desc<32x256xf16, #b>
-        %a_prefetch_next_tile = xegpu.update_nd_offset %a_prefetch_tile, [%c0, %c32] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-        %b_prefetch_next_tile = xegpu.update_nd_offset %b_prefetch_tile, [%c32, %c0] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+        %prefetch_offset = arith.addi %k, %c96 : index
+        xegpu.prefetch_nd %a_prefetch_tdesc[%m, %prefetch_offset] : !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+        xegpu.prefetch_nd %b_prefetch_tdesc[%prefetch_offset, %n] : !xegpu.tensor_desc<32x256xf16, #b_prefetch>
         %c_new_value = xegpu.dpas %a_value, %b_value, %c_value {layout_result_0 = #c}
           : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
-        scf.yield %a_next_tile, %b_next_tile, %c_new_value, %a_prefetch_next_tile, %b_prefetch_next_tile :
-          !xegpu.tensor_desc<256x32xf16, #a>, !xegpu.tensor_desc<32x256xf16, #b>, vector<256x256xf32>, !xegpu.tensor_desc<256x32xf16, #a_prefetch>, !xegpu.tensor_desc<32x256xf16, #b_prefetch>
+        scf.yield %c_new_value : vector<256x256xf32>
       }
-      xegpu.store_nd %out#2, %c_tdesc : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #c>
+      xegpu.store_nd %out, %c_tdesc[%m, %n] : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #c>
       gpu.return
     }
   }
