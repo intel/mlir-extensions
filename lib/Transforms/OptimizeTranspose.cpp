@@ -611,7 +611,7 @@ struct VectorExrtactOpPattern final
   LogicalResult
   matchAndRewrite(vector::ExtractOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto sources = adaptor.getVector();
+    auto sources = adaptor.getSource();
     // If single source, skip
     if (sources.size() == 1)
       return failure();

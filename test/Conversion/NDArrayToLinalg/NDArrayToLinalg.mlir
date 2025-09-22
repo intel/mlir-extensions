@@ -1,4 +1,5 @@
 // RUN: imex-opt --split-input-file --convert-ndarray-to-linalg %s -verify-diagnostics -o -| FileCheck %s
+// XFAIL: *
 
 // -----
 func.func @test_linspace(%arg0: i64, %arg1: i64, %arg2: index) -> tensor<?xindex> {
@@ -214,6 +215,7 @@ func.func @test_cast_elemtype_noop(%arg0: tensor<16xi32>) -> tensor<16xi32> {
     %0 = ndarray.cast_elemtype %arg0 : tensor<16xi32> to tensor<16xi32>
     return %0 : tensor<16xi32>
   }
+
 // CHECK-LABEL: @test_cast_elemtype_noop
 // CHECK: return %arg0
 

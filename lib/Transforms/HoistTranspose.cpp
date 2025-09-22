@@ -80,7 +80,7 @@ struct HoistTransposeBeforeExtractStridedSliceOpPattern
         transposeOp.getVector().getDefiningOp());
     if (!extractOp)
       return mlir::failure();
-    auto sourceOfExtract = extractOp.getVector().getDefiningOp();
+    auto sourceOfExtract = extractOp.getSource().getDefiningOp();
     if (!sourceOfExtract)
       return mlir::failure();
     // Check if the source is already transposed by previous application of this

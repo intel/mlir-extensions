@@ -16,10 +16,9 @@ module @gemm attributes {gpu.container_module} {
       %c16_i32 = arith.constant 16 : i32
       %c16 = arith.constant 16 : index
       %cst = arith.constant dense<1.0> : vector<16xf16>
-      %in_tdesc = xegpu.create_nd_tdesc %in[%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %c_tdesc0 = xegpu.create_nd_tdesc %c[%c0, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %c_tdesc1 = xegpu.create_nd_tdesc %c[%c8, %c0] : memref<16x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %in_val = xegpu.load_nd %in_tdesc : !xegpu.tensor_desc<16x16xf16> -> vector<16xf16>
+      %in_tdesc = xegpu.create_nd_tdesc %in : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %c_tdesc = xegpu.create_nd_tdesc %c : memref<16x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %in_val = xegpu.load_nd %in_tdesc[%c0, %c0]  : !xegpu.tensor_desc<16x16xf16> -> vector<16xf16>
       %out0 = arith.constant dense<0.0> : vector<16xf16>
       // Do a cross-lane reduction for each row.
       %r = scf.for %i = %c0 to %c16 step %c1 iter_args(%arg0 = %out0) -> vector<16xf16> {
@@ -38,8 +37,8 @@ module @gemm attributes {gpu.container_module} {
       // Store the result.
       %out_extract0 = vector.extract_strided_slice %r {offsets = [0], sizes = [8], strides = [1]} : vector<16xf16> to vector<8xf16>
       %out_extract1 = vector.extract_strided_slice %r {offsets = [8], sizes = [8], strides = [1]} : vector<16xf16> to vector<8xf16>
-      xegpu.store_nd %out_extract0, %c_tdesc0 : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
-      xegpu.store_nd %out_extract1, %c_tdesc1 : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
+      xegpu.store_nd %out_extract0, %c_tdesc[%c0, %c0] : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
+      xegpu.store_nd %out_extract1, %c_tdesc[%c8, %c0] : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
       gpu.return
     }
   }

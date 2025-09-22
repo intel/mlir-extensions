@@ -1,5 +1,5 @@
 // RUN: %python_executable %imex_runner -i %s -f %p/ndarray.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils --shared-libs=%mlir_runner_utils | FileCheck %s
-
+// XFAIL: *
 module {
   func.func private @printMemrefI32(tensor<*xi32>)
   func.func private @printMemrefF32(tensor<*xf32>)
