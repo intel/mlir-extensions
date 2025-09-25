@@ -1,3 +1,4 @@
+
 # RFC for XeGPU Dialect
 
 ## Summary
@@ -375,14 +376,41 @@ Users can create a subview of a mem_desc to represent a sliced or partitioned vi
 ```
 Users can load a matrix from shared local memory into a vector value using the load_matrix operation. The result is a vector type in the IR, representing a tile stored in registers.
 ```mlir
-vec_a = load_matrix mem_desc_a[0, 0]: mem_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
+vec_a = xegpu.load_matrix mem_desc_a[0, 0]: mem_desc<256x128xbf16, @block=[8, 16]> -> vector<256x128xbf6>
 %a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0] : mem_desc<256x32xf16, @block=[16, 16]> -> vector<32x32xf16>
 ```
-
 Users can store a matrix from a vector value into shared local memory using the store_matrix operation.
 ```mlir
-store_matrix vec_a, mem_desc_b[0, 0] : vector<256x128xbf6>, mem_desc<256x128xbf16, @block=[8, 16]>
+xegpu.store_matrix vec_a, mem_desc_b[0, 0] : vector<256x128xbf6>, mem_desc<256x128xbf16, @block=[8, 16]>
 xegpu.store_matrix %at, %mt[%sg_idy * 8, %sg_idx * 32] : vector<8x32xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+```
+
+At the lane level, a load_matrix operation retrieves a single element from the matrix in slm, with the element address determined by the lane’s offset.
+If the `vec_len` and `vec_dir` attributes are present, the operation instead retrieves a vector of length `vec_len` along the direction specified by `vec_dir`.
+If the `subgroupBlockIO` attribute is present, the load is a cooperative subgroup operation. In this case, the operation consumes a uniform memory descriptor and uniform offsets, 
+and returns the per-lane portion of the cooperatively loaded block.
+When 
+```mlir
+// Load a single element per lane
+%a = xegpu.load_matrix %ma[%sg_idy * 32, 0+%lane_id] : mem_desc<256x32xf16> -> f16
+// Load a vector along the column direction
+%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0+%lane_id] @vec_dir=col @vec_len=16: mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]> -> vector<16xf16>
+// Cooperative subgroup block load
+%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0] @subgroupBlockIO : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
+```
+
+At the lane level, a store_matrix operation writes a single element to the matrix in slm, with the element address determined by the lane’s offset.
+If the `vec_len` and `vec_dir` attributes are present, the operation instead writes a vector of length `vec_len` along the direction specified by `vec_dir`.
+If the `subgroupBlockIO` attribute is present, the store is a cooperative subgroup operation. In this case, the operation consumes a uniform memory descriptor and uniform offsets, 
+and writes the per-lane portion of the data to the matrix cooperatively.
+When 
+```mlir
+// Store a single element per lane
+xegpu.store_matrix %a, %ma[%sg_idy * 32, 0+%lane_id] : f16, mem_desc<256x32xf16>
+// Store a vector along the column direction
+xegpu.store_matrix %a_dpas, %ma[%sg_idy * 32, 0+%lane_id] @vec_dir=col @vec_len=16: vector<16xf16>, mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]>
+// Cooperative subgroup block Store
+xegpu.store_matrix %a_dpas, %ma[%sg_idy * 32, 0] @subgroupBlockIO : vector<16xf16>, mem_desc<256x32xf16, @block=[16, 16]>
 ```
 
 **Cooperative Transpose Example**
