@@ -648,7 +648,7 @@ gpu.barrier
 %a_dpas_1 = xevm.blockload %m, %addr1 : !llvm.ptr<f16, 3> -> vector<16xf16>
 %a_dpas_2 = xevm.blockload %m, %addr2 : !llvm.ptr<f16, 3> -> vector<16xf16>
 %a_dpas_3 = xevm.blockload %m, %addr3 : !llvm.ptr<f16, 3> -> vector<16xf16>
-
+```
 
 **Attribute xegpu.sg_map**
 
