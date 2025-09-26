@@ -650,6 +650,46 @@ gpu.barrier
 %a_dpas_3 = xevm.blockload %m, %addr3 : !llvm.ptr<f16, 3> -> vector<16xf16>
 ```
 
+**Reduction using SLM Example**
+
+Below is a code example demonstrating reduction at the workgroup level, which requires performing reduction across subgroups.
+
+```
+#a_wg  = { sg_layout = [8, 4], sg_data = [16, 16], order = [0, 1] }
+#reduce_wg = slice<#a_wg, dim=[1]>
+
+%a = xegpu.load %src[%offset], %mask  #a_wg : ui64, vector<128x64xindex>, vector<128x64xi1> -> vector<128x64xf16>
+%redce = vector.reduce %a dim=[1]: vector<128x64xf16> #reduce_wg -> vector<128xf16> 
+```
+
+***Workgroup-Level Reduction Using SLM***
+
+Reduction across a workgroup requires coordination between subgroups. The typical pattern is:
+
+1. Each subgroup performs a partial reduction in registers.
+2. Intermediate results are written to shared local memory (SLM).
+3. All subgroups read the intermediate values from SLM and perform the final reduction.
+
+This approach ensures efficient and correct reduction across the entire workgroup by leveraging both register-level and SLM-based reductions.
+
+Below is an example illustrating this pattern:
+
+```mlir
+
+%sg_a = xegpu.load %src[%sg_offset], %sg_mask  #a_wg : ui64, vector<16x16xindex>, vector<16x16xi1> -> vector<16x16xf16>
+%sg_partial_reduced = vector.reduce_add %sg_a [1] : vector<16x16xf16> -> vector<16xf16>
+
+// Allocate SLM buffer and create mem_desc for the full matrix
+%m = memref.alloca() {alignment = 1024} : memref<1024xi8, 3>
+%mt = xegpu.create_mem_desc %m : memref<1024xi8, 3>  -> mem_desc<128x4xf16, @stride=[1, 128], @block=[16, 4]>
+xegpu.store_matrix %sg_partial_reduced, %mt[sg_y*16, sg_x] : vector<16xf16>, mem_desc<128x4xf16, @stride=[1, 128], @block=[16, 4]>
+gpu.barrier
+
+%sg_partial_reduce_4lanes = xegpu.load_matrix %mt[sg_y*16, 0] : mem_desc<128x4xf16, @stride=[1, 128], @block=[16, 4]> -> vector<16x4xf16>
+%sg_reduced = vector.reduce_add %sg_partial_reduce_4lanes [1] : vector<16x4xf16> -> vector<16xf16>
+
+```
+
 **Attribute xegpu.sg_map**
 
 xegpu.sg_map specifies how a 2D tensor (defined by the tensor descriptor) is partitioned among work items (WIs) within a subgroup. sg_map consists of two parameters:
