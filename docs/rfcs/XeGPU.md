@@ -504,17 +504,19 @@ This example illustrates how load_matrix and store_matrix are distributed from w
 The distribution process assumes matrix stored in row-major contiguous layout, and performes indexing using logical coordinates. These logical coordinates are used throughout tile distribution and layout transformations. Only at the final lowering stage (e.g., MaterializeSLMAccess) are physical offsets computed using memory layout attributes such as @strides and @block. A key property of the mem_desc data type is that logical tile decomposition does not alter the block or stride metadata, making logical address computation straightforward.
 
 ```mlir
+#load_t_inst  = { inst_data = [8, 32] }
 #coop_t_inst  = { inst_data = [8, 16] }
 #dpas_t_inst  = { inst_data = [16, 16] }
 
 // Each subgroup loads its portion of the global matrix using inst_data layout
 %tdesc_sg = xegpu.create_nd_tdesc %base[%widy * 32 + %sg_idy * 8, %widx * 256 + %sg_idx * 32]
-    : memref<4096x4096xf16> -> tensor_desc<8x32xf16, #coop_t_inst>
+    : memref<4096x4096xf16> -> tensor_desc<8x32xf16, #load_t_inst>
 %at = xegpu.load_nd %tdesc_sg
-    : tensor_desc<8x32xf16, #coop_t_inst> -> vector<8x32xf16>
+    : tensor_desc<8x32xf16, #load_t_inst> -> vector<8x32xf16>
+%at2 = xegpu.conv_layout %at #coop_t_inst
 %m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
 %mt = xegpu.create_mem_desc %m : memref<16384xi8, 3>  -> mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
-xegpu.store_matrix %at, %mt[%sg_idy * 8, %sg_idx * 32] #coop_t_inst
+xegpu.store_matrix %at2, %mt[%sg_idy * 8, %sg_idx * 32] #coop_t_inst
     : vector<8x32xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 
 gpu.barrier
@@ -550,6 +552,33 @@ gpu.barrier
     : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
 %a_dpas_3 = xegpu.load_matrix %[%sg_idy * 32 + 16,  %sg_idx * 32 % 32 + 16]
     : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16x16xf16>
+```
+
+**Subgroup to Lane distribution**
+
+```mlir
+%tdesc_sg = xegpu.create_nd_tdesc %base[%widy * 32 + %sg_idy * 8, %widx * 256 + %sg_idx * 32]
+    : memref<4096x4096xf16> -> tensor_desc<8x32xf16>
+%at = xegpu.load_nd %tdesc_sg     : tensor_desc<8x32xf16> -> vector<16xf16>
+%at0 = vector.extract %at[0]   : vector<16xf16> -> vector<8xf16>
+%at1 = vector.extract %at[8]  : vector<16xf16> -> vector<8xf16>
+%m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
+%mt = xegpu.create_mem_desc %m : memref<16384xi8, 3>  -> mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at0, %mt[%sg_idy * 8, %sg_idx * 32 + %lane_id ] @vec_len=8 @vec_dir=col
+    : vector<8xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+xegpu.store_matrix %at1, %mt[%sg_idy * 8, %sg_idx * 32 + 16 + %lane_id] @vec_len=8 @vec_dir=col
+    : vector<8xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
+
+gpu.barrier
+%ma = xegpu.create_mem_desc %m : memref<16384xi8, 3>  -> mem_desc<256x32xf16, @block=[16, 16]>
+%a_dpas_0 = xegpu.load_matrix %ma[%sg_idy * 32, %sg_idx * 32 % 32] @subgroupBlockIO
+    : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
+%a_dpas_1 = xegpu.load_matrix %ma[%sg_idy * 32, %sg_idx * 32 % 32 + 16] @subgroupBlockIO
+    : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
+%a_dpas_2 = xegpu.load_matrix %ma[%sg_idy * 32 + 16,  %sg_idx * 32 % 32] @subgroupBlockIO
+    : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
+%a_dpas_3 = xegpu.load_matrix %[%sg_idy * 32 + 16,  %sg_idx * 32 % 32 + 16] @subgroupBlockIO
+    : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
 ```
 
 **MaterializeSLMAccess: Lowering mem_desc to Physical Memory Access**
