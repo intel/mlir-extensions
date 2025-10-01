@@ -144,14 +144,10 @@ module @gemm attributes {gpu.container_module} {
 
     // CHECK: gpu.func @test_create_nd_tdesc_1d_dynamic_strided_memref(%[[arg0:.*]]: memref<?x?xf16, strided<[?, ?], offset: ?>>, %[[arg1:.*]]: index, %[[arg2:.*]]: index, %[[arg3:.*]]: index, %[[arg4:.*]]: index) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
     gpu.func @test_create_nd_tdesc_1d_dynamic_strided_memref(%arg0: memref<?x?xf16, strided<[?,?], offset: ?>>, %arg1 : index, %arg2 : index, %arg3 : index, %arg4 : index) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>}{
-      //CHECK: %[[c0:.*]] = arith.constant 0 : index
       %c0 = arith.constant 0 : index
       //CHECK: %[[intptr:.*]] = memref.extract_aligned_pointer_as_index %arg0 : memref<?x?xf16, strided<[?, ?], offset: ?>> -> index
       //CHECK: %[[c2:.*]] = arith.constant 2 : index
-      //CHECK: %[[r0:.*]] = arith.muli %[[arg3]], %[[c2]] : index
-      //CHECK: %[[r1:.*]] = arith.muli %[[r0]], %[[c0]] : index
-      //CHECK: %[[r2:.*]] = arith.addi %[[intptr]], %[[r1]] : index
-      //CHECK: %[[r3:.*]] = arith.index_castui %[[r2]] : index to i64
+      //CHECK: %[[r3:.*]] = arith.index_castui %[[intptr]] : index to i64
       %tdesc_1d = xegpu.create_nd_tdesc %arg0[%c0, %c0], shape: [%arg1, %arg2], strides: [%arg3, %arg4] : memref<?x?xf16, strided<[?,?], offset: ?>> -> !xegpu.tensor_desc<16xf16>
       gpu.return
     }

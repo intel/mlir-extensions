@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -split-input-file -imex-vector-linearize -canonicalize | FileCheck %s
+// RUN: imex-opt %s -split-input-file -xegpu-vector-linearize -canonicalize | FileCheck %s
 module {
   gpu.module @postop_reduce_n attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Bfloat16ConversionINTEL, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, VectorAnyINTEL], [SPV_INTEL_bfloat16_conversion, SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
     gpu.func @postop_reduce_n(%arg0: memref<16384x12288xbf16>, %arg1: memref<1536x12288xbf16>, %arg2: memref<16384x4xf32>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 8, 4, 1>, gpu.known_grid_size = array<i32: 8, 32, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
