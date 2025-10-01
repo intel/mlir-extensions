@@ -11,7 +11,6 @@ add_mlir_library(IMEXTransforms
   SerializeSPIRV.cpp
   SetSPIRVAbiAttribute.cpp
   SetSPIRVCapabilities.cpp
-  VectorLinearize.cpp
   VnniTransformation.cpp
   OptimizeTranspose.cpp
   HoistTranspose.cpp

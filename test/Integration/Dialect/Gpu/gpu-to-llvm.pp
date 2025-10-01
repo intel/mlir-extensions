@@ -3,7 +3,7 @@
 // spirv dialect (for device code) lowering pipeline.
 // Ready for imex runner starting from GPU dialect.
 builtin.module(
-    imex-vector-linearize
+    xegpu-vector-linearize
     cse
     gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true})
     reconcile-unrealized-casts

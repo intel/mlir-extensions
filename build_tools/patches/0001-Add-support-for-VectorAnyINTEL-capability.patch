@@ -1,13 +1,13 @@
-From e0189210ee8e532bea15f0592a801f2264b62834 Mon Sep 17 00:00:00 2001
+From 887ae8599b205921bc4fd34da3c1de767f5568ae Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Wed, 13 Aug 2025 17:08:31 +0200
+Date: Tue, 23 Sep 2025 21:22:18 +0200
 Subject: [PATCH] Add support for VectorAnyINTEL capability
 
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  11 +-
  mlir/include/mlir/IR/CommonTypeConstraints.td |  86 +++++++++++
  mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    |   7 +-
- mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      |  23 ++-
+ mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      |  26 +++-
  .../SPIRV/Transforms/SPIRVConversion.cpp      | 135 +++++++++++++++---
  .../arith-to-spirv-unsupported.mlir           |   4 +-
  .../ArithToSPIRV/arith-to-spirv.mlir          |  34 +++++
@@ -21,13 +21,13 @@ Subject: [PATCH] Add support for VectorAnyINTEL capability
  mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir       |  34 ++---
  mlir/test/Target/SPIRV/arithmetic-ops.mlir    |   6 +-
  mlir/test/Target/SPIRV/ocl-ops.mlir           |   6 +
- 17 files changed, 322 insertions(+), 67 deletions(-)
+ 17 files changed, 324 insertions(+), 68 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index bdfd728d1d0b..31e8bc288d5b 100644
+index 0e42d08cdb1f..f821b0d2e59b 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4233,7 +4233,14 @@ def SPIRV_BFloat16KHR : TypeAlias<BF16, "BFloat16">;
+@@ -4240,7 +4240,14 @@ def SPIRV_BFloat16KHR : TypeAlias<BF16, "BFloat16">;
  def SPIRV_Float : FloatOfWidths<[16, 32, 64]>;
  def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
  def SPIRV_AnyFloat : AnyTypeOf<[SPIRV_Float, SPIRV_BFloat16KHR]>;
@@ -43,7 +43,7 @@ index bdfd728d1d0b..31e8bc288d5b 100644
                                         [SPIRV_Bool, SPIRV_Integer, SPIRV_AnyFloat]>;
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
-@@ -4286,7 +4293,7 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
+@@ -4293,7 +4300,7 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
      "Matrix">;
 
  class SPIRV_VectorOf<Type type> :
@@ -53,10 +53,10 @@ index bdfd728d1d0b..31e8bc288d5b 100644
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index b682f4c025a4..298553c83947 100644
+index 6b4e3dd60319..987b33c055e9 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
-@@ -648,6 +648,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
+@@ -654,6 +654,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
 
@@ -150,7 +150,7 @@ index b682f4c025a4..298553c83947 100644
  // Negative values for `n` index in reverse.
  class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index fcf152649197..bbc538a19840 100644
+index c8efdf009422..5236dc299f81 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 @@ -186,9 +186,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
@@ -169,10 +169,10 @@ index fcf152649197..bbc538a19840 100644
        return Type();
      }
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index ddb342621f37..952c474fd34d 100644
+index 7e9a80e7d73a..1db6233cf73f 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-@@ -98,9 +98,10 @@ bool CompositeType::classof(Type type) {
+@@ -186,9 +186,10 @@ bool CompositeType::classof(Type type) {
  }
 
  bool CompositeType::isValid(VectorType type) {
@@ -186,31 +186,34 @@ index ddb342621f37..952c474fd34d 100644
  }
 
  Type CompositeType::getElementType(unsigned index) const {
-@@ -171,7 +172,21 @@ void CompositeType::getCapabilities(
-       .Case<VectorType>([&](VectorType type) {
-         auto vecSize = getNumElements();
-         if (vecSize == 8 || vecSize == 16) {
--          static const Capability caps[] = {Capability::Vector16};
-+          static const Capability caps[] = {Capability::Vector16,
-+                                            Capability::VectorAnyINTEL};
-+          ArrayRef<Capability> ref(caps, std::size(caps));
-+          capabilities.push_back(ref);
-+        }
-+        // If the vector size is between [2 to 2^32 - 1]
-+        // and not of any size 2, 3, 4, 8, and 16
-+        // VectorAnyIntel Capability must be present
-+        // for the SPIR-V to be valid
-+        llvm::SmallVector<uint32_t, 5> allowedVecRange = {2, 3, 4, 8, 16};
-+        if (vecSize >= 2 &&
-+            (llvm::none_of(allowedVecRange, [&](uint32_t allowedVecSize) {
-+              return vecSize == allowedVecSize;
-+            }))) {
-+          static const Capability caps[] = {Capability::VectorAnyINTEL};
-           ArrayRef<Capability> ref(caps, std::size(caps));
-           capabilities.push_back(ref);
-         }
+@@ -221,8 +222,23 @@ void TypeCapabilityVisitor::addConcrete(VectorType type) {
+
+   int64_t vecSize = type.getNumElements();
+   if (vecSize == 8 || vecSize == 16) {
+-    static constexpr auto cap = Capability::Vector16;
+-    capabilities.push_back(cap);
++    static const Capability caps[] = {Capability::Vector16,
++                                      Capability::VectorAnyINTEL};
++    ArrayRef<Capability> ref(caps, std::size(caps));
++    capabilities.push_back(ref);
++  }
++  // If the vector size is between [2 to 2^32 - 1]
++  // and not of any size 2, 3, 4, 8, and 16
++  // VectorAnyIntel Capability must be present
++  // for the SPIR-V to be valid
++  llvm::SmallVector<uint32_t, 5> allowedVecRange = {2, 3, 4, 8, 16};
++  if (vecSize >= 2 &&
++      (llvm::none_of(allowedVecRange, [&](uint32_t allowedVecSize) {
++       return vecSize == allowedVecSize;
++     }))) {
++    static const Capability caps[] = {Capability::VectorAnyINTEL};
++    ArrayRef<Capability> ref(caps, std::size(caps));
++    capabilities.push_back(ref);
+   }
+ }
+
 diff --git a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
-index 49f4ce8de7c7..eef55a427486 100644
+index 122f61e0a66a..c6f37e9345ed 100644
 --- a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 +++ b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 @@ -84,9 +84,13 @@ static std::optional<SmallVector<int64_t>> getTargetShape(VectorType vecType) {
@@ -426,10 +429,10 @@ index 9d7ab2be096e..3aa22e261f7c 100644
  }
 
 diff --git a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
-index 6e2352e706ac..4c9d2e147bc6 100644
+index 3cb529459899..e881d512bf2e 100644
 --- a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
 +++ b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
-@@ -1479,6 +1479,40 @@ func.func @ops_flags(%arg0: i64, %arg1: i64) {
+@@ -1532,6 +1532,40 @@ func.func @ops_flags(%arg0: i64, %arg1: i64) {
    %2 = arith.muli %arg0, %arg1 overflow<nsw, nuw> : i64
    // CHECK: %{{.*}} = spirv.IMul %{{.*}}, %{{.*}} : i64
    %3 = arith.muli %arg0, %arg1 overflow<nsw, nuw> : i64
@@ -720,10 +723,10 @@ index 6aaaa6012fef..60ef7afeeeed 100644
    // expected-error @+1 {{expected ':'}}
    %2 = spirv.CL.s_abs %arg0, %arg1 : i32
 diff --git a/mlir/test/Target/SPIRV/arithmetic-ops.mlir b/mlir/test/Target/SPIRV/arithmetic-ops.mlir
-index b80e17f979da..32103f7b9c57 100644
+index ec47035d088b..44ce439a3f53 100644
 --- a/mlir/test/Target/SPIRV/arithmetic-ops.mlir
 +++ b/mlir/test/Target/SPIRV/arithmetic-ops.mlir
-@@ -6,9 +6,9 @@ spirv.module Logical GLSL450 requires #spirv.vce<v1.0, [Shader], []> {
+@@ -11,9 +11,9 @@ spirv.module Logical GLSL450 requires #spirv.vce<v1.0, [Shader, Linkage, BFloat1
      %0 = spirv.FMul %arg0, %arg1 : f32
      spirv.Return
    }
@@ -737,10 +740,10 @@ index b80e17f979da..32103f7b9c57 100644
    }
    spirv.func @fdiv(%arg0 : vector<4xf32>, %arg1 : vector<4xf32>) "None" {
 diff --git a/mlir/test/Target/SPIRV/ocl-ops.mlir b/mlir/test/Target/SPIRV/ocl-ops.mlir
-index 9a2e4cf62e37..31a7f616d648 100644
+index 17accd93e824..ed9a9976e89b 100644
 --- a/mlir/test/Target/SPIRV/ocl-ops.mlir
 +++ b/mlir/test/Target/SPIRV/ocl-ops.mlir
-@@ -39,6 +39,12 @@ spirv.module Physical64 OpenCL requires #spirv.vce<v1.0, [Kernel, Addresses], []
+@@ -44,6 +44,12 @@ spirv.module Physical64 OpenCL requires #spirv.vce<v1.0, [Kernel, Addresses, Vec
      spirv.Return
    }
 

@@ -2,7 +2,6 @@
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
-// XFAIL:*
 
 module @gemm attributes {gpu.container_module} {
   gpu.module @kernel {

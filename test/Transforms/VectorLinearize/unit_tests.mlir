@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -split-input-file -imex-vector-linearize | FileCheck %s
+// RUN: imex-opt %s -split-input-file -xegpu-vector-linearize | FileCheck %s
 
 // -----
 func.func @test() -> vector<4x2xf16> {

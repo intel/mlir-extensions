@@ -30,12 +30,10 @@ gpu.module @test_wg_to_sg  {
         //CHECK: %[[c32:.*]] = arith.constant 32 : index
         //CHECK: %[[R5:.*]] = index.divu %[[R4]], %[[c4]]
         //CHECK: %[[R6:.*]] = index.remu %[[R4]], %[[c4]]
-        //CHECK: %[[R7:.*]] = index.add %[[R5]], %[[c0]]
-        //CHECK: %[[R8:.*]] = index.remu %[[R7]], %[[c4]]
+        //CHECK: %[[R8:.*]] = index.remu %[[R5]], %[[c4]]
         //CHECK: %[[R9:.*]] = index.mul %[[R8]], %[[c32]]
         //CHECK: %[[R10:.*]] = index.add %[[R2]], %[[R9]]
-        //CHECK: %[[R11:.*]] = index.add %[[R6]], %[[c0]]
-        //CHECK: %[[R12:.*]] = index.remu %[[R11]], %[[c4]]
+        //CHECK: %[[R12:.*]] = index.remu %[[R6]], %[[c4]]
         //CHECK: %[[R13:.*]] = index.mul %[[R12]], %[[c32]]
         //CHECK: %[[R14:.*]] = index.add %[[R3]], %[[R13]]
 
@@ -55,17 +53,15 @@ gpu.module @test_wg_to_sg  {
 
 
         //CHECK: %[[c1:.*]] = arith.constant 1 : index
-        //CHECK: %[[R17:.*]] = index.remu %[[R11]], %[[c1]]
+        //CHECK: %[[R17:.*]] = index.remu %[[R6]], %[[c1]]
         //CHECK: %[[R18:.*]] = index.mul %[[R17]], %[[c128]]
-        //CHECK: %[[R19:.*]] = index.add %[[R18]], %[[c0]]
-        //CHECK: %[[R20:.*]] = xetile.init_tile %[[arg0]][%[[R10]], %[[R19]]] : memref<1024x1024xf16> -> !xetile.tile<32x128xf16>
+        //CHECK: %[[R20:.*]] = xetile.init_tile %[[arg0]][%[[R10]], %[[R18]]] : memref<1024x1024xf16> -> !xetile.tile<32x128xf16>
         %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16>
           -> !xetile.tile<128x128xf16, #tile_attr_a>
 
-        //CHECK: %[[R21:.*]] = index.remu %[[R7]], %[[c1]]
+        //CHECK: %[[R21:.*]] = index.remu %[[R5]], %[[c1]]
         //CHECK: %[[R22:.*]] = index.mul %[[R21]], %[[c128]]
-        //CHECK: %[[R23:.*]] = index.add %[[R22]], %[[c0]]
-        //CHECK: %[[R24:.*]] = xetile.init_tile %[[arg1]][%[[R23]], %[[R14]]] : memref<1024x1024xf16> -> !xetile.tile<128x32xf16>
+        //CHECK: %[[R24:.*]] = xetile.init_tile %[[arg1]][%[[R22]], %[[R14]]] : memref<1024x1024xf16> -> !xetile.tile<128x32xf16>
         %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16>
           -> !xetile.tile<128x128xf16, #tile_attr_b>
 

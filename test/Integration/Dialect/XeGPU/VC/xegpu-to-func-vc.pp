@@ -11,7 +11,7 @@ builtin.module(
         convert-xegpu-to-vc)
     cse
     canonicalize
-    imex-vector-linearize
+    xegpu-vector-linearize
     canonicalize
     cse
     reconcile-unrealized-casts

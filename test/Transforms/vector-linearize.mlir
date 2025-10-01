@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -split-input-file -imex-vector-linearize | FileCheck %s
+// RUN: imex-opt %s -split-input-file -xegpu-vector-linearize | FileCheck %s
 
 // CHECK-LABEL: @test_linearize
 //  CHECK-SAME: (%[[ARG0:.*]]: vector<2x2xf32>) -> vector<2x2xf32> {

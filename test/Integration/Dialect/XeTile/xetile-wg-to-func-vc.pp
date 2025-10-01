@@ -15,7 +15,7 @@ builtin.module(
         cse
         convert-xegpu-to-vc)
     cse
-    imex-vector-linearize
+    xegpu-vector-linearize
     canonicalize
     reconcile-unrealized-casts
     bf16-to-gpu
