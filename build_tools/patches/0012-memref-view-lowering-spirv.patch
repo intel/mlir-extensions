@@ -5,7 +5,7 @@ index 2e00b42f4a56..15529d4c9b54 100644
 @@ -393,8 +393,65 @@ AllocOpPattern::matchAndRewrite(memref::AllocOp operation, OpAdaptor adaptor,
    return success();
  }
- 
+
 +class ViewOpPattern final : public OpConversionPattern<memref::ViewOp> {
 +public:
 +  using OpConversionPattern<memref::ViewOp>::OpConversionPattern;
@@ -67,7 +67,7 @@ index 2e00b42f4a56..15529d4c9b54 100644
 +//===----------------------------------------------------------------------===//
 +// AtomicRMWOp
  //===----------------------------------------------------------------------===//
- 
+
  LogicalResult
 @@ -1071,7 +1128,7 @@ LogicalResult ExtractAlignedPointerAsIndexOpPattern::matchAndRewrite(
  namespace mlir {
@@ -83,9 +83,9 @@ index e6321e99693a..7308f000cdbe 100644
 --- a/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir
 +++ b/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir
 @@ -446,6 +446,30 @@ func.func @cast_to_static_zero_elems(%arg: memref<?xf32, #spirv.storage_class<Cr
- 
+
  // -----
- 
+
 +// Check memref.view
 +
 +module attributes {

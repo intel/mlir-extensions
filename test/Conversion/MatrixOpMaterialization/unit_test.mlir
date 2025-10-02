@@ -50,7 +50,7 @@ gpu.module @test {
     //CHECK: [[shapecast:%.+]] = vector.shape_cast [[load]] : vector<4x16x2xf16> to vector<4x32xf16>
     //CHECK: [[bcast:%.+]] = vector.bitcast [[shapecast]] : vector<4x32xf16> to vector<4x16xf32>
     //CHECK: [[data:%.+]] = vector.transpose [[bcast]], [1, 0] : vector<4x16xf32> to vector<16x4xf32>
-    //CHECK: [[tdesc2:%.+]] = xegpu.create_tdesc [[view]], [[offsets]] : memref<512xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>> 
+    //CHECK: [[tdesc2:%.+]] = xegpu.create_tdesc [[view]], [[offsets]] : memref<512xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>>
     //CHECK: xegpu.store [[data]], [[tdesc2]], [[mask]] : vector<16x4xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>>, vector<16xi1>
     %tdesc = xegpu.create_nd_tdesc %A[0, 0] : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
     %data = xegpu.load_nd %tdesc: !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
@@ -74,7 +74,7 @@ gpu.module @test {
     //CHECK: [[shapecast:%.+]] = vector.shape_cast [[shuffle]] : vector<128xf16> to vector<4x32xf16>
     //CHECK: [[bcast:%.+]] = vector.bitcast [[shapecast]] : vector<4x32xf16> to vector<4x16xf32>
     //CHECK: [[data:%.+]] = vector.transpose [[bcast]], [1, 0] : vector<4x16xf32> to vector<16x4xf32>
-    //CHECK: [[tdesc2:%.+]] = xegpu.create_tdesc [[view]], [[offsets]] : memref<512xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>> 
+    //CHECK: [[tdesc2:%.+]] = xegpu.create_tdesc [[view]], [[offsets]] : memref<512xf32, 3>, vector<16xindex> -> !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>>
     //CHECK: xegpu.store [[data]], [[tdesc2]], [[mask]] : vector<16x4xf32>, !xegpu.tensor_desc<16x4xf32, #xegpu.scatter_tdesc_attr<memory_space = slm, chunk_size = 4 : i64>>, vector<16xi1>
     %tdesc = xegpu.create_nd_tdesc %A[0, 0] : memref<64x64xf16> -> !xegpu.tensor_desc<8x16xf16>
     %data = xegpu.load_nd %tdesc: !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
@@ -84,5 +84,5 @@ gpu.module @test {
     xegpu.store_nd %data, %tdesc: vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
     gpu.return
   }
-  
+
 }

@@ -5,13 +5,13 @@ index cb4b8c2468d7..4dcf95a0f87a 100644
 @@ -573,6 +573,10 @@ def XeGPU_MemLayoutAttr : XeGPUAttr<"MemLayout", "mem_layout"> {
        return getAttrs().getAs<ArrayAttr>("stride");
      }
- 
+
 +    ArrayAttr getBlockAttr() {
 +      return getAttrs().getAs<ArrayAttr>("block");
 +    }
 +
    }];
- 
+
  }
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUTypes.td
 index f8b371db498e..93642c2166e1 100644
@@ -20,7 +20,7 @@ index f8b371db498e..93642c2166e1 100644
 @@ -232,7 +232,7 @@ def XeGPU_MemDesc: XeGPUTypeDef<"MemDesc", "mem_desc", [ShapedTypeInterface], "m
        return MemDescType::get(getContext(), shape.value_or(getShape()), elementType, getMemLayout());
      }
- 
+
 -    ArrayAttr getStrides() {
 +    ArrayAttr getStridesAttr() {
        auto layout = getMemLayout();
@@ -131,7 +131,7 @@ index f8b371db498e..93642c2166e1 100644
 +                       Location loc, ArrayRef<OpFoldResult> offsets);
 +
    }];
- 
+
    let hasCustomAssemblyFormat = true;
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUDialect.cpp
 index 8ea8cb1f4597..808270534459 100644
@@ -224,7 +224,7 @@ index 8ea8cb1f4597..808270534459 100644
 +
 +  return linearOffset;
 +}
- 
+
  } // namespace xegpu
  } // namespace mlir
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
@@ -234,9 +234,9 @@ index ecee53c56a54..ba38d74f3c7f 100644
 @@ -1069,7 +1069,7 @@ LogicalResult MemDescSubviewOp::verify() {
            [](auto p) { return std::get<0>(p) > std::get<1>(p); }))
      return emitOpError("result shape must not exceed source shape.");
- 
+
 -  if (srcTy.getStrides() != resTy.getStrides())
 +  if (srcTy.getStridesAttr() != resTy.getStridesAttr())
      return emitOpError("result must inherit the source strides.");
- 
+
    return success();
