@@ -226,4 +226,19 @@ def TileLoops : Pass<"tile-loops", "::mlir::func::FuncOp"> {
   ];
 }
 
+def MaterializeMatrixOp: Pass<"imex-xegpu-materialize-matrix-op"> {
+  let summary = "materialize matrix ops for Xe2/Xe3";
+  let description = [{
+    Coverts mem_desc operations (load_matrix, store_matrix) into other xegpu memory operations
+    (load/store chunk, 1d block load) over shared local memory. It computes physical address
+    using the matrix's layout attributes (@strides, @block) and logical lane coordinates.
+  }];
+  let constructor = "imex::createMaterializeMatrixOpPass()";
+  let dependentDialects = [
+    "::mlir::xegpu::XeGPUDialect",
+    "::mlir::vector::VectorDialect",
+    "::mlir::memref::MemRefDialect"
+  ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

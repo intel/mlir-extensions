@@ -1,13 +1,14 @@
-// gpu dialect with intel intrinsic functions (func dialect) to
-// llvm dialect (for host code) and
-// spirv dialect (for device code) lowering pipeline.
-// Ready for imex runner starting from GPU dialect.
 builtin.module(
-    gpu.module(imex-xegpu-hoist-transpose,
-        imex-xegpu-apply-vnni-transformation,
-        imex-xegpu-optimize-transpose)
     cse
-    gpu.module(convert-math-to-vc{enable-high-precision-interim-calculation=true}
+    gpu.module(
+        imex-xegpu-materialize-matrix-op
+        cse
+        canonicalize
+        imex-xegpu-hoist-transpose
+        imex-xegpu-apply-vnni-transformation
+        imex-xegpu-optimize-transpose
+        cse
+        convert-math-to-vc{enable-high-precision-interim-calculation=true}
         convert-xegpu-to-vc)
     cse
     canonicalize
@@ -35,4 +36,3 @@ builtin.module(
     convert-gpux-to-llvm
     lower-affine
     reconcile-unrealized-casts)
-// End

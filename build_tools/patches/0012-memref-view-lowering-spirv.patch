@@ -1,0 +1,115 @@
+diff --git a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
+index 2e00b42f4a56..15529d4c9b54 100644
+--- a/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
++++ b/mlir/lib/Conversion/MemRefToSPIRV/MemRefToSPIRV.cpp
+@@ -393,8 +393,65 @@ AllocOpPattern::matchAndRewrite(memref::AllocOp operation, OpAdaptor adaptor,
+   return success();
+ }
+ 
++class ViewOpPattern final : public OpConversionPattern<memref::ViewOp> {
++public:
++  using OpConversionPattern<memref::ViewOp>::OpConversionPattern;
++
++  LogicalResult
++  matchAndRewrite(memref::ViewOp operation, OpAdaptor adaptor,
++                  ConversionPatternRewriter &rewriter) const override;
++};
++
++
+ //===----------------------------------------------------------------------===//
+-// AllocOp
++// ViewOp
++// %view = memref.view %alloc[%c0][] : memref<2048xi8, 3> to memref<512xf32, 3>
++//  spirv.GlobalVariable @__workgroup_mem__1 : !spirv.ptr<!spirv.array<2048 x i8>, Workgroup>
++//  %1 = spirv.Bitcast @__workgroup_mem__1 : !spirv.ptr<!spirv.array<2048 x i8>, Workgroup> to !spirv.ptr<!spirv.array<512 x f32>, Workgroup>
++//
++//===----------------------------------------------------------------------===//
++
++LogicalResult
++ViewOpPattern::matchAndRewrite(memref::ViewOp operation, OpAdaptor adaptor,
++                               ConversionPatternRewriter &rewriter) const {
++  MemRefType ToType = operation.getType();
++
++  // insert spirv.bitcast which cast the pointer type from spirvFromType to spirvToType
++  Type spirvToType = getTypeConverter()->convertType(ToType);
++  if (!spirvToType)
++    return rewriter.notifyMatchFailure(operation, "type conversion failed");
++
++  // need to limit the case where the source is a memref with element type i8
++  // the result memref must have static sizes.
++  MemRefType FromType = cast<MemRefType>(operation.getSource().getType());
++  if (!FromType.getElementType().isInteger(8) || !FromType.hasStaticShape())
++    return rewriter.notifyMatchFailure(operation, "unhandled view type");
++  if (!ToType.hasStaticShape())
++    return rewriter.notifyMatchFailure(operation, "unhandled view type");
++
++  // get base pointer from adaptor.getSource()
++  Value basePtr = adaptor.getSource();
++  // get the offset
++  Value offset = adaptor.getByteShift();
++  if (offset) {
++    Location loc = operation.getLoc();
++    auto *spirvTypeConverter = getTypeConverter<SPIRVTypeConverter>();
++    Type materializedIndexType = spirvTypeConverter->getIndexType();
++    Value basePtrAsInt = rewriter.createOrFold<spirv::ConvertPtrToUOp>(loc, materializedIndexType, basePtr);
++    Value newPtrAsInt = rewriter.createOrFold<spirv::IAddOp>(loc, materializedIndexType, basePtrAsInt, offset);
++    Value newPtr = rewriter.createOrFold<spirv::ConvertUToPtrOp>(loc, basePtr.getType(), newPtrAsInt);
++    basePtr = newPtr;
++  }
++
++  Location loc = operation.getLoc();
++  Value castOp = rewriter.createOrFold<spirv::BitcastOp>(
++      loc, spirvToType, basePtr);
++  rewriter.replaceOp(operation, castOp);
++  return success();
++}
++
++//===----------------------------------------------------------------------===//
++// AtomicRMWOp
+ //===----------------------------------------------------------------------===//
+ 
+ LogicalResult
+@@ -1071,7 +1128,7 @@ LogicalResult ExtractAlignedPointerAsIndexOpPattern::matchAndRewrite(
+ namespace mlir {
+ void populateMemRefToSPIRVPatterns(const SPIRVTypeConverter &typeConverter,
+                                    RewritePatternSet &patterns) {
+-  patterns.add<AllocaOpPattern, AllocOpPattern, AtomicRMWOpPattern,
++  patterns.add<AllocaOpPattern, AllocOpPattern, ViewOpPattern, AtomicRMWOpPattern,
+                DeallocOpPattern, IntLoadOpPattern, ImageLoadOpPattern,
+                IntStoreOpPattern, LoadOpPattern, MemorySpaceCastOpPattern,
+                StoreOpPattern, ReinterpretCastPattern, CastPattern,
+diff --git a/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir b/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir
+index e6321e99693a..7308f000cdbe 100644
+--- a/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir
++++ b/mlir/test/Conversion/MemRefToSPIRV/memref-to-spirv.mlir
+@@ -446,6 +446,30 @@ func.func @cast_to_static_zero_elems(%arg: memref<?xf32, #spirv.storage_class<Cr
+ 
+ // -----
+ 
++// Check memref.view
++
++module attributes {
++  spirv.target_env = #spirv.target_env<
++    #spirv.vce<v1.0,
++      [
++        Kernel, Addresses, GenericPointer, Int8, Int64, StorageBuffer8BitAccess, Shader], [SPV_KHR_8bit_storage]>, #spirv.resource_limits<>>
++} {
++
++// CHECK-LABEL: func @memory_view
++//  CHECK-SAME: (%[[ARG0:.+]]: memref<2048xi8, #spirv.storage_class<Function>>)
++func.func @memory_view(%arg0: memref<2048xi8, #spirv.storage_class<Function>>)
++  -> memref<512xf32, #spirv.storage_class<Function>> {
++// CHECK-DAG: %[[ARG0_CAST:.+]] = builtin.unrealized_conversion_cast %[[ARG0]] : memref<2048xi8, #spirv.storage_class<Function>> to !spirv.ptr<!spirv.array<2048 x i8>, Function>
++// CHECK: %[[BITCAST:.+]] = spirv.Bitcast %[[ARG0_CAST]] : !spirv.ptr<!spirv.array<2048 x i8>, Function> to !spirv.ptr<!spirv.array<512 x f32>, Function>
++  %c0 = arith.constant 0: index
++  %view = memref.view %arg0[%c0][] : memref<2048xi8, #spirv.storage_class<Function>> to memref<512xf32, #spirv.storage_class<Function>>
++  return %view : memref<512xf32, #spirv.storage_class<Function>>
++}
++
++}
++
++// -----
++
+ module attributes {
+   spirv.target_env = #spirv.target_env<#spirv.vce<v1.5, [Kernel, Int64, Addresses, PhysicalStorageBufferAddresses], []>, #spirv.resource_limits<>>
+ } {

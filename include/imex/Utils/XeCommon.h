@@ -376,6 +376,25 @@ llvm::SmallVector<mlir::Value> getStridesOrOffsetsOrShapesInValueType(
     mlir::PatternRewriter &rewriter,
     ::llvm::SmallVector<mlir::OpFoldResult> mixedOSS, mlir::Location loc);
 
+// This method is essentially to insert ops to do vnni transformation
+// on the given rank-2 VectorType value, and returns the value after
+// transformation.
+// The VC lowering path has to write contiguous 32-bit SLM locations
+// using chunk stores, which requires the data is loaded in VNNI fashion.
+// If the value is only has one use, which is store to
+// slm, it is marked as potentialFoldable. Then if value is produced by
+// a LoadNdOp, and the loadNdOp doesn't have packedAttr, it will fold
+// the vnni transformation with the LoadNdOp, instead of inserting extra ops.
+mlir::Value convertToPackedVector(mlir::PatternRewriter &rewriter,
+                                  mlir::Location loc, mlir::Value value,
+                                  bool potentialFoldable = false);
+
+// It converts a VectorType value to a 1D vector of 32-bit element type,
+// using shapecast and bitcast operations, e.g., vector<4x4xf16> ->
+// vector<8xi32>.
+mlir::Value convertTo1D32BitVector(mlir::Value value, mlir::Location loc,
+                                   mlir::PatternRewriter &rewriter);
+
 } // namespace imex
 
 #endif
