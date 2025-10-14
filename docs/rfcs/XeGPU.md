@@ -358,7 +358,9 @@ To represent a matrix stored in shared local memory (SLM), users must create a m
 |load_matrix	| operation ::= xegpu.load_matrix $mdesc[$offsets] attr-dict : type($mdesc), type(offsets) -> type($res)	| %result = xegpu.load_matrix %mdesc[0, 0] : mem_desc<128x256xbf16, @block=[8, 16]> -> vector<128x256xbf16> |
 |store_matrix	| operation ::= xegpu.store_matrix $val, $mdesc[$offsets] attr-dict : type($val), type($mdesc), type(offsets) 	| %result = xegpu.store_matrix %val %mdesc[0, 0] : vector<128x256xbf16>, mem_desc<128x256xbf16, @block=[8, 16]> |
 
-Users create a `mem_desc` to represent a matrix stored in shared local memory (SLM). The operation takes a memref and adds structure information to the representation of the share local memory. The result mem_desc has proper information including shape, element type, and memory layout attributes (@block and @strides). The result mem_desc must be 2D. The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
+Users create a `mem_desc` to represent a matrix stored in shared local memory (SLM). This operation takes a `memref` and augments it with structural information describing the layout of the shared local memory. The input memref must be contiguous, and its size and base address alignment must meet the specific microarchitectural requirements. 
+
+The resulting `mem_desc` includes metadata such as shape, element type, and memory layout attributes (`block` and `strides`). The `mem_desc` must describe a 2D matrix. The @block attribute indicates that the matrix follows a blocked layout, enabling optimized lowering to 1D block loads. The @strides attribute specifies the logical strides of each dimension and is typically used to support chunked loads.
 
 ```mlir
 %mdesc_a = xegpu.create_mem_desc: mem_desc<256x128xbf16>
@@ -377,7 +379,7 @@ xegpu.store_matrix %at, %mt[%sg_idy * 8, %sg_idx * 32] : vector<8x32xf16>, mem_d
 
 **Lane level attributes**
 At the lane level, a load_matrix operation retrieves a single element from the matrix in slm, with the element address determined by the lane’s offset.
-If the `vec_len` and `vec_dir` attributes are present, the operation instead retrieves a vector of length `vec_len` along the direction specified by `vec_dir`.
+When the return type is a vector, the operation retrieves multiple contiguous elements from SLM and returns them as a single vector value.
 If the `subgroupBlockIO` attribute is present, the load is a cooperative subgroup operation. In this case, the operation consumes a uniform memory descriptor and uniform offsets, 
 and returns the per-lane portion of the cooperatively loaded block.
 When 
@@ -385,13 +387,13 @@ When
 // Load a single element per lane
 %a = xegpu.load_matrix %ma[%sg_idy * 32, 0+%lane_id] : mem_desc<256x32xf16> -> f16
 // Load a vector along the column direction
-%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0+%lane_id] @vec_dir=col @vec_len=16: mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]> -> vector<16xf16>
+%a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0+%lane_id] : mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]> -> vector<16xf16>
 // Cooperative subgroup block load
 %a_dpas = xegpu.load_matrix %ma[%sg_idy * 32, 0] @subgroupBlockIO : mem_desc<256x32xf16, @block=[16, 16]> -> vector<16xf16>
 ```
 
 At the lane level, a store_matrix operation writes a single element to the matrix in slm, with the element address determined by the lane’s offset.
-If the `vec_len` and `vec_dir` attributes are present, the operation instead writes a vector of length `vec_len` along the direction specified by `vec_dir`.
+When the input is a vector, the operation writes the vector elements to contiguous addresses within the matrix stored in SLM.
 If the `subgroupBlockIO` attribute is present, the store is a cooperative subgroup operation. In this case, the operation consumes a uniform memory descriptor and uniform offsets, 
 and writes the per-lane portion of the data to the matrix cooperatively.
 When 
@@ -399,7 +401,7 @@ When
 // Store a single element per lane
 xegpu.store_matrix %a, %ma[%sg_idy * 32, 0+%lane_id] : f16, mem_desc<256x32xf16>
 // Store a vector along the column direction
-xegpu.store_matrix %a_dpas, %ma[%sg_idy * 32, 0+%lane_id] @vec_dir=col @vec_len=16: vector<16xf16>, mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]>
+xegpu.store_matrix %a_dpas, %ma[%sg_idy * 32, 0+%lane_id] : vector<16xf16>, mem_desc<256x32xf16, @stride=[1, 16], @block=[16, 16]>
 // Cooperative subgroup block Store
 xegpu.store_matrix %a_dpas, %ma[%sg_idy * 32, 0] @subgroupBlockIO : vector<16xf16>, mem_desc<256x32xf16, @block=[16, 16]>
 ```
@@ -551,7 +553,7 @@ gpu.barrier
 
 **Subgroup to Lane distribution**
 
-This example illustrates how `load_matrix` and `store_matrix` operations are distributed from subgroup to lane. For simplicity, the lane layout assignment pass is omitted. After distribution, these operations work on 1D vectors or scalars. The lane-level attribute `subgroupBlockIO` is used to represent 1D block loads, while `vec_len` and `vec_dir` indicate chunked loads.
+This example illustrates how `load_matrix` and `store_matrix` operations are distributed from subgroup to lane. For simplicity, the lane layout assignment pass is omitted. After distribution, these operations work on 1D vectors or scalars. The lane-level attribute `subgroupBlockIO` is used to represent 1D block loads, while store_matrix with vector input represents chunked loads.
 
 ```mlir
 %tdesc_sg = xegpu.create_nd_tdesc %base[%widy * 32 + %sg_idy * 8, %widx * 256 + %sg_idx * 32]
@@ -561,9 +563,9 @@ This example illustrates how `load_matrix` and `store_matrix` operations are dis
 %at1 = vector.extract %at[8]  : vector<16xf16> -> vector<8xf16>
 %m = memref.alloca() {alignment = 1024} : memref<16384xi8, 3>
 %mt = xegpu.create_mem_desc %m : memref<16384xi8, 3>  -> mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
-xegpu.store_matrix %at0, %mt[%sg_idy * 8, %sg_idx * 32 + %lane_id ] @vec_len=8 @vec_dir=col
+xegpu.store_matrix %at0, %mt[%sg_idy * 8, %sg_idx * 32 + %lane_id ]
     : vector<8xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
-xegpu.store_matrix %at1, %mt[%sg_idy * 8, %sg_idx * 32 + 16 + %lane_id] @vec_len=8 @vec_dir=col
+xegpu.store_matrix %at1, %mt[%sg_idy * 8, %sg_idx * 32 + 16 + %lane_id]
     : vector<8xf16>, mem_desc<32x256xf16, @block=[16, 16], @strides=[1, 32]>
 
 gpu.barrier
