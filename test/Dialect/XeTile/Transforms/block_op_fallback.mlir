@@ -358,9 +358,9 @@ module attributes {gpu.container_module} {
           // CHECK: %[[CAST:.*]] = memref.reinterpret_cast %[[VIEW:.*]] to offset: [0], sizes: [1024], strides: [1] : memref<8x128xf32, 3> to memref<1024xf32, 3>
           // CHECK: %[[VAR48:.*]] = vector.step : vector<32xindex>
           // CHECK: %[[VAR49:.*]] = vector.broadcast %[[VAR48]] : vector<32xindex> to vector<1x32xindex>
-          // CHECK: %[[VAR50:.*]] = vector.splat %[[VAR45:.*]] : vector<1x32xindex>
+          // CHECK: %[[VAR50:.*]] = vector.broadcast %[[VAR45:.*]] : index to vector<1x32xindex>
           // CHECK: %[[VAR52:.*]] = arith.addi %[[VAR49]], %[[VAR50]] : vector<1x32xindex>
-          // CHECK: %[[VAR54:.*]] = vector.splat %[[VAR17:.*]] : vector<1x32xindex>
+          // CHECK: %[[VAR54:.*]] = vector.broadcast %[[VAR17:.*]] : index to vector<1x32xindex>
           // CHECK: %[[VAR55:.*]] = arith.muli %[[VAR54]], %[[CST2]] : vector<1x32xindex>
           // CHECK: %[[VAR56:.*]] = arith.addi %[[VAR55]], %[[VAR52]] : vector<1x32xindex>
           // CHECK: %[[VAR57:.*]] = xetile.init_tile %[[CAST]], %[[VAR56]] : memref<1024xf32, 3>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<memory_space = 3 : i32, scattered = true>>
@@ -375,10 +375,10 @@ module attributes {gpu.container_module} {
           // CHECK: %[[CAST7:.*]] = memref.reinterpret_cast %[[VIEW]] to offset: [0], sizes: [1024], strides: [1] : memref<8x128xf32, 3> to memref<1024xf32, 3>
           // CHECK: %[[VAR62:.*]] = vector.step : vector<4xindex>
           // CHECK: %[[VAR63:.*]] = vector.broadcast %[[VAR62]] : vector<4xindex> to vector<8x4xindex>
-          // CHECK: %[[VAR61:.*]] = vector.splat %[[VAR59]] : vector<8x4xindex>
+          // CHECK: %[[VAR61:.*]] = vector.broadcast %[[VAR59]] : index to vector<8x4xindex>
           // CHECK: %[[VAR64:.*]] = arith.addi %[[VAR63]], %[[VAR61]] : vector<8x4xindex>
           // CHECK: %[[VAR65:.*]] = vector.step : vector<8xindex>
-          // CHECK: %[[VAR60:.*]] = vector.splat %[[VAR58]] : vector<8xindex>
+          // CHECK: %[[VAR60:.*]] = vector.broadcast %[[VAR58]] : index to vector<8xindex>
           // CHECK: %[[VAR66:.*]] = arith.addi %[[VAR65]], %[[VAR60]] : vector<8xindex>
           // CHECK: %[[VAR67:.*]] = vector.shape_cast %[[VAR66]] : vector<8xindex> to vector<8x1xindex>
           // CHECK: %[[VAR68:.*]] = vector.broadcast %[[VAR67]] : vector<8x1xindex> to vector<8x4xindex>

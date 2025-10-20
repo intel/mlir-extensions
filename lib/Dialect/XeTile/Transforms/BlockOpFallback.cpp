@@ -212,14 +212,14 @@ public:
     // if isSingleCol, splat offsetY to TileShape
     mlir::Value stepOffsetTile;
     if (isSingleCol) {
-      stepOffsetTile = rewriter.createOrFold<mlir::vector::SplatOp>(
+      stepOffsetTile = rewriter.createOrFold<mlir::vector::BroadcastOp>(
           loc, indexVecTy, offsetY);
     } else {
       auto stepVec =
           rewriter.createOrFold<mlir::vector::StepOp>(loc, colIndexVecTy);
       auto stepTile = rewriter.createOrFold<mlir::vector::BroadcastOp>(
           loc, indexVecTy, stepVec);
-      auto offsetYTile = rewriter.createOrFold<mlir::vector::SplatOp>(
+      auto offsetYTile = rewriter.createOrFold<mlir::vector::BroadcastOp>(
           loc, indexVecTy, offsetY);
       // Add offsetY to step
       stepOffsetTile = rewriter.createOrFold<mlir::arith::AddIOp>(
@@ -230,12 +230,12 @@ public:
     // if isSingleRow, splat offsetX to TileShape
     mlir::Value rowOffsetTile;
     if (isSingleRow) {
-      rowOffsetTile = rewriter.createOrFold<mlir::vector::SplatOp>(
+      rowOffsetTile = rewriter.createOrFold<mlir::vector::BroadcastOp>(
           loc, indexVecTy, offsetX);
     } else {
       auto rowVecT =
           rewriter.createOrFold<mlir::vector::StepOp>(loc, rowIndexVecTy);
-      auto offsetXVec = rewriter.createOrFold<mlir::vector::SplatOp>(
+      auto offsetXVec = rewriter.createOrFold<mlir::vector::BroadcastOp>(
           loc,
           mlir::VectorType::get({tileTy.getShape().front()},
                                 rewriter.getIndexType()),
@@ -258,7 +258,7 @@ public:
     auto stride = rewriter.createOrFold<mlir::arith::ConstantOp>(
         loc, rewriter.getIndexType(), rewriter.getIndexAttr(pitchNumElems));
     auto strideTile =
-        rewriter.createOrFold<mlir::vector::SplatOp>(loc, indexVecTy, stride);
+        rewriter.createOrFold<mlir::vector::BroadcastOp>(loc, indexVecTy, stride);
     // Create a temp with just rowTile * strideTile
     auto rowStrideTile = rewriter.createOrFold<mlir::arith::MulIOp>(
         loc, indexVecTy, rowOffsetTile, strideTile);
@@ -298,7 +298,7 @@ struct LoadTileOpPattern final
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
         loadTileOp.getLoc(), rewriter.getI1Type(),
         rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-    auto mask = rewriter.createOrFold<mlir::vector::SplatOp>(
+    auto mask = rewriter.createOrFold<mlir::vector::BroadcastOp>(
         loadTileOp.getLoc(),
         mlir::VectorType::get(tileTy.getShape(), rewriter.getI1Type()), one);
     rewriter.replaceOpWithNewOp<imex::xetile::LoadGatherOp>(
@@ -324,7 +324,7 @@ struct StoreTileOpPattern final
     auto one = rewriter.createOrFold<mlir::arith::ConstantOp>(
         storeTileOp.getLoc(), rewriter.getI1Type(),
         rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-    auto mask = rewriter.createOrFold<mlir::vector::SplatOp>(
+    auto mask = rewriter.createOrFold<mlir::vector::BroadcastOp>(
         storeTileOp.getLoc(),
         mlir::VectorType::get(tileTy.getShape(), rewriter.getI1Type()), one);
     rewriter.replaceOpWithNewOp<imex::xetile::StoreScatterOp>(
@@ -418,7 +418,7 @@ struct UpdateTileOffsetOpPattern final
     auto offY = updateTileOffsetOp.getOffsetY();
     auto index = rewriter.createOrFold<mlir::arith::AddIOp>(
         loc, rewriter.getIndexType(), stride, offY);
-    auto indices = rewriter.createOrFold<mlir::vector::SplatOp>(
+    auto indices = rewriter.createOrFold<mlir::vector::BroadcastOp>(
         loc, mlir::VectorType::get(tileTy.getShape(), rewriter.getIndexType()),
         index);
     rewriter.replaceOpWithNewOp<imex::xetile::UpdateTileOffsetOp>(

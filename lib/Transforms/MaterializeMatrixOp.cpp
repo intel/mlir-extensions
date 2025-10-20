@@ -59,18 +59,6 @@ public:
   }
 };
 
-class MemDescSubviewOpPattern final
-    : public OpConversionPattern<xegpu::MemDescSubviewOp> {
-public:
-  using OpConversionPattern<xegpu::MemDescSubviewOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(xegpu::MemDescSubviewOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    return rewriter.notifyMatchFailure(
-        op, "MemDescSubviewOp are not supported on Xe2/Xe3 architecture.");
-  }
-};
-
 class LoadMatrixOpPattern final
     : public OpConversionPattern<xegpu::LoadMatrixOp> {
 public:
@@ -81,9 +69,9 @@ public:
     MLIRContext *context = op.getContext();
     auto loc = op.getLoc();
     MemDescType mdescTy = op.getMemDesc().getType();
-    VectorType resTy = op.getRes().getType();
+    VectorType resTy = dyn_cast<VectorType>(op.getRes().getType());
 
-    SmallVector<int64_t> blockShape = mdescTy.getBlockSize();
+    SmallVector<int64_t> blockShape = mdescTy.getBlockShape();
 
     if (blockShape.empty()) {
       // TODO: lowering to regular load/store
@@ -163,13 +151,13 @@ public:
     Value data = adaptor.getData();
     SmallVector<OpFoldResult> offsets = op.getMixedOffsets();
 
-    VectorType dataTy = op.getData().getType();
+    VectorType dataTy = dyn_cast<VectorType>(op.getData().getType());
     SmallVector<int64_t> dataShape(dataTy.getShape().begin(),
                                    dataTy.getShape().end());
     int packSize = getVnniFactor(dataTy.getElementType());
 
     MemDescType mdescTy = op.getMemDesc().getType();
-    SmallVector<int64_t> blockShape = mdescTy.getBlockSize();
+    SmallVector<int64_t> blockShape = mdescTy.getBlockShape();
 
     if (blockShape.empty()) {
       // TODO: lowering to regular load/store
@@ -278,7 +266,7 @@ public:
 /// Populate the given list with patterns that convert MemDesc and related ops
 void populateMatrixOpConversionPatterns(TypeConverter &converter,
                                         RewritePatternSet &patterns) {
-  patterns.add<CreateMemDescOpPattern, MemDescSubviewOpPattern,
+  patterns.add<CreateMemDescOpPattern,
                LoadMatrixOpPattern, StoreMatrixOpPattern>(
       converter, patterns.getContext());
 }
@@ -314,7 +302,7 @@ struct MaterializeMatrixOpPass
     });
 
     ConversionTarget target(ctx);
-    target.addIllegalOp<CreateMemDescOp, MemDescSubviewOp, LoadMatrixOp,
+    target.addIllegalOp<CreateMemDescOp, LoadMatrixOp,
                         StoreMatrixOp>();
     target.markUnknownOpDynamicallyLegal([](Operation *op) { return true; });
 

@@ -83,7 +83,7 @@ gpu.module @test {
     %cast_1 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
     %block_id_x = gpu.block_id  x
     %0 = arith.muli %block_id_x, %c1024 : index
-    %1 = vector.splat %0 : vector<1x32xindex>
+    %1 = vector.broadcast %0 : index to vector<1x32xindex>
     %2 = xetile.init_tile %cast, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
     %3 = xetile.load %2, %cst : !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf32>
     %4 = xetile.init_tile %cast_0, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>

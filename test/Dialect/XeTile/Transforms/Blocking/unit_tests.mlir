@@ -291,37 +291,37 @@ gpu.module @test_kernel {
     //CHECK: %[[r96:.*]] = vector.shuffle %[[r94]], %[[r94]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r97:.*]] = arith.addf %[[r95]], %[[r96]] : vector<16xf16>
     //CHECK: %[[r98:.*]] = vector.extract %[[r97]][0] : f16 from vector<16xf16>
-    //CHECK: %[[r99:.*]] = vector.splat %[[r98]] : vector<1x1xf16>
+    //CHECK: %[[r99:.*]] = vector.broadcast %[[r98]] : f16 to vector<1x1xf16>
     //CHECK: %[[r100:.*]] = vector.extract %[[r97]][1] : f16 from vector<16xf16>
-    //CHECK: %[[r101:.*]] = vector.splat %[[r100]] : vector<1x1xf16>
+    //CHECK: %[[r101:.*]] = vector.broadcast %[[r100]] : f16 to vector<1x1xf16>
     //CHECK: %[[r102:.*]] = vector.extract %[[r97]][2] : f16 from vector<16xf16>
-    //CHECK: %[[r103:.*]] = vector.splat %[[r102]] : vector<1x1xf16>
+    //CHECK: %[[r103:.*]] = vector.broadcast %[[r102]] : f16 to vector<1x1xf16>
     //CHECK: %[[r104:.*]] = vector.extract %[[r97]][3] : f16 from vector<16xf16>
-    //CHECK: %[[r105:.*]] = vector.splat %[[r104]] : vector<1x1xf16>
+    //CHECK: %[[r105:.*]] = vector.broadcast %[[r104]] : f16 to vector<1x1xf16>
     //CHECK: %[[r106:.*]] = vector.extract %[[r97]][4] : f16 from vector<16xf16>
-    //CHECK: %[[r107:.*]] = vector.splat %[[r106]] : vector<1x1xf16>
+    //CHECK: %[[r107:.*]] = vector.broadcast %[[r106]] : f16 to vector<1x1xf16>
     //CHECK: %[[r108:.*]] = vector.extract %[[r97]][5] : f16 from vector<16xf16>
-    //CHECK: %[[r109:.*]] = vector.splat %[[r108]] : vector<1x1xf16>
+    //CHECK: %[[r109:.*]] = vector.broadcast %[[r108]] : f16 to vector<1x1xf16>
     //CHECK: %[[r110:.*]] = vector.extract %[[r97]][6] : f16 from vector<16xf16>
-    //CHECK: %[[r111:.*]] = vector.splat %[[r110]] : vector<1x1xf16>
+    //CHECK: %[[r111:.*]] = vector.broadcast %[[r110]] : f16 to vector<1x1xf16>
     //CHECK: %[[r112:.*]] = vector.extract %[[r97]][7] : f16 from vector<16xf16>
-    //CHECK: %[[r113:.*]] = vector.splat %[[r112]] : vector<1x1xf16>
+    //CHECK: %[[r113:.*]] = vector.broadcast %[[r112]] : f16 to vector<1x1xf16>
     //CHECK: %[[r114:.*]] = vector.extract %[[r97]][8] : f16 from vector<16xf16>
-    //CHECK: %[[r115:.*]] = vector.splat %[[r114]] : vector<1x1xf16>
+    //CHECK: %[[r115:.*]] = vector.broadcast %[[r114]] : f16 to vector<1x1xf16>
     //CHECK: %[[r116:.*]] = vector.extract %[[r97]][9] : f16 from vector<16xf16>
-    //CHECK: %[[r117:.*]] = vector.splat %[[r116]] : vector<1x1xf16>
+    //CHECK: %[[r117:.*]] = vector.broadcast %[[r116]] : f16 to vector<1x1xf16>
     //CHECK: %[[r118:.*]] = vector.extract %[[r97]][10] : f16 from vector<16xf16>
-    //CHECK: %[[r119:.*]] = vector.splat %[[r118]] : vector<1x1xf16>
+    //CHECK: %[[r119:.*]] = vector.broadcast %[[r118]] : f16 to vector<1x1xf16>
     //CHECK: %[[r120:.*]] = vector.extract %[[r97]][11] : f16 from vector<16xf16>
-    //CHECK: %[[r121:.*]] = vector.splat %[[r120]] : vector<1x1xf16>
+    //CHECK: %[[r121:.*]] = vector.broadcast %[[r120]] : f16 to vector<1x1xf16>
     //CHECK: %[[r122:.*]] = vector.extract %[[r97]][12] : f16 from vector<16xf16>
-    //CHECK: %[[r123:.*]] = vector.splat %[[r122]] : vector<1x1xf16>
+    //CHECK: %[[r123:.*]] = vector.broadcast %[[r122]] : f16 to vector<1x1xf16>
     //CHECK: %[[r124:.*]] = vector.extract %[[r97]][13] : f16 from vector<16xf16>
-    //CHECK: %[[r125:.*]] = vector.splat %[[r124]] : vector<1x1xf16>
+    //CHECK: %[[r125:.*]] = vector.broadcast %[[r124]] : f16 to vector<1x1xf16>
     //CHECK: %[[r126:.*]] = vector.extract %[[r97]][14] : f16 from vector<16xf16>
-    //CHECK: %[[r127:.*]] = vector.splat %[[r126]] : vector<1x1xf16>
+    //CHECK: %[[r127:.*]] = vector.broadcast %[[r126]] : f16 to vector<1x1xf16>
     //CHECK: %[[r128:.*]] = vector.extract %[[r97]][15] : f16 from vector<16xf16>
-    //CHECK: %[[r129:.*]] = vector.splat %[[r128]] : vector<1x1xf16>
+    //CHECK: %[[r129:.*]] = vector.broadcast %[[r128]] : f16 to vector<1x1xf16>
 
     //CHECK: %[[r130:.*]] = vector.insert_strided_slice %[[r99]], %[[cst]] {offsets = [0, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
     //CHECK: %[[r131:.*]] = vector.insert_strided_slice %[[r101]], %[[r130]] {offsets = [1, 0], strides = [1, 1]} : vector<1x1xf16> into vector<16x1xf16>
@@ -756,7 +756,7 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
     //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
 
     //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
 
@@ -1004,7 +1004,7 @@ gpu.module @test_kernel {
     //CHECK: %[[r223:.*]] = vector.shuffle %[[r218]], %[[r221]] [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
     //CHECK: %[[r224:.*]] = arith.addf %[[r222]], %[[r223]] : vector<32xf16>
     //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x8xf16>
 
     //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
     //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [32, 8], strides = [1, 1]} : vector<32x64xf16> to vector<32x8xf16>
@@ -1086,7 +1086,7 @@ gpu.module @test_kernel {
     //CHECK: %{{.*}} = arith.addf %{{.*}}, %{{.*}} : vector<32xf16>
 
     //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
 
     //CHECK-COUNT-8: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
     //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [8, 32], strides = [1, 1]} : vector<32x64xf16> to vector<8x32xf16>
@@ -1110,7 +1110,7 @@ gpu.module @test_kernel {
   gpu.func @sglevel_softmax_transpose(%a: memref<1024x1024xf16>) {
 
     //CHECK-COUNT-32: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<32xf16>
-    //CHECK-COUNT-32: %{{.*}} = vector.splat %{{.*}} : vector<1x8xf16>
+    //CHECK-COUNT-32: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x8xf16>
     //CHECK-COUNT-256: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x8xf16> into vector<32x64xf16>
     //CHECK-COUNT-8: %{{.*}} = vector.extract_strided_slice %{{.*}} {offsets = [{{.*}}], sizes = [32, 8], strides = [1, 1]} : vector<32x64xf16> to vector<32x8xf16>
     //CHECK-COUNT-8: %{{.*}} = arith.divf %{{.*}}, %{{.*}} : vector<32x8xf16>
@@ -1264,69 +1264,69 @@ gpu.module @test_kernel {
     %3 = xetile.transpose %2, [1, 0] : vector<1x32xf16> -> vector<32x1xf16>
 
     //CHECK: %{{.*}} = vector.extract %{{.*}}[0, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[1, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[2, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[3, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[4, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[5, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[6, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[7, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[8, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[9, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[10, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[11, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[12, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[13, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[14, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[15, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[16, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[17, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[18, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[19, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[20, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[21, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[22, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[23, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[24, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[25, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[26, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[27, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[28, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[29, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[30, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
     //CHECK: %{{.*}} = vector.extract %{{.*}}[31, 0] : f16 from vector<32x1xf16>
-    //CHECK: %{{.*}} = vector.splat %{{.*}} : vector<1x32xf16>
+    //CHECK: %{{.*}} = vector.broadcast %{{.*}} : f16 to vector<1x32xf16>
 
     //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>
     %4 = xetile.broadcast %3 [1] : vector<32x1xf16> -> vector<32x64xf16>
@@ -1408,7 +1408,7 @@ gpu.module @test_kernel {
     //CHECK: %[[cast_1:.*]] = memref.cast %[[arg2]] : memref<*xf32> to memref<?xf32>
     //CHECK: %[[block_id_x:.*]] = gpu.block_id  x
     //CHECK: %[[r0:.*]] = arith.muli %[[block_id_x]], %[[c1024]] : index
-    //CHECK: %[[r1:.*]] = vector.splat %[[r0]] : vector<1x32xindex>
+    //CHECK: %[[r1:.*]] = vector.broadcast %[[r0]] : index to vector<1x32xindex>
     //CHECK: %[[r2:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
     //CHECK: %[[r3:.*]] = vector.extract_strided_slice %[[r1]] {offsets = [0, 16], sizes = [1, 16], strides = [1, 1]} : vector<1x32xindex> to vector<1x16xindex>
     //CHECK: %[[r4:.*]] = xetile.init_tile %[[cast]], %[[r2]] : memref<?xf32>, vector<1x16xindex> -> !xetile.tile<1x16xf32, #xetile.tile_attr<scattered = true>>
@@ -1439,7 +1439,7 @@ gpu.module @test_kernel {
     %cast_1 = memref.cast %arg2 : memref<*xf32> to memref<?xf32>
     %block_id_x = gpu.block_id  x
     %0 = arith.muli %block_id_x, %c1024 : index
-    %1 = vector.splat %0 : vector<1x32xindex>
+    %1 = vector.broadcast %0 : index to vector<1x32xindex>
     %2 = xetile.init_tile %cast, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
     %3 = xetile.load %2, %cst : !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>, vector<1x32xi1> -> vector<1x32xf32>
     %4 = xetile.init_tile %cast_0, %1 : memref<?xf32>, vector<1x32xindex> -> !xetile.tile<1x32xf32, #xetile.tile_attr<scattered = true>>
@@ -1611,10 +1611,10 @@ gpu.module @test_kernel {
     %cast_0 = memref.cast %arg1 : memref<*xf32> to memref<?xf32>
     %cast_1 = memref.cast %arg0 : memref<*xf32> to memref<?xf32>
     %index = arith.addi %block_id_x, %thread_id_x : index
-    %tile_indices = vector.splat %index : vector<1x256xindex>
+    %tile_indices = vector.broadcast %index : index to vector<1x256xindex>
     %tile_indices_i32 = arith.index_cast %tile_indices : vector<1x256xindex> to vector<1x256xi32>
-    %arg3_splat = vector.splat %arg3 : vector<1x256xi32>
-    %mask = arith.cmpi slt, %tile_indices_i32, %arg3_splat : vector<1x256xi32>
+    %arg3_broadcast = vector.broadcast %arg3 : i32 to vector<1x256xi32>
+    %mask = arith.cmpi slt, %tile_indices_i32, %arg3_broadcast : vector<1x256xi32>
     %tile = xetile.init_tile %cast_1, %tile_indices : memref<?xf32>, vector<1x256xindex> -> !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>
     %load1 = xetile.load %tile, %mask : !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>, vector<1x256xi1> -> vector<1x256xf32>
     %tile_0 = xetile.init_tile %cast_0, %tile_indices : memref<?xf32>, vector<1x256xindex> -> !xetile.tile<1x256xf32, #xetile.tile_attr<memory_space = 0 : i32, scattered = true>>

@@ -334,7 +334,7 @@ public:
               loc, rewriter.getIndexVectorAttr(cst));
           auto baseValue = getValueOrCreateConstantIndexOp(rewriter, loc, base);
           auto idxTy = VectorType::get(tileShape[0], rewriter.getIndexType());
-          auto splat = rewriter.create<vector::SplatOp>(loc, baseValue, idxTy);
+          auto splat = rewriter.create<vector::BroadcastOp>(loc, idxTy, baseValue);
           auto result = add(splat.getResult(), cstOffsets.getResult());
           return getValueOrCreateConstantIndexOp(rewriter, loc, result);
         };

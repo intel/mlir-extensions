@@ -183,19 +183,19 @@ struct VectorInterleaveOpConversion final
   }
 };
 
-struct VectorSplatOpConversion final
-    : public mlir::OpConversionPattern<mlir::vector::SplatOp> {
-  using mlir::OpConversionPattern<mlir::vector::SplatOp>::OpConversionPattern;
+struct VectorBroadcastOpConversion final
+    : public mlir::OpConversionPattern<mlir::vector::BroadcastOp> {
+  using mlir::OpConversionPattern<mlir::vector::BroadcastOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::vector::SplatOp splatOp, OpAdaptor adaptor,
+  matchAndRewrite(mlir::vector::BroadcastOp splatOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto type = mlir::cast<mlir::VectorType>(splatOp.getType());
     if (type.getNumElements() != 1)
       return mlir::failure();
 
-    rewriter.replaceOp(splatOp, adaptor.getInput());
+    rewriter.replaceOp(splatOp, adaptor.getSource());
     return mlir::success();
   }
 };
@@ -310,7 +310,7 @@ struct RemoveSingleElemVectorPass final
     // xetile-blockop-fallback pass
     patterns.add</*VectorExtractStridedSliceConversion,*/ VectorizableOpPattern,
                  VectorShffleOpConversion, VectorInterleaveOpConversion,
-                 VectorSplatOpConversion, VectorExtractOpConversion,
+                 VectorBroadcastOpConversion, VectorExtractOpConversion,
                  VectorStoreOpConversion>(typeConverter, context);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
