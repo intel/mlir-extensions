@@ -266,9 +266,9 @@ public:
 /// Populate the given list with patterns that convert MemDesc and related ops
 void populateMatrixOpConversionPatterns(TypeConverter &converter,
                                         RewritePatternSet &patterns) {
-  patterns.add<CreateMemDescOpPattern,
-               LoadMatrixOpPattern, StoreMatrixOpPattern>(
-      converter, patterns.getContext());
+  patterns
+      .add<CreateMemDescOpPattern, LoadMatrixOpPattern, StoreMatrixOpPattern>(
+          converter, patterns.getContext());
 }
 
 struct MaterializeMatrixOpPass
@@ -302,8 +302,7 @@ struct MaterializeMatrixOpPass
     });
 
     ConversionTarget target(ctx);
-    target.addIllegalOp<CreateMemDescOp, LoadMatrixOp,
-                        StoreMatrixOp>();
+    target.addIllegalOp<CreateMemDescOp, LoadMatrixOp, StoreMatrixOp>();
     target.markUnknownOpDynamicallyLegal([](Operation *op) { return true; });
 
     RewritePatternSet patterns(&ctx);

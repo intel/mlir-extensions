@@ -257,8 +257,8 @@ public:
     // create [pitchNumElems] splatted to TileShape
     auto stride = rewriter.createOrFold<mlir::arith::ConstantOp>(
         loc, rewriter.getIndexType(), rewriter.getIndexAttr(pitchNumElems));
-    auto strideTile =
-        rewriter.createOrFold<mlir::vector::BroadcastOp>(loc, indexVecTy, stride);
+    auto strideTile = rewriter.createOrFold<mlir::vector::BroadcastOp>(
+        loc, indexVecTy, stride);
     // Create a temp with just rowTile * strideTile
     auto rowStrideTile = rewriter.createOrFold<mlir::arith::MulIOp>(
         loc, indexVecTy, rowOffsetTile, strideTile);

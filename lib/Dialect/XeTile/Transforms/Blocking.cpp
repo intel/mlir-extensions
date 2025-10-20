@@ -1044,8 +1044,8 @@ public:
         for (auto i = 0; i < blkSize[1]; i++) {
           auto extractOp = rewriter.create<vector::ExtractOp>(
               loc, v, rewriter.getIndexAttr(i));
-          auto splatOp = rewriter.create<vector::BroadcastOp>(op.getLoc(), resultTy,
-                                                          extractOp);
+          auto splatOp = rewriter.create<vector::BroadcastOp>(
+              op.getLoc(), resultTy, extractOp);
           newOps.push_back(splatOp);
         }
       }

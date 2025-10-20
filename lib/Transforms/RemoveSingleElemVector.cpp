@@ -185,7 +185,8 @@ struct VectorInterleaveOpConversion final
 
 struct VectorBroadcastOpConversion final
     : public mlir::OpConversionPattern<mlir::vector::BroadcastOp> {
-  using mlir::OpConversionPattern<mlir::vector::BroadcastOp>::OpConversionPattern;
+  using mlir::OpConversionPattern<
+      mlir::vector::BroadcastOp>::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::vector::BroadcastOp splatOp, OpAdaptor adaptor,
