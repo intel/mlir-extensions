@@ -64,7 +64,7 @@ module @gemm attributes {gpu.container_module} {
                                             [96, 97, 98, 99, 100, 101, 102, 103]]>: vector<4x8xindex>
       %off_y2 = arith.muli %tid_y, %c128 : index
       %offset = arith.addi %off_y2, %off_x : index
-      %offsets = vector.splat %offset: vector<4x8xindex>
+      %offsets = vector.broadcast %offset: index to vector<4x8xindex>
       %indices = arith.addi %base_indices, %offsets : vector<4x8xindex>
       %st_tile = xetile.init_tile %slm, %indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
       xetile.store %data, %st_tile, %mask : vector<4x8xf16>, !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>, vector<4x8xi1>
@@ -80,7 +80,7 @@ module @gemm attributes {gpu.container_module} {
       %trans_off_x = arith.muli %tid_x, %c256 : index
       %trans_off_y = arith.muli %tid_y, %c4 : index
       %trans_off = arith.addi %trans_off_x, %trans_off_y : index
-      %trans_offsets = vector.splat %trans_off: vector<4x8xindex>
+      %trans_offsets = vector.broadcast %trans_off: index to vector<4x8xindex>
       %trans_indices = arith.addi %trans_base_indices, %trans_offsets : vector<4x8xindex>
       %ld_tile = xetile.init_tile %slm, %trans_indices : memref<1024xf16, 3>, vector<4x8xindex> -> !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>
       %d = xetile.load %ld_tile, %mask : !xetile.tile<4x8xf16, #xetile.tile_attr<scattered = true, memory_space=3>>, vector<4x8xi1> -> vector<4x8xf16>

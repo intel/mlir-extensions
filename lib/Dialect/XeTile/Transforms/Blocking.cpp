@@ -1044,8 +1044,8 @@ public:
         for (auto i = 0; i < blkSize[1]; i++) {
           auto extractOp = rewriter.create<vector::ExtractOp>(
               loc, v, rewriter.getIndexAttr(i));
-          auto splatOp = rewriter.create<vector::SplatOp>(op.getLoc(), resultTy,
-                                                          extractOp);
+          auto splatOp = rewriter.create<vector::BroadcastOp>(
+              op.getLoc(), resultTy, extractOp);
           newOps.push_back(splatOp);
         }
       }
@@ -1141,7 +1141,7 @@ public:
                "Expecting a <1x1xelemty> vector type.");
         auto ext = rewriter.create<vector::ExtractOp>(
             loc, src, llvm::ArrayRef<int64_t>({0, 0}));
-        auto splatOp = rewriter.create<vector::SplatOp>(loc, dstTy, ext);
+        auto splatOp = rewriter.create<vector::BroadcastOp>(loc, dstTy, ext);
         newOps.append(resultGrid[1], splatOp);
       }
     } else {
@@ -1543,35 +1543,6 @@ public:
   }
 };
 
-// Rewrite a splat op on big vector size into multiple splat ops
-// on smaller vector size.
-class RewriteSplatOp
-    : public RewriteXeTileOp<vector::SplatOp, BlockingAnalysis> {
-public:
-  using RewriteXeTileOp<vector::SplatOp, BlockingAnalysis>::RewriteXeTileOp;
-
-  LogicalResult matchAndRewrite(vector::SplatOp op,
-                                OpPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto res = op.getAggregate();
-    auto resTy = res.getType();
-    auto shape = resTy.getShape();
-    auto blockSize = analysis.getDefBlockSize(res);
-    if (!blockSize || resTy.getRank() != 2 || shape == blockSize.asArrayRef())
-      return failure();
-
-    auto newTy =
-        VectorType::get(blockSize.asArrayRef(), resTy.getElementType());
-    auto newOp = rewriter.create<vector::SplatOp>(loc, newTy, op->getOperands(),
-                                                  op->getAttrs());
-    auto numOps = resTy.getNumElements() / newTy.getNumElements();
-    llvm::SmallVector<Value> newOps(numOps, newOp);
-    auto castOp =
-        addUnpackOp(newOps, resTy, blockSize.asArrayRef(), loc, rewriter);
-    rewriter.replaceOp(op, castOp);
-    return success();
-  }
-};
 } // namespace Blocking
 
 void populateXeTileBlockingPatterns(RewritePatternSet &patterns,

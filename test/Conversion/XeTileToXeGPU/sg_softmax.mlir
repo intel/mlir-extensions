@@ -202,7 +202,7 @@ gpu.module @test_kernel {
       //CHECK: {{.*}} = vector.shuffle {{.*}}, {{.*}} [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] : vector<32xf16>, vector<32xf16>
       //CHECK: {{.*}} = arith.addf {{.*}}, {{.*}} : vector<32xf16>
       //CHECK-COUNT-32: {{.*}} = vector.extract {{.*}}[{{.*}}] : f16 from vector<32xf16>
-      //CHECK-COUNT-32: {{.*}} = vector.splat {{.*}} : vector<1x32xf16>
+      //CHECK-COUNT-32: {{.*}} = vector.broadcast {{.*}} : f16 to vector<1x32xf16>
       %4 = xetile.reduction <add>, %3 [1]: vector<32x64xf16> -> vector<32x1xf16>
 
       //CHECK-COUNT-64: %{{.*}} = vector.insert_strided_slice %{{.*}}, %{{.*}} {offsets = [{{.*}}], strides = [1, 1]} : vector<1x32xf16> into vector<32x64xf16>

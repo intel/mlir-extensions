@@ -64,10 +64,10 @@ index 6b4e3dd60319..987b33c055e9 100644
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsVectorOfLengthRangePred<list<int> allowedRanges> :
 +  And<[IsVectorOfNonZeroRankTypePred,
-+       And<[CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++       And<[CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
-+                        CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++                        CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
 +
@@ -75,10 +75,10 @@ index 6b4e3dd60319..987b33c055e9 100644
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsFixedVectorOfLengthRangePred<list<int> allowedRanges> :
 +  And<[IsFixedVectorOfAnyRankTypePred,
-+       And<[CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++       And<[CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
-+                        CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++                        CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
 +
@@ -86,10 +86,10 @@ index 6b4e3dd60319..987b33c055e9 100644
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsScalableVectorOfLengthRangePred<list<int> allowedRanges> :
 +  And<[IsVectorTypeWithAnyDimScalablePred,
-+       And<[CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++       And<[CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
-+                        CPred<[{cast<::mlir::VectorType>($_self).getNumElements()
++                        CPred<[{::llvm::cast<::mlir::VectorType>($_self).getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
 +
