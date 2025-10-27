@@ -1,85 +1,85 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+
 module @gemm attributes {gpu.container_module} {
-  func.func @test(%A: memref<8x16xf32>) -> (memref<8x16xf32>, memref<8x16xf32>) attributes {llvm.emit_c_interface} {
+  func.func @test(%arg0: memref<8x16xf32>) -> (memref<8x16xf32>, memref<8x16xf32>) attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
-    %memref = gpu.alloc  host_shared () : memref<8x16xf32>
-    memref.copy %A, %memref : memref<8x16xf32> to memref<8x16xf32>
-
-    %memref_2 = gpu.alloc  host_shared () : memref<8x16xf32>
-    %memref_3 = gpu.alloc  host_shared () : memref<8x16xf32>
-    gpu.launch_func  @module0::@test_exp_larger_vec blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref : memref<8x16xf32>, %memref_2 : memref<8x16xf32>)
-    gpu.launch_func  @module1::@test_exp_generic_vec blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref : memref<8x16xf32>, %memref_3 : memref<8x16xf32>)
+    %memref = gpu.alloc  () : memref<8x16xf32>
+    gpu.memcpy  %memref, %arg0 : memref<8x16xf32>, memref<8x16xf32>
+    %memref_0 = gpu.alloc  () : memref<8x16xf32>
+    %memref_1 = gpu.alloc  () : memref<8x16xf32>
+    gpu.launch_func  @module0::@test_exp_larger_vec blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<8x16xf32>, %memref_0 : memref<8x16xf32>)
+    gpu.launch_func  @module1::@test_exp_generic_vec blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<8x16xf32>, %memref_1 : memref<8x16xf32>)
+    %alloc = memref.alloc() : memref<8x16xf32>
+    gpu.memcpy  %alloc, %memref_0 : memref<8x16xf32>, memref<8x16xf32>
+    %alloc_2 = memref.alloc() : memref<8x16xf32>
+    gpu.memcpy  %alloc_2, %memref_1 : memref<8x16xf32>, memref<8x16xf32>
     gpu.dealloc  %memref : memref<8x16xf32>
-    return %memref_2, %memref_3 : memref<8x16xf32>, memref<8x16xf32>
+    gpu.dealloc  %memref_0 : memref<8x16xf32>
+    gpu.dealloc  %memref_1 : memref<8x16xf32>
+    return %alloc, %alloc_2 : memref<8x16xf32>, memref<8x16xf32>
   }
-
-  gpu.module @module0 attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
-    gpu.func @test_exp_larger_vec(%A: memref<8x16xf32>, %Out: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  gpu.module @module0  {
+    gpu.func @test_exp_larger_vec(%arg0: memref<8x16xf32>, %arg1: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       // load A tile
-      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %val0 = xegpu.load_nd %a_tile0 : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
       // take exp
-      %t6 = math.exp %val0 : vector<8x16xf32>
       // store
-      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %t6, %out_tile  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %1 = xegpu.load_nd %0  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
+      %2 = math.exp %1 : vector<8x16xf32>
+      %3 = xegpu.create_nd_tdesc %arg1[%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %2, %3  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }
-  gpu.module @module1 attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
-    gpu.func @test_exp_generic_vec(%A: memref<8x16xf32>, %Out: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  gpu.module @module1  {
+    gpu.func @test_exp_generic_vec(%arg0: memref<8x16xf32>, %arg1: memref<8x16xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       // load A tile
-      %a_tile0 = xegpu.create_nd_tdesc %A [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %val0 = xegpu.load_nd %a_tile0 : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-
       // extract the loaded vector into 16xf32 vectors
-      %v0 = vector.extract %val0[0] : vector<16xf32> from vector<8x16xf32>
-      %v1 = vector.extract %val0[1] : vector<16xf32> from vector<8x16xf32>
-      %v2 = vector.extract %val0[2] : vector<16xf32> from vector<8x16xf32>
-      %v3 = vector.extract %val0[3] : vector<16xf32> from vector<8x16xf32>
-      %v4 = vector.extract %val0[4] : vector<16xf32> from vector<8x16xf32>
-      %v5 = vector.extract %val0[5] : vector<16xf32> from vector<8x16xf32>
-      %v6 = vector.extract %val0[6] : vector<16xf32> from vector<8x16xf32>
-      %v7 = vector.extract %val0[7] : vector<16xf32> from vector<8x16xf32>
       // do generic size exp
-      %v0_exp = math.exp %v0 : vector<16xf32>
-      %v1_exp = math.exp %v1 : vector<16xf32>
-      %v2_exp = math.exp %v2 : vector<16xf32>
-      %v3_exp = math.exp %v3 : vector<16xf32>
-      %v4_exp = math.exp %v4 : vector<16xf32>
-      %v5_exp = math.exp %v5 : vector<16xf32>
-      %v6_exp = math.exp %v6 : vector<16xf32>
-      %v7_exp = math.exp %v7 : vector<16xf32>
-      %v0_exp_cast = vector.shape_cast %v0_exp : vector<16xf32> to vector<1x16xf32>
-      %v1_exp_cast = vector.shape_cast %v1_exp : vector<16xf32> to vector<1x16xf32>
-      %v2_exp_cast = vector.shape_cast %v2_exp : vector<16xf32> to vector<1x16xf32>
-      %v3_exp_cast = vector.shape_cast %v3_exp : vector<16xf32> to vector<1x16xf32>
-      %v4_exp_cast = vector.shape_cast %v4_exp : vector<16xf32> to vector<1x16xf32>
-      %v5_exp_cast = vector.shape_cast %v5_exp : vector<16xf32> to vector<1x16xf32>
-      %v6_exp_cast = vector.shape_cast %v6_exp : vector<16xf32> to vector<1x16xf32>
-      %v7_exp_cast = vector.shape_cast %v7_exp : vector<16xf32> to vector<1x16xf32>
       // construct 4x16xf32 vector from the smaller ones
-      %t0 = vector.shuffle %v0_exp_cast, %v1_exp_cast [0, 1] : vector<1x16xf32>, vector<1x16xf32>
-      %t1 = vector.shuffle %v2_exp_cast, %v3_exp_cast [0, 1] : vector<1x16xf32>, vector<1x16xf32>
-      %t2 = vector.shuffle %v4_exp_cast, %v5_exp_cast [0, 1] : vector<1x16xf32>, vector<1x16xf32>
-      %t3 = vector.shuffle %v6_exp_cast, %v7_exp_cast [0, 1] : vector<1x16xf32>, vector<1x16xf32>
-      %t4 = vector.shuffle %t0, %t1 [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
-      %t5 = vector.shuffle %t2, %t3 [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
-      %t6 = vector.shuffle %t4, %t5 [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x16xf32>, vector<4x16xf32>
       // store
-      %out_tile = xegpu.create_nd_tdesc %Out [%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.store_nd %t6, %out_tile  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %1 = xegpu.load_nd %0  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
+      %2 = vector.extract %1[0] : vector<16xf32> from vector<8x16xf32>
+      %3 = vector.extract %1[1] : vector<16xf32> from vector<8x16xf32>
+      %4 = vector.extract %1[2] : vector<16xf32> from vector<8x16xf32>
+      %5 = vector.extract %1[3] : vector<16xf32> from vector<8x16xf32>
+      %6 = vector.extract %1[4] : vector<16xf32> from vector<8x16xf32>
+      %7 = vector.extract %1[5] : vector<16xf32> from vector<8x16xf32>
+      %8 = vector.extract %1[6] : vector<16xf32> from vector<8x16xf32>
+      %9 = vector.extract %1[7] : vector<16xf32> from vector<8x16xf32>
+      %10 = math.exp %2 : vector<16xf32>
+      %11 = math.exp %3 : vector<16xf32>
+      %12 = math.exp %4 : vector<16xf32>
+      %13 = math.exp %5 : vector<16xf32>
+      %14 = math.exp %6 : vector<16xf32>
+      %15 = math.exp %7 : vector<16xf32>
+      %16 = math.exp %8 : vector<16xf32>
+      %17 = math.exp %9 : vector<16xf32>
+      %18 = vector.shape_cast %10 : vector<16xf32> to vector<1x16xf32>
+      %19 = vector.shape_cast %11 : vector<16xf32> to vector<1x16xf32>
+      %20 = vector.shape_cast %12 : vector<16xf32> to vector<1x16xf32>
+      %21 = vector.shape_cast %13 : vector<16xf32> to vector<1x16xf32>
+      %22 = vector.shape_cast %14 : vector<16xf32> to vector<1x16xf32>
+      %23 = vector.shape_cast %15 : vector<16xf32> to vector<1x16xf32>
+      %24 = vector.shape_cast %16 : vector<16xf32> to vector<1x16xf32>
+      %25 = vector.shape_cast %17 : vector<16xf32> to vector<1x16xf32>
+      %26 = vector.shuffle %18, %19 [0, 1] : vector<1x16xf32>, vector<1x16xf32>
+      %27 = vector.shuffle %20, %21 [0, 1] : vector<1x16xf32>, vector<1x16xf32>
+      %28 = vector.shuffle %22, %23 [0, 1] : vector<1x16xf32>, vector<1x16xf32>
+      %29 = vector.shuffle %24, %25 [0, 1] : vector<1x16xf32>, vector<1x16xf32>
+      %30 = vector.shuffle %26, %27 [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
+      %31 = vector.shuffle %28, %29 [0, 1, 2, 3] : vector<2x16xf32>, vector<2x16xf32>
+      %32 = vector.shuffle %30, %31 [0, 1, 2, 3, 4, 5, 6, 7] : vector<4x16xf32>, vector<4x16xf32>
+      %33 = xegpu.create_nd_tdesc %arg1[%c0, %c0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %32, %33  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }
@@ -89,42 +89,43 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
     %c16 = arith.constant 16 : index
-    %rand_lower = arith.constant -1.0 : f32
-    %rand_upper = arith.constant 1.0 : f32
-    %gen_int = arith.constant 0 : i1
-    %A = memref.alloc() : memref<8x16xf32>
-    %Out_cpu = memref.alloc() : memref<8x16xf32>
-    %A_random = memref.cast %A : memref<8x16xf32> to memref<*xf32>
-    call @fillResource1DRandomF32(%A_random, %rand_lower, %rand_upper, %gen_int) : (memref<*xf32>, f32, f32, i1) -> ()
     // run GPU version
-    %Out_gpu_large, %Out_gpu_generic = call @test(%A) : (memref<8x16xf32>) -> (memref<8x16xf32>, memref<8x16xf32>)
-    %Out_gpu_generic_cast = memref.cast %Out_gpu_generic : memref<8x16xf32> to memref<*xf32>
-    %Out_gpu_large_cast = memref.cast %Out_gpu_large : memref<8x16xf32> to memref<*xf32>
     // run CPU version
-    scf.for %i = %c0 to %c8 step %c1 {
-      scf.for %j = %c0 to  %c16 step %c1 {
-        %a0 = memref.load %A[%i, %j] : memref<8x16xf32>
-        %vexp = math.exp %a0: f32
-        memref.store %vexp, %Out_cpu[%i, %j] : memref<8x16xf32>
+    %cst = arith.constant -1.000000e+00 : f32
+    %cst_0 = arith.constant 1.000000e+00 : f32
+    %false = arith.constant false
+    %alloc = memref.alloc() : memref<8x16xf32>
+    %alloc_1 = memref.alloc() : memref<8x16xf32>
+    %cast = memref.cast %alloc : memref<8x16xf32> to memref<*xf32>
+    call @fillResource1DRandomF32(%cast, %cst, %cst_0, %false) : (memref<*xf32>, f32, f32, i1) -> ()
+    %0:2 = call @test(%alloc) : (memref<8x16xf32>) -> (memref<8x16xf32>, memref<8x16xf32>)
+    %cast_2 = memref.cast %0#1 : memref<8x16xf32> to memref<*xf32>
+    %cast_3 = memref.cast %0#0 : memref<8x16xf32> to memref<*xf32>
+    scf.for %arg0 = %c0 to %c8 step %c1 {
+      scf.for %arg1 = %c0 to %c16 step %c1 {
+        %1 = memref.load %alloc[%arg0, %arg1] : memref<8x16xf32>
+        %2 = math.exp %1 : f32
+        memref.store %2, %alloc_1[%arg0, %arg1] : memref<8x16xf32>
       }
     }
-    %Out_cpu_cast = memref.cast %Out_cpu : memref<8x16xf32> to memref<*xf32>
     // print GPU and CPU outs
     // call @printMemrefF32(%Out_cpu_cast) : (memref<*xf32>) -> ()
     // call @printMemrefF32(%Out_gpu_cast) : (memref<*xf32>) -> ()
     // CHECK: [ALLCLOSE: TRUE]
     // CHECK: [ALLCLOSE: TRUE]
-    call @printAllcloseF32(%Out_gpu_generic_cast, %Out_cpu_cast) : (memref<*xf32>, memref<*xf32>) -> ()
-    call @printAllcloseF32(%Out_gpu_large_cast, %Out_cpu_cast) : (memref<*xf32>, memref<*xf32>) -> ()
     // dealloc
-    memref.dealloc %A : memref<8x16xf32>
-    memref.dealloc %Out_cpu : memref<8x16xf32>
     // gpu dealloc
-    gpu.dealloc %Out_gpu_generic : memref<8x16xf32>
-    gpu.dealloc %Out_gpu_large : memref<8x16xf32>
+    %cast_4 = memref.cast %alloc_1 : memref<8x16xf32> to memref<*xf32>
+    call @printAllcloseF32(%cast_2, %cast_4) : (memref<*xf32>, memref<*xf32>) -> ()
+    call @printAllcloseF32(%cast_3, %cast_4) : (memref<*xf32>, memref<*xf32>) -> ()
+    memref.dealloc %alloc : memref<8x16xf32>
+    memref.dealloc %alloc_1 : memref<8x16xf32>
+    memref.dealloc  %0#1 : memref<8x16xf32>
+    memref.dealloc  %0#0 : memref<8x16xf32>
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @fillResource1DRandomF32(memref<*xf32>, f32, f32, i1) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
+

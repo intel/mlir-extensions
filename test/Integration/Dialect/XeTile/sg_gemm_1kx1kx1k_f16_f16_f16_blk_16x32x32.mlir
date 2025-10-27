@@ -1,142 +1,129 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 
 // NOTES :
 // This example assumes one subgroup per one workgroup and the kernel specifies the computation
 // done by a single subgroup.
-
 module @gemm attributes {gpu.container_module} {
-  func.func @test(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>) -> (memref<1024x1024xf32>, memref<1024x1024xf16>) attributes {llvm.emit_c_interface} {
+  func.func @test(%arg0: memref<1024x1024xf16>, %arg1: memref<1024x1024xf16>) -> (memref<1024x1024xf32>, memref<1024x1024xf16>) attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
-    %c4 = arith.constant 4 : index
-    %c8 = arith.constant 8 : index
-    %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
     %c64 = arith.constant 64 : index
-    %c128 = arith.constant 128 : index
-    %c512 = arith.constant 512 : index
-    %A_gpu = gpu.alloc  host_shared () : memref<1024x1024xf16>
-    memref.copy %A, %A_gpu : memref<1024x1024xf16> to memref<1024x1024xf16>
-    %B_gpu = gpu.alloc  host_shared () : memref<1024x1024xf16>
-    memref.copy %B, %B_gpu : memref<1024x1024xf16> to memref<1024x1024xf16>
-    %C_gpu = gpu.alloc  host_shared () : memref<1024x1024xf32>
-    %D_gpu = gpu.alloc  host_shared () : memref<1024x1024xf16>
-    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c64, %c32, %c1) threads in (%c1, %c1, %c1) args(%A_gpu : memref<1024x1024xf16>, %B_gpu : memref<1024x1024xf16>, %C_gpu : memref<1024x1024xf32>, %D_gpu : memref<1024x1024xf16>)
-    gpu.dealloc  %A_gpu : memref<1024x1024xf16>
-    gpu.dealloc  %B_gpu : memref<1024x1024xf16>
-    return %C_gpu, %D_gpu : memref<1024x1024xf32>, memref<1024x1024xf16>
+    %memref = gpu.alloc  () : memref<1024x1024xf16>
+    gpu.memcpy  %memref, %arg0 : memref<1024x1024xf16>, memref<1024x1024xf16>
+    %memref_0 = gpu.alloc  () : memref<1024x1024xf16>
+    gpu.memcpy  %memref_0, %arg1 : memref<1024x1024xf16>, memref<1024x1024xf16>
+    %memref_1 = gpu.alloc  () : memref<1024x1024xf32>
+    %memref_2 = gpu.alloc  () : memref<1024x1024xf16>
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c64, %c32, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<1024x1024xf16>, %memref_0 : memref<1024x1024xf16>, %memref_1 : memref<1024x1024xf32>, %memref_2 : memref<1024x1024xf16>)
+    gpu.dealloc  %memref : memref<1024x1024xf16>
+    gpu.dealloc  %memref_0 : memref<1024x1024xf16>
+    %alloc = memref.alloc() : memref<1024x1024xf32>
+    gpu.memcpy  %alloc, %memref_1 : memref<1024x1024xf32>, memref<1024x1024xf32>
+    gpu.dealloc  %memref_1 : memref<1024x1024xf32>
+    %alloc_3 = memref.alloc() : memref<1024x1024xf16>
+    gpu.memcpy  %alloc_3, %memref_2 : memref<1024x1024xf16>, memref<1024x1024xf16>
+    gpu.dealloc  %memref_2 : memref<1024x1024xf16>
+    return %alloc, %alloc_3 : memref<1024x1024xf32>, memref<1024x1024xf16>
   }
-  gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
-    gpu.func @test_kernel(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: memref<1024x1024xf32>, %D: memref<1024x1024xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  gpu.module @test_kernel  {
+    gpu.func @test_kernel(%arg0: memref<1024x1024xf16>, %arg1: memref<1024x1024xf16>, %arg2: memref<1024x1024xf32>, %arg3: memref<1024x1024xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
       %c1 = arith.constant 1 : index
       %c8 = arith.constant 8 : index
       %c16 = arith.constant 16 : index
       %c32 = arith.constant 32 : index
       %c1024 = arith.constant 1024 : index
-      %block_id_x = gpu.block_id x
-      %block_id_y = gpu.block_id y
-      %m = arith.muli %block_id_x, %c16 : index
-      %n = arith.muli %block_id_y, %c32 : index
-      %c_init_value = arith.constant dense<0.0> : vector<16x32xf32>
       // initalize A and B tiles
-      %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<16x32xf16>
-      %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
       // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
-      %out:3 = scf.for %k = %c0 to %c1024 step %c32
-        iter_args(%a_tile = %a_init_tile, %b_tile = %b_init_tile, %c_value = %c_init_value)
-        -> (!xetile.tile<16x32xf16>, !xetile.tile<32x32xf16>, vector<16x32xf32>) {
-
         // load A and B tiles
-        %a_value = xetile.load_tile %a_tile  : !xetile.tile<16x32xf16> -> vector<16x32xf16>
-        %b_value = xetile.load_tile %b_tile  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         // perform dpas and accumulate
-        %c_new_value = xetile.tile_mma %a_value, %b_value, %c_value
-          : vector<16x32xf16>, vector<32x32xf16>, vector<16x32xf32> -> vector<16x32xf32>
         // update the offsets for A and B tiles
-        %a_next_tile = xetile.update_tile_offset %a_tile, [%c0, %c32]
-          : !xetile.tile<16x32xf16>
-        %b_next_tile = xetile.update_tile_offset %b_tile, [%c32, %c0]
-          :  !xetile.tile<32x32xf16>
         // partial C tile result
-        scf.yield %a_next_tile, %b_next_tile, %c_new_value
-          : !xetile.tile<16x32xf16>, !xetile.tile<32x32xf16>, vector<16x32xf32>
+      %block_id_x = gpu.block_id  x
+      %block_id_y = gpu.block_id  y
+      %0 = arith.muli %block_id_x, %c16 : index
+      %1 = arith.muli %block_id_y, %c32 : index
+      %cst = arith.constant dense<0.000000e+00> : vector<16x32xf32>
+      %2 = xetile.init_tile %arg0[%0, %c0] : memref<1024x1024xf16> -> !xetile.tile<16x32xf16>
+      %3 = xetile.init_tile %arg1[%c0, %1] : memref<1024x1024xf16> -> !xetile.tile<32x32xf16>
+      %4:3 = scf.for %arg4 = %c0 to %c1024 step %c32 iter_args(%arg5 = %2, %arg6 = %3, %arg7 = %cst) -> (!xetile.tile<16x32xf16>, !xetile.tile<32x32xf16>, vector<16x32xf32>) {
+        %8 = xetile.load_tile %arg5 : !xetile.tile<16x32xf16> -> vector<16x32xf16>
+        %9 = xetile.load_tile %arg6 : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %10 = xetile.tile_mma %8, %9, %arg7 : vector<16x32xf16>, vector<32x32xf16>, vector<16x32xf32> -> vector<16x32xf32>
+        %11 = xetile.update_tile_offset %arg5, [%c0, %c32] : !xetile.tile<16x32xf16>
+        %12 = xetile.update_tile_offset %arg6, [%c32, %c0] : !xetile.tile<32x32xf16>
+        scf.yield %11, %12, %10 : !xetile.tile<16x32xf16>, !xetile.tile<32x32xf16>, vector<16x32xf32>
       }
       // store the final accumulated C tile result back to memory
-      %c_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32> -> !xetile.tile<16x32xf32>
-      xetile.store_tile %out#2, %c_tile: vector<16x32xf32>, !xetile.tile<16x32xf32>
-      %d_tile = xetile.init_tile %D[%m, %n] : memref<1024x1024xf16> -> !xetile.tile<16x32xf16>
-      %value = arith.truncf %out#2 : vector<16x32xf32> to vector<16x32xf16>
-      xetile.store_tile %value, %d_tile: vector<16x32xf16>, !xetile.tile<16x32xf16>
+      %5 = xetile.init_tile %arg2[%0, %1] : memref<1024x1024xf32> -> !xetile.tile<16x32xf32>
+      xetile.store_tile %4#2,  %5 : vector<16x32xf32>, !xetile.tile<16x32xf32>
+      %6 = xetile.init_tile %arg3[%0, %1] : memref<1024x1024xf16> -> !xetile.tile<16x32xf16>
+      %7 = arith.truncf %4#2 : vector<16x32xf32> to vector<16x32xf16>
+      xetile.store_tile %7,  %6 : vector<16x32xf16>, !xetile.tile<16x32xf16>
       gpu.return
     }
   }
   func.func @main() attributes {llvm.emit_c_interface} {
+    %cst = arith.constant 0.000000e+00 : f32
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1024 = arith.constant 1024 : index
-    %cf_0 = arith.constant 0.0 : f16
-    %cf_1 = arith.constant 1.0 : f16
-    %A = memref.alloc() : memref<1024x1024xf16>
-    %B = memref.alloc() : memref<1024x1024xf16>
-    %C_ref = memref.alloc() : memref<1024x1024xf32>
     // intialize matrix A ; A[i, j] = j
-    scf.for %i = %c0 to %c1024 step %c1 {
-      scf.for %j = %c0 to %c1024 step %c1 {
-        %t = index.castu %j : index to i16
-        %val = arith.uitofp %t : i16 to f16
-        memref.store %val, %A[%i, %j] : memref<1024x1024xf16>
+    %cst_0 = arith.constant 0.000000e+00 : f16
+    %cst_1 = arith.constant 1.000000e+00 : f16
+    %alloc = memref.alloc() : memref<1024x1024xf16>
+    %alloc_2 = memref.alloc() : memref<1024x1024xf16>
+    %alloc_3 = memref.alloc() : memref<1024x1024xf32>
+    scf.for %arg0 = %c0 to %c1024 step %c1 {
+      scf.for %arg1 = %c0 to %c1024 step %c1 {
+        %1 = index.castu %arg1 : index to i16
+        %2 = arith.uitofp %1 : i16 to f16
+        memref.store %2, %alloc[%arg0, %arg1] : memref<1024x1024xf16>
       }
     }
     // make matrix B an identity matrix
-    scf.for %i = %c0 to %c1024 step %c1 {
-      scf.for %j = %c0 to %c1024 step %c1 {
-        %i_i32 = index.castu %i : index to i32
-        %j_i32 = index.castu %j : index to i32
-        %i_j_same = arith.cmpi eq, %i_i32, %j_i32 : i32
-
-        scf.if %i_j_same {
-          memref.store %cf_1, %B[%i, %j] : memref<1024x1024xf16>
+    scf.for %arg0 = %c0 to %c1024 step %c1 {
+      scf.for %arg1 = %c0 to %c1024 step %c1 {
+        %1 = index.castu %arg0 : index to i32
+        %2 = index.castu %arg1 : index to i32
+        %3 = arith.cmpi eq, %1, %2 : i32
+        scf.if %3 {
+          memref.store %cst_1, %alloc_2[%arg0, %arg1] : memref<1024x1024xf16>
         } else {
-          memref.store %cf_0, %B[%i, %j] : memref<1024x1024xf16>
+          memref.store %cst_0, %alloc_2[%arg0, %arg1] : memref<1024x1024xf16>
         }
       }
     }
-
     // compute C for reference
-    scf.for %i = %c0 to %c1024 step %c1 {
-      scf.for %j = %c0 to %c1024 step %c1 {
-        %c_curr = arith.constant 0.0 : f32
-        %c_val = scf.for %k = %c0 to %c1024 step %c1 iter_args(%c_partial = %c_curr) -> f32 {
-          %a_val = memref.load %A[%i, %k] : memref<1024x1024xf16>
-          %b_val = memref.load %B[%k, %j] : memref<1024x1024xf16>
-          %t = arith.mulf %a_val, %b_val : f16
-          %t_cast = arith.extf %t : f16 to f32
-          %c_sum = arith.addf %t_cast, %c_partial : f32
-          scf.yield %c_sum : f32
+    scf.for %arg0 = %c0 to %c1024 step %c1 {
+      scf.for %arg1 = %c0 to %c1024 step %c1 {
+        %1 = scf.for %arg2 = %c0 to %c1024 step %c1 iter_args(%arg3 = %cst) -> (f32) {
+          %2 = memref.load %alloc[%arg0, %arg2] : memref<1024x1024xf16>
+          %3 = memref.load %alloc_2[%arg2, %arg1] : memref<1024x1024xf16>
+          %4 = arith.mulf %2, %3 : f16
+          %5 = arith.extf %4 : f16 to f32
+          %6 = arith.addf %5, %arg3 : f32
+          scf.yield %6 : f32
         }
-        memref.store %c_val , %C_ref[%i, %j] : memref<1024x1024xf32>
+        memref.store %1, %alloc_3[%arg0, %arg1] : memref<1024x1024xf32>
       }
     }
-    %2:2 = call @test(%A, %B) : (memref<1024x1024xf16>, memref<1024x1024xf16>) -> (memref<1024x1024xf32>, memref<1024x1024xf16>)
-    %cast_C = memref.cast %2#0 : memref<1024x1024xf32> to memref<*xf32>
-    %cast_D = memref.cast %2#1 : memref<1024x1024xf16> to memref<*xf16>
-    %cast_C_ref = memref.cast %C_ref : memref<1024x1024xf32> to memref<*xf32>
     // call @printMemrefF32(%cast_C) : (memref<*xf32>) -> ()
     // call @printMemrefF16(%cast_D) : (memref<*xf16>) -> ()
     // call @printMemrefF32(%cast_C_ref) : (memref<*xf32>) -> ()
     // CHECK: [ALLCLOSE: TRUE]
-    call @printAllcloseF32(%cast_C, %cast_C_ref) : (memref<*xf32>, memref<*xf32>) -> ()
-    call @printAllcloseF16(%cast_D, %cast_C_ref) : (memref<*xf16>, memref<*xf32>) -> ()
-    memref.dealloc %A : memref<1024x1024xf16>
-    memref.dealloc %B : memref<1024x1024xf16>
-    memref.dealloc %C_ref : memref<1024x1024xf32>
+    %0:2 = call @test(%alloc, %alloc_2) : (memref<1024x1024xf16>, memref<1024x1024xf16>) -> (memref<1024x1024xf32>, memref<1024x1024xf16>)
+    %cast = memref.cast %0#0 : memref<1024x1024xf32> to memref<*xf32>
+    %cast_4 = memref.cast %0#1 : memref<1024x1024xf16> to memref<*xf16>
+    %cast_5 = memref.cast %alloc_3 : memref<1024x1024xf32> to memref<*xf32>
+    call @printAllcloseF32(%cast, %cast_5) : (memref<*xf32>, memref<*xf32>) -> ()
+    call @printAllcloseF16(%cast_4, %cast_5) : (memref<*xf16>, memref<*xf32>) -> ()
+    memref.dealloc %alloc : memref<1024x1024xf16>
+    memref.dealloc %alloc_2 : memref<1024x1024xf16>
+    memref.dealloc %alloc_3 : memref<1024x1024xf32>
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
@@ -144,3 +131,4 @@ module @gemm attributes {gpu.container_module} {
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF16(memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
+

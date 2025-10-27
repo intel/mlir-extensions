@@ -1,92 +1,78 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+
 module @softmax attributes {gpu.container_module} {
-  func.func @reduce_test(%a: memref<1024x32xf32>) -> memref<1x1024xf32> attributes {llvm.emit_c_interface} {
+  func.func @reduce_test(%arg0: memref<1024x32xf32>) -> memref<1x1024xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
-    %c32 = arith.constant 32 : index
     %c64 = arith.constant 64 : index
-
-    %a_gpu = gpu.alloc host_shared () : memref<1024x32xf32>
-    memref.copy %a, %a_gpu : memref<1024x32xf32> to memref<1024x32xf32>
-    %b_gpu = gpu.alloc  host_shared () : memref<1x1024xf32>
-
-    gpu.launch_func @kernel::@reduce_dim_1 blocks in (%c64, %c1, %c1) threads in (%c1, %c1, %c1) args(%a_gpu : memref<1024x32xf32>, %b_gpu : memref<1x1024xf32>)
-
-    gpu.dealloc %a_gpu : memref<1024x32xf32>
-    return %b_gpu : memref<1x1024xf32>
+    %memref = gpu.alloc  () : memref<1024x32xf32>
+    gpu.memcpy  %memref, %arg0 : memref<1024x32xf32>, memref<1024x32xf32>
+    %memref_0 = gpu.alloc  () : memref<1x1024xf32>
+    gpu.launch_func  @kernel::@reduce_dim_1 blocks in (%c64, %c1, %c1) threads in (%c1, %c1, %c1)  args(%memref : memref<1024x32xf32>, %memref_0 : memref<1x1024xf32>)
+    gpu.dealloc  %memref : memref<1024x32xf32>
+    %alloc = memref.alloc() : memref<1x1024xf32>
+    gpu.memcpy  %alloc, %memref_0 : memref<1x1024xf32>, memref<1x1024xf32>
+    gpu.dealloc  %memref_0 : memref<1x1024xf32>
+    return %alloc : memref<1x1024xf32>
   }
-
-  gpu.module @kernel  attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
         // the kernel is a 16x32 block reduction. each thread is assigned with a 16x32 block, and do reduction along dim-1 independently.
-    gpu.func @reduce_dim_1(%a: memref<1024x32xf32>, %b: memref<1x1024xf32>)  kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
-      %c = arith.constant dense<3.2>: vector<16xf32>
+  gpu.module @kernel  {
+    gpu.func @reduce_dim_1(%arg0: memref<1024x32xf32>, %arg1: memref<1x1024xf32>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      %cst = arith.constant dense<3.200000e+00> : vector<16xf32>
       %c1 = arith.constant 1 : index
       %c16 = arith.constant 16 : index
       %c32 = arith.constant 32 : index
-
-      %block_id_x = gpu.block_id x
-      %block_id_y = gpu.block_id y
-
-      %m = arith.muli %block_id_x, %c16 : index
-      %n = arith.muli %block_id_y, %c32 : index
-
-      %1 = xetile.init_tile %a[%m, %n] : memref<1024x32xf32> -> !xetile.tile<16x32xf32>
-      %2 = xetile.load_tile %1: !xetile.tile<16x32xf32> -> vector<16x32xf32>
-
-      %4 = xetile.reduction <add>, %2 [1]: vector<16x32xf32> -> vector<16x1xf32>
-      %5 = xetile.init_tile %b[0, %m] : memref<1x1024xf32> -> !xetile.tile<1x16xf32>
-      %cast = vector.shape_cast %4: vector<16x1xf32> to vector<1x16xf32>
-      xetile.store_tile %cast, %5: vector<1x16xf32>, !xetile.tile<1x16xf32>
+      %block_id_x = gpu.block_id  x
+      %block_id_y = gpu.block_id  y
+      %0 = arith.muli %block_id_x, %c16 : index
+      %1 = arith.muli %block_id_y, %c32 : index
+      %2 = xetile.init_tile %arg0[%0, %1] : memref<1024x32xf32> -> !xetile.tile<16x32xf32>
+      %3 = xetile.load_tile %2 : !xetile.tile<16x32xf32> -> vector<16x32xf32>
+      %4 = xetile.reduction <add>, %3 [1] : vector<16x32xf32> -> vector<16x1xf32>
+      %5 = xetile.init_tile %arg1[0, %0] : memref<1x1024xf32> -> !xetile.tile<1x16xf32>
+      %6 = vector.shape_cast %4 : vector<16x1xf32> to vector<1x16xf32>
+      xetile.store_tile %6,  %5 : vector<1x16xf32>, !xetile.tile<1x16xf32>
       gpu.return
     }
   }
-
   func.func @main() attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
-    %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
     %c1024 = arith.constant 1024 : index
-    %c0_f32 = arith.constant 0.0 : f32
-    %c32_f32 = arith.constant 32.0 : f32
-    %c100_f32 = arith.constant 100.0 : f32
-    %a = memref.alloc() : memref<1024x32xf32>
-    %b_ref = memref.alloc() : memref<1024xf32>
-
     // intialize matrix A ; A[i, j] = j
-    scf.for %i = %c0 to %c1024 step %c1 {
-      scf.for %j = %c0 to %c32 step %c1 {
-        %t = index.castu %j : index to i16
-        %u = arith.uitofp %t : i16 to f32
-        %v = arith.divf %u, %c100_f32 : f32
-        memref.store %v, %a[%i, %j] : memref<1024x32xf32>
+    %cst = arith.constant 0.000000e+00 : f32
+    %cst_0 = arith.constant 1.000000e+02 : f32
+    %alloc = memref.alloc() : memref<1024x32xf32>
+    %alloc_1 = memref.alloc() : memref<1024xf32>
+    scf.for %arg0 = %c0 to %c1024 step %c1 {
+      scf.for %arg1 = %c0 to %c32 step %c1 {
+        %1 = index.castu %arg1 : index to i16
+        %2 = arith.uitofp %1 : i16 to f32
+        %3 = arith.divf %2, %cst_0 : f32
+        memref.store %3, %alloc[%arg0, %arg1] : memref<1024x32xf32>
       }
     }
-
-    scf.for %i = %c0 to %c1024 step %c1 {
-      %sum = scf.for %j = %c0 to %c32 step %c1 iter_args(%arg = %c0_f32) -> (f32) {
-        %val = memref.load %a[%i, %j] : memref<1024x32xf32>
-        %2 = arith.addf %arg, %val : f32
-        scf.yield %2 : f32
+    scf.for %arg0 = %c0 to %c1024 step %c1 {
+      %1 = scf.for %arg1 = %c0 to %c32 step %c1 iter_args(%arg2 = %cst) -> (f32) {
+        %2 = memref.load %alloc[%arg0, %arg1] : memref<1024x32xf32>
+        %3 = arith.addf %arg2, %2 : f32
+        scf.yield %3 : f32
       }
-      memref.store %sum, %b_ref[%i] : memref<1024xf32>
+      memref.store %1, %alloc_1[%arg0] : memref<1024xf32>
     }
-
-    %b = call @reduce_test(%a) : (memref<1024x32xf32>) -> memref<1x1024xf32>
-    %cast_b = memref.cast %b : memref<1x1024xf32> to memref<*xf32>
-    %cast_b_ref = memref.cast %b_ref : memref<1024xf32> to memref<*xf32>
     // CHECK: [ALLCLOSE: TRUE]
-    call @printAllcloseF32(%cast_b, %cast_b_ref) : (memref<*xf32>, memref<*xf32>) -> ()
-    memref.dealloc %a : memref<1024x32xf32>
-    memref.dealloc %b_ref : memref<1024xf32>
+    %0 = call @reduce_test(%alloc) : (memref<1024x32xf32>) -> memref<1x1024xf32>
+    %cast = memref.cast %0 : memref<1x1024xf32> to memref<*xf32>
+    %cast_2 = memref.cast %alloc_1 : memref<1024xf32> to memref<*xf32>
+    call @printAllcloseF32(%cast, %cast_2) : (memref<*xf32>, memref<*xf32>) -> ()
+    memref.dealloc %alloc : memref<1024x32xf32>
+    memref.dealloc %alloc_1 : memref<1024xf32>
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
+
