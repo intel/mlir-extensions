@@ -32,4 +32,3 @@ module @gemm attributes {gpu.container_module} {
   }
   func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
 }
-

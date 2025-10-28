@@ -131,4 +131,3 @@ module @gemm attributes {gpu.container_module} {
   func.func private @printMemrefI8(memref<*xi8>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseI32(memref<*xi32>, memref<*xi32>) attributes {llvm.emit_c_interface}
 }
-

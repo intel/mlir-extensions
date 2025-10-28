@@ -89,4 +89,3 @@ module @gemm attributes {gpu.container_module} {
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printMaxErrorF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
-

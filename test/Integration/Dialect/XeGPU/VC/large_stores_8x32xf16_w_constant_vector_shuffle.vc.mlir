@@ -62,4 +62,3 @@ module @gemm attributes {gpu.container_module} {
   func.func private @fillResource1DF16(memref<*xf16>, f32) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF16(memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
-

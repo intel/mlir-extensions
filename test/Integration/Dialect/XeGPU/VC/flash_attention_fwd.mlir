@@ -767,4 +767,3 @@ module @flash_attention attributes {gpu.container_module} {
   func.func private @fillResource1DF32(memref<*xf32>, f32) attributes {llvm.emit_c_interface}
   func.func private @printMaxErrorF16(memref<*xf16>, memref<*xf16>) attributes {llvm.emit_c_interface}
 }
-

@@ -95,4 +95,3 @@ module @softmax attributes {gpu.container_module} {
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
-

@@ -122,4 +122,3 @@ module @gemm_output_f16 attributes {gpu.container_module} {
   func.func private @printAllcloseF16(memref<*xf16>, memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printMaxErrorF16(memref<*xf16>, memref<*xf16>) attributes {llvm.emit_c_interface}
 }
-

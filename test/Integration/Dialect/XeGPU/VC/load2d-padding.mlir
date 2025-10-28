@@ -44,4 +44,3 @@ module @gemm attributes {gpu.container_module} {
     return
   }
 }
-

@@ -55,4 +55,3 @@ module @loadstore attributes {gpu.container_module} {
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @fillResource1DF32(memref<*xf32>, f32) attributes {llvm.emit_c_interface}
 }
-

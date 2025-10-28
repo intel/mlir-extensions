@@ -69,4 +69,3 @@ module @conv_layout attributes {gpu.container_module} {
   func.func private @printAllcloseF16(memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
 }
-
