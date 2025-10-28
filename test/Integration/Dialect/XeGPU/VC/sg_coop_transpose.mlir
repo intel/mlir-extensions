@@ -1,25 +1,24 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 
 module @gemm attributes {gpu.container_module} {
   func.func @test(%A: memref<32x32xf16>) -> memref<32x32xf16> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
     %c4 = arith.constant 4 : index
-    %A_gpu = gpu.alloc  host_shared () : memref<32x32xf16>
-    memref.copy %A, %A_gpu : memref<32x32xf16> to memref<32x32xf16>
-    %B_gpu = gpu.alloc  host_shared () : memref<32x32xf16>
+    %A_gpu = gpu.alloc (): memref<32x32xf16>
+    gpu.memcpy %A_gpu, %A  : memref<32x32xf16>, memref<32x32xf16>
+    %B_gpu = gpu.alloc () : memref<32x32xf16>
     gpu.launch_func  @test_kernel::@test_kernel blocks in (%c1, %c1, %c1) threads in (%c4, %c2, %c1) args(%A_gpu : memref<32x32xf16>, %B_gpu : memref<32x32xf16>)
+    %host_result = memref.alloc () : memref<32x32xf16>
+    gpu.memcpy %host_result, %B_gpu : memref<32x32xf16>, memref<32x32xf16>
     gpu.dealloc  %A_gpu : memref<32x32xf16>
-    return %B_gpu : memref<32x32xf16>
+    gpu.dealloc  %B_gpu : memref<32x32xf16>
+    return %host_result : memref<32x32xf16>
   }
-  gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
+  gpu.module @test_kernel  {
     gpu.func @test_kernel(%A: memref<32x32xf16>, %B: memref<32x32xf16>) kernel attributes {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
       %c1 = arith.constant 1 : index
@@ -79,6 +78,7 @@ module @gemm attributes {gpu.container_module} {
     // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF16(%cast, %cast_ref) : (memref<*xf16>, memref<*xf32>) -> ()
     memref.dealloc %A : memref<32x32xf16>
+    memref.dealloc %B : memref<32x32xf16>
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}

@@ -1,85 +1,73 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+
 module @gemm attributes {gpu.container_module} {
-  memref.global "private" @__Aconstant_32x64xf16 : memref<32x64xf16> = dense<1.0>
-  memref.global "private" @__Bconstant_32x64xf16 : memref<32x64xf16> = dense<2.0>
+  memref.global "private" @__Aconstant_32x64xf16 : memref<32x64xf16> = dense<1.000000e+00>
+  memref.global "private" @__Bconstant_32x64xf16 : memref<32x64xf16> = dense<2.000000e+00>
   func.func @test(%arg0: memref<32x64xf16>, %arg1: memref<32x64xf16>) -> memref<32x64xf32> attributes {llvm.emit_c_interface} {
-    %c64 = arith.constant 64 : index
     %c4 = arith.constant 4 : index
     %c2 = arith.constant 2 : index
-    %c0_f32 = arith.constant 0.0 : f32
-
+    %cst = arith.constant 0.000000e+00 : f32
     %c1 = arith.constant 1 : index
-    %A = gpu.alloc  host_shared () : memref<32x64xf16>
-    memref.copy %arg0, %A : memref<32x64xf16> to memref<32x64xf16>
-    %B = gpu.alloc  host_shared () : memref<32x64xf16>
-    memref.copy %arg1, %B : memref<32x64xf16> to memref<32x64xf16>
-
-    %C = gpu.alloc  host_shared () : memref<32x64xf32>
-    %C_unranked = memref.cast %C : memref<32x64xf32> to memref<*xf32>
-    call @fillResource1DF32(%C_unranked, %c0_f32) : (memref<*xf32>, f32) -> ()
-
     // Create the strided memrefs from A, B, C : first 32 elements of each row
-    %A_strided = memref.subview %A[0, 0][32, 32][1, 1] : memref<32x64xf16> to memref<32x32xf16, strided<[64,1], offset: 0>>
-    %B_strided = memref.subview %B[0, 0][32, 32][1, 1] : memref<32x64xf16> to memref<32x32xf16, strided<[64,1], offset: 0>>
-    %C_strided = memref.subview %C[0, 0][32, 32][1, 1] : memref<32x64xf32> to memref<32x32xf32, strided<[64,1], offset: 0>>
-
-    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c4, %c2, %c1) threads in (%c1, %c1, %c1) args(%A_strided : memref<32x32xf16, strided<[64,1], offset: 0>>, %B_strided : memref<32x32xf16, strided<[64,1], offset: 0>>, %C_strided : memref<32x32xf32, strided<[64,1], offset: 0>>)
-    gpu.dealloc  %A : memref<32x64xf16>
-    gpu.dealloc  %B : memref<32x64xf16>
-    return %C : memref<32x64xf32>
+    %memref = gpu.alloc  () : memref<32x64xf16>
+    gpu.memcpy  %memref, %arg0 : memref<32x64xf16>, memref<32x64xf16>
+    %memref_0 = gpu.alloc  () : memref<32x64xf16>
+    gpu.memcpy  %memref_0, %arg1 : memref<32x64xf16>, memref<32x64xf16>
+    %memref_host = memref.alloc() : memref<32x64xf32>
+    %cast_host = memref.cast %memref_host : memref<32x64xf32> to memref<*xf32>
+    call @fillResource1DF32(%cast_host, %cst) : (memref<*xf32>, f32) -> ()
+    %memref_1 = gpu.alloc  () : memref<32x64xf32>
+    gpu.memcpy  %memref_1, %memref_host : memref<32x64xf32>, memref<32x64xf32>
+    %subview = memref.subview %memref[0, 0] [32, 32] [1, 1] : memref<32x64xf16> to memref<32x32xf16, strided<[64, 1]>>
+    %subview_2 = memref.subview %memref_0[0, 0] [32, 32] [1, 1] : memref<32x64xf16> to memref<32x32xf16, strided<[64, 1]>>
+    %subview_3 = memref.subview %memref_1[0, 0] [32, 32] [1, 1] : memref<32x64xf32> to memref<32x32xf32, strided<[64, 1]>>
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c4, %c2, %c1) threads in (%c1, %c1, %c1)  args(%subview : memref<32x32xf16, strided<[64, 1]>>, %subview_2 : memref<32x32xf16, strided<[64, 1]>>, %subview_3 : memref<32x32xf32, strided<[64, 1]>>)
+    memref.dealloc  %memref_host : memref<32x64xf32>
+    gpu.dealloc  %memref : memref<32x64xf16>
+    gpu.dealloc  %memref_0 : memref<32x64xf16>
+    %alloc = memref.alloc() : memref<32x64xf32>
+    gpu.memcpy  %alloc, %memref_1 : memref<32x64xf32>, memref<32x64xf32>
+    gpu.dealloc  %memref_1 : memref<32x64xf32>
+    return %alloc : memref<32x64xf32>
   }
-
-gpu.module @test_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, SubgroupDispatch, VectorComputeINTEL, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
-    gpu.func @test_kernel(%A: memref<32x32xf16, strided<[64,1], offset: 0>>, %B: memref<32x32xf16, strided<[64,1], offset: 0>>, %C: memref<32x32xf32, strided<[64,1], offset: 0>>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 4, 2, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  gpu.module @test_kernel  {
+    gpu.func @test_kernel(%arg0: memref<32x32xf16, strided<[64, 1]>>, %arg1: memref<32x32xf16, strided<[64, 1]>>, %arg2: memref<32x32xf32, strided<[64, 1]>>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 4, 2, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %c0 = arith.constant 0 : index
       %c16 = arith.constant 16 : index
       %c32 = arith.constant 32 : index
       %c8 = arith.constant 8 : index
-      %cst = arith.constant dense<1.0> : vector<8x16xf16>
-      %0 = gpu.block_id  x
-      %1 = gpu.block_id  y
-
-      %2 = arith.muli %0, %c8 : index
-      %3 = arith.muli %1, %c16 : index
-
-      %4 = xegpu.create_nd_tdesc %C[%2, %3] : memref<32x32xf32, strided<[64,1], offset: 0>> -> !xegpu.tensor_desc<8x16xf32>
-      %5 = xegpu.load_nd %4 : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-
-      %6 = scf.for %arg3 = %c0 to %c32 step %c16 iter_args(%arg4 = %5) -> (vector<8x16xf32>) {
-        %A0 = xegpu.create_nd_tdesc %A[%2, %arg3] : memref<32x32xf16, strided<[64,1], offset: 0>> -> !xegpu.tensor_desc<8x16xf16>
-        %A0_val = xegpu.load_nd %A0 : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-
-        %B0 = xegpu.create_nd_tdesc %B[%arg3, %3] : memref<32x32xf16, strided<[64,1], offset: 0>> -> !xegpu.tensor_desc<16x16xf16>
-        %B0_val = xegpu.load_nd %B0 {packed} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-
-        %A0_preop = arith.addf %A0_val, %cst : vector<8x16xf16>
-
-        %dpas0 = xegpu.dpas %A0_preop, %B0_val , %arg4: vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
-        scf.yield %dpas0 : vector<8x16xf32>
+      %cst = arith.constant dense<1.000000e+00> : vector<8x16xf16>
+      %block_id_x = gpu.block_id  x
+      %block_id_y = gpu.block_id  y
+      %0 = arith.muli %block_id_x, %c8 : index
+      %1 = arith.muli %block_id_y, %c16 : index
+      %2 = xegpu.create_nd_tdesc %arg2[%0, %1] : memref<32x32xf32, strided<[64, 1]>> -> !xegpu.tensor_desc<8x16xf32>
+      %3 = xegpu.load_nd %2  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
+      %4 = scf.for %arg3 = %c0 to %c32 step %c16 iter_args(%arg4 = %3) -> (vector<8x16xf32>) {
+        %5 = xegpu.create_nd_tdesc %arg0[%0, %arg3] : memref<32x32xf16, strided<[64, 1]>> -> !xegpu.tensor_desc<8x16xf16>
+        %6 = xegpu.load_nd %5  : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+        %7 = xegpu.create_nd_tdesc %arg1[%arg3, %1] : memref<32x32xf16, strided<[64, 1]>> -> !xegpu.tensor_desc<16x16xf16>
+        %8 = xegpu.load_nd %7 <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+        %9 = arith.addf %6, %cst : vector<8x16xf16>
+        %10 = xegpu.dpas %9, %8, %arg4 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+        scf.yield %10 : vector<8x16xf32>
       }
-      xegpu.store_nd %6, %4 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
-
+      xegpu.store_nd %4, %2  : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }
-
   func.func @main() attributes {llvm.emit_c_interface} {
     // Allocate/get regular row major memrefs
-    %A = memref.get_global @__Aconstant_32x64xf16 : memref<32x64xf16>
-    %B = memref.get_global @__Bconstant_32x64xf16 : memref<32x64xf16>
-
-    %result = call @test(%A, %B) : (memref<32x64xf16>, memref<32x64xf16>) -> memref<32x64xf32>
-    %result_cast = memref.cast %result : memref<32x64xf32> to memref<*xf32>
-    call @printMemrefF32(%result_cast) : (memref<*xf32>) -> ()
     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-NEXT:[128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   128,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0],
+    %0 = memref.get_global @__Aconstant_32x64xf16 : memref<32x64xf16>
+    %1 = memref.get_global @__Bconstant_32x64xf16 : memref<32x64xf16>
+    %2 = call @test(%0, %1) : (memref<32x64xf16>, memref<32x64xf16>) -> memref<32x64xf32>
+    %cast = memref.cast %2 : memref<32x64xf32> to memref<*xf32>
+    call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
     return
   }
   func.func private @fillResource1DF32(memref<*xf32>, f32) attributes {llvm.emit_c_interface}

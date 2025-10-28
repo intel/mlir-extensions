@@ -258,6 +258,43 @@ memref, arith and math.
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
 }
 
+
+//===----------------------------------------------------------------------===//
+// ConvertToSPIRV
+//===----------------------------------------------------------------------===//
+
+def ConvertToSPIRV : Pass<"imex-convert-to-spirv", "::mlir::ModuleOp"> {
+  let summary = "Convert to SPIR-V dialect by using all the 'to SPIR-V' conversion patterns from all the dialect conversions";
+  let description = [{
+    This is a one-shot pass to convert to SPIR-V dialect by using all the 'to SPIR-V' conversion patterns from all the dialect conversions.
+    It includes the GPU to SPIR-V conversion as well as other dialects like SCF, Math, Arith etc.
+
+  }];
+  let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
+  let constructor = "imex::createConvertToSPIRVPass()";
+  let options = [
+    // arith, cf, func, tensor to SPIR-V options
+    Option<"emulateLT32BitScalarTypes", "emulate-lt-32-bit-scalar-types",
+           "bool", /*default=*/"true",
+           "Emulate narrower scalar types with 32-bit ones if not supported by "
+           "the target">,
+    Option<"emulateUnsupportedFloatTypes", "emulate-unsupported-float-types",
+           "bool", /*default=*/"true",
+           "Emulate unsupported float types by representing them with integer "
+           "types of same bit width">,
+    // gpu, Index to SPIR-V options
+    Option<"use64bitIndex", "use-64bit-index",
+           "bool", /*default=*/"false",
+           "Use 64-bit integers to convert index types">,
+    // memref to SPIR-V options
+    Option<"boolNumBits", "bool-num-bits",
+           "int", /*default=*/"8",
+           "The number of bits to store a boolean value">,
+
+  ];
+}
+
+
 //===----------------------------------------------------------------------===//
 // GPUToGPUX
 //===----------------------------------------------------------------------===//

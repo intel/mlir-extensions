@@ -29,8 +29,8 @@ module @gemm attributes {gpu.container_module} {
     return %C : memref<4096x4096xf16>
   }
 
-  gpu.module @test_kernel   {
-    gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf16>) kernel  {
+  gpu.module @test_kernel {
+    gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf16>) kernel {
       // constants
       %c256 = arith.constant 256 : index
       %c512 = arith.constant 512 : index

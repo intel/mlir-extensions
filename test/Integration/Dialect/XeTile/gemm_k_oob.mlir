@@ -1,35 +1,30 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
+// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xetile-to-func-vc.pp \
-// RUN:                                        --runner mlir-runner -e main \
-// RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 
 #map = affine_map<() -> (0)>
 #map1 = affine_map<() -> (100)>
 module @gemm attributes {gpu.container_module} {
-  func.func @gemm_k_oob_entry(
-      %A: memref<128x100xf16>, %B: memref<256x100xf16>) ->
-      memref<128x256xf32> attributes {llvm.emit_c_interface} {
+  func.func @gemm_k_oob_entry(%arg0: memref<128x100xf16>, %arg1: memref<256x100xf16>) -> memref<128x256xf32> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
     %c4 = arith.constant 4 : index
     %c8 = arith.constant 8 : index
-    %A_gpu = gpu.alloc  host_shared () : memref<128x100xf16>
-    memref.copy %A, %A_gpu : memref<128x100xf16> to memref<128x100xf16>
-    %B_gpu = gpu.alloc  host_shared () : memref<256x100xf16>
-    memref.copy %B, %B_gpu : memref<256x100xf16> to memref<256x100xf16>
-    %GEMM_gpu = gpu.alloc  host_shared () : memref<128x256xf32>
-    gpu.launch_func  @gemm_k_oob::@gemm_k_oob blocks in (%c2, %c1, %c1) threads in (%c4, %c8, %c1)
-                     args(%A_gpu : memref<128x100xf16>, %B_gpu : memref<256x100xf16>, %GEMM_gpu : memref<128x256xf32>)
-    gpu.dealloc  %A_gpu : memref<128x100xf16>
-    gpu.dealloc  %B_gpu : memref<256x100xf16>
-    return %GEMM_gpu : memref<128x256xf32>
+    %memref = gpu.alloc  () : memref<128x100xf16>
+    gpu.memcpy  %memref, %arg0 : memref<128x100xf16>, memref<128x100xf16>
+    %memref_0 = gpu.alloc  () : memref<256x100xf16>
+    gpu.memcpy  %memref_0, %arg1 : memref<256x100xf16>, memref<256x100xf16>
+    %memref_1 = gpu.alloc  () : memref<128x256xf32>
+    gpu.launch_func  @gemm_k_oob::@gemm_k_oob blocks in (%c2, %c1, %c1) threads in (%c4, %c8, %c1)  args(%memref : memref<128x100xf16>, %memref_0 : memref<256x100xf16>, %memref_1 : memref<128x256xf32>)
+    gpu.dealloc  %memref : memref<128x100xf16>
+    gpu.dealloc  %memref_0 : memref<256x100xf16>
+    %alloc = memref.alloc() : memref<128x256xf32>
+    gpu.memcpy  %alloc, %memref_1 : memref<128x256xf32>, memref<128x256xf32>
+    gpu.dealloc  %memref_1 : memref<128x256xf32>
+    return %alloc : memref<128x256xf32>
   }
-
-  gpu.module @gemm_k_oob attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Bfloat16ConversionINTEL, BFloat16TypeKHR, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR, VectorAnyINTEL], [SPV_EXT_shader_atomic_float_add, SPV_KHR_bfloat16, SPV_KHR_expect_assume, SPV_INTEL_bfloat16_conversion, SPV_INTEL_vector_compute]>, api=OpenCL, #spirv.resource_limits<>>} {
+  gpu.module @gemm_k_oob {
     gpu.func @gemm_k_oob(%arg0: memref<128x100xf16>, %arg1: memref<256x100xf16>, %arg2: memref<128x256xf32>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 4, 8, 1>, gpu.known_grid_size = array<i32: 2, 1, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       cf.br ^bb1
     ^bb1:  // pred: ^bb0
@@ -55,10 +50,10 @@ module @gemm attributes {gpu.container_module} {
       %8 = xetile.init_tile %arg0[%5, %c0] : memref<128x100xf16> -> !xetile.tile<32x32xf16>
       %9 = xetile.init_tile %arg1[%7, %c0] : memref<256x100xf16> -> !xetile.tile<32x32xf16>
       %10:3 = scf.for %arg3 = %c0 to %c100 step %c32 iter_args(%arg4 = %cst_0, %arg5 = %8, %arg6 = %9) -> (vector<32x32xf32>, !xetile.tile<32x32xf16>, !xetile.tile<32x32xf16>) {
-        %12 = xetile.update_tile_offset %arg6, [%c0,  %c32] :  !xetile.tile<32x32xf16>
-        %13 = xetile.update_tile_offset %arg5, [%c0,  %c32] :  !xetile.tile<32x32xf16>
-        %14 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
-        %15 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32}  : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %12 = xetile.update_tile_offset %arg6, [%c0, %c32] : !xetile.tile<32x32xf16>
+        %13 = xetile.update_tile_offset %arg5, [%c0, %c32] : !xetile.tile<32x32xf16>
+        %14 = xetile.load_tile %arg5 {padding = 0.000000e+00 : f32} : !xetile.tile<32x32xf16> -> vector<32x32xf16>
+        %15 = xetile.load_tile %arg6 {padding = 0.000000e+00 : f32} : !xetile.tile<32x32xf16> -> vector<32x32xf16>
         %16 = vector.transpose %15, [1, 0] : vector<32x32xf16> to vector<32x32xf16>
         xegpu.compile_hint
         %17 = math.exp %14 : vector<32x32xf16>
@@ -76,49 +71,46 @@ module @gemm attributes {gpu.container_module} {
       gpu.return
     }
   }
-
   func.func @main() attributes {llvm.emit_c_interface} {
+    %cst = arith.constant 738.90564 : f32
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c100 = arith.constant 100 : index
     %c256 = arith.constant 256 : index
     %c128 = arith.constant 128 : index
-    %cf_1 = arith.constant 1.0 : f16
-    %A = memref.alloc() : memref<128x100xf16>
-    %B = memref.alloc() : memref<256x100xf16>
-    %GEMM_ref = memref.alloc() : memref<128x256xf32>
     // intialize matrix A with ones
-    scf.for %i = %c0 to %c128 step %c1 {
-      scf.for %j = %c0 to %c100 step %c1 {
-        memref.store %cf_1, %A[%i, %j] : memref<128x100xf16>
+    %cst_0 = arith.constant 1.000000e+00 : f16
+    %alloc = memref.alloc() : memref<128x100xf16>
+    %alloc_1 = memref.alloc() : memref<256x100xf16>
+    %alloc_2 = memref.alloc() : memref<128x256xf32>
+    scf.for %arg0 = %c0 to %c128 step %c1 {
+      scf.for %arg1 = %c0 to %c100 step %c1 {
+        memref.store %cst_0, %alloc[%arg0, %arg1] : memref<128x100xf16>
       }
     }
     // intialize matrix B with ones
-    scf.for %i = %c0 to %c256 step %c1 {
-      scf.for %j = %c0 to %c100 step %c1 {
-        memref.store %cf_1, %B[%i, %j] : memref<256x100xf16>
+    scf.for %arg0 = %c0 to %c256 step %c1 {
+      scf.for %arg1 = %c0 to %c100 step %c1 {
+        memref.store %cst_0, %alloc_1[%arg0, %arg1] : memref<256x100xf16>
       }
     }
     // intialize matrix GEMM_ref
-    %cf_result = arith.constant 738.90560989 : f32
-    scf.for %i = %c0 to %c128 step %c1 {
-      scf.for %j = %c0 to %c256 step %c1 {
-        memref.store %cf_result, %GEMM_ref[%i, %j] : memref<128x256xf32>
+    scf.for %arg0 = %c0 to %c128 step %c1 {
+      scf.for %arg1 = %c0 to %c256 step %c1 {
+        memref.store %cst, %alloc_2[%arg0, %arg1] : memref<128x256xf32>
       }
     }
-
-    %GEMM = call @gemm_k_oob_entry(%A, %B) : (memref<128x100xf16>, memref<256x100xf16>) -> memref<128x256xf32>
-    %cast_GEMM = memref.cast %GEMM : memref<128x256xf32> to memref<*xf32>
-    %cast_GEMM_ref = memref.cast %GEMM_ref : memref<128x256xf32> to memref<*xf32>
     // CHECK: Max absolute error 0.
     // CHECK: Max relative error 0.00
-    call @printMaxErrorF32(%cast_GEMM, %cast_GEMM_ref) : (memref<*xf32>, memref<*xf32>) -> ()
-    memref.dealloc %A : memref<128x100xf16>
-    memref.dealloc %B : memref<256x100xf16>
-    memref.dealloc %GEMM_ref : memref<128x256xf32>
+    %0 = call @gemm_k_oob_entry(%alloc, %alloc_1) : (memref<128x100xf16>, memref<256x100xf16>) -> memref<128x256xf32>
+    %cast = memref.cast %0 : memref<128x256xf32> to memref<*xf32>
+    %cast_3 = memref.cast %alloc_2 : memref<128x256xf32> to memref<*xf32>
+    call @printMaxErrorF32(%cast, %cast_3) : (memref<*xf32>, memref<*xf32>) -> ()
+    memref.dealloc %alloc : memref<128x100xf16>
+    memref.dealloc %alloc_1 : memref<256x100xf16>
+    memref.dealloc %alloc_2 : memref<128x256xf32>
     return
   }
-
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}

@@ -1,3 +1,8 @@
+// gpu dialect with intel intrinsic functions (func dialect) to
+// llvm dialect (for host code) and
+// spirv dialect (for device code) lowering pipeline.
+// Ready for imex runner starting from GPU dialect.
+
 builtin.module(
     cse
     gpu.module(
@@ -16,23 +21,21 @@ builtin.module(
     canonicalize
     cse
     reconcile-unrealized-casts
-    bf16-to-gpu
-    imex-convert-gpu-to-spirv
-    spirv.module(spirv-lower-abi-attrs
-             spirv-update-vce)
+    gpu.module(math-extend-to-supported-types{target-type=f32})
+    gpu.module(arith-emulate-unsupported-floats{source-types=bf16 target-type=f32})
+    spirv-attach-target{ver=v1.0 caps=Addresses,BFloat16TypeKHR,Float16Buffer,Int64,Int16,Int8,Kernel,Linkage,Vector16,GenericPointer,Groups,Float16,Float64,AtomicFloat32AddEXT,ExpectAssumeKHR,SubgroupDispatch,VectorComputeINTEL,VectorAnyINTEL,Bfloat16ConversionINTEL exts=SPV_EXT_shader_atomic_float_add,SPV_KHR_bfloat16,SPV_KHR_expect_assume,SPV_INTEL_vector_compute,SPV_INTEL_bfloat16_conversion}
+    imex-convert-to-spirv{use-64bit-index=true}
+    gpu.module(spirv.module(spirv-lower-abi-attrs, spirv-update-vce))
     func.func(llvm-request-c-wrappers)
-    serialize-spirv
     convert-vector-to-scf
-    convert-gpu-to-gpux
     convert-scf-to-cf
+    func.func(gpu-async-region)
     expand-strided-metadata
     finalize-memref-to-llvm
-    convert-cf-to-llvm
-    convert-vector-to-llvm
-    convert-index-to-llvm
-    convert-arith-to-llvm
-    convert-func-to-llvm
-    convert-math-to-llvm
-    convert-gpux-to-llvm
+    gpu-to-llvm{use-bare-pointers-for-kernels=true}
+    convert-to-llvm
     lower-affine
-    reconcile-unrealized-casts)
+    reconcile-unrealized-casts
+    gpu-module-to-binary)
+
+// End

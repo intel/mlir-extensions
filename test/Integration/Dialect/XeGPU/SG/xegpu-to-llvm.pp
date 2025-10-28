@@ -9,6 +9,8 @@ builtin.module(
       loop-invariant-code-motion
       cse
       xegpu-vector-linearize
+      canonicalize
+      cse
       convert-xegpu-to-xevm
       convert-gpu-to-llvm-spv{use-64bit-index=true}
       convert-xevm-to-llvm
