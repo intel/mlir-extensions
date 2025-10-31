@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <random>
 
 // NOLINTBEGIN(*-identifier-naming)
@@ -223,21 +224,33 @@ void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
   std::pair<double, DynamicMemRefIterator<T>> max_rel_err_idx{0.0, DM.begin()};
   std::pair<double, DynamicMemRefIterator<T>> max_abs_err_idx{0.0, DM.begin()};
   uint64_t idx = 0;
+  double max_rel_error_i = std::numeric_limits<double>::infinity(),
+         max_rel_error_j = std::numeric_limits<double>::infinity();
+  double max_abs_error_i = std::numeric_limits<double>::infinity(),
+         max_abs_error_j = std::numeric_limits<double>::infinity();
   for (; i != DM.end() && j != DN.end(); ++i, ++j, ++idx) {
     const double i_val = getFloat(*i);
     const double j_val = getFloat(*j);
     const double delta = fabs(i_val - j_val);
     const double rel_error = delta / fmax(fabs(i_val), fabs(j_val));
-    if (delta > max_abs_err_idx.first)
+    if (delta > max_abs_err_idx.first) {
       max_abs_err_idx = {delta, i};
-    if (rel_error > max_rel_err_idx.first)
+      max_abs_error_i = i_val;
+      max_abs_error_j = j_val;
+    }
+    if (rel_error > max_rel_err_idx.first) {
       max_rel_err_idx = {rel_error, i};
+      max_rel_error_i = i_val;
+      max_rel_error_j = j_val;
+    }
   }
   std::cout << "Max absolute error " << max_abs_err_idx.first
             << " at idx=" << std::distance(DM.begin(), max_abs_err_idx.second)
+            << " (i=" << max_abs_error_i << ", j=" << max_abs_error_j << ")"
             << '\n';
   std::cout << "Max relative error " << max_rel_err_idx.first
             << " at idx=" << std::distance(DM.begin(), max_rel_err_idx.second)
+            << " (i=" << max_rel_error_i << ", j=" << max_rel_error_j << ")"
             << '\n';
 }
 

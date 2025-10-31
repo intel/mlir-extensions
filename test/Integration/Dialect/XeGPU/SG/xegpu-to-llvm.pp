@@ -12,6 +12,7 @@ builtin.module(
       canonicalize
       cse
       convert-xegpu-to-xevm
+      convert-math-to-xevm
       convert-gpu-to-llvm-spv{use-64bit-index=true}
       convert-xevm-to-llvm
 	    cse
