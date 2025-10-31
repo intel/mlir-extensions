@@ -852,7 +852,10 @@ The rule also applies to reduction from 3d to 2d.
    #layout_b = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0]>
 ```
 
-For `shape_cast`, it first determines the dimensions being reduced or expanded. The input's `layout` needs to expand or reduce the value accordingly for related dimension in `sg_layout` and `sg_data`. `order` should be consistent between input and output.
+For `shape_cast`, it first determines the dimensions being reduced or expanded. When vector.shape_cast changes the rank, the layout of the other side must be adjusted so that sg_layout / sg_data stay consistent with the new shape and keep the same order.
+1. Shrinking / merging dimensions (rank goes down). When several original dims are collapsed into one, the derived layout must collapse their layout info too. The resulting **sg_layout and sg_data use the combined / aggregated values of those original dims.
+2. Expanding dimensions (rank goes up). For every new dimension introduced by the shape cast, we create a corresponding entry in the layout. Its sg_layout is set to 1 (meaning: no subgroup partitioning along this new dim). Its sg_data is set to the vector extent of that new dim (so data coverage fully matches).
+
 ```mlir
    #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [1, 32, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
    %vector_a = vector.shape_cast %vector_b {#layout_a} : vector<256x128xf32> to vector<8x32x128xf32>
@@ -861,12 +864,12 @@ For `shape_cast`, it first determines the dimensions being reduced or expanded. 
    #layout_b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data=[1, 16], lane_layout=[1, 16], lane_data = [1, 1], order=[1, 0]>
 ```
 ```mlir
-   #layout_a = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [32, 1, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
-   %vector_a = vector.shape_cast %vector_b {#layout_a} : vector<256x128xf32> to vector<256x1x128xf32>
+   #layout_a =  #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data=[1, 16], lane_layout=[1, 16], lane_data = [1, 1], order=[1, 0]>
+   %vector_a = vector.shape_cast %vector_b {#layout_a} : vector<256x1x128xf32> to vector<256x128xf32>
 
-   //derived layout for input operand
+   //derived layout for input operand.
    #layout_b = #xegpu.layout<sg_layout = [8, 1, 4], sg_data = [32, 1, 32], inst_data=[1, 1, 16], lane_layout=[1, 1, 16], lane_data = [1, 1, 1], order=[2, 1, 0] >
-   #layout_b_reduce = #xegpu.slice<#layout_b, 1>
+
 ```
 
 For `broadcast`, `layout` of the input operand has one less dimension for the broadcast dimension. `sg_layout` for that dimension must be `1` in the ouptut layout and must be removed for the input operand. The corresponding dimension in `sg_data` and `order` must be removed also.
