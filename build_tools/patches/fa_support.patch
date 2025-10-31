@@ -1,0 +1,52 @@
+diff --git a/mlir/lib/Conversion/XeGPUToXeVM/XeGPUToXeVM.cpp b/mlir/lib/Conversion/XeGPUToXeVM/XeGPUToXeVM.cpp
+index 9ead1d89069d..3822d24c8579 100644
+--- a/mlir/lib/Conversion/XeGPUToXeVM/XeGPUToXeVM.cpp
++++ b/mlir/lib/Conversion/XeGPUToXeVM/XeGPUToXeVM.cpp
+@@ -189,9 +189,10 @@ class CreateNdDescToXeVMPattern
+     // If source is a memref, we need to extract the aligned pointer as index.
+     // Pointer type is passed as i32 or i64 by type converter.
+     if (sourceMemrefTy) {
+-      if (!sourceMemrefTy.hasStaticShape()) {
+-        return rewriter.notifyMatchFailure(op, "Expected static memref shape.");
+-      }
++      // if (!sourceMemrefTy.hasStaticShape()) {
++      //   return rewriter.notifyMatchFailure(op, "Expected static memref
++      //   shape.");
++      // }
+       baseAddr =
+           memref::ExtractAlignedPointerAsIndexOp::create(rewriter, loc, source);
+     } else {
+diff --git a/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp b/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
+index e95338f7d18b..2615d225dc1d 100644
+--- a/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
++++ b/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
+@@ -348,6 +349,9 @@ private:
+ /// d1) and return vector<16x2x64>
+ static VectorType getDistributedType(VectorType originalType, AffineMap map,
+                                      int64_t warpSize) {
++  // If the map has zero results, that means no distribution.
++  if (map.getNumResults() == 0)
++    return originalType;
+   SmallVector<int64_t> targetShape(originalType.getShape());
+   for (unsigned i = 0, e = map.getNumResults(); i < e; i++) {
+     unsigned position = map.getDimPosition(i);
+diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUSubgroupDistribute.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUSubgroupDistribute.cpp
+index f1dbc5ddb202..3023c65d4bc3 100644
+--- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUSubgroupDistribute.cpp
++++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUSubgroupDistribute.cpp
+@@ -1506,9 +1506,14 @@ void XeGPUSubgroupDistributePass::runOnOperation() {
+     if (!layout)
+       return AffineMap::getMultiDimMapWithTargets(
+           vecRank, {static_cast<unsigned int>(vecRank - 1)}, val.getContext());
++    // Expecting layout and vector rank to match.
++    assert(layout.getRank() == vecRank &&
++           "vector rank and layout rank must match");
++    // A dimension is distributed if its layout value is > 1 and the dimension
++    // size is evenly divisible by the layout value.
+     SmallVector<unsigned int> distributedDims;
+     for (auto [i, v] : llvm::enumerate(layout.getEffectiveLaneLayoutAsInt())) {
+-      if (v > 1)
++      if (v > 1 && vecType.getShape()[i] % v == 0)
+         distributedDims.push_back(i);
+     }
+     return AffineMap::getMultiDimMapWithTargets(vecRank, distributedDims,
