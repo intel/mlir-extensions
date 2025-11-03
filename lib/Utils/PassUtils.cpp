@@ -49,8 +49,9 @@ namespace imex {
   auto intTyp = val.getType();
   assert(intTyp.isIntOrIndex() && !intTyp.isIndex());
   if (intTyp.isUnsignedInteger()) {
-    return ::mlir::UnrealizedConversionCastOp::create(builder,
-            loc, builder.getIntegerType(intTyp.getIntOrFloatBitWidth()), val)
+    return ::mlir::UnrealizedConversionCastOp::create(
+               builder, loc,
+               builder.getIntegerType(intTyp.getIntOrFloatBitWidth()), val)
         .getResult(0);
   }
   return val;
@@ -137,8 +138,9 @@ namespace imex {
     } else {
       if (dTyp.isUnsignedInteger()) {
         // to uint
-        val = ::mlir::arith::FPToUIOp::create(builder,
-            loc, builder.getIntegerType(dTyp.getIntOrFloatBitWidth()), val);
+        val = ::mlir::arith::FPToUIOp::create(
+            builder, loc, builder.getIntegerType(dTyp.getIntOrFloatBitWidth()),
+            val);
       } else {
         // to int
         val = builder.createOrFold<::mlir::arith::FPToSIOp>(loc, dTyp, val);
@@ -257,7 +259,8 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
   ::mlir::SmallVector<int64_t> staticSizes;
   ::mlir::SmallVector<mlir::Value> dynamicSizes;
   dispatchIndexValues(builder, loc, shp, dynamicSizes, staticSizes);
-  return ::mlir::tensor::EmptyOp::create(builder, loc, staticSizes, elType, dynamicSizes)
+  return ::mlir::tensor::EmptyOp::create(builder, loc, staticSizes, elType,
+                                         dynamicSizes)
       .getResult();
 }
 
@@ -302,7 +305,7 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
 
   // create empty tensor with dims as determined above
   return ::mlir::tensor::EmptyOp::create(builder, loc, staticSizes,
-                                       resType.getElementType(), filteredDims)
+                                         resType.getElementType(), filteredDims)
       .getResult();
 }
 
@@ -343,8 +346,9 @@ void dispatchIndexValues(::mlir::OpBuilder &builder, ::mlir::Location loc,
 /// Create a 1d MemRef alloc with given size and elType
 ::mlir::Value createAllocMR(::mlir::OpBuilder &builder, ::mlir::Location loc,
                             ::mlir::Type elType, int64_t sz) {
-  return ::mlir::memref::AllocOp::create(builder,
-      loc, ::mlir::MemRefType::get({sz}, elType), builder.getI64IntegerAttr(8));
+  return ::mlir::memref::AllocOp::create(builder, loc,
+                                         ::mlir::MemRefType::get({sz}, elType),
+                                         builder.getI64IntegerAttr(8));
 }
 
 /// Create a 1d MemRef from given elements and elType
@@ -441,7 +445,8 @@ namespace imex {
 ::mlir::Value createExtractPtrFromMemRef(::mlir::OpBuilder &builder,
                                          ::mlir::Location loc,
                                          ::mlir::Value mr) {
-  auto meta = ::mlir::memref::ExtractStridedMetadataOp::create(builder, loc, mr);
+  auto meta =
+      ::mlir::memref::ExtractStridedMetadataOp::create(builder, loc, mr);
   return createExtractPtrFromMemRef(builder, loc, mr, meta);
 }
 
@@ -461,10 +466,10 @@ void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
   auto cmr = mlir::memref::CastOp::create(builder, loc, memrefType, mr);
   if (et == builder.getIndexType()) {
     ::mlir::func::CallOp::create(builder, loc, "printMemrefInd",
-                                         ::mlir::TypeRange(), cmr.getResult());
+                                 ::mlir::TypeRange(), cmr.getResult());
   } else if (et == builder.getI64Type()) {
     ::mlir::func::CallOp::create(builder, loc, "printMemrefI64",
-                                         ::mlir::TypeRange(), cmr.getResult());
+                                 ::mlir::TypeRange(), cmr.getResult());
   } else {
     assert(false);
   }
@@ -480,8 +485,8 @@ void printValsAsMemRef(::mlir::Location loc, ::mlir::OpBuilder &builder,
   auto mrTyp = mlir::cast<::mlir::MemRefType>(toTyp);
   auto shapedMrTyp =
       mlir::cast<::mlir::ShapedType>(mrTyp).clone(iTyp.getShape());
-  ::mlir::Value shapedMr = ::mlir::bufferization::ToBufferOp::create(builder,
-      loc, shapedMrTyp, input);
+  ::mlir::Value shapedMr = ::mlir::bufferization::ToBufferOp::create(
+      builder, loc, shapedMrTyp, input);
   if (clone) {
     shapedMr = ::mlir::bufferization::CloneOp::create(builder, loc, shapedMr);
   }

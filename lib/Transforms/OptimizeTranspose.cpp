@@ -394,10 +394,11 @@ static void createStoreScatter(Value data, Value slm, Value base,
   auto desc = xegpu::CreateDescOp::create(rewriter, loc, tdescTy, slm, offsets);
 
   auto maskTy = VectorType::get(simdLanes, rewriter.getI1Type());
-  auto mask = arith::ConstantOp::create(rewriter,
-      loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
+  auto mask = arith::ConstantOp::create(
+      rewriter, loc,
+      DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
   xegpu::StoreScatterOp::create(rewriter, loc, data, desc, mask, nullptr /*L1*/,
-                                         nullptr /*L2*/, nullptr /*L3*/);
+                                nullptr /*L2*/, nullptr /*L3*/);
 }
 
 static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
@@ -423,10 +424,10 @@ static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
   for (auto i = 0; i < numLoads; i++) {
     Value offset =
         arith::AddIOp::create(rewriter, loc, base, index_val(i * vectSize));
-    auto tdesc = xegpu::CreateNdDescOp::create(rewriter,
-        loc, tdescTy, slm, llvm::ArrayRef<OpFoldResult>({offset}));
-    Value value = xegpu::LoadNdOp::create(rewriter,
-        loc, loadTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
+    auto tdesc = xegpu::CreateNdDescOp::create(
+        rewriter, loc, tdescTy, slm, llvm::ArrayRef<OpFoldResult>({offset}));
+    Value value = xegpu::LoadNdOp::create(
+        rewriter, loc, loadTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
         nullptr /*packed*/, nullptr /*transpose*/,
         nullptr /*transpose_bit_width*/, nullptr /*l1_hint*/,
         nullptr /*l2_hint*/, nullptr /*l3_hint*/);
@@ -481,16 +482,16 @@ struct CreateNdDescOpPattern
     auto origOffsetY = op.getOffsets().back();
     for (int64_t i = 0; i < arrayLength; ++i) {
       auto attr = rewriter.getIndexAttr(i * tdescTy.getShape()[1]);
-      auto offsetIncrementY = mlir::arith::ConstantOp::create(rewriter,
-          op->getLoc(), rewriter.getIndexType(), attr);
+      auto offsetIncrementY = mlir::arith::ConstantOp::create(
+          rewriter, op->getLoc(), rewriter.getIndexType(), attr);
       // Y offset is adjusted based on col dim size.
-      auto offsetY = mlir::arith::AddIOp::create(rewriter,
-          op->getLoc(), origOffsetY, offsetIncrementY);
+      auto offsetY = mlir::arith::AddIOp::create(rewriter, op->getLoc(),
+                                                 origOffsetY, offsetIncrementY);
       SmallVector<OpFoldResult> offsets =
           op.getOffsets().drop_back(); // offsets excluding Y offset.
       offsets.push_back(offsetY->getResult(0));
-      auto newOp = xegpu::CreateNdDescOp::create(rewriter,
-          op.getLoc(), newTdescTy, memrefTypedSource, offsets);
+      auto newOp = xegpu::CreateNdDescOp::create(
+          rewriter, op.getLoc(), newTdescTy, memrefTypedSource, offsets);
       createNdDescOps.push_back(newOp);
     }
 
@@ -515,9 +516,9 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
     auto newLoadTy = VectorType::get(op.getTensorDescType().getShape(),
                                      op.getType().getElementType());
     for (auto source : tdescSources) {
-      auto loadNdOp = xegpu::LoadNdOp::create(rewriter,
-          op.getLoc(), newLoadTy, source, ValueRange(), DenseI64ArrayAttr(),
-          op.getPackedAttr(), op.getTransposeAttr(),
+      auto loadNdOp = xegpu::LoadNdOp::create(
+          rewriter, op.getLoc(), newLoadTy, source, ValueRange(),
+          DenseI64ArrayAttr(), op.getPackedAttr(), op.getTransposeAttr(),
           op.getTransposeBitWidthAttr(), op.getL1HintAttr(), op.getL2HintAttr(),
           op.getL3HintAttr());
       loadNdOps.push_back(loadNdOp);
@@ -557,9 +558,9 @@ struct ScfForOpPattern : public OpConversionPattern<scf::ForOp> {
     }
     rewriter.applySignatureConversion(oldBody, signatureConversion);
     // Create a new ForOp.
-    auto newForOp = scf::ForOp::create(rewriter,
-        op.getLoc(), op.getLowerBound(), op.getUpperBound(), op.getStep(),
-        flattenedRemappedInitArgs);
+    auto newForOp = scf::ForOp::create(rewriter, op.getLoc(),
+                                       op.getLowerBound(), op.getUpperBound(),
+                                       op.getStep(), flattenedRemappedInitArgs);
     rewriter.eraseBlock(newForOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newForOp.getRegion(),
                                 newForOp.getRegion().begin());
@@ -642,8 +643,9 @@ struct UpdateNdOffsetOpPattern final
     dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
     llvm::SmallVector<Value> newOps;
     for (auto source : tdescSources) {
-      auto newOp = xegpu::UpdateNdOffsetOp::create(rewriter,
-          op.getLoc(), source.getType(), source, dynamicOffsets, staticOffsets);
+      auto newOp = xegpu::UpdateNdOffsetOp::create(
+          rewriter, op.getLoc(), source.getType(), source, dynamicOffsets,
+          staticOffsets);
       newOps.push_back(newOp);
     }
     rewriter.replaceOpWithMultiple(op, {newOps});
@@ -793,10 +795,11 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto slmTy = MemRefType::get({totSlmSize}, elemTy, {}, 3);
       auto slm = memref::AllocOp::create(rewriter, loc, slmTy);
 
-      auto sgId = gpu::SubgroupIdOp::create(rewriter,
-          loc, rewriter.getIndexType(), nullptr /* upper_bound*/);
-      auto offset = arith::MulIOp::create(rewriter,
-          loc, sgId, index_val(numElems), nullptr /* overflowFlags */);
+      auto sgId = gpu::SubgroupIdOp::create(
+          rewriter, loc, rewriter.getIndexType(), nullptr /* upper_bound*/);
+      auto offset =
+          arith::MulIOp::create(rewriter, loc, sgId, index_val(numElems),
+                                nullptr /* overflowFlags */);
 
       data =
           vector::TransposeOp::create(rewriter, loc, data, op.getPermutation());
@@ -846,10 +849,10 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto transposeBitWidthAttr = IntegerAttr::get(
           rewriter.getIntegerType(32),
           32); // need to do a 32 bit transpose to get the packed layout.
-      auto newLoadOp = xegpu::LoadNdOp::create(rewriter,
-          loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), ValueRange(),
-          DenseI64ArrayAttr(), packedAttr, transposeAttr, transposeBitWidthAttr,
-          loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+      auto newLoadOp = xegpu::LoadNdOp::create(
+          rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
+          ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
+          transposeBitWidthAttr, loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
           loadOp.getL3HintAttr());
       // Replace the uses of the packed layout conversion with new load.
       rewriter.replaceAllUsesWith(packedLayoutOps.back()->getResult(0),
@@ -871,10 +874,10 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto packedAttr = UnitAttr(); // empty packed attribute.
       auto transposeAttr =
           DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
-      auto newLoadOp = xegpu::LoadNdOp::create(rewriter,
-          loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), ValueRange(),
-          DenseI64ArrayAttr(), packedAttr, transposeAttr, IntegerAttr(),
-          loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+      auto newLoadOp = xegpu::LoadNdOp::create(
+          rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
+          ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
+          IntegerAttr(), loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
           loadOp.getL3HintAttr());
       rewriter.replaceAllUsesWith(op.getResult(), newLoadOp.getResult());
     }

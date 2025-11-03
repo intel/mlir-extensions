@@ -86,8 +86,8 @@ static Value castValueTo(Value val, Type toType, Location loc,
   if (cst) {
     auto attr = dyn_cast<IntegerAttr>(cst.getValue());
     if (attr)
-      return arith::ConstantOp::create(rewriter,
-          loc, rewriter.getIntegerAttr(toType, attr.getInt()));
+      return arith::ConstantOp::create(
+          rewriter, loc, rewriter.getIntegerAttr(toType, attr.getInt()));
   }
 
   if (auto vectorTy = dyn_cast<VectorType>(fromType)) {
@@ -191,11 +191,11 @@ public:
     auto memRefType = dyn_cast<MemRefType>(op.getSource().getType());
     Value base;
     if (memRefType)
-      base = memref::ExtractAlignedPointerAsIndexOp::create(rewriter,
-          loc, adaptor.getSource());
+      base = memref::ExtractAlignedPointerAsIndexOp::create(
+          rewriter, loc, adaptor.getSource());
     else { // Handle i64/i32/ui64/ui32 passed as a source
-      base = arith::IndexCastUIOp::create(rewriter, loc, rewriter.getIndexType(),
-                                                   op.getSource());
+      base = arith::IndexCastUIOp::create(
+          rewriter, loc, rewriter.getIndexType(), op.getSource());
     }
 
     base = adjustBasePointer(rewriter, op, base);
@@ -408,8 +408,8 @@ public:
     auto scope = tdescTy.getMemorySpace();
     auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
 
-    Value base = memref::ExtractAlignedPointerAsIndexOp::create(rewriter,
-        loc, adaptor.getSource());
+    Value base = memref::ExtractAlignedPointerAsIndexOp::create(
+        rewriter, loc, adaptor.getSource());
     base = arith::IndexCastUIOp::create(rewriter, loc, addrTy, base);
 
     // Using an 1-D vector of index type elements to represent the payload
@@ -495,7 +495,7 @@ public:
     unsigned infoVal = (rc << 24) | (sd << 16) | (prec2 << 8) | (prec1);
     auto infoAttr = rewriter.getIntegerAttr(rewriter.getI32Type(), infoVal);
     auto info = arith::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
-                                                   infoAttr);
+                                          infoAttr);
 
     auto lhs = adaptor.getLhs();
     auto rhs = adaptor.getRhs();
@@ -587,8 +587,8 @@ public:
     Value num_producers = num_participants;
     Value num_consumers = num_participants;
 
-    auto nbarrier = ::mlir::UnrealizedConversionCastOp::create(rewriter,
-        loc, ::mlir::TypeRange{op.getType()},
+    auto nbarrier = ::mlir::UnrealizedConversionCastOp::create(
+        rewriter, loc, ::mlir::TypeRange{op.getType()},
         ::mlir::ValueRange{nbarrier_id, nbarrier_role, num_producers,
                            num_consumers});
     rewriter.replaceOp(op, nbarrier);

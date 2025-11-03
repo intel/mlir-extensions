@@ -38,8 +38,8 @@ FlatSymbolRefAttr getFuncRefAttr(gpu::GPUModuleOp module, StringRef name,
   auto func = module.lookupSymbol<func::FuncOp>(result.getAttr());
   if (!func) {
     OpBuilder moduleBuilder(module.getBodyRegion());
-    func = func::FuncOp::create(moduleBuilder,
-        module.getLoc(), name,
+    func = func::FuncOp::create(
+        moduleBuilder, module.getLoc(), name,
         FunctionType::get(context, operands.getTypes(), resultType));
 
     func.setPrivate();

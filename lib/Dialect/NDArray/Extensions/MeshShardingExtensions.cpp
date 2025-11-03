@@ -438,8 +438,8 @@ struct SubviewShardingInterface
       return failure();
     }
     auto &[lShardOffs, lShardSizes, lShardStrides] = offSzStr.value();
-    auto newSubview = imex::ndarray::SubviewOp::create(builder,
-        op->getLoc(), spmdizedOperands[0], lShardOffs, lShardSizes,
+    auto newSubview = imex::ndarray::SubviewOp::create(
+        builder, op->getLoc(), spmdizedOperands[0], lShardOffs, lShardSizes,
         lShardStrides);
     spmdizationMap.map(op->getResult(0), newSubview.getResult());
     return success();
@@ -527,20 +527,20 @@ struct InsertSliceShardingInterface
       hasSize = hasSize.land(easyI64(loc, builder, v).sgt(zero));
     }
 
-    scf::IfOp ifOp = scf::IfOp::create(builder,
-        loc, hasSize.get(),
+    scf::IfOp ifOp = scf::IfOp::create(
+        builder, loc, hasSize.get(),
         [&](OpBuilder &b, Location loc) {
-          auto res = imex::ndarray::InsertSliceOp::create(b,
-              loc, spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
+          auto res = imex::ndarray::InsertSliceOp::create(
+              b, loc, spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
               lShardSizes, lShardStrides);
-          scf::YieldOp::create(b,loc, res.getResult());
+          scf::YieldOp::create(b, loc, res.getResult());
         },
         [&](OpBuilder &b, Location loc) {
-          scf::YieldOp::create(b,loc, spmdizedOperands[0]);
+          scf::YieldOp::create(b, loc, spmdizedOperands[0]);
         });
 
-    auto res = UpdateHaloOp::create(builder,
-        loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
+    auto res = UpdateHaloOp::create(
+        builder, loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
         dstSharding.getGridAttr(),
         GridAxesArrayAttr::get(op->getContext(), dstSharding.getSplitAxes()),
         dstSharding.getDynamicHaloSizes(),
@@ -683,7 +683,7 @@ struct LinspaceShardingInterface
                                          retArType.getEncoding());
     lSz = createCast(loc, builder, lSz, builder.getIndexType());
     auto res = ::imex::ndarray::LinSpaceOp::create(builder, loc, retType, start,
-                                                           stop, lSz, false);
+                                                   stop, lSz, false);
     // update mapping
     spmdizationMap.map(op->getResult(0), res->getResult(0));
     spmdizationMap.map(op, res.getOperation());

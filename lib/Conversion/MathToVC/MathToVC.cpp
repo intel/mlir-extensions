@@ -106,7 +106,8 @@ SmallVector<Value> convertFloatArgsType(SmallVector<Value> args,
     } else if (srcBitWidth > dstBitWidth) {
       auto newType =
           convertScalarOrVectorFloatType(arg.getType(), dstElementType);
-      auto newOp = arith::TruncFOp::create(rewriter, arg.getLoc(), newType, arg);
+      auto newOp =
+          arith::TruncFOp::create(rewriter, arg.getLoc(), newType, arg);
       newArgs.push_back(newOp);
     }
   }
@@ -212,8 +213,8 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
             interimVectorType,
             rewriter.getFloatAttr(interimVectorType.getElementType(),
                                   1.442695040888963));
-        auto log2eConstVec =
-            arith::ConstantOp::create(rewriter, loc, interimVectorType, vecAttr);
+        auto log2eConstVec = arith::ConstantOp::create(
+            rewriter, loc, interimVectorType, vecAttr);
         auto input = convertFloatArgsType({operands[0]}, rewriter.getF32Type(),
                                           rewriter);
         auto scaledInputf32 =
@@ -313,7 +314,7 @@ struct MathToVCPass : public imex::impl::ConvertMathToVCBase<MathToVCPass> {
         return nullptr;
 
       return mlir::vector::ShapeCastOp::create(builder, loc, type,
-                                                       inputs.front());
+                                               inputs.front());
     };
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);

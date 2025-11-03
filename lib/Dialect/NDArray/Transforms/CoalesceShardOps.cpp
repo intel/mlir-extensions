@@ -511,8 +511,8 @@ struct CoalesceShardOpsPass
         builder.setInsertionPointAfter(shardOp);
       }
 
-      auto newSharding = ::mlir::shard::ShardingOp::create(builder,
-          shardOp->getLoc(),
+      auto newSharding = ::mlir::shard::ShardingOp::create(
+          builder, shardOp->getLoc(),
           ::mlir::shard::ShardingType::get(shardOp->getContext()),
           orgSharding.getGridAttr(), orgSharding.getSplitAxesAttr(),
           ::mlir::DenseI64ArrayAttr::get(shardOp->getContext(), {}),
@@ -529,8 +529,8 @@ struct CoalesceShardOpsPass
         // sharding
         newShardOp.getShardingMutable().assign(newSharding.getResult());
       } else { // block arg
-        newShardOp = ::mlir::shard::ShardOp::create(builder,
-            shardOp->getLoc(), shardOp, newSharding.getResult());
+        newShardOp = ::mlir::shard::ShardOp::create(
+            builder, shardOp->getLoc(), shardOp, newSharding.getResult());
       }
 
       // update shardOps of dependent Subview/InsertSliceOps

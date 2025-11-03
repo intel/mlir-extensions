@@ -635,8 +635,8 @@ static func::CallOp gen2DBlockIntrinsicCall(
   // arg1: vNi8, Cache controls
   auto l1Encode = i8_val(getCacheEncoding(l1));
   auto l3Encode = i8_val(getCacheEncoding(l3));
-  auto cacheControls = vector::FromElementsOp::create(rewriter,
-      loc, vecTy(2, i8Ty), ValueRange({l1Encode, l3Encode}));
+  auto cacheControls = vector::FromElementsOp::create(
+      rewriter, loc, vecTy(2, i8Ty), ValueRange({l1Encode, l3Encode}));
 
   // arg2: i8, Number of blocks
   auto nBlks = i8_val(nblocks);
@@ -1251,7 +1251,8 @@ public:
           data.getType(); // 1D VectorType expected by the intrinsic
       SmallVector<int64_t> permutation =
           generateFullPermutation(tdescTy.getRank());
-      data = vector::ShapeCastOp::create(rewriter, loc, op.getValueType(), data);
+      data =
+          vector::ShapeCastOp::create(rewriter, loc, op.getValueType(), data);
       data = vector::TransposeOp::create(rewriter, loc, data, permutation);
       data = vector::ShapeCastOp::create(rewriter, loc, flatVecTy, data);
     }

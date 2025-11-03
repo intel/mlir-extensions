@@ -109,8 +109,8 @@ public:
               o->setOperand(idx, newOp);
             }
           } else if (oper.getType().isBF16()) {
-            auto newOp = arith::ExtFOp::create(builder,
-                o->getLoc(), builder.getF32Type(), oper);
+            auto newOp = arith::ExtFOp::create(builder, o->getLoc(),
+                                               builder.getF32Type(), oper);
             o->setOperand(idx, newOp);
           }
           idx++;
@@ -131,8 +131,8 @@ public:
           } else if (res.getType().isBF16()) {
             res.setType(builder.getF32Type());
             builder.setInsertionPointAfter(o);
-            auto newRes = arith::TruncFOp::create(builder,
-                o->getLoc(), builder.getBF16Type(), res);
+            auto newRes = arith::TruncFOp::create(builder, o->getLoc(),
+                                                  builder.getBF16Type(), res);
             res.replaceAllUsesExcept(newRes, newRes);
           }
         }

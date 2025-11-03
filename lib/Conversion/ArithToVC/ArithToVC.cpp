@@ -154,7 +154,7 @@ struct ArithToVCPass : public imex::impl::ConvertArithToVCBase<ArithToVCPass> {
         return nullptr;
 
       return mlir::vector::ShapeCastOp::create(builder, loc, type,
-                                                       inputs.front());
+                                               inputs.front());
     };
     typeConverter.addSourceMaterialization(materializeCast);
     typeConverter.addTargetMaterialization(materializeCast);

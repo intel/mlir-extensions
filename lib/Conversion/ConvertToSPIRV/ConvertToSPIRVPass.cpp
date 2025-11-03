@@ -70,40 +70,41 @@ public:
 
     auto vWidth = vTy.getNumElements();
     assert(vWidth <= 64 && "vector.create_mask supports vector widths <= 64");
-    auto vWidthConst = mlir::arith::ConstantOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(vWidth));
+    auto vWidthConst = mlir::arith::ConstantOp::create(
+        rewriter, vMaskOp.getLoc(), rewriter.getI64IntegerAttr(vWidth));
     auto maskVal = adaptor.getOperands()[0];
-    maskVal = mlir::arith::TruncIOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getI64Type(), maskVal);
+    maskVal = mlir::arith::TruncIOp::create(rewriter, vMaskOp.getLoc(),
+                                            rewriter.getI64Type(), maskVal);
 
     // maskVal < vWidth
-    auto cmp = mlir::arith::CmpIOp::create(rewriter,
-        vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal,
-        vWidthConst);
-    auto one = mlir::arith::ConstantOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(1));
-    auto shift = mlir::spirv::ShiftLeftLogicalOp::create(rewriter,
-        vMaskOp.getLoc(), one, maskVal);
+    auto cmp = mlir::arith::CmpIOp::create(rewriter, vMaskOp.getLoc(),
+                                           mlir::arith::CmpIPredicate::slt,
+                                           maskVal, vWidthConst);
+    auto one = mlir::arith::ConstantOp::create(rewriter, vMaskOp.getLoc(),
+                                               rewriter.getI64IntegerAttr(1));
+    auto shift = mlir::spirv::ShiftLeftLogicalOp::create(
+        rewriter, vMaskOp.getLoc(), one, maskVal);
     auto mask1 =
-        mlir::arith::SubIOp::create(rewriter,vMaskOp.getLoc(), shift, one);
-    auto mask2 = mlir::arith::ConstantOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(-1)); // all ones
+        mlir::arith::SubIOp::create(rewriter, vMaskOp.getLoc(), shift, one);
+    auto mask2 = mlir::arith::ConstantOp::create(
+        rewriter, vMaskOp.getLoc(), rewriter.getI64IntegerAttr(-1)); // all ones
     mlir::Value sel = mlir::arith::SelectOp::create(rewriter, vMaskOp.getLoc(),
-                                                             cmp, mask1, mask2);
+                                                    cmp, mask1, mask2);
 
     // maskVal < 0
-    auto zero = mlir::arith::ConstantOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getI64IntegerAttr(0));
-    auto cmp2 = mlir::arith::CmpIOp::create(rewriter,
-        vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal, zero);
+    auto zero = mlir::arith::ConstantOp::create(rewriter, vMaskOp.getLoc(),
+                                                rewriter.getI64IntegerAttr(0));
+    auto cmp2 = mlir::arith::CmpIOp::create(rewriter, vMaskOp.getLoc(),
+                                            mlir::arith::CmpIPredicate::slt,
+                                            maskVal, zero);
     sel = mlir::arith::SelectOp::create(rewriter, vMaskOp.getLoc(), cmp2, zero,
-                                                 sel);
+                                        sel);
 
-    sel = mlir::arith::TruncIOp::create(rewriter,
-        vMaskOp.getLoc(), rewriter.getIntegerType(vWidth), sel);
-    auto res = mlir::spirv::BitcastOp::create(rewriter,
-        vMaskOp.getLoc(), mlir::VectorType::get({vWidth}, rewriter.getI1Type()),
-        sel);
+    sel = mlir::arith::TruncIOp::create(rewriter, vMaskOp.getLoc(),
+                                        rewriter.getIntegerType(vWidth), sel);
+    auto res = mlir::spirv::BitcastOp::create(
+        rewriter, vMaskOp.getLoc(),
+        mlir::VectorType::get({vWidth}, rewriter.getI1Type()), sel);
     vMaskOp->replaceAllUsesWith(res);
     rewriter.eraseOp(vMaskOp);
     return mlir::success();
@@ -136,10 +137,11 @@ public:
     }
 
     auto loc = fromElementsOp.getLoc();
-    mlir::Value result = mlir::spirv::UndefOp::create(rewriter, loc, spirvVecTy);
+    mlir::Value result =
+        mlir::spirv::UndefOp::create(rewriter, loc, spirvVecTy);
     for (auto [idx, val] : llvm::enumerate(adaptor.getElements())) {
-      result = mlir::spirv::CompositeInsertOp::create(rewriter, loc, val, result,
-                                                               idx);
+      result = mlir::spirv::CompositeInsertOp::create(rewriter, loc, val,
+                                                      result, idx);
     }
     rewriter.replaceOp(fromElementsOp, result);
     return mlir::success();

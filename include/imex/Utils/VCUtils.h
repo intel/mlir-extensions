@@ -58,9 +58,10 @@ using namespace mlir;
   arith::ConstantOp::create(rewriter, loc, rewriter.getIntegerAttr(type, value))
 
 #define dense_vector_int_val(value, elemTy, vecSize)                           \
-  arith::ConstantOp::create(rewriter,                                          \
-      loc, DenseElementsAttr::get(vecTy(vecSize, elemTy),                      \
-                                  IntegerAttr::get(elemTy, value)))
+  arith::ConstantOp::create(                                                   \
+      rewriter, loc,                                                           \
+      DenseElementsAttr::get(vecTy(vecSize, elemTy),                           \
+                             IntegerAttr::get(elemTy, value)))
 
 #define dense_vector_val(attr, vecTy)                                          \
   arith::ConstantOp::create(rewriter, loc, DenseElementsAttr::get(vecTy, attr))

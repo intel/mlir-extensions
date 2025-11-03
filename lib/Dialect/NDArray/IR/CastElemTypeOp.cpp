@@ -71,7 +71,7 @@ public:
     auto resShape = srcNDTyp.getShape();
     auto resTyp = resNDTyp.cloneWith(resShape, resNDTyp.getElementType());
     auto newOp = ::imex::ndarray::CastElemTypeOp::create(rewriter, op->getLoc(),
-                                                                  resTyp, src);
+                                                         resTyp, src);
     rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(op, resNDTyp, newOp);
 
     return ::mlir::success();

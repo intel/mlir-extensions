@@ -270,13 +270,14 @@ public:
 
     // Create folded extract.
     mlir::Location loc = sliceOp.getLoc();
-    mlir::Value newResult = SubviewOpTy::create(rewriter,
-        loc, sliceOp.getType(), castOp.getSource(), sliceOp.getOffsets(),
-        sliceOp.getSizes(), sliceOp.getStrides(), sliceOp.getStaticOffsets(),
-        sliceOp.getStaticSizes(), sliceOp.getStaticStrides());
+    mlir::Value newResult = SubviewOpTy::create(
+        rewriter, loc, sliceOp.getType(), castOp.getSource(),
+        sliceOp.getOffsets(), sliceOp.getSizes(), sliceOp.getStrides(),
+        sliceOp.getStaticOffsets(), sliceOp.getStaticSizes(),
+        sliceOp.getStaticStrides());
     if (newResult.getType() != sliceOp.getType())
-      newResult = ::mlir::tensor::CastOp::create(rewriter,
-          loc, sliceOp.getType(), newResult);
+      newResult = ::mlir::tensor::CastOp::create(rewriter, loc,
+                                                 sliceOp.getType(), newResult);
     rewriter.replaceOp(sliceOp, newResult);
     return mlir::success();
   }
@@ -338,8 +339,8 @@ template <typename SubviewOpTy> struct SliceCanonicalizer {
                   SubviewOpTy newOp) {
     mlir::Value replacement = newOp.getResult();
     if (replacement.getType() != op.getType())
-      replacement = ::mlir::tensor::CastOp::create(rewriter,
-          op.getLoc(), op.getType(), replacement);
+      replacement = ::mlir::tensor::CastOp::create(rewriter, op.getLoc(),
+                                                   op.getType(), replacement);
     rewriter.replaceOp(op, replacement);
   }
 };

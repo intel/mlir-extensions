@@ -118,9 +118,9 @@ public:
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
     VectorType newResTy = VectorType::get(vecSize, elemTy);
-    auto ldOp = xegpu::LoadNdOp::create(rewriter,
-        loc, newResTy, tdesc, ValueRange(), DenseI64ArrayAttr(), packAttr,
-        transAttr, bitWidthAttr, nullptr, nullptr, nullptr);
+    auto ldOp = xegpu::LoadNdOp::create(
+        rewriter, loc, newResTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
+        packAttr, transAttr, bitWidthAttr, nullptr, nullptr, nullptr);
 
     Value result = ldOp.getResult();
 

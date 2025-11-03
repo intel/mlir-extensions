@@ -237,9 +237,9 @@ public:
       newOp =
           xegpu::CreateDescOp::create(rewriter, loc, tdescTy, source, indices);
     } else if (memSpace == xegpu::MemorySpace::Global) {
-      newOp = xegpu::CreateNdDescOp::create(rewriter,
-          loc, tdescTy, source, op.getOffsets(), op.getSizes(), op.getStrides(),
-          op.getConstOffsetsAttr(), op.getConstSizesAttr(),
+      newOp = xegpu::CreateNdDescOp::create(
+          rewriter, loc, tdescTy, source, op.getOffsets(), op.getSizes(),
+          op.getStrides(), op.getConstOffsetsAttr(), op.getConstSizesAttr(),
           op.getConstStridesAttr());
     } else { // Lowering for blocked tiles on SLM.
       // For simplicity, it currently restricts the SLM to be a MemRef with
@@ -330,8 +330,8 @@ public:
           llvm::SmallVector<int64_t> cst(tileShape[0]);
           std::generate(cst.begin(), cst.end(),
                         [stride, i = 0]() mutable { return stride * i++; });
-          auto cstOffsets = arith::ConstantOp::create(rewriter,
-              loc, rewriter.getIndexVectorAttr(cst));
+          auto cstOffsets = arith::ConstantOp::create(
+              rewriter, loc, rewriter.getIndexVectorAttr(cst));
           auto baseValue = getValueOrCreateConstantIndexOp(rewriter, loc, base);
           auto idxTy = VectorType::get(tileShape[0], rewriter.getIndexType());
           auto splat =
@@ -347,8 +347,8 @@ public:
         std::reverse(offsets.begin(), offsets.end());
         std::reverse(tileShape.begin(), tileShape.end());
         offsets[1] = div(offsets[1], vnni);
-        newOp = xegpu::CreateDescOp::create(rewriter,
-            loc, tdescTy, source,
+        newOp = xegpu::CreateDescOp::create(
+            rewriter, loc, tdescTy, source,
             getScatteredOffsets(offsets, tileShape, slmBlock, slmShape));
       } else { // lower to 1D block TenssorDesc
         // Generate a linearized offset for a tile, given tileOffsets = [y, x]
@@ -371,8 +371,8 @@ public:
         };
 
         offsets[1] = div(offsets[1], vnni);
-        newOp = xegpu::CreateNdDescOp::create(rewriter,
-            loc, tdescTy, dyn_cast<TypedValue<MemRefType>>(source),
+        newOp = xegpu::CreateNdDescOp::create(
+            rewriter, loc, tdescTy, dyn_cast<TypedValue<MemRefType>>(source),
             getLinearOffset(offsets, slmBlock, slmShape));
       }
     }
@@ -399,7 +399,7 @@ public:
       auto flatTy = VectorType::get(indicesTy.getNumElements(),
                                     indicesTy.getElementType());
       auto indices = vector::ShapeCastOp::create(rewriter, op.getLoc(), flatTy,
-                                                          adaptor.getIndices());
+                                                 adaptor.getIndices());
       rewriter.replaceOpWithNewOp<xegpu::UpdateOffsetOp>(op, tdesc.getType(),
                                                          tdesc, indices);
     } else {
@@ -492,9 +492,9 @@ public:
     auto packAttr = UnitAttr();
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
-    auto ldOp = xegpu::LoadNdOp::create(rewriter,
-        loc, vecTy, adaptor.getTile(), ValueRange(), DenseI64ArrayAttr(),
-        packAttr, transAttr, bitWidthAttr, L1, L2, L3);
+    auto ldOp = xegpu::LoadNdOp::create(
+        rewriter, loc, vecTy, adaptor.getTile(), ValueRange(),
+        DenseI64ArrayAttr(), packAttr, transAttr, bitWidthAttr, L1, L2, L3);
 
     llvm::SmallVector<Value> results({ldOp.getResult()});
     if (memSpace == xegpu::MemorySpace::SLM) {
@@ -539,8 +539,8 @@ public:
     auto [L1, L2, L3] = getCachePolicy(op);
     auto mask =
         vector::ShapeCastOp::create(rewriter, loc, maskTy, adaptor.getMask());
-    auto ldOp = xegpu::LoadGatherOp::create(rewriter,
-        loc, ldTy, adaptor.getTile(), mask, L1, L2, L3);
+    auto ldOp = xegpu::LoadGatherOp::create(
+        rewriter, loc, ldTy, adaptor.getTile(), mask, L1, L2, L3);
     auto v = vector::ShapeCastOp::create(rewriter, loc, op.getType(), ldOp);
     rewriter.replaceOp(op, v);
     return success();
@@ -572,8 +572,9 @@ public:
       value = convertToPackedVector(value, loc, rewriter,
                                     op.getValue().hasOneUse());
       auto maskTy = VectorType::get(tileTy.getShape()[1], rewriter.getI1Type());
-      auto mask = arith::ConstantOp::create(rewriter,
-          loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
+      auto mask = arith::ConstantOp::create(
+          rewriter, loc,
+          DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
 
       if (tileTy.getRank() > 1) {
         SmallVector<int64_t> permutation = llvm::to_vector(
@@ -637,8 +638,8 @@ public:
     auto maskAttr = DenseElementsAttr::get(maskTy, maskValues);
     Value mask = arith::ConstantOp::create(rewriter, loc, maskTy, maskAttr);
     value = vector::ShapeCastOp::create(rewriter, loc, valTy, value);
-    auto rmwOp = xegpu::AtomicRMWOp::create(rewriter,
-        loc, valTy, op.getKind(), adaptor.getTile(), mask, value);
+    auto rmwOp = xegpu::AtomicRMWOp::create(rewriter, loc, valTy, op.getKind(),
+                                            adaptor.getTile(), mask, value);
     auto v = vector::ShapeCastOp::create(rewriter, loc, op.getType(), rmwOp);
     rewriter.replaceOp(op, v);
     return success();
@@ -678,7 +679,7 @@ public:
       auto newTy =
           VectorType::get(srcTy.getNumElements(), srcTy.getElementType());
       auto cast = vector::ShapeCastOp::create(rewriter, op.getLoc(), newTy,
-                                                       adaptor.getSource());
+                                              adaptor.getSource());
       rewriter.replaceOpWithNewOp<vector::BroadcastOp>(op, resTy, cast);
       return success();
     }
@@ -690,12 +691,12 @@ public:
                       ? (Attribute)rewriter.getIntegerAttr(elemTy, 0)
                       : (Attribute)rewriter.getFloatAttr(elemTy, 0.0);
 
-      Value result = arith::ConstantOp::create(rewriter,
-          op.getLoc(), resTy, DenseElementsAttr::get(resTy, attr));
+      Value result = arith::ConstantOp::create(
+          rewriter, op.getLoc(), resTy, DenseElementsAttr::get(resTy, attr));
 
       for (int64_t j = 0; j < resTy.getShape()[1]; j++) {
-        result = vector::InsertStridedSliceOp::create(rewriter,
-            op.getLoc(), adaptor.getSource(), result,
+        result = vector::InsertStridedSliceOp::create(
+            rewriter, op.getLoc(), adaptor.getSource(), result,
             llvm::ArrayRef<int64_t>({0, j}), llvm::ArrayRef<int64_t>({1, 1}));
       }
       rewriter.replaceOp(op, result);
@@ -716,8 +717,8 @@ public:
     auto resTy = op.getResult().getType();
     auto newTy =
         VectorType::get(resTy.getNumElements(), resTy.getElementType());
-    auto acc = arith::ConstantOp::create(rewriter,
-        op.getLoc(), newTy, DenseElementsAttr::get(newTy, 0));
+    auto acc = arith::ConstantOp::create(rewriter, op.getLoc(), newTy,
+                                         DenseElementsAttr::get(newTy, 0));
     auto result = rewriter.replaceOpWithNewOp<vector::MultiDimReductionOp>(
         op, op.getType(), op.getKindAttr(), adaptor.getSource(), acc,
         op.getReductionDimsAttr());
@@ -749,8 +750,8 @@ public:
   matchAndRewrite(scf::ForOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto newOp = scf::ForOp::create(rewriter, op.getLoc(), op.getLowerBound(),
-                                             op.getUpperBound(), op.getStep(),
-                                             adaptor.getInitArgs());
+                                    op.getUpperBound(), op.getStep(),
+                                    adaptor.getInitArgs());
     Block *newBlock = newOp.getBody();
     // remove the terminator of the new block
     if (newBlock->mightHaveTerminator())

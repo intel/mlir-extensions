@@ -116,8 +116,8 @@ public:
               o->setOperand(idx, newOp);
             }
           } else if (oper.getType().isBF16()) {
-            auto newOp = arith::ExtFOp::create(builder,
-                o->getLoc(), builder.getF32Type(), oper);
+            auto newOp = arith::ExtFOp::create(builder, o->getLoc(),
+                                               builder.getF32Type(), oper);
             o->setOperand(idx, newOp);
           }
           idx++;
@@ -156,8 +156,8 @@ public:
           } else if (res.getType().isBF16()) {
             res.setType(builder.getF32Type());
             builder.setInsertionPointAfter(o);
-            auto newRes = arith::TruncFOp::create(builder,
-                o->getLoc(), builder.getBF16Type(), res);
+            auto newRes = arith::TruncFOp::create(builder, o->getLoc(),
+                                                  builder.getBF16Type(), res);
             res.replaceAllUsesExcept(newRes, newRes);
           }
         }
@@ -193,8 +193,8 @@ public:
                     builder.setInsertionPoint(lop);
                     auto newTy =
                         VectorType::get(vecTy.getShape(), builder.getI16Type());
-                    auto newConst = arith::ConstantOp::create(builder,
-                        lop->getLoc(), newTy, ival);
+                    auto newConst = arith::ConstantOp::create(
+                        builder, lop->getLoc(), newTy, ival);
                     lop->replaceAllUsesWith(newConst);
                     replacedConstantOps.push_back(lop);
                   } else {
@@ -209,8 +209,8 @@ public:
                   int64_t i64val = ival.getSExtValue();
                   int16_t i16val = static_cast<int16_t>(i64val);
                   builder.setInsertionPoint(lop);
-                  auto newConst = arith::ConstantOp::create(builder,
-                      lop->getLoc(), builder.getI16Type(),
+                  auto newConst = arith::ConstantOp::create(
+                      builder, lop->getLoc(), builder.getI16Type(),
                       builder.getI16IntegerAttr(i16val));
                   lop->replaceAllUsesWith(newConst);
                   replacedConstantOps.push_back(lop);
@@ -248,8 +248,8 @@ public:
             }
           } else if (src.getType().isInteger(16) && res.getType().isF32()) {
             builder.setInsertionPoint(lop);
-            auto bcast = arith::BitcastOp::create(builder,
-                lop->getLoc(), builder.getBF16Type(), src);
+            auto bcast = arith::BitcastOp::create(builder, lop->getLoc(),
+                                                  builder.getBF16Type(), src);
             lop->setOperand(0, bcast);
           }
         } else if (dyn_cast<arith::TruncFOp>(lop)) {
@@ -270,8 +270,8 @@ public:
             }
           } else if (src.getType().isF32() && res.getType().isBF16()) {
             builder.setInsertionPointAfter(lop);
-            auto bcast = arith::BitcastOp::create(builder,
-                lop->getLoc(), builder.getI16Type(), res);
+            auto bcast = arith::BitcastOp::create(builder, lop->getLoc(),
+                                                  builder.getI16Type(), res);
             res.replaceAllUsesExcept(bcast, bcast);
           }
         } else {
@@ -383,7 +383,8 @@ public:
           }
           auto et = t.getElementType();
           builder.setInsertionPoint(dop);
-          auto zero = arith::ConstantIndexOp::create(builder, alloc.getLoc(), 0);
+          auto zero =
+              arith::ConstantIndexOp::create(builder, alloc.getLoc(), 0);
           // get shape of kernel operand and construct a same shape
           // type with i16
           MemRefType m = mlir::dyn_cast<MemRefType>(kop.getType());
@@ -424,8 +425,8 @@ public:
             // Collect allocs to be removed later
             replacedAllocOps.push_back(dop);
             // Create flat gpu alloc
-            auto flatAlloc = gpu::AllocOp::create(builder,
-                alloc.getLoc(), ftype,
+            auto flatAlloc = gpu::AllocOp::create(
+                builder, alloc.getLoc(), ftype,
                 alloc.getAsyncToken() ? alloc.getAsyncToken().getType()
                                       : nullptr,
                 alloc.getAsyncDependencies(), alloc.getDynamicSizes(),
@@ -433,11 +434,12 @@ public:
             // Create two views
             // 1) bf16
             // 2) i16
-            auto bf16View = memref::ViewOp::create(builder,
-                alloc.getLoc(), alloc.getType(), flatAlloc.getResult(0), zero,
-                sizes);
-            i16View = memref::ViewOp::create(builder,
-                alloc.getLoc(), itype, flatAlloc.getResult(0), zero, sizes);
+            auto bf16View =
+                memref::ViewOp::create(builder, alloc.getLoc(), alloc.getType(),
+                                       flatAlloc.getResult(0), zero, sizes);
+            i16View =
+                memref::ViewOp::create(builder, alloc.getLoc(), itype,
+                                       flatAlloc.getResult(0), zero, sizes);
             // Replace old uses of "alloc" with proper Value
             for (OpOperand *u : deallocUse) {
               u->set(flatAlloc.getResult(0));
@@ -502,8 +504,9 @@ public:
               }
             }
             builder.setInsertionPointAfter(dop);
-            auto bcast = arith::BitcastOp::create(builder,
-                dop->getLoc(), builder.getI16Type(), dop->getResult(0));
+            auto bcast = arith::BitcastOp::create(builder, dop->getLoc(),
+                                                  builder.getI16Type(),
+                                                  dop->getResult(0));
             for (OpOperand *u : bf16Use) {
               u->set(bcast.getResult());
             }

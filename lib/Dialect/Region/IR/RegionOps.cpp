@@ -147,9 +147,9 @@ struct MergeAdjacentRegions
 
     // Construct new env region op and steal new merged region into it.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
-    auto newOp = EnvironmentRegionOp::create(rewriter,
-        op->getLoc(), newYieldArgsRange.getTypes(), op.getEnvironment(),
-        op.getArgs());
+    auto newOp = EnvironmentRegionOp::create(rewriter, op->getLoc(),
+                                             newYieldArgsRange.getTypes(),
+                                             op.getEnvironment(), op.getArgs());
     mlir::Region &newRegion = newOp.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
 
@@ -208,9 +208,9 @@ struct CleanupRegionYieldArgs
 
     // Construct new env region op, only yielding values we selected.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
-    auto newOp = EnvironmentRegionOp::create(rewriter,
-        op->getLoc(), newYieldArgsRange.getTypes(), op.getEnvironment(),
-        op.getArgs());
+    auto newOp = EnvironmentRegionOp::create(rewriter, op->getLoc(),
+                                             newYieldArgsRange.getTypes(),
+                                             op.getEnvironment(), op.getArgs());
     mlir::Region &newRegion = newOp.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
     {

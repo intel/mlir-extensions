@@ -71,10 +71,10 @@ public:
     for (auto copyOp : copyOpsInGpuRegion) {
       builder.setInsertionPoint(copyOp);
       // /*asyncToken*/ std::nullopt,
-      ::mlir::gpu::MemcpyOp::create(builder,
-          copyOp.getLoc(), /*resultTypes*/ ::mlir::TypeRange{},
-          /*asyncDependencies*/ ::mlir::ValueRange{}, copyOp.getTarget(),
-          copyOp.getSource());
+      ::mlir::gpu::MemcpyOp::create(builder, copyOp.getLoc(),
+                                    /*resultTypes*/ ::mlir::TypeRange{},
+                                    /*asyncDependencies*/ ::mlir::ValueRange{},
+                                    copyOp.getTarget(), copyOp.getSource());
       copyOp.erase();
     }
   }

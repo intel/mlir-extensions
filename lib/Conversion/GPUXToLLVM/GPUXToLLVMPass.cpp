@@ -75,9 +75,8 @@ struct FunctionCallBuilder {
               module.lookupSymbol<mlir::LLVM::LLVMFuncOp>(functionName))
         return function;
       auto blockEnd = mlir::OpBuilder::atBlockEnd(module.getBody());
-      return mlir::LLVM::LLVMFuncOp::create(
-                                blockEnd,
-                                loc, functionName, functionType);
+      return mlir::LLVM::LLVMFuncOp::create(blockEnd, loc, functionName,
+                                            functionType);
     }();
     return mlir::LLVM::CallOp::create(builder, loc, function, arguments);
   }
@@ -229,8 +228,8 @@ private:
     mlir::MemRefDescriptor srcDesc(adaptor.getSrc());
 
     // Compute number of elements.
-    mlir::Value numElements = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, getIndexType(), rewriter.getIndexAttr(1));
+    mlir::Value numElements = mlir::LLVM::ConstantOp::create(
+        rewriter, loc, getIndexType(), rewriter.getIndexAttr(1));
     for (int pos = 0; pos < srcMemRefType.getRank(); ++pos) {
       auto size = srcDesc.size(rewriter, loc, pos);
       numElements = mlir::LLVM::MulOp::create(rewriter, loc, numElements, size);
@@ -248,13 +247,15 @@ private:
 
     mlir::Value srcBasePtr = srcDesc.alignedPtr(rewriter, loc);
     mlir::Value srcOffset = srcDesc.offset(rewriter, loc);
-    mlir::Value srcPtr = mlir::LLVM::GEPOp::create(rewriter,
-        loc, srcBasePtr.getType(), elementType, srcBasePtr, srcOffset);
+    mlir::Value srcPtr =
+        mlir::LLVM::GEPOp::create(rewriter, loc, srcBasePtr.getType(),
+                                  elementType, srcBasePtr, srcOffset);
     mlir::MemRefDescriptor dstDesc(adaptor.getDst());
     mlir::Value dstBasePtr = dstDesc.alignedPtr(rewriter, loc);
     mlir::Value dstOffset = dstDesc.offset(rewriter, loc);
-    mlir::Value dstPtr = mlir::LLVM::GEPOp::create(rewriter,
-        loc, dstBasePtr.getType(), elementType, dstBasePtr, dstOffset);
+    mlir::Value dstPtr =
+        mlir::LLVM::GEPOp::create(rewriter, loc, dstBasePtr.getType(),
+                                  elementType, dstBasePtr, dstOffset);
 
     // Allocate the underlying buffer and store a pointer to it in the MemRef
     // descriptor.
@@ -304,8 +305,8 @@ private:
     auto alignmentVar =
         mlir::LLVM::ConstantOp::create(rewriter, loc, llvmIndexType, alignment);
 
-    auto typeVar = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(isShared));
+    auto typeVar = mlir::LLVM::ConstantOp::create(
+        rewriter, loc, llvmInt32Type, rewriter.getI32IntegerAttr(isShared));
 
     // Allocate the underlying buffer and store a pointer to it in the MemRef
     // descriptor.
@@ -325,8 +326,9 @@ private:
         rewriter, loc,
         mlir::LLVM::BitcastOp::create(rewriter, loc, elemPtrTye, allocatedPtr));
 
-    auto zero = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+    auto zero = mlir::LLVM::ConstantOp::create(
+        rewriter, loc, llvmIndexType,
+        rewriter.getIntegerAttr(llvmIndexType, 0));
 
     memrefDesc.setOffset(rewriter, loc, zero);
     for (auto i : llvm::seq(0u, static_cast<unsigned>(shape.size()))) {
@@ -406,11 +408,10 @@ private:
         mlir::IntegerType::get(builder.getContext(), 8), kernelName.size());
     auto ptrType = mlir::LLVM::LLVMPointerType::get(builder.getContext());
     // Get the pointer to the first character in the global string.
-    auto globalPtr = mlir::LLVM::AddressOfOp::create(builder,
-        loc, ptrType, global.getSymNameAttr());
-    return mlir::LLVM::GEPOp::create(builder,
-        loc, ptrType, type, globalPtr,
-        llvm::ArrayRef<mlir::LLVM::GEPArg>{0, 0});
+    auto globalPtr = mlir::LLVM::AddressOfOp::create(builder, loc, ptrType,
+                                                     global.getSymNameAttr());
+    return mlir::LLVM::GEPOp::create(builder, loc, ptrType, type, globalPtr,
+                                     llvm::ArrayRef<mlir::LLVM::GEPArg>{0, 0});
   }
 
   // Generates an LLVM IR dialect global that contains the name of the given
@@ -498,8 +499,8 @@ private:
                                             mlir::LLVM::Linkage::Internal);
     }
 
-    auto size = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, llvmIndexType,
+    auto size = mlir::LLVM::ConstantOp::create(
+        rewriter, loc, llvmIndexType,
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(spirvBlob.size())));
 
@@ -548,22 +549,22 @@ private:
 
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
-      auto size = mlir::LLVM::ConstantOp::create(rewriter,
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+      auto size = mlir::LLVM::ConstantOp::create(rewriter, loc, llvmInt64Type,
+                                                 rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
-        paramsStorage[i] = mlir::LLVM::AllocaOp::create(rewriter,
-            loc, llvmPointerType, getKernelParamType(i), size, 0);
+        paramsStorage[i] = mlir::LLVM::AllocaOp::create(
+            rewriter, loc, llvmPointerType, getKernelParamType(i), size, 0);
       }
       return mlir::LLVM::AllocaOp::create(rewriter, loc, llvmPointerType,
-                                                   paramsArrayType, size, 0);
+                                          paramsArrayType, size, 0);
     });
 
-    mlir::Value one = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
+    mlir::Value one = mlir::LLVM::ConstantOp::create(
+        rewriter, loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, type);
       auto gep = mlir::LLVM::GEPOp::create(rewriter, loc, type, llvmPointerType,
-                                                    nullPtr, one);
+                                           nullPtr, one);
       return mlir::LLVM::PtrToIntOp::create(rewriter, loc, llvmIndexType, gep);
     };
 
@@ -588,35 +589,38 @@ private:
 
     for (auto i : llvm::seq(0u, paramsCount)) {
       auto param = getKernelParam(i);
-      mlir::LLVM::StoreOp::create(rewriter, loc, param.second, paramsStorage[i]);
+      mlir::LLVM::StoreOp::create(rewriter, loc, param.second,
+                                  paramsStorage[i]);
       auto ptr = mlir::LLVM::BitcastOp::create(rewriter, loc, llvmPointerType,
-                                                        paramsStorage[i]);
+                                               paramsStorage[i]);
 
       auto typeSize = param.first;
 
       mlir::Value range =
           mlir::LLVM::UndefOp::create(rewriter, loc, llvmRangeType);
-      range = mlir::LLVM::InsertValueOp::create(rewriter, loc, range, ptr, pos_0);
+      range =
+          mlir::LLVM::InsertValueOp::create(rewriter, loc, range, ptr, pos_0);
       range =
           mlir::LLVM::InsertValueOp::create(rewriter, loc, range, typeSize, 1);
 
-      paramsArray = mlir::LLVM::InsertValueOp::create(rewriter, loc, paramsArray,
-                                                               range, i);
+      paramsArray = mlir::LLVM::InsertValueOp::create(rewriter, loc,
+                                                      paramsArray, range, i);
     }
 
     auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
     auto nullRange = [&]() {
-      auto zero = mlir::LLVM::ConstantOp::create(rewriter,
-          loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+      auto zero = mlir::LLVM::ConstantOp::create(
+          rewriter, loc, llvmIndexType,
+          rewriter.getIntegerAttr(llvmIndexType, 0));
       mlir::Value range =
           mlir::LLVM::UndefOp::create(rewriter, loc, llvmRangeType);
-      range =
-          mlir::LLVM::InsertValueOp::create(rewriter, loc, range, nullPtr, pos_0);
+      range = mlir::LLVM::InsertValueOp::create(rewriter, loc, range, nullPtr,
+                                                pos_0);
       range = mlir::LLVM::InsertValueOp::create(rewriter, loc, range, zero, 1);
       return range;
     }();
-    paramsArray = mlir::LLVM::InsertValueOp::create(rewriter,
-        loc, paramsArray, nullRange, paramsCount);
+    paramsArray = mlir::LLVM::InsertValueOp::create(rewriter, loc, paramsArray,
+                                                    nullRange, paramsCount);
     mlir::LLVM::StoreOp::create(rewriter, loc, paramsArray, paramsArrayPtr);
 
     /////////////////////////////////////////////////////////////////////
@@ -645,7 +649,7 @@ private:
 
     auto eventsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       return mlir::LLVM::AllocaOp::create(rewriter, loc, llvmPointerType,
-                                                   eventsArrayType, size, 0);
+                                          eventsArrayType, size, 0);
     });
 
     mlir::Value eventsArray =
@@ -654,7 +658,8 @@ private:
     for (auto i : llvm::seq(0u, eventsCount)) {
       mlir::Value evt =
           mlir::LLVM::UndefOp::create(rewriter, loc, llvmEventType);
-      evt = mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, events[i], pos_0);
+      evt = mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, events[i],
+                                              pos_0);
       eventsArray =
           mlir::LLVM::InsertValueOp::create(rewriter, loc, eventsArray, evt, i);
     }
@@ -663,20 +668,21 @@ private:
       auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
       mlir::Value evt =
           mlir::LLVM::UndefOp::create(rewriter, loc, llvmEventType);
-      return mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, nullPtr, pos_0);
+      return mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, nullPtr,
+                                               pos_0);
     }();
 
-    eventsArray = mlir::LLVM::InsertValueOp::create(rewriter,
-        loc, eventsArray, nullEvent, eventsCount);
+    eventsArray = mlir::LLVM::InsertValueOp::create(rewriter, loc, eventsArray,
+                                                    nullEvent, eventsCount);
     mlir::LLVM::StoreOp::create(rewriter, loc, eventsArray, eventsArrayPtr);
 
     /////////////////////////////////////////////////////////////////////////
 
     // Get pointer to array of kernel parameters and call launch kernel
-    auto paramsArrayVoidPtr = mlir::LLVM::BitcastOp::create(rewriter,
-        loc, llvmRangePointerType, paramsArrayPtr);
-    auto zero = mlir::LLVM::ConstantOp::create(rewriter,
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
+    auto paramsArrayVoidPtr = mlir::LLVM::BitcastOp::create(
+        rewriter, loc, llvmRangePointerType, paramsArrayPtr);
+    auto zero = mlir::LLVM::ConstantOp::create(rewriter, loc, llvmInt32Type,
+                                               rewriter.getI32IntegerAttr(0));
     mlir::Value dynamicSharedMemorySize =
         adaptor.getDynamicSharedMemorySize()
             ? adaptor.getDynamicSharedMemorySize()

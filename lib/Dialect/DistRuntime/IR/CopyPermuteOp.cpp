@@ -56,14 +56,14 @@ public:
     auto nType = dstType.cloneWith(dstLShape, elType);
     auto hType = ::imex::distruntime::AsyncHandleType::get(getContext());
 
-    auto newOp = ::imex::distruntime::CopyPermuteOp::create(rewriter,
-        op.getLoc(), ::mlir::TypeRange{hType, nType}, op.getTeamAttr(),
-        op.getLArray(), op.getGShape(), op.getLOffsets(), op.getNlOffsets(),
-        op.getNlShape(), op.getAxes());
+    auto newOp = ::imex::distruntime::CopyPermuteOp::create(
+        rewriter, op.getLoc(), ::mlir::TypeRange{hType, nType},
+        op.getTeamAttr(), op.getLArray(), op.getGShape(), op.getLOffsets(),
+        op.getNlOffsets(), op.getNlShape(), op.getAxes());
 
     // cast to original types and replace op
     auto res = ::mlir::tensor::CastOp::create(rewriter, op.getLoc(), dstType,
-                                                       newOp.getNlArray());
+                                              newOp.getNlArray());
     rewriter.replaceOp(op, {newOp.getHandle(), res});
 
     return ::mlir::success();
@@ -89,10 +89,10 @@ public:
     if (!mlir::tensor::canFoldIntoConsumerOp(castOp))
       return mlir::failure();
 
-    auto newOp = ::imex::distruntime::CopyPermuteOp::create(rewriter,
-        op.getLoc(), op->getResultTypes(), op.getTeamAttr(), castOp.getSource(),
-        op.getGShape(), op.getLOffsets(), op.getNlOffsets(), op.getNlShape(),
-        op.getAxes());
+    auto newOp = ::imex::distruntime::CopyPermuteOp::create(
+        rewriter, op.getLoc(), op->getResultTypes(), op.getTeamAttr(),
+        castOp.getSource(), op.getGShape(), op.getLOffsets(), op.getNlOffsets(),
+        op.getNlShape(), op.getAxes());
     rewriter.replaceOp(op, newOp);
 
     return mlir::success();
