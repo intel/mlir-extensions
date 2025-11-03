@@ -106,7 +106,7 @@ static Value convertTo1D32BitVector(Value value, Location loc,
   auto shapecastTy = VectorType::get(vecTy.getNumElements(), elemTy);
 
   if (shapecastTy != vecTy) {
-    value = rewriter.create<vector::ShapeCastOp>(loc, shapecastTy, value);
+    value = vector::ShapeCastOp::create(rewriter, loc, shapecastTy, value);
   }
 
   auto vnni = getVnniFactor(elemTy);
@@ -114,7 +114,7 @@ static Value convertTo1D32BitVector(Value value, Location loc,
     elemTy = isa<IntegerType>(elemTy) ? (Type)rewriter.getI32Type()
                                       : (Type)rewriter.getF32Type();
     auto castTy = VectorType::get(vecTy.getNumElements() / vnni, elemTy);
-    value = rewriter.create<vector::BitCastOp>(loc, castTy, value);
+    value = vector::BitCastOp::create(rewriter, loc, castTy, value);
   }
   return value;
 }
@@ -152,14 +152,14 @@ static Value convertToPackedVector(Value value, Location loc,
     // shape cast packed type (3D vector) to 2D vector, are required by bitcast
     auto shape = packedTy.getShape();
     vecTy = VectorType::get({shape[0], shape[1] * shape[2]}, elemTy);
-    value = rewriter.create<vector::ShapeCastOp>(loc, vecTy, value);
+    value = vector::ShapeCastOp::create(rewriter, loc, vecTy, value);
 
     // cast to 32-bit data, use i32 for intergers and f32 for floats.
     elemTy = isa<IntegerType>(elemTy) ? (Type)rewriter.getI32Type()
                                       : (Type)rewriter.getF32Type();
     vecTy = VectorType::get(packedTy.getShape().take_front(2), elemTy);
     if (vecTy != packedTy)
-      value = rewriter.create<vector::BitCastOp>(loc, vecTy, value);
+      value = vector::BitCastOp::create(rewriter, loc, vecTy, value);
   }
   return value;
 }
@@ -181,7 +181,7 @@ OpFoldResult genBinOp(OpFoldResult a, OpFoldResult b, Location loc,
   } else {
     auto aVal = getValueOrCreateConstantIndexOp(rewriter, loc, a);
     auto bVal = getValueOrCreateConstantIndexOp(rewriter, loc, b);
-    result = rewriter.create<ArithOp>(loc, aVal, bVal).getResult();
+    result = ArithOp::create(rewriter, loc, aVal, bVal).getResult();
   }
   return result;
 }
@@ -233,11 +233,11 @@ public:
       auto idxTy =
           VectorType::get(tdescTy.getNumElements(), rewriter.getIndexType());
       auto indices =
-          rewriter.create<vector::ShapeCastOp>(loc, idxTy, op.getIndices());
+          vector::ShapeCastOp::create(rewriter, loc, idxTy, op.getIndices());
       newOp =
-          rewriter.create<xegpu::CreateDescOp>(loc, tdescTy, source, indices);
+          xegpu::CreateDescOp::create(rewriter, loc, tdescTy, source, indices);
     } else if (memSpace == xegpu::MemorySpace::Global) {
-      newOp = rewriter.create<xegpu::CreateNdDescOp>(
+      newOp = xegpu::CreateNdDescOp::create(rewriter,
           loc, tdescTy, source, op.getOffsets(), op.getSizes(), op.getStrides(),
           op.getConstOffsetsAttr(), op.getConstSizesAttr(),
           op.getConstStridesAttr());
@@ -330,12 +330,12 @@ public:
           llvm::SmallVector<int64_t> cst(tileShape[0]);
           std::generate(cst.begin(), cst.end(),
                         [stride, i = 0]() mutable { return stride * i++; });
-          auto cstOffsets = rewriter.create<arith::ConstantOp>(
+          auto cstOffsets = arith::ConstantOp::create(rewriter,
               loc, rewriter.getIndexVectorAttr(cst));
           auto baseValue = getValueOrCreateConstantIndexOp(rewriter, loc, base);
           auto idxTy = VectorType::get(tileShape[0], rewriter.getIndexType());
           auto splat =
-              rewriter.create<vector::BroadcastOp>(loc, idxTy, baseValue);
+              vector::BroadcastOp::create(rewriter, loc, idxTy, baseValue);
           auto result = add(splat.getResult(), cstOffsets.getResult());
           return getValueOrCreateConstantIndexOp(rewriter, loc, result);
         };
@@ -347,7 +347,7 @@ public:
         std::reverse(offsets.begin(), offsets.end());
         std::reverse(tileShape.begin(), tileShape.end());
         offsets[1] = div(offsets[1], vnni);
-        newOp = rewriter.create<xegpu::CreateDescOp>(
+        newOp = xegpu::CreateDescOp::create(rewriter,
             loc, tdescTy, source,
             getScatteredOffsets(offsets, tileShape, slmBlock, slmShape));
       } else { // lower to 1D block TenssorDesc
@@ -371,7 +371,7 @@ public:
         };
 
         offsets[1] = div(offsets[1], vnni);
-        newOp = rewriter.create<xegpu::CreateNdDescOp>(
+        newOp = xegpu::CreateNdDescOp::create(rewriter,
             loc, tdescTy, dyn_cast<TypedValue<MemRefType>>(source),
             getLinearOffset(offsets, slmBlock, slmShape));
       }
@@ -398,7 +398,7 @@ public:
       auto indicesTy = op.getIndices().getType();
       auto flatTy = VectorType::get(indicesTy.getNumElements(),
                                     indicesTy.getElementType());
-      auto indices = rewriter.create<vector::ShapeCastOp>(op.getLoc(), flatTy,
+      auto indices = vector::ShapeCastOp::create(rewriter, op.getLoc(), flatTy,
                                                           adaptor.getIndices());
       rewriter.replaceOpWithNewOp<xegpu::UpdateOffsetOp>(op, tdesc.getType(),
                                                          tdesc, indices);
@@ -492,7 +492,7 @@ public:
     auto packAttr = UnitAttr();
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
-    auto ldOp = rewriter.create<xegpu::LoadNdOp>(
+    auto ldOp = xegpu::LoadNdOp::create(rewriter,
         loc, vecTy, adaptor.getTile(), ValueRange(), DenseI64ArrayAttr(),
         packAttr, transAttr, bitWidthAttr, L1, L2, L3);
 
@@ -503,10 +503,10 @@ public:
         auto elemTy = tileTy.getElementType();
         auto castTy = VectorType::get(tileTy.getNumElements(), elemTy);
         if (castTy != vecTy)
-          value = rewriter.create<vector::BitCastOp>(loc, castTy, value);
+          value = vector::BitCastOp::create(rewriter, loc, castTy, value);
         if (castTy != op.getType(0))
           value =
-              rewriter.create<vector::ShapeCastOp>(loc, op.getType(0), value);
+              vector::ShapeCastOp::create(rewriter, loc, op.getType(0), value);
         results.push_back(value);
       } else {
         return failure();
@@ -514,7 +514,7 @@ public:
     } else if (arrayLength > 1) {
       auto value = results.pop_back_val();
       for (auto i = 0; i < arrayLength; ++i) {
-        auto extractOp = rewriter.create<vector::ExtractOp>(loc, value, i);
+        auto extractOp = vector::ExtractOp::create(rewriter, loc, value, i);
         results.push_back(extractOp.getResult());
       }
     }
@@ -538,10 +538,10 @@ public:
         VectorType::get(type.getNumElements(), rewriter.getIntegerType(1));
     auto [L1, L2, L3] = getCachePolicy(op);
     auto mask =
-        rewriter.create<vector::ShapeCastOp>(loc, maskTy, adaptor.getMask());
-    auto ldOp = rewriter.create<xegpu::LoadGatherOp>(
+        vector::ShapeCastOp::create(rewriter, loc, maskTy, adaptor.getMask());
+    auto ldOp = xegpu::LoadGatherOp::create(rewriter,
         loc, ldTy, adaptor.getTile(), mask, L1, L2, L3);
-    auto v = rewriter.create<vector::ShapeCastOp>(loc, op.getType(), ldOp);
+    auto v = vector::ShapeCastOp::create(rewriter, loc, op.getType(), ldOp);
     rewriter.replaceOp(op, v);
     return success();
   }
@@ -572,13 +572,13 @@ public:
       value = convertToPackedVector(value, loc, rewriter,
                                     op.getValue().hasOneUse());
       auto maskTy = VectorType::get(tileTy.getShape()[1], rewriter.getI1Type());
-      auto mask = rewriter.create<arith::ConstantOp>(
+      auto mask = arith::ConstantOp::create(rewriter,
           loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
 
       if (tileTy.getRank() > 1) {
         SmallVector<int64_t> permutation = llvm::to_vector(
             llvm::reverse(llvm::seq<int64_t>(tileTy.getRank())));
-        value = rewriter.create<vector::TransposeOp>(loc, value, permutation);
+        value = vector::TransposeOp::create(rewriter, loc, value, permutation);
       }
 
       rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(
@@ -612,8 +612,8 @@ public:
     auto valTy = VectorType::get(numElems, tileTy.getElementType());
     auto maskTy = VectorType::get(numElems, rewriter.getIntegerType(1));
     auto [L1, L2, L3] = getCachePolicy(op, xegpu::CachePolicy::WRITE_BACK);
-    mask = rewriter.create<vector::ShapeCastOp>(op.getLoc(), maskTy, mask);
-    value = rewriter.create<vector::ShapeCastOp>(op.getLoc(), valTy, value);
+    mask = vector::ShapeCastOp::create(rewriter, op.getLoc(), maskTy, mask);
+    value = vector::ShapeCastOp::create(rewriter, op.getLoc(), valTy, value);
     rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(op, value, tdesc, mask,
                                                        L1, L2, L3);
     return success();
@@ -635,11 +635,11 @@ public:
         VectorType::get(type.getNumElements(), rewriter.getIntegerType(1));
     llvm::SmallVector<bool> maskValues(type.getNumElements(), true);
     auto maskAttr = DenseElementsAttr::get(maskTy, maskValues);
-    Value mask = rewriter.create<arith::ConstantOp>(loc, maskTy, maskAttr);
-    value = rewriter.create<vector::ShapeCastOp>(loc, valTy, value);
-    auto rmwOp = rewriter.create<xegpu::AtomicRMWOp>(
+    Value mask = arith::ConstantOp::create(rewriter, loc, maskTy, maskAttr);
+    value = vector::ShapeCastOp::create(rewriter, loc, valTy, value);
+    auto rmwOp = xegpu::AtomicRMWOp::create(rewriter,
         loc, valTy, op.getKind(), adaptor.getTile(), mask, value);
-    auto v = rewriter.create<vector::ShapeCastOp>(loc, op.getType(), rmwOp);
+    auto v = vector::ShapeCastOp::create(rewriter, loc, op.getType(), rmwOp);
     rewriter.replaceOp(op, v);
     return success();
   }
@@ -677,7 +677,7 @@ public:
       auto srcTy = op.getSource().getType();
       auto newTy =
           VectorType::get(srcTy.getNumElements(), srcTy.getElementType());
-      auto cast = rewriter.create<vector::ShapeCastOp>(op.getLoc(), newTy,
+      auto cast = vector::ShapeCastOp::create(rewriter, op.getLoc(), newTy,
                                                        adaptor.getSource());
       rewriter.replaceOpWithNewOp<vector::BroadcastOp>(op, resTy, cast);
       return success();
@@ -690,11 +690,11 @@ public:
                       ? (Attribute)rewriter.getIntegerAttr(elemTy, 0)
                       : (Attribute)rewriter.getFloatAttr(elemTy, 0.0);
 
-      Value result = rewriter.create<arith::ConstantOp>(
+      Value result = arith::ConstantOp::create(rewriter,
           op.getLoc(), resTy, DenseElementsAttr::get(resTy, attr));
 
       for (int64_t j = 0; j < resTy.getShape()[1]; j++) {
-        result = rewriter.create<vector::InsertStridedSliceOp>(
+        result = vector::InsertStridedSliceOp::create(rewriter,
             op.getLoc(), adaptor.getSource(), result,
             llvm::ArrayRef<int64_t>({0, j}), llvm::ArrayRef<int64_t>({1, 1}));
       }
@@ -716,7 +716,7 @@ public:
     auto resTy = op.getResult().getType();
     auto newTy =
         VectorType::get(resTy.getNumElements(), resTy.getElementType());
-    auto acc = rewriter.create<arith::ConstantOp>(
+    auto acc = arith::ConstantOp::create(rewriter,
         op.getLoc(), newTy, DenseElementsAttr::get(newTy, 0));
     auto result = rewriter.replaceOpWithNewOp<vector::MultiDimReductionOp>(
         op, op.getType(), op.getKindAttr(), adaptor.getSource(), acc,
@@ -748,7 +748,7 @@ public:
   LogicalResult
   matchAndRewrite(scf::ForOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto newOp = rewriter.create<scf::ForOp>(op.getLoc(), op.getLowerBound(),
+    auto newOp = scf::ForOp::create(rewriter, op.getLoc(), op.getLowerBound(),
                                              op.getUpperBound(), op.getStep(),
                                              adaptor.getInitArgs());
     Block *newBlock = newOp.getBody();
@@ -1049,7 +1049,7 @@ struct ConvertXeTileToXeGPUPass // convert XeTile to XeGPU
     auto materializeWithCast = [&](OpBuilder &builder, Type type,
                                    ValueRange inputs, Location loc) -> Value {
       assert(inputs.size() == 1 && "Expecting single input");
-      return builder.create<UnrealizedConversionCastOp>(loc, type, inputs)
+      return UnrealizedConversionCastOp::create(builder, loc, type, inputs)
           .getResult(0);
     };
 

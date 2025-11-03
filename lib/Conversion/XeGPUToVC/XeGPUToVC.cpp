@@ -86,7 +86,7 @@ static Value castValueTo(Value val, Type toType, Location loc,
   if (cst) {
     auto attr = dyn_cast<IntegerAttr>(cst.getValue());
     if (attr)
-      return rewriter.create<arith::ConstantOp>(
+      return arith::ConstantOp::create(rewriter,
           loc, rewriter.getIntegerAttr(toType, attr.getInt()));
   }
 
@@ -191,15 +191,15 @@ public:
     auto memRefType = dyn_cast<MemRefType>(op.getSource().getType());
     Value base;
     if (memRefType)
-      base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
+      base = memref::ExtractAlignedPointerAsIndexOp::create(rewriter,
           loc, adaptor.getSource());
     else { // Handle i64/i32/ui64/ui32 passed as a source
-      base = rewriter.create<arith::IndexCastUIOp>(loc, rewriter.getIndexType(),
+      base = arith::IndexCastUIOp::create(rewriter, loc, rewriter.getIndexType(),
                                                    op.getSource());
     }
 
     base = adjustBasePointer(rewriter, op, base);
-    base = rewriter.create<arith::IndexCastUIOp>(loc, addrTy, base);
+    base = arith::IndexCastUIOp::create(rewriter, loc, addrTy, base);
 
     if (scope == xegpu::MemorySpace::SLM || rank == 1) {
       // for SLM and 1D, we need to create message for use regular load/store
@@ -223,7 +223,7 @@ public:
       auto payload = addi(base, numOffsetBytes);
 
       // convert the payload into vector type
-      payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, payload);
+      payload = vector::BroadcastOp::create(rewriter, loc, payloadTy, payload);
 
       rewriter.replaceOp(op, payload);
       return success();
@@ -247,7 +247,7 @@ public:
       Value payload = dense_vector_int_val(0, i64Ty, 8);
 
       // encode base address
-      payload = rewriter.create<vector::InsertOp>(loc, base, payload, 0);
+      payload = vector::InsertOp::create(rewriter, loc, base, payload, 0);
 
       // In Matrix descriptor (payload), shape and offset are encoded
       // with 32-bit data
@@ -255,10 +255,10 @@ public:
                                       unsigned minus = 0) -> Value {
         auto value = llvm::dyn_cast_if_present<Value>(ofr);
         if (value) {
-          value = rewriter.create<arith::IndexCastUIOp>(loc, i32Ty, value);
+          value = arith::IndexCastUIOp::create(rewriter, loc, i32Ty, value);
           if (mul > 8)
             value =
-                rewriter.create<arith::MulIOp>(loc, value, i32_val(mul / 8));
+                arith::MulIOp::create(rewriter, loc, value, i32_val(mul / 8));
           else if (mul >= 4)
             value = getOffsetInUnitOfBytes(rewriter, loc, i32Ty, value, mul);
           return (!minus) ? value : subi(value, i32_val(minus));
@@ -270,7 +270,7 @@ public:
       };
 
       payload =
-          rewriter.create<vector::BitCastOp>(loc, vecTy(16, i32Ty), payload);
+          vector::BitCastOp::create(rewriter, loc, vecTy(16, i32Ty), payload);
 
       // encode the surface width and height. width is in bytes minus 1, height
       // is in rows.
@@ -291,16 +291,16 @@ public:
       auto surfaceP =
           encodeShapeAndOffset(matrixStrides[size - 2], eTyBitWidth, 1);
 
-      payload = rewriter.create<vector::InsertOp>(loc, surfaceW, payload, 2);
-      payload = rewriter.create<vector::InsertOp>(loc, surfaceH, payload, 3);
-      payload = rewriter.create<vector::InsertOp>(loc, surfaceP, payload, 4);
+      payload = vector::InsertOp::create(rewriter, loc, surfaceW, payload, 2);
+      payload = vector::InsertOp::create(rewriter, loc, surfaceH, payload, 3);
+      payload = vector::InsertOp::create(rewriter, loc, surfaceP, payload, 4);
 
       // encode the offset, they are in elements
       auto offsets = op.getMixedOffsets();
       auto offsetX = encodeShapeAndOffset(offsets[size - 1], 8, 0);
       auto offsetY = encodeShapeAndOffset(offsets[size - 2], 8, 0);
-      payload = rewriter.create<vector::InsertOp>(loc, offsetX, payload, 5);
-      payload = rewriter.create<vector::InsertOp>(loc, offsetY, payload, 6);
+      payload = vector::InsertOp::create(rewriter, loc, offsetX, payload, 5);
+      payload = vector::InsertOp::create(rewriter, loc, offsetY, payload, 6);
 
       // encode the block size
       int nblks = tdescTy.getArrayLength();
@@ -308,7 +308,7 @@ public:
       int blkH = tdescTy.getShape()[0];
       auto block =
           i32_val(((nblks - 1) << 16) | ((blkH - 1) << 8) | (blkW - 1));
-      payload = rewriter.create<vector::InsertOp>(loc, block, payload, 7);
+      payload = vector::InsertOp::create(rewriter, loc, block, payload, 7);
       rewriter.replaceOp(op, payload);
     } else {
       llvm_unreachable("Unsupported TensorDesc.");
@@ -356,7 +356,7 @@ public:
       // convert offset to vector type and update the payload
       const int simd_lanes = 1;
       auto payloadTy = VectorType::get(simd_lanes, addrTy);
-      offset = rewriter.create<vector::BroadcastOp>(loc, payloadTy, offset);
+      offset = vector::BroadcastOp::create(rewriter, loc, payloadTy, offset);
 
       auto payload = addi(desc, offset);
       rewriter.replaceOp(op, payload);
@@ -379,10 +379,10 @@ public:
         offset = castValueTo(offset, i32Ty, loc, rewriter);
 
         // Get 2D Block OffsetX/OffsetY from DWORD5/DWORD6 of payload
-        auto oldOffset = rewriter.create<vector::ExtractOp>(loc, desc, i);
+        auto oldOffset = vector::ExtractOp::create(rewriter, loc, desc, i);
 
         auto newOffset = addi(oldOffset, offset);
-        desc = rewriter.create<vector::InsertOp>(loc, newOffset, desc, i);
+        desc = vector::InsertOp::create(rewriter, loc, newOffset, desc, i);
       }
     } else {
       llvm_unreachable("unsupported TensorDesc.");
@@ -408,9 +408,9 @@ public:
     auto scope = tdescTy.getMemorySpace();
     auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
 
-    Value base = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(
+    Value base = memref::ExtractAlignedPointerAsIndexOp::create(rewriter,
         loc, adaptor.getSource());
-    base = rewriter.create<arith::IndexCastUIOp>(loc, addrTy, base);
+    base = arith::IndexCastUIOp::create(rewriter, loc, addrTy, base);
 
     // Using an 1-D vector of index type elements to represent the payload
     // It essentially holds the absolute address of the base pointer with
@@ -425,7 +425,7 @@ public:
                                         offsets, eTyBitWidth);
 
     // create a payload with the base address broadcasted to all simd lanes
-    Value payload = rewriter.create<vector::BroadcastOp>(loc, payloadTy, base);
+    Value payload = vector::BroadcastOp::create(rewriter, loc, payloadTy, base);
 
     // performing base + offsets to get the final address per simd lane
     payload = addi(payload, offsets);
@@ -494,7 +494,7 @@ public:
     uint8_t prec2 = encodePrecision(lhsType.getElementType());
     unsigned infoVal = (rc << 24) | (sd << 16) | (prec2 << 8) | (prec1);
     auto infoAttr = rewriter.getIntegerAttr(rewriter.getI32Type(), infoVal);
-    auto info = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(),
+    auto info = arith::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
                                                    infoAttr);
 
     auto lhs = adaptor.getLhs();
@@ -508,10 +508,10 @@ public:
                          /*enforceInteger=*/false, /*keepF16=*/true);
 
     if (lhsNewType != lhs.getType()) {
-      lhs = rewriter.create<vector::BitCastOp>(loc, lhsNewType, lhs);
+      lhs = vector::BitCastOp::create(rewriter, loc, lhsNewType, lhs);
     }
     if (rhsNewType != rhs.getType()) {
-      rhs = rewriter.create<vector::BitCastOp>(loc, rhsNewType, rhs);
+      rhs = vector::BitCastOp::create(rewriter, loc, rhsNewType, rhs);
     }
     SmallVector<Value, 4> args{rhs, lhs, info};
     std::string funcName = "llvm.genx.dpas.nosrc0.";
@@ -520,7 +520,7 @@ public:
       auto i32Type = rewriter.getI32Type();
       auto createIntConstant = [&](Type type, unsigned value) {
         auto attr = rewriter.getIntegerAttr(type, value);
-        return rewriter.create<arith::ConstantOp>(loc, type, attr);
+        return arith::ConstantOp::create(rewriter, loc, type, attr);
       };
       auto prec1Arg = createIntConstant(i32Type, prec1);
       auto prec2Arg = createIntConstant(i32Type, prec2);
@@ -587,7 +587,7 @@ public:
     Value num_producers = num_participants;
     Value num_consumers = num_participants;
 
-    auto nbarrier = rewriter.create<::mlir::UnrealizedConversionCastOp>(
+    auto nbarrier = ::mlir::UnrealizedConversionCastOp::create(rewriter,
         loc, ::mlir::TypeRange{op.getType()},
         ::mlir::ValueRange{nbarrier_id, nbarrier_role, num_producers,
                            num_consumers});
@@ -735,10 +735,10 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
         return nullptr;
       auto valTy = inputs.front().getType();
       if (isa<VectorType>(type) && isa<VectorType>(valTy))
-        return builder.create<ShapeCastOp>(loc, type, inputs.front());
+        return ShapeCastOp::create(builder, loc, type, inputs.front());
 
       if (isa<xegpu::TensorDescType>(type) || isa<xegpu::TensorDescType>(valTy))
-        return builder.create<UnrealizedConversionCastOp>(loc, type, inputs)
+        return UnrealizedConversionCastOp::create(builder, loc, type, inputs)
             .getResult(0);
 
       return nullptr;

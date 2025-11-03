@@ -154,7 +154,7 @@ struct CoalesceShardOpsPass
           if (!currSharding.equalHaloAndShardSizes(sharding)) {
             builder.setInsertionPoint(op);
             auto newSharding =
-                builder.create<::mlir::shard::ShardingOp>(op->getLoc(), sh);
+                ::mlir::shard::ShardingOp::create(builder, op->getLoc(), sh);
             typedOp.getShardingMutable().assign(newSharding.getResult());
             return true;
           }
@@ -511,7 +511,7 @@ struct CoalesceShardOpsPass
         builder.setInsertionPointAfter(shardOp);
       }
 
-      auto newSharding = builder.create<::mlir::shard::ShardingOp>(
+      auto newSharding = ::mlir::shard::ShardingOp::create(builder,
           shardOp->getLoc(),
           ::mlir::shard::ShardingType::get(shardOp->getContext()),
           orgSharding.getGridAttr(), orgSharding.getSplitAxesAttr(),
@@ -529,7 +529,7 @@ struct CoalesceShardOpsPass
         // sharding
         newShardOp.getShardingMutable().assign(newSharding.getResult());
       } else { // block arg
-        newShardOp = builder.create<::mlir::shard::ShardOp>(
+        newShardOp = ::mlir::shard::ShardOp::create(builder,
             shardOp->getLoc(), shardOp, newSharding.getResult());
       }
 

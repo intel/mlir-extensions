@@ -128,12 +128,12 @@ static Value addUnpackOp(ValueRange srcs, Type destTy,
     auto shape = vecTy.getShape();
     auto zeroAttr = rewriter.getZeroAttr(vecTy.getElementType());
 
-    Value result = rewriter.create<arith::ConstantOp>(
+    Value result = arith::ConstantOp::create(rewriter,
         loc, vecTy, DenseElementsAttr::get(vecTy, zeroAttr));
     int64_t idx = 0;
     for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
       for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
-        result = rewriter.create<vector::InsertStridedSliceOp>(
+        result = vector::InsertStridedSliceOp::create(rewriter,
             loc, srcs[idx++], result, llvm::ArrayRef<int64_t>({i, j}),
             llvm::ArrayRef<int64_t>({1, 1}));
       }
@@ -146,7 +146,7 @@ static Value addUnpackOp(ValueRange srcs, Type destTy,
     auto innerBlkAttr =
         NamedAttribute(rewriter.getStringAttr(blockAttrName),
                        rewriter.getDenseI64ArrayAttr(innerBlock));
-    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+    auto castOp = UnrealizedConversionCastOp::create(rewriter,
         loc, destTy, srcs,
         llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
     return castOp.getResult(0);
@@ -169,7 +169,7 @@ static llvm::SmallVector<Value> addPackOp(Value src, TypeRange destTypes,
     llvm::SmallVector<Value> results;
     for (int64_t i = 0; i < shape[0]; i += innerBlock[0]) {
       for (int64_t j = 0; j < shape[1]; j += innerBlock[1]) {
-        auto slice = rewriter.create<vector::ExtractStridedSliceOp>(
+        auto slice = vector::ExtractStridedSliceOp::create(rewriter,
             loc, src, llvm::ArrayRef<int64_t>({i, j}), innerBlock,
             llvm::ArrayRef<int64_t>({1, 1}));
         results.push_back(slice);
@@ -182,7 +182,7 @@ static llvm::SmallVector<Value> addPackOp(Value src, TypeRange destTypes,
     auto innerBlkAttr =
         NamedAttribute(rewriter.getStringAttr(blockAttrName),
                        rewriter.getDenseI64ArrayAttr(innerBlock));
-    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+    auto castOp = UnrealizedConversionCastOp::create(rewriter,
         loc, destTypes, src,
         llvm::ArrayRef<NamedAttribute>({attr, innerBlkAttr}));
     return castOp.getResults();
@@ -270,7 +270,7 @@ lowerOuterReduction(ValueRange sources, llvm::ArrayRef<int64_t> grid,
       auto shape = shapedTy.getShape().vec();
       shape[0] = 1;
       auto resTy = shapedTy.clone(shape);
-      val = rewriter.create<xetile::ReductionOp>(loc, resTy, kind, val,
+      val = xetile::ReductionOp::create(rewriter, loc, resTy, kind, val,
                                                  llvm::ArrayRef<int64_t>({0}));
     }
     results.push_back(val);
@@ -339,7 +339,7 @@ static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
     }
     // cast the result of e.g., vector<1x16xf16> into vector<16xf16>
     auto targetTy = VectorType::get({block[1]}, elemTy);
-    val = rewriter.create<vector::ShapeCastOp>(loc, targetTy, val);
+    val = vector::ShapeCastOp::create(rewriter, loc, targetTy, val);
     intermediates[i] = val;
   }
 
@@ -379,9 +379,9 @@ static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
       auto v1 = workList[i];
       auto v2 = workList[i + 1];
       auto shuffleOp1 =
-          rewriter.create<vector::ShuffleOp>(loc, v1, v2, masks.first);
+          vector::ShuffleOp::create(rewriter, loc, v1, v2, masks.first);
       auto shuffleOp2 =
-          rewriter.create<vector::ShuffleOp>(loc, v1, v2, masks.second);
+          vector::ShuffleOp::create(rewriter, loc, v1, v2, masks.second);
       auto reduce = createBinOp(kind, shuffleOp1, shuffleOp2, loc, rewriter);
       intermediates.push_back(reduce);
     }
@@ -399,9 +399,9 @@ static llvm::SmallVector<Value> lowerInnerReductionWithIntraVectorShuffles(
       partialRowAggSize /= 2;
       auto [vecUpperMask, vecLowerMask] =
           genShuffleMasks(partialRowAggSize, currentAggVecSize);
-      auto shuffleOp1 = rewriter.create<vector::ShuffleOp>(
+      auto shuffleOp1 = vector::ShuffleOp::create(rewriter,
           loc, toFinalize, toFinalize, vecUpperMask);
-      auto shuffleOp2 = rewriter.create<vector::ShuffleOp>(
+      auto shuffleOp2 = vector::ShuffleOp::create(rewriter,
           loc, toFinalize, toFinalize, vecLowerMask);
       toFinalize = createBinOp(kind, shuffleOp1, shuffleOp2, loc, rewriter);
     } while (partialRowAggSize != 1);
@@ -480,7 +480,7 @@ public:
             }
           }
           auto subValue = DenseElementsAttr::get(newTy, subValues);
-          auto newOp = rewriter.create<arith::ConstantOp>(loc, subValue);
+          auto newOp = arith::ConstantOp::create(rewriter, loc, subValue);
           newOps.push_back(newOp);
         }
       }
@@ -529,7 +529,7 @@ public:
 
       for (auto [t, i] : llvm::zip(convertedTileTypes, subIndices)) {
         llvm::SmallVector<Value> operands({op.getSource(), i});
-        auto newOp = rewriter.create<xetile::InitTileOp>(
+        auto newOp = xetile::InitTileOp::create(rewriter,
             loc, TypeRange({t}), operands, op->getAttrs());
         newOps.push_back(newOp);
       }
@@ -558,11 +558,11 @@ public:
           auto attr = llvm::cast<Attribute>(a);
           auto sum =
               rewriter.getIndexAttr(llvm::cast<IntegerAttr>(attr).getInt() + b);
-          return rewriter.create<arith::ConstantOp>(loc, sum);
+          return arith::ConstantOp::create(rewriter, loc, sum);
         } else {
           auto aV = llvm::cast<Value>(a);
           auto bV =
-              rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
+              arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(b));
           return rewriter.createOrFold<arith::AddIOp>(loc, aV, bV);
         }
       };
@@ -584,7 +584,7 @@ public:
           llvm::SmallVector<int64_t> constOffsets;
           dispatchIndexOpFoldResults(mixedOffsets, offsets, constOffsets);
           auto constOffsetsAttr = rewriter.getDenseI64ArrayAttr(constOffsets);
-          auto newOp = rewriter.create<xetile::InitTileOp>(
+          auto newOp = xetile::InitTileOp::create(rewriter,
               loc, newTileTy, op.getSource(), offsets, op.getSizes(),
               op.getStrides(), constOffsetsAttr, op.getConstSizesAttr(),
               op.getConstStridesAttr(), nullptr);
@@ -621,7 +621,7 @@ public:
                                     blockSize.asArrayRef(), loc, rewriter);
 
     for (auto t : convertedTiles) {
-      rewriter.create<xetile::PrefetchTileOp>(loc, TypeRange(), t,
+      xetile::PrefetchTileOp::create(rewriter, loc, TypeRange(), t,
                                               op->getAttrs());
     }
 
@@ -658,7 +658,7 @@ public:
 
     llvm::SmallVector<Value> newOps;
     for (auto t : convertedTiles) {
-      auto newOp = rewriter.create<xetile::LoadTileOp>(loc, resultTys, t,
+      auto newOp = xetile::LoadTileOp::create(rewriter, loc, resultTys, t,
                                                        op->getAttrs());
       newOps.append(newOp.getValues().begin(), newOp.getValues().end());
     }
@@ -699,7 +699,7 @@ public:
                                     blockSize.asArrayRef(), loc, rewriter);
 
     for (auto [v, t] : llvm::zip(convertedValues, convertedTiles)) {
-      rewriter.create<xetile::StoreTileOp>(loc, v, t, op.getL1HintAttr(),
+      xetile::StoreTileOp::create(rewriter, loc, v, t, op.getL1HintAttr(),
                                            op.getL2HintAttr(),
                                            op.getL3HintAttr());
     }
@@ -739,7 +739,7 @@ public:
     auto newValueTy = VectorType::get(blockSize.asArrayRef(), elemTy);
     llvm::SmallVector<Value> newOps;
     for (auto [t, m] : llvm::zip(tiles, masks)) {
-      auto newOp = rewriter.create<xetile::LoadGatherOp>(
+      auto newOp = xetile::LoadGatherOp::create(rewriter,
           loc, newValueTy, t, m, op.getPaddingAttr(), op.getL1HintAttr(),
           op.getL2HintAttr(), op.getL3HintAttr());
       newOps.push_back(newOp);
@@ -789,7 +789,7 @@ public:
                            loc, rewriter);
 
     for (auto [v, t, m] : llvm::zip(values, tiles, masks)) {
-      (void)rewriter.create<xetile::StoreScatterOp>(
+      (void)xetile::StoreScatterOp::create(rewriter,
           loc, v, t, m, op.getL1HintAttr(), op.getL2HintAttr(),
           op.getL3HintAttr());
     }
@@ -829,7 +829,7 @@ public:
       auto valTy = dyn_cast<VectorType>(v.getType());
       auto vecTy = VectorType::get(valTy.getShape(), valTy.getElementType());
       auto newOp =
-          rewriter.create<xetile::AtomicRMWOp>(loc, vecTy, op.getKind(), v, t);
+          xetile::AtomicRMWOp::create(rewriter, loc, vecTy, op.getKind(), v, t);
       newOps.push_back(newOp);
     }
     auto castOp = addUnpackOp(newOps, op.getType(), blockSize.asArrayRef(), loc,
@@ -878,13 +878,13 @@ public:
                                         blockSize.asArrayRef(), loc, rewriter);
 
       for (auto [t, i] : llvm::zip(convertedTiles, convertedIndices)) {
-        auto newOp = rewriter.create<xetile::UpdateTileOffsetOp>(
+        auto newOp = xetile::UpdateTileOffsetOp::create(rewriter,
             loc, t, op.getOffsetX(), op.getOffsetY(), i);
         newOps.push_back(newOp);
       }
     } else { // handle blocked tiles
       for (auto t : convertedTiles) {
-        auto newOp = rewriter.create<xetile::UpdateTileOffsetOp>(
+        auto newOp = xetile::UpdateTileOffsetOp::create(rewriter,
             loc, t, op.getOffsetX(), op.getOffsetY(), nullptr);
         newOps.push_back(newOp);
       }
@@ -975,7 +975,7 @@ public:
           llvm::SmallVector<Value> operands({aVec, bVec});
           if (tmpC)
             operands.push_back(tmpC);
-          tmpC = rewriter.create<xetile::TileMMAOp>(loc, vecTy, operands,
+          tmpC = xetile::TileMMAOp::create(rewriter, loc, vecTy, operands,
                                                     op->getAttrs());
         }
         newOps.push_back(tmpC);
@@ -1042,9 +1042,9 @@ public:
       for (auto v : intermediates) {
         auto resultTy = VectorType::get({1, 1}, elemTy);
         for (auto i = 0; i < blkSize[1]; i++) {
-          auto extractOp = rewriter.create<vector::ExtractOp>(
+          auto extractOp = vector::ExtractOp::create(rewriter,
               loc, v, rewriter.getIndexAttr(i));
-          auto splatOp = rewriter.create<vector::BroadcastOp>(
+          auto splatOp = vector::BroadcastOp::create(rewriter,
               op.getLoc(), resultTy, extractOp);
           newOps.push_back(splatOp);
         }
@@ -1139,9 +1139,9 @@ public:
         auto ty = dyn_cast<VectorType>(src.getType());
         assert(ty && ty.getNumElements() == 1 &&
                "Expecting a <1x1xelemty> vector type.");
-        auto ext = rewriter.create<vector::ExtractOp>(
+        auto ext = vector::ExtractOp::create(rewriter,
             loc, src, llvm::ArrayRef<int64_t>({0, 0}));
-        auto splatOp = rewriter.create<vector::BroadcastOp>(loc, dstTy, ext);
+        auto splatOp = vector::BroadcastOp::create(rewriter, loc, dstTy, ext);
         newOps.append(resultGrid[1], splatOp);
       }
     } else {
@@ -1197,7 +1197,7 @@ class RewriteTileTransposeOp
       for (auto j : llvm::seq<int64_t>(0, grids[1])) {
         int64_t idx = i + grids[0] * j;
         Value arg = convertedInputs[idx];
-        Value res = rewriter.create<xetile::TransposeOp>(loc, newDstTy, arg,
+        Value res = xetile::TransposeOp::create(rewriter, loc, newDstTy, arg,
                                                          permutation);
         newOps.push_back(res);
       }
@@ -1513,11 +1513,11 @@ public:
       auto ofr = getAsOpFoldResult(a);
       if (auto cst = getConstantIntValue(ofr)) {
         auto val = std::max<int64_t>(*cst - b, 0);
-        return rewriter.create<arith::ConstantOp>(loc,
+        return arith::ConstantOp::create(rewriter, loc,
                                                   rewriter.getIndexAttr(val));
       } else {
         auto bV =
-            rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(b));
+            arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(b));
         return rewriter.createOrFold<arith::SubIOp>(loc, a, bV);
       }
     };
@@ -1529,7 +1529,7 @@ public:
     for (int64_t i = 0; i < shape[0]; i += blockSize[0]) {
       Value y = operands[1];
       for (int64_t j = 0; j < shape[1]; j += blockSize[1]) {
-        auto newOp = rewriter.create<vector::CreateMaskOp>(loc, newTy,
+        auto newOp = vector::CreateMaskOp::create(rewriter, loc, newTy,
                                                            ValueRange({x, y}));
         newOps.push_back(newOp);
         y = sub(y, blockSize[1]);

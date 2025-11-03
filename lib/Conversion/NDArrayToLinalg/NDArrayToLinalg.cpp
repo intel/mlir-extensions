@@ -58,7 +58,7 @@ auto createParFor(mlir::Location &loc, mlir::OpBuilder &builder, uint64_t rank,
   ::mlir::SmallVector<::mlir::utils::IteratorType> iterators(
       rank, mlir::utils::IteratorType::parallel);
 
-  return builder.create<::mlir::linalg::GenericOp>(
+  return ::mlir::linalg::GenericOp::create(builder,
       loc, out.getType(), inputs, out, maps, iterators, bBuilder);
 }
 
@@ -94,22 +94,22 @@ struct CopyLowering : public ::mlir::OpRewritePattern<::imex::ndarray::CopyOp> {
     // alloc memref
     auto mrTyp =
         ::mlir::MemRefType::get(tTyp.getShape(), tTyp.getElementType());
-    auto mr = rewriter.create<::mlir::memref::AllocOp>(
+    auto mr = ::mlir::memref::AllocOp::create(rewriter,
         loc, mrTyp, dynDims, rewriter.getI64IntegerAttr(8));
     // and copy if non-0
     if (!imex::ndarray::hasZeroSize(retArTyp.getShape())) {
       auto srcMR = createToMemRef(loc, rewriter, src, getMemRefType(srcArTyp));
       // create a region with given env, add copy op within it
       auto env = rewriter.getStringAttr("protect_copy_op");
-      rewriter.create<::imex::region::EnvironmentRegionOp>(
+      ::imex::region::EnvironmentRegionOp::create(rewriter,
           loc, env, llvm::ArrayRef<mlir::Value>(), llvm::ArrayRef<mlir::Type>(),
           [&srcMR, &mr](::mlir::OpBuilder &builder, ::mlir::Location loc) {
-            (void)builder.create<::mlir::memref::CopyOp>(loc, srcMR, mr);
-            (void)builder.create<::imex::region::EnvironmentRegionYieldOp>(loc);
+            (void)::mlir::memref::CopyOp::create(builder, loc, srcMR, mr);
+            (void)::imex::region::EnvironmentRegionYieldOp::create(builder, loc);
           });
     }
     // convert memref to tensor
-    auto res = rewriter.create<::mlir::bufferization::ToTensorOp>(
+    auto res = ::mlir::bufferization::ToTensorOp::create(rewriter,
         loc, retArTyp, mr, /*restrict=*/true,
         /*writable=*/true);
     rewriter.replaceOp(op, res);
@@ -133,11 +133,11 @@ struct ReshapeLowering
     auto shape = op.getShape();
 
     if (op.getCopy().value_or(false)) {
-      src = rewriter.create<::imex::ndarray::CopyOp>(
+      src = ::imex::ndarray::CopyOp::create(rewriter,
           loc, op.getSource().getType(), op.getSource());
     }
 
-    auto shapeT = rewriter.create<::mlir::tensor::FromElementsOp>(loc, shape);
+    auto shapeT = ::mlir::tensor::FromElementsOp::create(rewriter, loc, shape);
     rewriter.replaceOpWithNewOp<::mlir::tensor::ReshapeOp>(op, op.getType(),
                                                            src, shapeT);
 
@@ -175,11 +175,11 @@ struct SubviewLowering
         ::mlir::memref::SubViewOp::inferRankReducedResultType(
             op.getType().getShape(), srcMRType, offsets, sizes, strides));
 
-    auto sw = rewriter.create<::mlir::memref::SubViewOp>(
+    auto sw = ::mlir::memref::SubViewOp::create(rewriter,
         loc, resMRType, srcMR, offsets, sizes, strides);
 
     // convert result to tensor
-    auto res = rewriter.create<::mlir::bufferization::ToTensorOp>(
+    auto res = ::mlir::bufferization::ToTensorOp::create(rewriter,
         loc, srcTnsr.getType(), sw,
         /*restrict=*/true, /*writable=*/true);
     rewriter.replaceOp(op, res.getResult());
@@ -224,7 +224,7 @@ struct InsertSliceLowering
     auto slcStrides = ::mlir::getMixedValues(op.getStaticStrides(),
                                              op.getStrides(), rewriter);
 
-    auto view = rewriter.create<::mlir::memref::SubViewOp>(
+    auto view = ::mlir::memref::SubViewOp::create(rewriter,
         loc, dstMR, slcOffs, slcSizes, slcStrides);
 
     auto srcRank = srcMRTyp.getRank();
@@ -238,12 +238,12 @@ struct InsertSliceLowering
       auto dstMap = rewriter.getMultiDimIdentityMap(dstRank);
       ::mlir::SmallVector<mlir::utils::IteratorType> iterators(
           dstRank, ::mlir::utils::IteratorType::parallel);
-      auto copyOp = rewriter.create<::mlir::linalg::GenericOp>(
+      auto copyOp = ::mlir::linalg::GenericOp::create(rewriter,
           loc, srcMR, view.getResult(), ::mlir::ArrayRef({srcMap, dstMap}),
           iterators,
           [](::mlir::OpBuilder &b, ::mlir::Location loc,
              ::mlir::ValueRange args) {
-            b.create<::mlir::linalg::YieldOp>(loc, args.front());
+            ::mlir::linalg::YieldOp::create(b, loc, args.front());
           });
       rewriter.replaceOp(op, copyOp);
       return ::mlir::success();
@@ -292,9 +292,8 @@ struct LinSpaceLowering
 
     // init tensor
     auto tensor = retArTyp.hasStaticShape()
-                      ? rewriter
-                            .create<::mlir::tensor::EmptyOp>(
-                                loc, retArTyp.getShape(), elTyp)
+                      ? ::mlir::tensor::EmptyOp::create(rewriter,
+                            loc, retArTyp.getShape(), elTyp)
                             .getResult()
                       : createEmptyTensor(rewriter, loc, elTyp, {count});
 
@@ -305,11 +304,11 @@ struct LinSpaceLowering
       auto dim = getIntAttr(builder, 0);
       auto idx =
           createCast(loc, builder,
-                     builder.create<::mlir::linalg::IndexOp>(loc, dim), cType);
+                     ::mlir::linalg::IndexOp::create(builder, loc, dim), cType);
       ::mlir::Value val = builder.createOrFold<::mlir::arith::AddFOp>(
           loc, builder.createOrFold<::mlir::arith::MulFOp>(loc, step, idx),
           start);
-      (void)builder.create<::mlir::linalg::YieldOp>(
+      (void)::mlir::linalg::YieldOp::create(builder,
           loc, createCast(loc, rewriter, val, elTyp));
     };
 
@@ -384,7 +383,7 @@ struct CastElemTypeLowering
         [dstElType](::mlir::OpBuilder &b, ::mlir::Location loc,
                     ::mlir::ValueRange args) {
           auto val = createCast(loc, b, args[0], dstElType);
-          b.create<::mlir::linalg::YieldOp>(loc, val);
+          ::mlir::linalg::YieldOp::create(b, loc, val);
         });
 
     return ::mlir::success();
@@ -422,7 +421,7 @@ struct ConvertNDArrayToLinalgPass
                       mlir::isa<mlir::memref::GetGlobalOp>(defOp))) {
           mlir::OpBuilder::InsertionGuard g(rewriter);
           rewriter.setInsertionPointAfter(defOp);
-          auto copyOp = rewriter.create<imex::ndarray::CopyOp>(
+          auto copyOp = imex::ndarray::CopyOp::create(rewriter,
               op->getLoc(), base.getType(), base);
           rewriter.replaceAllUsesExcept(base, copyOp.getResult(), copyOp);
         }

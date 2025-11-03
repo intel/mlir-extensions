@@ -125,7 +125,7 @@ public:
         return mlir::failure();
       } else {
         mlir::OpBuilder::InsertionGuard g(rewriter);
-        toInsert = rewriter.create<mlir::tensor::CastOp>(
+        toInsert = mlir::tensor::CastOp::create(rewriter,
             insertSliceOp.getLoc(), newSourceType, toInsert);
       }
     }
@@ -170,13 +170,13 @@ struct InsertSliceOpCastFolder final
     auto dst =
         (destCastSource ? *destCastSource : insertSliceOp.getDestination());
 
-    mlir::Operation *replacement = rewriter.create<InsertOpTy>(
+    mlir::Operation *replacement = InsertOpTy::create(rewriter,
         insertSliceOp.getLoc(), dst, src, insertSliceOp.getMixedOffsets(),
         insertSliceOp.getMixedSizes(), insertSliceOp.getMixedStrides());
 
     if (hasReturnValue &&
         (dst.getType() != insertSliceOp.getDestinationType())) {
-      replacement = rewriter.create<mlir::tensor::CastOp>(
+      replacement = mlir::tensor::CastOp::create(rewriter,
           insertSliceOp.getLoc(), insertSliceOp.getDestinationType(),
           replacement->getResult(0));
     }

@@ -68,7 +68,7 @@ static ::mlir::LogicalResult matchAndRewritePTOP(::mlir::Operation *op,
       op, env, llvm::ArrayRef<mlir::Value>(), op->getResultTypes(),
       [op](::mlir::OpBuilder &builder, ::mlir::Location loc) {
         auto cOp = builder.clone(*op);
-        (void)builder.create<::imex::region::EnvironmentRegionYieldOp>(
+        (void)::imex::region::EnvironmentRegionYieldOp::create(builder,
             loc, cOp->getResults());
       });
 

@@ -90,7 +90,7 @@ struct InitTileOpPattern final
       auto newSourceTy = mlir::MemRefType::get(
           swapLastTwoElems(sourceShape), sourceTy.getElementType(), newLayout,
           sourceTy.getMemorySpace());
-      auto castOp = rewriter.create<mlir::memref::ReinterpretCastOp>(
+      auto castOp = mlir::memref::ReinterpretCastOp::create(rewriter,
           initOp.getLoc(), newSourceTy, initOp.getSource(), offset,
           swapLastTwoElems(sourceShape), newStrides);
       // Create a new InitTileOp with swapped offsets
@@ -158,10 +158,9 @@ struct LoadTileOpPattern final
     mlir::VectorType newVecTy =
         mlir::VectorType::get(newTileTy.getShape(), newTileTy.getElementType());
     // Create a new loadOp.
-    mlir::Value newOp = rewriter
-                            .create<imex::xetile::LoadTileOp>(loadOp.getLoc(),
+    mlir::Value newOp = imex::xetile::LoadTileOp::create(rewriter, loadOp.getLoc(),
                                                               newVecTy, newTile)
-                            .getResult(0);
+                                                        .getResult(0);
     // Transpose the output of the load so that we get the return type of the
     // original loadOp
     rewriter.replaceOpWithNewOp<imex::xetile::TransposeOp>(
@@ -182,7 +181,7 @@ struct ScfForOpPattern final
 
     convertedArgs.append(adaptor.getInitArgs().begin(),
                          adaptor.getInitArgs().end());
-    auto newOp = rewriter.create<mlir::scf::ForOp>(
+    auto newOp = mlir::scf::ForOp::create(rewriter,
         forOp.getLoc(), forOp.getLowerBound(), forOp.getUpperBound(),
         forOp.getStep(), convertedArgs);
 
@@ -266,7 +265,7 @@ struct VectorBroadcastToXetileBroadcastOpPattern
       auto source2DTy =
           mlir::VectorType::get(llvm::ArrayRef<int64_t>({1, sourceShape[0]}),
                                 resultTy.getElementType());
-      auto source2D = rewriter.create<mlir::vector::ShapeCastOp>(
+      auto source2D = mlir::vector::ShapeCastOp::create(rewriter,
           op.getLoc(), source2DTy, op.getSource());
       source2D->setDiscardableAttrs(discardableAttrs);
       auto newOp = rewriter.replaceOpWithNewOp<imex::xetile::BroadcastOp>(
@@ -312,12 +311,12 @@ struct VectorMultiReductionToXeTileReduce
         (reduceDim == 0 ? llvm::ArrayRef<int64_t>({1, resultTy.getDimSize(0)})
                         : llvm::ArrayRef<int64_t>({resultTy.getDimSize(0), 1})),
         resultTy.getElementType());
-    auto reduceOp = rewriter.create<imex::xetile::ReductionOp>(
+    auto reduceOp = imex::xetile::ReductionOp::create(rewriter,
         op->getLoc(), xetileResultTy, op.getKind(), op.getSource(),
         mlir::ArrayRef<int64_t>({reduceDim}));
     reduceOp->setDiscardableAttrs(discardableAttrs);
     // Shape cast the result back to original shape.
-    auto shapeCastOp = rewriter.create<mlir::vector::ShapeCastOp>(
+    auto shapeCastOp = mlir::vector::ShapeCastOp::create(rewriter,
         op->getLoc(), resultTy, reduceOp.getResult());
     shapeCastOp->setDiscardableAttrs(discardableAttrs);
     // Finally add the result to the accumulator.
@@ -403,13 +402,13 @@ struct RemoveReductionSizePattern
       newRedShape.push_back(numRes);
       newRedShape.push_back(1);
     }
-    mlir::Value newCast = rewriter.create<mlir::vector::ShapeCastOp>(
+    mlir::Value newCast = mlir::vector::ShapeCastOp::create(rewriter,
         loc, mlir::VectorType::get(newShape, elemTy), op.getSource());
-    mlir::Value newReductionOp = rewriter.create<imex::xetile::ReductionOp>(
+    mlir::Value newReductionOp = imex::xetile::ReductionOp::create(rewriter,
         loc, mlir::VectorType::get(newRedShape, elemTy), op.getKind(), newCast,
         op.getReductionDims());
 
-    auto shapeCastOp = rewriter.create<mlir::vector::ShapeCastOp>(
+    auto shapeCastOp = mlir::vector::ShapeCastOp::create(rewriter,
         op.getLoc(), op.getType(), newReductionOp);
     rewriter.replaceOp(op, shapeCastOp);
     return mlir::success();
@@ -448,7 +447,7 @@ struct XeTileCanonicalizationPass final
       auto addUnrealizedCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                   mlir::ValueRange inputs, mlir::Location loc) {
         auto cast =
-            builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
+            mlir::UnrealizedConversionCastOp::create(builder, loc, type, inputs);
         return cast.getResult(0);
       };
 

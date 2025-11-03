@@ -62,7 +62,7 @@ static SmallVector<Value> getMyMultiIndex(OpBuilder &b, ::GridOp mesh,
     return idxs;
   }
   SmallVector<Value> res =
-      b.create<ProcessMultiIndexOp>(mesh.getLoc(), mesh).getResult();
+      ProcessMultiIndexOp::create(b, mesh.getLoc(), mesh).getResult();
   if (asI64) {
     for (auto &v : res) {
       v = createCast(mesh->getLoc(), b, v, b.getI64Type());
@@ -206,10 +206,10 @@ getOffsetAndSize(const EasyI64 &myID, const EasyI64 &zero, const EasyI64 &one,
   auto myPos1 = createIndexCast(loc, builder, (eMyPos + one).get());
   auto myOff = easyI64(
       loc, builder,
-      builder.create<tensor::ExtractOp>(loc, targetOffs, myPos).getResult());
+      tensor::ExtractOp::create(builder, loc, targetOffs, myPos).getResult());
   auto nextOff = easyI64(
       loc, builder,
-      builder.create<tensor::ExtractOp>(loc, targetOffs, myPos1).getResult());
+      tensor::ExtractOp::create(builder, loc, targetOffs, myPos1).getResult());
   return {myOff.get(), (nextOff - myOff).get()};
 }
 
@@ -309,7 +309,7 @@ getLocalOffSzAndStrFromSlice(OP op, ArrayRef<int64_t> srcShape,
         loc, builder, offsSharding.getDynamicShardedDimsOffsets(),
         offsSharding.getStaticShardedDimsOffsets());
     targetOffs =
-        builder.create<tensor::FromElementsOp>(loc, shardedDimsOffsets);
+        tensor::FromElementsOp::create(builder, loc, shardedDimsOffsets);
   }
 
   auto zero = easyI64(loc, builder, 0);
@@ -438,7 +438,7 @@ struct SubviewShardingInterface
       return failure();
     }
     auto &[lShardOffs, lShardSizes, lShardStrides] = offSzStr.value();
-    auto newSubview = builder.create<imex::ndarray::SubviewOp>(
+    auto newSubview = imex::ndarray::SubviewOp::create(builder,
         op->getLoc(), spmdizedOperands[0], lShardOffs, lShardSizes,
         lShardStrides);
     spmdizationMap.map(op->getResult(0), newSubview.getResult());
@@ -527,19 +527,19 @@ struct InsertSliceShardingInterface
       hasSize = hasSize.land(easyI64(loc, builder, v).sgt(zero));
     }
 
-    scf::IfOp ifOp = builder.create<scf::IfOp>(
+    scf::IfOp ifOp = scf::IfOp::create(builder,
         loc, hasSize.get(),
         [&](OpBuilder &b, Location loc) {
-          auto res = b.create<imex::ndarray::InsertSliceOp>(
+          auto res = imex::ndarray::InsertSliceOp::create(b,
               loc, spmdizedOperands[0], spmdizedOperands[1], lShardOffs,
               lShardSizes, lShardStrides);
-          b.create<scf::YieldOp>(loc, res.getResult());
+          scf::YieldOp::create(b,loc, res.getResult());
         },
         [&](OpBuilder &b, Location loc) {
-          b.create<scf::YieldOp>(loc, spmdizedOperands[0]);
+          scf::YieldOp::create(b,loc, spmdizedOperands[0]);
         });
 
-    auto res = builder.create<UpdateHaloOp>(
+    auto res = UpdateHaloOp::create(builder,
         loc, spmdizedOperands[0].getType(), ifOp.getResult(0),
         dstSharding.getGridAttr(),
         GridAxesArrayAttr::get(op->getContext(), dstSharding.getSplitAxes()),
@@ -656,7 +656,7 @@ struct LinspaceShardingInterface
           loc, builder, sharding.getDynamicShardedDimsOffsets(),
           sharding.getStaticShardedDimsOffsets(), true);
       auto targetOffs =
-          builder.create<tensor::FromElementsOp>(loc, shardedDimsOffsets);
+          tensor::FromElementsOp::create(builder, loc, shardedDimsOffsets);
       auto myOffAndSize =
           getOffsetAndSize(pRank, zero, one, targetOffs, 0, builder, loc);
       off = myOffAndSize.first;
@@ -682,7 +682,7 @@ struct LinspaceShardingInterface
     auto retType = RankedTensorType::get({ShapedType::kDynamic}, elTyp,
                                          retArType.getEncoding());
     lSz = createCast(loc, builder, lSz, builder.getIndexType());
-    auto res = builder.create<::imex::ndarray::LinSpaceOp>(loc, retType, start,
+    auto res = ::imex::ndarray::LinSpaceOp::create(builder, loc, retType, start,
                                                            stop, lSz, false);
     // update mapping
     spmdizationMap.map(op->getResult(0), res->getResult(0));

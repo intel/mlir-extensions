@@ -461,11 +461,11 @@ static Value genLoadIntrinsicCallWithC32BConversion(
 
     auto iTy = rewriter.getIntegerType(elemTy.getIntOrFloatBitWidth());
     auto iVecTy = VectorType::get(vecTy.getShape(), iTy);
-    value = rewriter.create<arith::TruncIOp>(loc, iVecTy, value);
+    value = arith::TruncIOp::create(rewriter, loc, iVecTy, value);
     if (isa<FloatType>(elemTy)) {
       // need a bitcast from e.g., i16 to f16.
       auto fVecTy = VectorType::get(vecTy.getShape(), elemTy);
-      value = rewriter.create<vector::BitCastOp>(loc, fVecTy, value);
+      value = vector::BitCastOp::create(rewriter, loc, fVecTy, value);
     }
 
     return value;
@@ -575,12 +575,12 @@ static func::CallOp genStoreIntrinsicCallWithC32BConversion(
     if (isa<FloatType>(elemTy)) {
       auto intTy = rewriter.getIntegerType(elemTy.getIntOrFloatBitWidth());
       auto intVecTy = VectorType::get(vecTy.getShape(), intTy);
-      value = rewriter.create<vector::BitCastOp>(loc, intVecTy, value);
-      return rewriter.create<arith::ExtUIOp>(loc, dstTy, value);
+      value = vector::BitCastOp::create(rewriter, loc, intVecTy, value);
+      return arith::ExtUIOp::create(rewriter, loc, dstTy, value);
     } else if (elemTy.isSignedInteger()) { // signed integer
-      return rewriter.create<arith::ExtSIOp>(loc, dstTy, value);
+      return arith::ExtSIOp::create(rewriter, loc, dstTy, value);
     } else { // signless integer
-      return rewriter.create<arith::ExtUIOp>(loc, dstTy, value);
+      return arith::ExtUIOp::create(rewriter, loc, dstTy, value);
     }
   };
 
@@ -635,7 +635,7 @@ static func::CallOp gen2DBlockIntrinsicCall(
   // arg1: vNi8, Cache controls
   auto l1Encode = i8_val(getCacheEncoding(l1));
   auto l3Encode = i8_val(getCacheEncoding(l3));
-  auto cacheControls = rewriter.create<vector::FromElementsOp>(
+  auto cacheControls = vector::FromElementsOp::create(rewriter,
       loc, vecTy(2, i8Ty), ValueRange({l1Encode, l3Encode}));
 
   // arg2: i8, Number of blocks
@@ -837,7 +837,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
           tdescTy.getMemorySpace(), adaptor.getTensorDesc());
       if (scaled) {
         newValue =
-            rewriter.create<vector::BitCastOp>(loc, op.getType(), newValue);
+            vector::BitCastOp::create(rewriter, loc, op.getType(), newValue);
       }
       rewriter.replaceOp(op, newValue);
       return success();
@@ -882,7 +882,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         // update the block offset X of the payload, since it is in unit of
         // elements we don't need to update the surface width and pitch, since
         // they are in unit of bytes.
-        Value offsetX = rewriter.create<vector::ExtractOp>(loc, payload, 5);
+        Value offsetX = vector::ExtractOp::create(rewriter, loc, payload, 5);
         auto log2 = [&](int val) -> unsigned {
           if (val == 2)
             return 1;
@@ -892,7 +892,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
             assert(false && "invalid vnni Factor!");
         };
         offsetX = shrui(offsetX, i32_val(log2(factor)));
-        payload = rewriter.create<vector::InsertOp>(loc, offsetX, payload, 5);
+        payload = vector::InsertOp::create(rewriter, loc, offsetX, payload, 5);
 
         // update the block width. Here we simply create a new TensorDescType
         // with updated shape only, since it is only consumed by the
@@ -909,7 +909,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
         auto blkW = shape[1];
         auto blkH = shape[0];
         auto block = i32_val((nblks - 1) << 16 | (blkH - 1) << 8 | (blkW - 1));
-        payload = rewriter.create<vector::InsertOp>(loc, block, payload, 7);
+        payload = vector::InsertOp::create(rewriter, loc, block, payload, 7);
 
         // update the retTy
         if (elemTy.isInteger()) {
@@ -944,7 +944,7 @@ class LoadNdPattern : public OpConversionPattern<LoadNdOp> {
       // type after the intrinsic call.
       if (retTy != op.getType()) {
         auto targetTy = convertVectorType(op.getType()).second;
-        callOp = rewriter.create<vector::BitCastOp>(loc, targetTy, callOp);
+        callOp = vector::BitCastOp::create(rewriter, loc, targetTy, callOp);
       }
       rewriter.replaceOp(op, callOp);
       return success();
@@ -1056,7 +1056,7 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
 
       if (isScaled(tdescTy, scaledTdescTy)) {
         auto scaledVecTy = VectorType::get({scaledElems}, scaledElemTy);
-        data = rewriter.create<vector::BitCastOp>(loc, scaledVecTy, data);
+        data = vector::BitCastOp::create(rewriter, loc, scaledVecTy, data);
       }
       auto callOp = gen1DStoreInstrinsicCall(rewriter, loc, l1hint, l3hint,
                                              scaledElemTy, scaledElems, scope,
@@ -1094,7 +1094,7 @@ class StoreNdPattern : public OpConversionPattern<StoreNdOp> {
                                       tdescTy.getEncoding(),
                                       /*sg_map*/ nullptr);
         auto dataTy = VectorType::get({tdescTy.getNumElements()}, elemTy);
-        data = rewriter.create<vector::BitCastOp>(loc, dataTy, data);
+        data = vector::BitCastOp::create(rewriter, loc, dataTy, data);
       }
       auto callOp =
           gen2DStoreIntrinsicCall(rewriter, loc, l1hint, l3hint, tdescTy,
@@ -1156,9 +1156,9 @@ public:
       auto intrinsicTy =
           VectorType::get(applyPermutation(shape, permutation), elemTy);
       newValue =
-          rewriter.create<vector::ShapeCastOp>(loc, intrinsicTy, newValue);
+          vector::ShapeCastOp::create(rewriter, loc, intrinsicTy, newValue);
       newValue =
-          rewriter.create<vector::TransposeOp>(loc, newValue, permutation);
+          vector::TransposeOp::create(rewriter, loc, newValue, permutation);
     }
 
     rewriter.replaceOp(op, newValue);
@@ -1251,9 +1251,9 @@ public:
           data.getType(); // 1D VectorType expected by the intrinsic
       SmallVector<int64_t> permutation =
           generateFullPermutation(tdescTy.getRank());
-      data = rewriter.create<vector::ShapeCastOp>(loc, op.getValueType(), data);
-      data = rewriter.create<vector::TransposeOp>(loc, data, permutation);
-      data = rewriter.create<vector::ShapeCastOp>(loc, flatVecTy, data);
+      data = vector::ShapeCastOp::create(rewriter, loc, op.getValueType(), data);
+      data = vector::TransposeOp::create(rewriter, loc, data, permutation);
+      data = vector::ShapeCastOp::create(rewriter, loc, flatVecTy, data);
     }
     auto callOp = genStoreIntrinsicCallWithC32BConversion(
         rewriter, loc, simd_lanes, op.getMask(), l1hint, l3hint, elemTy,
@@ -1276,7 +1276,7 @@ public:
     auto loc = op->getLoc();
     auto createIntConstant = [&](Type type, unsigned value) {
       auto attr = rewriter.getIntegerAttr(type, value);
-      return rewriter.create<arith::ConstantOp>(loc, type, attr);
+      return arith::ConstantOp::create(rewriter, loc, type, attr);
     };
 
     /// collect common info
@@ -1292,7 +1292,7 @@ public:
     /// fill in parameters for lsc
     auto v16i1 = VectorType::get(16, i1Type);
     auto vecAttr = DenseElementsAttr::get(v16i1, true);
-    auto pred = rewriter.create<arith::ConstantOp>(loc, v16i1, vecAttr);
+    auto pred = arith::ConstantOp::create(rewriter, loc, v16i1, vecAttr);
     auto subOpcode = createIntConstant(i8Type, encodeOpcode(op.getKind()));
     auto l1CacheHint = createIntConstant(i8Type, 1);
     auto l3CacheHint = createIntConstant(i8Type, 1);
@@ -1316,12 +1316,12 @@ public:
     Value payLoad = adaptor.getTensorDesc();
     // src
     auto v16i32Ty = VectorType::get(16, i32Type);
-    Value undef = rewriter.create<mlir::ub::PoisonOp>(loc, v16i32Ty);
+    Value undef = mlir::ub::PoisonOp::create(rewriter, loc, v16i32Ty);
     Value src0 = undef;
     if (op.getValue()) {
       src0 = op.getValue();
       if (src0.getType() != newType) {
-        src0 = rewriter.create<vector::BitCastOp>(loc, newType, src0);
+        src0 = vector::BitCastOp::create(rewriter, loc, newType, src0);
       }
     }
     Value src1 = undef;
@@ -1337,7 +1337,7 @@ public:
     auto *converter = this->getTypeConverter();
     auto castTy = converter->convertType(op.getType());
     auto cast =
-        rewriter.create<vector::BitCastOp>(loc, castTy, newOp->getResult(0));
+        vector::BitCastOp::create(rewriter, loc, castTy, newOp->getResult(0));
     rewriter.replaceOp(op, cast);
     return success();
   }

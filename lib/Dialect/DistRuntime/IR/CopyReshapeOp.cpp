@@ -69,13 +69,13 @@ public:
     auto nType = nlType.cloneWith(nlShape, elType);
     auto hType = ::imex::distruntime::AsyncHandleType::get(getContext());
 
-    auto newOp = rewriter.create<::imex::distruntime::CopyReshapeOp>(
+    auto newOp = ::imex::distruntime::CopyReshapeOp::create(rewriter,
         op.getLoc(), ::mlir::TypeRange{hType, nType}, op.getTeamAttr(),
         op.getLArray(), op.getGShape(), op.getLOffsets(), op.getNgShape(),
         op.getNlOffsets(), op.getNlShape());
 
     // cast to original types and replace op
-    auto res = rewriter.create<mlir::tensor::CastOp>(op.getLoc(), nlType,
+    auto res = mlir::tensor::CastOp::create(rewriter, op.getLoc(), nlType,
                                                      newOp.getNlArray());
     rewriter.replaceOp(op, {newOp.getHandle(), res});
 

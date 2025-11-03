@@ -60,7 +60,7 @@ struct SubviewOpInterface
         bufferization::getBufferType(subviewOp.getResult(), options, state);
     if (failed(resultMemrefType))
       return failure();
-    Value subView = rewriter.create<memref::SubViewOp>(
+    Value subView = memref::SubViewOp::create(rewriter,
         loc, llvm::cast<MemRefType>(*resultMemrefType), *srcMemref,
         mixedOffsets, mixedSizes, mixedStrides);
 
@@ -140,7 +140,7 @@ struct InsertSliceOpInterface
     if (srcRank == 0) {
       // If the source tensor is basically a scalar, we need to copy the scalar
       // value using a linalg.generic into the view of the destination buffer.
-      auto subView = rewriter.create<memref::SubViewOp>(
+      auto subView = memref::SubViewOp::create(rewriter,
           loc, *dstMemref, mixedOffsets, mixedSizes, mixedStrides);
       // emit a loop that broadcasts a scalar to dst shape
       // construct broadcasting affine map; srcRank==0 case is simple
@@ -151,12 +151,12 @@ struct InsertSliceOpInterface
       auto dstMap = rewriter.getMultiDimIdentityMap(dstRank);
       ::mlir::SmallVector<mlir::utils::IteratorType> iterators(
           dstRank, ::mlir::utils::IteratorType::parallel);
-      (void)rewriter.create<::mlir::linalg::GenericOp>(
+      (void)::mlir::linalg::GenericOp::create(rewriter,
           loc, srcMemref.value(), subView.getResult(),
           ::mlir::ArrayRef({srcMap, dstMap}), iterators,
           [](::mlir::OpBuilder &b, ::mlir::Location loc,
              ::mlir::ValueRange args) {
-            b.create<::mlir::linalg::YieldOp>(loc, args.front());
+            ::mlir::linalg::YieldOp::create(b, loc, args.front());
           });
     } else {
       // Take a subview of the destination buffer.
@@ -165,7 +165,7 @@ struct InsertSliceOpInterface
           cast<MemRefType>(memref::SubViewOp::inferRankReducedResultType(
               insertSliceOp.getSourceType().getShape(), dstMemrefType,
               mixedOffsets, mixedSizes, mixedStrides));
-      Value subView = rewriter.create<memref::SubViewOp>(
+      Value subView = memref::SubViewOp::create(rewriter,
           loc, subviewMemRefType, *dstMemref, mixedOffsets, mixedSizes,
           mixedStrides);
 

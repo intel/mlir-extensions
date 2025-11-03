@@ -44,7 +44,7 @@ template <typename T> struct EasyVal {
           const ::mlir::OpFoldResult &value)
       : _value(llvm::isa<::mlir::Value>(value)
                    ? llvm::cast<::mlir::Value>(value)
-                   : builder.create<::mlir::arith::ConstantOp>(
+                   : ::mlir::arith::ConstantOp::create(builder,
                          *_loc, ::mlir::cast<::mlir::IntegerAttr>(
                                     llvm::cast<::mlir::Attribute>(value)))),
         _loc(&loc), _builder(&builder) {}

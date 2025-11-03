@@ -95,7 +95,7 @@ struct HoistTransposeBeforeExtractStridedSliceOpPattern
     }
     // If not found, create a new transpose op.
     if (!transposedLoad)
-      transposedLoad = rewriter.create<mlir::vector::TransposeOp>(
+      transposedLoad = mlir::vector::TransposeOp::create(rewriter,
           transposeOp.getLoc(), sourceOfExtract->getResult(0),
           llvm::ArrayRef<int64_t>({1, 0}));
     // Extract the required slice from the transposed load and replace the

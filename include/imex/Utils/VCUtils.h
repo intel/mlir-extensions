@@ -35,35 +35,35 @@ using namespace mlir;
 #define vecTy(n, ty) VectorType::get(n, ty)
 
 #define i1_val(value)                                                          \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(value))
 
 #define i8_val(value)                                                          \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getI8IntegerAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getI8IntegerAttr(value))
 
 #define i16_val(value)                                                         \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getI16IntegerAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getI16IntegerAttr(value))
 
 #define i32_val(value)                                                         \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getI32IntegerAttr(value))
 
 #define i64_val(value)                                                         \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getI64IntegerAttr(value))
 
 #define index_val(value)                                                       \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(value))
 
-#define constant_val(attr) rewriter.create<arith::ConstantOp>(loc, attr)
+#define constant_val(attr) arith::ConstantOp::create(rewriter, loc, attr)
 
 #define integer_val(value, type)                                               \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(type, value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getIntegerAttr(type, value))
 
 #define dense_vector_int_val(value, elemTy, vecSize)                           \
-  rewriter.create<arith::ConstantOp>(                                          \
+  arith::ConstantOp::create(rewriter,                                          \
       loc, DenseElementsAttr::get(vecTy(vecSize, elemTy),                      \
                                   IntegerAttr::get(elemTy, value)))
 
 #define dense_vector_val(attr, vecTy)                                          \
-  rewriter.create<arith::ConstantOp>(loc, DenseElementsAttr::get(vecTy, attr))
+  arith::ConstantOp::create(rewriter, loc, DenseElementsAttr::get(vecTy, attr))
 
 #define divi(a, b) rewriter.createOrFold<arith::DivSIOp>(loc, a, b)
 #define muli(a, b) rewriter.createOrFold<arith::MulIOp>(loc, a, b)

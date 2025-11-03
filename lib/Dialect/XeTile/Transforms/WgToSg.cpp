@@ -104,7 +104,7 @@ public:
 
     rewriter.setInsertionPoint(op);
     // get the subgroup Id
-    auto sgID = rewriter.create<mlir::gpu::SubgroupIdOp>(loc, nullptr);
+    auto sgID = mlir::gpu::SubgroupIdOp::create(rewriter, loc, nullptr);
 
     // Handle the init tile for scatter ops
     if (tileTy.getScatterAttr() == mlir::BoolAttr::get(op.getContext(), true)) {
@@ -115,7 +115,7 @@ public:
         tileTy.getScatterAttr() /*scatterAttr*/);
       auto newTileTy =
         imex::xetile::TileType::get({sgTileShape[0], sgTileShape[1]}, elemTy, attr);
-      auto newInitTileOp = rewriter.create<xetile::InitTileOp>(
+      auto newInitTileOp = xetile::InitTileOp::create(rewriter,
         loc, newTileTy, mlir::cast<mlir::TypedValue<mlir::MemRefType>>(op.getSource()),
         mlir::cast<mlir::TypedValue<mlir::VectorType>>(adaptor.getIndices()[0]));
       rewriter.replaceOp(op, newInitTileOp);
@@ -124,7 +124,7 @@ public:
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
-      return rewriter.create<arith::ConstantOp>(loc, type, attr);
+      return arith::ConstantOp::create(rewriter, loc, type, attr);
     };
 
     auto indexType = rewriter.getIndexType();
@@ -142,14 +142,14 @@ public:
 
     if (sgLayoutMap.find(op.getResult()) != sgLayoutMap.end()) {
       sgIdY =
-          rewriter.create<mlir::index::DivUOp>(loc, sgID, sgLayoutDimXConst);
+          mlir::index::DivUOp::create(rewriter, loc, sgID, sgLayoutDimXConst);
       sgIdX =
-          rewriter.create<mlir::index::RemUOp>(loc, sgID, sgLayoutDimXConst);
+          mlir::index::RemUOp::create(rewriter, loc, sgID, sgLayoutDimXConst);
     } else {
       sgIdY =
-          rewriter.create<mlir::index::DivUOp>(loc, sgID, sgLayoutDimYConst);
+          mlir::index::DivUOp::create(rewriter, loc, sgID, sgLayoutDimYConst);
       sgIdX =
-          rewriter.create<mlir::index::RemUOp>(loc, sgID, sgLayoutDimYConst);
+          mlir::index::RemUOp::create(rewriter, loc, sgID, sgLayoutDimYConst);
     }
 
     llvm::SmallVector<Value> offsets;
@@ -159,7 +159,7 @@ public:
       if (ShapedType::isDynamic(staticOffsets[i])) {
         offsets.push_back(dynamicOffsets[j++]);
       } else {
-        offsets.push_back(rewriter.create<arith::ConstantOp>(
+        offsets.push_back(arith::ConstantOp::create(rewriter,
             op.getLoc(), rewriter.getIndexAttr(staticOffsets[i])));
       }
     }
@@ -230,11 +230,11 @@ public:
       newOffsets.push_back(offsetPermutations[i][1]);
       Value newInitTileOp = nullptr;
       if (sourceMemRefType && sourceMemRefType.hasStaticShape()) {
-        newInitTileOp = rewriter.create<xetile::InitTileOp>(
+        newInitTileOp = xetile::InitTileOp::create(rewriter,
             loc, newTileTy, source, newOffsets);
       }
       else { // memref with dynamic shape or non memref source
-        newInitTileOp = rewriter.create<xetile::InitTileOp>(
+        newInitTileOp = xetile::InitTileOp::create(rewriter,
             loc, newTileTy, source, newOffsets, op.getMixedSizes(), op.getMixedStrides());
       }
       newOffsets.clear();
@@ -267,7 +267,7 @@ class WGToSGLoadTileOpPattern : public OpConversionPattern<xetile::LoadTileOp> {
       auto newResTy =
           VectorType::get({tileTy.getShape()[0], tileTy.getShape()[1]},
                                 tileTy.getElementType());
-      auto newLoadOp = rewriter.create<xetile::LoadTileOp>(
+      auto newLoadOp = xetile::LoadTileOp::create(rewriter,
           op.getLoc(), newResTy, src, op->getAttrs()).getResult(0);
       newLoadOps.push_back(newLoadOp);
     }
@@ -297,7 +297,7 @@ class WGToSGLoadGatherOpPattern : public OpConversionPattern<xetile::LoadGatherO
       auto newResTy =
           mlir::VectorType::get({tileTy.getShape()[0], tileTy.getShape()[1]},
           tileTy.getElementType());
-      auto newLoadOp = rewriter.create<xetile::LoadGatherOp>(
+      auto newLoadOp = xetile::LoadGatherOp::create(rewriter,
           op.getLoc(), newResTy, src, mask, op.getPaddingAttr(),
           op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
       newLoadOps.push_back(newLoadOp);
@@ -333,7 +333,7 @@ class WGToSGTileMMAOpPattern : public OpConversionPattern<xetile::TileMMAOp> {
         auto bShape = llvm::cast<VectorType>(b.getType()).getShape();
         auto resTy = VectorType::get({aShape[0], bShape[1]},
                                            resultTy.getElementType());
-        tmpC = rewriter.create<xetile::TileMMAOp>(
+        tmpC = xetile::TileMMAOp::create(rewriter,
             op.getLoc(), resTy, a, b, tmpC, nullptr, nullptr, nullptr);
         newTileMMAOps.push_back(tmpC);
         newResultTypes.push_back(resTy);
@@ -356,7 +356,7 @@ class WGToSGStoreTileOpPattern : public OpConversionPattern<xetile::StoreTileOp>
     auto newDstTiles = adaptor.getTile();
 
     for (size_t i = 0; i < newValues.size(); i++) {
-      rewriter.create<xetile::StoreTileOp>(op.getLoc(), newValues[i],
+      xetile::StoreTileOp::create(rewriter, op.getLoc(), newValues[i],
                                            newDstTiles[i], op.getL1HintAttr(), op.getL2HintAttr(), op.getL3HintAttr());
     }
 
@@ -377,7 +377,7 @@ class WGToSGStoreScatterOpPattern : public OpConversionPattern<xetile::StoreScat
     auto mask = adaptor.getMask();
 
     for (size_t i = 0; i < newValues.size(); i++) {
-      rewriter.create<xetile::StoreScatterOp>(op.getLoc(), newValues[i],
+      xetile::StoreScatterOp::create(rewriter, op.getLoc(), newValues[i],
                                            newDstTiles[i], mask[i], op.getL1HintAttr(),
                                            op.getL2HintAttr(), op.getL3HintAttr());
     }
@@ -398,7 +398,7 @@ class WGToSGUpdateTileOffsetOpPattern
     llvm::SmallVector<Type> newResultTypes;
     for (auto tile : adaptor.getTile()) {
 
-      auto newUpdateTileOffsetOp = rewriter.create<xetile::UpdateTileOffsetOp>(
+      auto newUpdateTileOffsetOp = xetile::UpdateTileOffsetOp::create(rewriter,
           op.getLoc(), tile.getType(), tile, op.getOffsetX(), op.getOffsetY(), op.getIndices());
       newUpdateTileOffsetOps.push_back(newUpdateTileOffsetOp);
       newResultTypes.push_back(tile.getType());
@@ -476,7 +476,7 @@ class WGToSGArithConstantOpPattern
 
     llvm::SmallVector<Value> newOps;
     for (size_t i = 0; i < numOps; i++) {
-      auto newOp = rewriter.create<arith::ConstantOp>(op.getLoc(), newTy, attr);
+      auto newOp = arith::ConstantOp::create(rewriter, op.getLoc(), newTy, attr);
       newOps.push_back(newOp);
     }
     rewriter.replaceOpWithMultiple(op, {newOps});
@@ -515,7 +515,7 @@ public:
       auto sgData = mapAttr.getSgData();
       auto newTy = VectorType::get({sgData[0], sgData[1]},
                                                    resType.getElementType());
-      auto newOp = rewriter.create<vector::TransposeOp>(
+      auto newOp = vector::TransposeOp::create(rewriter,
               op.getLoc(), newTy, adaptor.getVector(), op.getPermutation());
       rewriter.replaceOp(op, newOp);
       return success();
@@ -587,7 +587,7 @@ class WGToSGXeTileConvertLayout
     auto slmScopeAttr = rewriter.getI32IntegerAttr(3);
 
     auto createIndexConstant = [&](int64_t value) {
-      return rewriter.create<arith::ConstantIndexOp>(loc, value);
+      return arith::ConstantIndexOp::create(rewriter, loc, value);
     };
 
     auto isOneUseTranspose = [&](Operation *op) {
@@ -602,8 +602,8 @@ class WGToSGXeTileConvertLayout
       // x is row, y is col
       // TODO: Div and Rem are expensive. Find alterate.
       auto dimY = createIndexConstant(sgLayout[1]);
-      auto sgIdX = rewriter.create<index::DivUOp>(loc, sgId, dimY);
-      auto sgIdY = rewriter.create<index::RemUOp>(loc, sgId, dimY);
+      auto sgIdX = index::DivUOp::create(rewriter, loc, sgId, dimY);
+      auto sgIdY = index::RemUOp::create(rewriter, loc, sgId, dimY);
 
       auto offsetX = rewriter.createOrFold<index::MulOp>(loc, sgIdX, createIndexConstant(sgData[0]));
       auto offsetY = rewriter.createOrFold<index::MulOp>(loc, sgIdY, createIndexConstant(sgData[1]));
@@ -626,12 +626,12 @@ class WGToSGXeTileConvertLayout
     auto flattenFactor = bitWidth / 8;
     auto slmSize = resType.getNumElements() * flattenFactor;
     auto slmTy = MemRefType::get(slmSize, rewriter.getI8Type(), {}, 3);
-    auto slm = rewriter.create<memref::AllocOp>(loc, slmTy);
+    auto slm = memref::AllocOp::create(rewriter, loc, slmTy);
     auto viewTy = MemRefType::get(resShape, elemTy, {}, 3);
-    auto view = rewriter.create<memref::ViewOp>(loc, viewTy, slm, createIndexConstant(0), ValueRange());
+    auto view = memref::ViewOp::create(rewriter, loc, viewTy, slm, createIndexConstant(0), ValueRange());
 
     // Get SG id
-    auto sgId = rewriter.create<gpu::SubgroupIdOp>(loc, rewriter.getIndexType(), nullptr);
+    auto sgId = gpu::SubgroupIdOp::create(rewriter, loc, rewriter.getIndexType(), nullptr);
 
     { // store to slm
       auto sgData = srcMapAttr.getSgData();
@@ -648,7 +648,7 @@ class WGToSGXeTileConvertLayout
 
         auto permMap = AffineMap::getPermutationMap(llvm::ArrayRef<int64_t>({1, 0}), ctx);
         auto permAttr = AffineMapAttr::get(permMap);
-        stView = rewriter.create<memref::TransposeOp>(loc, view, permAttr);
+        stView = memref::TransposeOp::create(rewriter, loc, view, permAttr);
       }
 
       auto attr = imex::xetile::XeTileAttr::get(
@@ -656,13 +656,13 @@ class WGToSGXeTileConvertLayout
                       nullptr /*array_length*/, slmScopeAttr, nullptr /*scatterAttr*/);
       auto tileTy = imex::xetile::TileType::get({sgData[0], sgData[1]}, elemTy, attr);
 
-      auto tile = rewriter.create<xetile::InitTileOp>(
+      auto tile = xetile::InitTileOp::create(rewriter,
                       loc, tileTy, stView, llvm::ArrayRef<OpFoldResult>({offsetX, offsetY}));
-      rewriter.create<xetile::StoreTileOp>(loc, data, tile, nullptr, nullptr, nullptr);
+      xetile::StoreTileOp::create(rewriter, loc, data, tile, nullptr, nullptr, nullptr);
     }
 
     // Add barrier to wait for all threads to finish writing to SLM
-    rewriter.create<gpu::BarrierOp>(loc);
+    gpu::BarrierOp::create(rewriter, loc);
 
     { // load from slm
       auto sgData = dstMapAttr.getSgData();
@@ -681,10 +681,10 @@ class WGToSGXeTileConvertLayout
       auto tileTy = xetile::TileType::get({sgData[0], sgData[1]}, elemTy, attr);
       auto newResTy = VectorType::get({sgData[0], sgData[1]}, elemTy);
 
-      auto tile = rewriter.create<xetile::InitTileOp>(
+      auto tile = xetile::InitTileOp::create(rewriter,
                     loc, tileTy, view, llvm::ArrayRef<OpFoldResult>({offsetX, offsetY}));
       //TODO: Set up cache attributes
-      auto ld = rewriter.create<xetile::LoadTileOp>(
+      auto ld = xetile::LoadTileOp::create(rewriter,
                     loc, newResTy, tile, Attribute(), nullptr, nullptr, nullptr);
       rewriter.replaceOp(op, ld);
     }
@@ -728,7 +728,7 @@ class WGToSGVectorBroadcast
         !(srcShape[1] == 1 && srcShape[0] == dstShape[0]))
       return failure();
 
-    auto newOp = rewriter.create<vector::BroadcastOp>(
+    auto newOp = vector::BroadcastOp::create(rewriter,
             op.getLoc(), newTy, adaptor.getSource());
     rewriter.replaceOp(op, newOp);
     return success();
@@ -747,7 +747,7 @@ class WGToSGPrefetchOpPattern : public OpConversionPattern<xetile::PrefetchTileO
     auto L3 = op.getL3HintAttr();
 
     for(auto tile : adaptor.getTile()) {
-      rewriter.create<xetile::PrefetchTileOp>(op.getLoc(),  tile, L1, L2, L3);
+      xetile::PrefetchTileOp::create(rewriter, op.getLoc(),  tile, L1, L2, L3);
     }
 
     rewriter.eraseOp(op);
@@ -787,10 +787,10 @@ class WGToSGVectorMultiDimReductionOp
       auto newTy = VectorType::get(outputShape, srcType.getElementType());
 
       // ShapeCast acc to match reduction op shape.
-      auto acc = rewriter.create<vector::ShapeCastOp>(op->getLoc(), newTy,
+      auto acc = vector::ShapeCastOp::create(rewriter, op->getLoc(), newTy,
                                                       adaptor.getAcc());
 
-      auto newOp = rewriter.create<vector::MultiDimReductionOp>(
+      auto newOp = vector::MultiDimReductionOp::create(rewriter,
           op.getLoc(), newTy, op.getKind(), src, acc, redDims);
 
       // Shape Cast the output of reduction back to 2D
@@ -799,7 +799,7 @@ class WGToSGVectorMultiDimReductionOp
           dyn_cast<VectorType>(accumalator.getType());
       auto outputVectorTy = VectorType::get(
           accumalatorType.getShape(), accumalatorType.getElementType());
-      auto shapeCastOp = rewriter.create<vector::ShapeCastOp>(
+      auto shapeCastOp = vector::ShapeCastOp::create(rewriter,
           op.getLoc(), outputVectorTy, newOp);
       rewriter.replaceOp(op, shapeCastOp);
       return success();
@@ -816,7 +816,7 @@ class WGToSGVectorMultiDimReductionOp
 
       SmallVector<int64_t> redDims{reduceDim};
       auto newTy = VectorType::get(outputShape, srcType.getElementType());
-      auto newOp = rewriter.create<vector::MultiDimReductionOp>(
+      auto newOp = vector::MultiDimReductionOp::create(rewriter,
           op.getLoc(), newTy, op.getKind(), adaptor.getSource(),
           adaptor.getAcc(), redDims);
       rewriter.replaceOp(op, newOp);
@@ -868,7 +868,7 @@ class WGToSGVectorShapeCast
     auto newTy =
         VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
 
-    auto newOp = rewriter.create<vector::ShapeCastOp>(
+    auto newOp = vector::ShapeCastOp::create(rewriter,
         op.getLoc(), newTy, adaptor.getSource());
     rewriter.replaceOp(op, newOp);
     return success();
@@ -897,7 +897,7 @@ class WGToSGVectorCreateMask
     auto newTy = mlir::VectorType::get({sgData[0], sgData[1]},
                                        resType.getElementType());
 
-    auto newOp = rewriter.create<mlir::vector::CreateMaskOp>(
+    auto newOp = mlir::vector::CreateMaskOp::create(rewriter,
             op.getLoc(), newTy, adaptor.getOperands());
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -911,11 +911,11 @@ Op createOp(ConversionPatternRewriter &rewriter, Location loc,
                 "Unsupported number of operands");
 
   if constexpr (numOperands == 1) {
-    return rewriter.create<Op>(loc, operands[0][i]);
+    return Op::create(rewriter, loc, operands[0][i]);
   } else if constexpr (numOperands == 2) {
-    return rewriter.create<Op>(loc, operands[0][i], operands[1][i]);
+    return Op::create(rewriter, loc, operands[0][i], operands[1][i]);
   } else if constexpr (numOperands == 3) {
-    return rewriter.create<Op>(loc, operands[0][i], operands[1][i],
+    return Op::create(rewriter, loc, operands[0][i], operands[1][i],
                                operands[2][i]);
   }
 }
@@ -1016,7 +1016,7 @@ class WGToSGArithDifferentResultTypePattern : public OpConversionPattern<Op> {
     auto newTy =
         VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
 
-    auto newOp = rewriter.create<Op>(op.getLoc(), newTy, adaptor.getOperands()[0]);
+    auto newOp = Op::create(rewriter, op.getLoc(), newTy, adaptor.getOperands()[0]);
     rewriter.replaceOp(op, newOp);
     return success();
   }
@@ -1052,7 +1052,7 @@ class WGToSGElementWiseOpComparisonOpsPattern : public OpConversionPattern<Op> {
     auto resTy =
         VectorType::get({sgData[0], sgData[1]}, resType.getElementType());
 
-    auto newOp = rewriter.create<Op>(op.getLoc(), newTy, op.getPredicate(),
+    auto newOp = Op::create(rewriter, op.getLoc(), newTy, op.getPredicate(),
                                  adaptor.getLhs()[0], adaptor.getRhs()[0]);
     newOp->getResult(0).setType(resTy);
     rewriter.replaceOp(op, newOp);
@@ -1072,7 +1072,7 @@ class WGToSGArithSelectOpPattern : public OpConversionPattern<mlir::arith::Selec
       return mlir::failure();
     }
 
-    auto newOp = rewriter.create<mlir::arith::SelectOp>(op.getLoc(), adaptor.getCondition(),
+    auto newOp = mlir::arith::SelectOp::create(rewriter, op.getLoc(), adaptor.getCondition(),
                                  adaptor.getTrueValue(), adaptor.getFalseValue());
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -1091,7 +1091,7 @@ class WGToSGMathFPowIOpPattern : public OpConversionPattern<mlir::math::FPowIOp>
       return mlir::failure();
     }
 
-    auto newOp = rewriter.create<mlir::math::FPowIOp>(op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
+    auto newOp = mlir::math::FPowIOp::create(rewriter, op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
     rewriter.replaceOp(op, newOp);
     return mlir::success();
   }
@@ -1314,7 +1314,7 @@ public:
                                mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1)
           return nullptr;
-        return builder.create<UnrealizedConversionCastOp>(loc, type, inputs).getResult(0);
+        return UnrealizedConversionCastOp::create(builder, loc, type, inputs).getResult(0);
       };
       converter.addSourceMaterialization(materializeCast);
       converter.addTargetMaterialization(materializeCast);

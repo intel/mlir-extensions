@@ -71,7 +71,7 @@ index d7885e035959..5195035f088f 100644
 +    OpBuilder::InsertionGuard guard(rewriter);
 +    rewriter.setInsertionPointAfter(newFuncOp);
 +
-+    rewriter.create<spirv::ExecutionModeOp>(funcOp.getLoc(), newFuncOp,
++    spirv::ExecutionModeOp::create(rewriter, funcOp.getLoc(), newFuncOp,
 +                                            executionMode.getValue(), *modeVal);
 +  }
 +

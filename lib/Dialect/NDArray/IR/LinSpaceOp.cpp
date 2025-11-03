@@ -43,7 +43,7 @@ public:
       return mlir::failure();
 
     // emit create op with new return type
-    auto newOp = rewriter.create<imex::ndarray::LinSpaceOp>(
+    auto newOp = imex::ndarray::LinSpaceOp::create(rewriter,
         loc, newReturnType, op.getStart(), op.getStop(), num, op.getEndpoint());
     // cast to original type
     rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(op, oldReturnType,

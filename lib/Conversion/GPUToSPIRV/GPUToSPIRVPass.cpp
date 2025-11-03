@@ -94,38 +94,38 @@ public:
 
     auto vWidth = vTy.getNumElements();
     assert(vWidth <= 64 && "vector.create_mask supports vector widths <= 64");
-    auto vWidthConst = rewriter.create<mlir::arith::ConstantOp>(
+    auto vWidthConst = mlir::arith::ConstantOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getI64IntegerAttr(vWidth));
     auto maskVal = adaptor.getOperands()[0];
-    maskVal = rewriter.create<mlir::arith::TruncIOp>(
+    maskVal = mlir::arith::TruncIOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getI64Type(), maskVal);
 
     // maskVal < vWidth
-    auto cmp = rewriter.create<mlir::arith::CmpIOp>(
+    auto cmp = mlir::arith::CmpIOp::create(rewriter,
         vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal,
         vWidthConst);
-    auto one = rewriter.create<mlir::arith::ConstantOp>(
+    auto one = mlir::arith::ConstantOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getI64IntegerAttr(1));
-    auto shift = rewriter.create<mlir::spirv::ShiftLeftLogicalOp>(
+    auto shift = mlir::spirv::ShiftLeftLogicalOp::create(rewriter,
         vMaskOp.getLoc(), one, maskVal);
     auto mask1 =
-        rewriter.create<mlir::arith::SubIOp>(vMaskOp.getLoc(), shift, one);
-    auto mask2 = rewriter.create<mlir::arith::ConstantOp>(
+        mlir::arith::SubIOp::create(rewriter,vMaskOp.getLoc(), shift, one);
+    auto mask2 = mlir::arith::ConstantOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getI64IntegerAttr(-1)); // all ones
-    mlir::Value sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(),
+    mlir::Value sel = mlir::arith::SelectOp::create(rewriter,vMaskOp.getLoc(),
                                                              cmp, mask1, mask2);
 
     // maskVal < 0
-    auto zero = rewriter.create<mlir::arith::ConstantOp>(
+    auto zero = mlir::arith::ConstantOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getI64IntegerAttr(0));
-    auto cmp2 = rewriter.create<mlir::arith::CmpIOp>(
+    auto cmp2 = mlir::arith::CmpIOp::create(rewriter,
         vMaskOp.getLoc(), mlir::arith::CmpIPredicate::slt, maskVal, zero);
-    sel = rewriter.create<mlir::arith::SelectOp>(vMaskOp.getLoc(), cmp2, zero,
+    sel = mlir::arith::SelectOp::create(rewriter,vMaskOp.getLoc(), cmp2, zero,
                                                  sel);
 
-    sel = rewriter.create<mlir::arith::TruncIOp>(
+    sel = mlir::arith::TruncIOp::create(rewriter,
         vMaskOp.getLoc(), rewriter.getIntegerType(vWidth), sel);
-    auto res = rewriter.create<mlir::spirv::BitcastOp>(
+    auto res = mlir::spirv::BitcastOp::create(rewriter,
         vMaskOp.getLoc(), mlir::VectorType::get({vWidth}, rewriter.getI1Type()),
         sel);
     vMaskOp->replaceAllUsesWith(res);
@@ -168,7 +168,7 @@ public:
     mlir::arith::BitcastOpAdaptor bitcastOpAdaptor(bitcastOp);
 
     mlir::Value intelFToBF16ConvertionOp =
-        rewriter.create<mlir::spirv::INTELConvertFToBF16Op>(
+        mlir::spirv::INTELConvertFToBF16Op::create(rewriter,
             truncfOp.getLoc(),
             getTypeConverter()->convertType(bitcastOp.getType()),
             adaptor.getOperands());
@@ -210,7 +210,7 @@ public:
       return mlir::failure();
 
     mlir::Value intelBF16ToFConvertionOp =
-        rewriter.create<mlir::spirv::INTELConvertBF16ToFOp>(
+        mlir::spirv::INTELConvertBF16ToFOp::create(rewriter,
             bitcastOp.getLoc(),
             getTypeConverter()->convertType(extfOp.getType()),
             adaptor.getOperands());
@@ -255,9 +255,9 @@ public:
     }
 
     auto loc = fromElementsOp.getLoc();
-    mlir::Value result = rewriter.create<mlir::spirv::UndefOp>(loc, spirvVecTy);
+    mlir::Value result = mlir::spirv::UndefOp::create(rewriter, loc, spirvVecTy);
     for (auto [idx, val] : llvm::enumerate(adaptor.getElements())) {
-      result = rewriter.create<mlir::spirv::CompositeInsertOp>(loc, val, result,
+      result = mlir::spirv::CompositeInsertOp::create(rewriter, loc, val, result,
                                                                idx);
     }
     rewriter.replaceOp(fromElementsOp, result);

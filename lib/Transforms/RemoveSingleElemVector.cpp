@@ -56,7 +56,7 @@ struct VectorExtractOpConversion final
       auto attr = value.getValues<mlir::TypedAttr>()[0];
       auto elemTy = vecTy.getElementType();
 
-      auto newVal = rewriter.create<mlir::arith::ConstantOp>(extractOp.getLoc(),
+      auto newVal = mlir::arith::ConstantOp::create(rewriter, extractOp.getLoc(),
                                                              elemTy, attr);
 
       rewriter.replaceOp(extractOp, newVal);
@@ -135,9 +135,9 @@ static mlir::Value createInsertOps(OpTy op, mlir::ValueRange operands,
   auto denseAttr = mlir::DenseElementsAttr::get(type, fillValue);
 
   mlir::Value newOp =
-      rewriter.create<mlir::arith::ConstantOp>(loc, type, denseAttr);
+      mlir::arith::ConstantOp::create(rewriter, loc, type, denseAttr);
   for (auto [i, opr] : llvm::enumerate(operands)) {
-    newOp = rewriter.create<mlir::vector::InsertOp>(loc, opr, newOp, i);
+    newOp = mlir::vector::InsertOp::create(rewriter, loc, opr, newOp, i);
   }
   return newOp;
 }
@@ -235,11 +235,11 @@ struct VectorStoreOpConversion final
     // Create a i32 constant of value 0 for index
 
     // Extract the single element from the vector as a scalar
-    auto scalar = rewriter.create<mlir::vector::ExtractOp>(
+    auto scalar = mlir::vector::ExtractOp::create(rewriter,
         storeOp.getLoc(), vector, rewriter.getI32IntegerAttr(0));
 
     // Create a memref.store op with the scalar value
-    auto memrefStoreOp = rewriter.create<mlir::memref::StoreOp>(
+    auto memrefStoreOp = mlir::memref::StoreOp::create(rewriter,
         storeOp.getLoc(), scalar, base, indices);
 
     rewriter.replaceOp(storeOp, memrefStoreOp);
@@ -264,10 +264,9 @@ struct RemoveSingleElemVectorPass final
       if (!vecTy || vecTy.getNumElements() != 1)
         return mlir::Value();
 
-      return builder
-          .create<mlir::vector::ExtractOp>(loc, inputs[0],
+      return mlir::vector::ExtractOp::create(builder, loc, inputs[0],
                                            builder.getIndexAttr(0))
-          .getResult();
+                                           .getResult();
     };
 
     typeConverter.addSourceMaterialization(materializeCast);

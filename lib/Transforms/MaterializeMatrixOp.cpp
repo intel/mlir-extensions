@@ -118,7 +118,7 @@ public:
     auto transAttr = DenseI64ArrayAttr();
     auto bitWidthAttr = IntegerAttr();
     VectorType newResTy = VectorType::get(vecSize, elemTy);
-    auto ldOp = rewriter.create<xegpu::LoadNdOp>(
+    auto ldOp = xegpu::LoadNdOp::create(rewriter,
         loc, newResTy, tdesc, ValueRange(), DenseI64ArrayAttr(), packAttr,
         transAttr, bitWidthAttr, nullptr, nullptr, nullptr);
 
@@ -128,9 +128,9 @@ public:
     elemTy = resTy.getElementType();
     auto castTy = VectorType::get(resTy.getNumElements(), elemTy);
     if (castTy != newResTy)
-      result = rewriter.create<vector::BitCastOp>(loc, castTy, result);
+      result = vector::BitCastOp::create(rewriter, loc, castTy, result);
     if (castTy != resTy)
-      result = rewriter.create<vector::ShapeCastOp>(loc, resTy, result);
+      result = vector::ShapeCastOp::create(rewriter, loc, resTy, result);
 
     rewriter.replaceOp(op, result);
     return success();

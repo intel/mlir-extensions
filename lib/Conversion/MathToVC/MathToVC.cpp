@@ -101,12 +101,12 @@ SmallVector<Value> convertFloatArgsType(SmallVector<Value> args,
     else if (srcBitWidth < dstBitWidth) {
       auto newType =
           convertScalarOrVectorFloatType(arg.getType(), dstElementType);
-      auto newOp = rewriter.create<arith::ExtFOp>(arg.getLoc(), newType, arg);
+      auto newOp = arith::ExtFOp::create(rewriter, arg.getLoc(), newType, arg);
       newArgs.push_back(newOp);
     } else if (srcBitWidth > dstBitWidth) {
       auto newType =
           convertScalarOrVectorFloatType(arg.getType(), dstElementType);
-      auto newOp = rewriter.create<arith::TruncFOp>(arg.getLoc(), newType, arg);
+      auto newOp = arith::TruncFOp::create(rewriter, arg.getLoc(), newType, arg);
       newArgs.push_back(newOp);
     }
   }
@@ -213,11 +213,11 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
             rewriter.getFloatAttr(interimVectorType.getElementType(),
                                   1.442695040888963));
         auto log2eConstVec =
-            rewriter.create<arith::ConstantOp>(loc, interimVectorType, vecAttr);
+            arith::ConstantOp::create(rewriter, loc, interimVectorType, vecAttr);
         auto input = convertFloatArgsType({operands[0]}, rewriter.getF32Type(),
                                           rewriter);
         auto scaledInputf32 =
-            rewriter.create<arith::MulFOp>(loc, input[0], log2eConstVec);
+            arith::MulFOp::create(rewriter, loc, input[0], log2eConstVec);
         auto scaledInput = convertFloatArgsType(
             {scaledInputf32}, vecTy.getElementType(), rewriter);
         args.clear();
@@ -227,10 +227,10 @@ struct ExpOpPattern final : public OpConversionPattern<ExpOp> {
             vecTy,
             rewriter.getFloatAttr(vecTy.getElementType(), 1.442695040888963));
         auto log2eConstVec =
-            rewriter.create<arith::ConstantOp>(loc, vecTy, vecAttr);
+            arith::ConstantOp::create(rewriter, loc, vecTy, vecAttr);
         auto input = operands[0];
         auto scaledInput =
-            rewriter.create<arith::MulFOp>(loc, input, log2eConstVec);
+            arith::MulFOp::create(rewriter, loc, input, log2eConstVec);
         args.clear();
         args.push_back(scaledInput);
       }
@@ -312,7 +312,7 @@ struct MathToVCPass : public imex::impl::ConvertMathToVCBase<MathToVCPass> {
           !mlir::isa<mlir::VectorType>(inputs.front().getType()))
         return nullptr;
 
-      return builder.create<mlir::vector::ShapeCastOp>(loc, type,
+      return mlir::vector::ShapeCastOp::create(builder, loc, type,
                                                        inputs.front());
     };
     typeConverter.addSourceMaterialization(materializeCast);

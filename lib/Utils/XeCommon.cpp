@@ -124,11 +124,11 @@ applyVnniTransform(mlir::OpBuilder &builder,
   auto elems = srcTy.getNumElements();
   auto elemTy = srcTy.getElementType();
   auto linearVecTy = mlir::VectorType::get(elems, elemTy);
-  auto root = builder.create<mlir::vector::ShapeCastOp>(loc, linearVecTy, src);
+  auto root = mlir::vector::ShapeCastOp::create(builder, loc, linearVecTy, src);
   auto mask = getVNNIShuffleIndices(srcTy);
-  auto shuffle = builder.create<mlir::vector::ShuffleOp>(loc, root, root, mask);
+  auto shuffle = mlir::vector::ShuffleOp::create(builder, loc, root, root, mask);
   auto packedTy = getPackedType(srcTy);
-  auto cast = builder.create<mlir::vector::ShapeCastOp>(loc, packedTy, shuffle);
+  auto cast = mlir::vector::ShapeCastOp::create(builder, loc, packedTy, shuffle);
   // for convenience of load+transpose optimization, add packed attribute
   // to indicate these ops are used to do vnni transform.
   root.getOperation()->setAttr("packed", builder.getUnitAttr());
@@ -195,7 +195,7 @@ mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
   mlir::Location loc = builder.getUnknownLoc();
   if (!inputs.empty())
     loc = inputs.front().getLoc();
-  auto castOp = builder.create<mlir::UnrealizedConversionCastOp>(
+  auto castOp = mlir::UnrealizedConversionCastOp::create(builder,
       loc, resultTypes, inputs);
   return castOp->getResults();
 }
@@ -314,7 +314,7 @@ mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
   llvm::SmallVector<int64_t> mask(vecUpTy.getShape()[0] +
                                   vecDownTy.getShape()[0]);
   std::iota(mask.begin(), mask.end(), 0);
-  auto op = builder.create<mlir::vector::ShuffleOp>(loc, vecUp, vecDown, mask);
+  auto op = mlir::vector::ShuffleOp::create(builder, loc, vecUp, vecDown, mask);
   return op;
 }
 
@@ -345,7 +345,7 @@ mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
   if (type)
     intAttr = mlir::IntegerAttr::get(type, intAttr.getInt());
 
-  return rewriter.create<mlir::arith::ConstantOp>(loc, intAttr);
+  return mlir::arith::ConstantOp::create(rewriter, loc, intAttr);
 }
 
 llvm::SmallVector<mlir::Value> getStridesOrOffsetsOrShapesInValueType(
@@ -397,7 +397,7 @@ mlir::Value convertToPackedVector(mlir::PatternRewriter &rewriter,
     // shape cast packed type (3D vector) to 2D vector, are required by bitcast
     auto shape = packedTy.getShape();
     vecTy = mlir::VectorType::get({shape[0], shape[1] * shape[2]}, elemTy);
-    value = rewriter.create<mlir::vector::ShapeCastOp>(loc, vecTy, value);
+    value = mlir::vector::ShapeCastOp::create(rewriter, loc, vecTy, value);
 
     // cast to 32-bit data, use i32 for intergers and f32 for floats.
     elemTy = mlir::isa<mlir::IntegerType>(elemTy)
@@ -405,7 +405,7 @@ mlir::Value convertToPackedVector(mlir::PatternRewriter &rewriter,
                  : (mlir::Type)rewriter.getF32Type();
     vecTy = mlir::VectorType::get(packedTy.getShape().take_front(2), elemTy);
     if (vecTy != packedTy)
-      value = rewriter.create<mlir::vector::BitCastOp>(loc, vecTy, value);
+      value = mlir::vector::BitCastOp::create(rewriter, loc, vecTy, value);
   }
   return value;
 }
@@ -423,7 +423,7 @@ mlir::Value convertTo1D32BitVector(mlir::Value value, mlir::Location loc,
   auto shapecastTy = mlir::VectorType::get(vecTy.getNumElements(), elemTy);
 
   if (shapecastTy != vecTy) {
-    value = rewriter.create<mlir::vector::ShapeCastOp>(loc, shapecastTy, value);
+    value = mlir::vector::ShapeCastOp::create(rewriter, loc, shapecastTy, value);
   }
 
   auto vnni = getVnniFactor(elemTy);
@@ -432,7 +432,7 @@ mlir::Value convertTo1D32BitVector(mlir::Value value, mlir::Location loc,
                  ? (mlir::Type)rewriter.getI32Type()
                  : (mlir::Type)rewriter.getF32Type();
     auto castTy = mlir::VectorType::get(vecTy.getNumElements() / vnni, elemTy);
-    value = rewriter.create<mlir::vector::BitCastOp>(loc, castTy, value);
+    value = mlir::vector::BitCastOp::create(rewriter, loc, castTy, value);
   }
   return value;
 }

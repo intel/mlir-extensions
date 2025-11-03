@@ -74,10 +74,12 @@ struct FunctionCallBuilder {
       if (auto function =
               module.lookupSymbol<mlir::LLVM::LLVMFuncOp>(functionName))
         return function;
-      return mlir::OpBuilder::atBlockEnd(module.getBody())
-          .create<mlir::LLVM::LLVMFuncOp>(loc, functionName, functionType);
+      auto blockEnd = mlir::OpBuilder::atBlockEnd(module.getBody());
+      return mlir::LLVM::LLVMFuncOp::create(
+                                blockEnd,
+                                loc, functionName, functionType);
     }();
-    return builder.create<mlir::LLVM::CallOp>(loc, function, arguments);
+    return mlir::LLVM::CallOp::create(builder, loc, function, arguments);
   }
 
 private:
@@ -227,11 +229,11 @@ private:
     mlir::MemRefDescriptor srcDesc(adaptor.getSrc());
 
     // Compute number of elements.
-    mlir::Value numElements = rewriter.create<mlir::LLVM::ConstantOp>(
+    mlir::Value numElements = mlir::LLVM::ConstantOp::create(rewriter,
         loc, getIndexType(), rewriter.getIndexAttr(1));
     for (int pos = 0; pos < srcMemRefType.getRank(); ++pos) {
       auto size = srcDesc.size(rewriter, loc, pos);
-      numElements = rewriter.create<mlir::LLVM::MulOp>(loc, numElements, size);
+      numElements = mlir::LLVM::MulOp::create(rewriter, loc, numElements, size);
     }
 
     // Get element size.
@@ -239,19 +241,19 @@ private:
         getSizeInBytes(loc, srcMemRefType.getElementType(), rewriter);
     // Compute total.
     mlir::Value totalSize =
-        rewriter.create<mlir::LLVM::MulOp>(loc, numElements, sizeInBytes);
+        mlir::LLVM::MulOp::create(rewriter, loc, numElements, sizeInBytes);
 
     mlir::Type elementType =
         typeConverter->convertType(srcMemRefType.getElementType());
 
     mlir::Value srcBasePtr = srcDesc.alignedPtr(rewriter, loc);
     mlir::Value srcOffset = srcDesc.offset(rewriter, loc);
-    mlir::Value srcPtr = rewriter.create<mlir::LLVM::GEPOp>(
+    mlir::Value srcPtr = mlir::LLVM::GEPOp::create(rewriter,
         loc, srcBasePtr.getType(), elementType, srcBasePtr, srcOffset);
     mlir::MemRefDescriptor dstDesc(adaptor.getDst());
     mlir::Value dstBasePtr = dstDesc.alignedPtr(rewriter, loc);
     mlir::Value dstOffset = dstDesc.offset(rewriter, loc);
-    mlir::Value dstPtr = rewriter.create<mlir::LLVM::GEPOp>(
+    mlir::Value dstPtr = mlir::LLVM::GEPOp::create(rewriter,
         loc, dstBasePtr.getType(), elementType, dstBasePtr, dstOffset);
 
     // Allocate the underlying buffer and store a pointer to it in the MemRef
@@ -300,9 +302,9 @@ private:
 
     auto alignment = rewriter.getIntegerAttr(llvmIndexType, 64);
     auto alignmentVar =
-        rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
+        mlir::LLVM::ConstantOp::create(rewriter, loc, llvmIndexType, alignment);
 
-    auto typeVar = rewriter.create<mlir::LLVM::ConstantOp>(
+    auto typeVar = mlir::LLVM::ConstantOp::create(rewriter,
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(isShared));
 
     // Allocate the underlying buffer and store a pointer to it in the MemRef
@@ -318,12 +320,12 @@ private:
     auto elemPtrTye = memrefDesc.getElementPtrType();
     memrefDesc.setAllocatedPtr(
         rewriter, loc,
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
+        mlir::LLVM::BitcastOp::create(rewriter, loc, elemPtrTye, allocatedPtr));
     memrefDesc.setAlignedPtr(
         rewriter, loc,
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
+        mlir::LLVM::BitcastOp::create(rewriter, loc, elemPtrTye, allocatedPtr));
 
-    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+    auto zero = mlir::LLVM::ConstantOp::create(rewriter,
         loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
 
     memrefDesc.setOffset(rewriter, loc, zero);
@@ -358,7 +360,7 @@ private:
     mlir::Value pointer =
         mlir::MemRefDescriptor(adaptor.getMemref()).allocatedPtr(rewriter, loc);
     auto casted =
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
+        mlir::LLVM::BitcastOp::create(rewriter, loc, llvmPointerType, pointer);
     auto res = deallocCallBuilder.create(loc, rewriter,
                                          {adaptor.getGpuxStream(), casted});
     rewriter.replaceOp(deallocOp, res.getResults());
@@ -404,9 +406,9 @@ private:
         mlir::IntegerType::get(builder.getContext(), 8), kernelName.size());
     auto ptrType = mlir::LLVM::LLVMPointerType::get(builder.getContext());
     // Get the pointer to the first character in the global string.
-    auto globalPtr = builder.create<mlir::LLVM::AddressOfOp>(
+    auto globalPtr = mlir::LLVM::AddressOfOp::create(builder,
         loc, ptrType, global.getSymNameAttr());
-    return builder.create<mlir::LLVM::GEPOp>(
+    return mlir::LLVM::GEPOp::create(builder,
         loc, ptrType, type, globalPtr,
         llvm::ArrayRef<mlir::LLVM::GEPArg>{0, 0});
   }
@@ -496,7 +498,7 @@ private:
                                             mlir::LLVM::Linkage::Internal);
     }
 
-    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+    auto size = mlir::LLVM::ConstantOp::create(rewriter,
         loc, llvmIndexType,
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(spirvBlob.size())));
@@ -546,23 +548,23 @@ private:
 
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
-      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+      auto size = mlir::LLVM::ConstantOp::create(rewriter,
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
-        paramsStorage[i] = rewriter.create<mlir::LLVM::AllocaOp>(
+        paramsStorage[i] = mlir::LLVM::AllocaOp::create(rewriter,
             loc, llvmPointerType, getKernelParamType(i), size, 0);
       }
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmPointerType,
+      return mlir::LLVM::AllocaOp::create(rewriter, loc, llvmPointerType,
                                                    paramsArrayType, size, 0);
     });
 
-    mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
+    mlir::Value one = mlir::LLVM::ConstantOp::create(rewriter,
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
-      auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, type);
-      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, llvmPointerType,
+      auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, type);
+      auto gep = mlir::LLVM::GEPOp::create(rewriter, loc, type, llvmPointerType,
                                                     nullPtr, one);
-      return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+      return mlir::LLVM::PtrToIntOp::create(rewriter, loc, llvmIndexType, gep);
     };
 
     auto getKernelParam =
@@ -580,41 +582,42 @@ private:
       return {size, kernelParams[i]};
     };
 
+    mlir::SmallVector<int64_t> pos_0{0};
     mlir::Value paramsArray =
-        rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
+        mlir::LLVM::UndefOp::create(rewriter, loc, paramsArrayType);
 
     for (auto i : llvm::seq(0u, paramsCount)) {
       auto param = getKernelParam(i);
-      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
-      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+      mlir::LLVM::StoreOp::create(rewriter, loc, param.second, paramsStorage[i]);
+      auto ptr = mlir::LLVM::BitcastOp::create(rewriter, loc, llvmPointerType,
                                                         paramsStorage[i]);
 
       auto typeSize = param.first;
 
       mlir::Value range =
-          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, ptr, 0);
+          mlir::LLVM::UndefOp::create(rewriter, loc, llvmRangeType);
+      range = mlir::LLVM::InsertValueOp::create(rewriter, loc, range, ptr, pos_0);
       range =
-          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, typeSize, 1);
+          mlir::LLVM::InsertValueOp::create(rewriter, loc, range, typeSize, 1);
 
-      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, paramsArray,
+      paramsArray = mlir::LLVM::InsertValueOp::create(rewriter, loc, paramsArray,
                                                                range, i);
     }
 
-    auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
+    auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
     auto nullRange = [&]() {
-      auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+      auto zero = mlir::LLVM::ConstantOp::create(rewriter,
           loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
       mlir::Value range =
-          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+          mlir::LLVM::UndefOp::create(rewriter, loc, llvmRangeType);
       range =
-          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, nullPtr, 0);
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, zero, 1);
+          mlir::LLVM::InsertValueOp::create(rewriter, loc, range, nullPtr, pos_0);
+      range = mlir::LLVM::InsertValueOp::create(rewriter, loc, range, zero, 1);
       return range;
     }();
-    paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+    paramsArray = mlir::LLVM::InsertValueOp::create(rewriter,
         loc, paramsArray, nullRange, paramsCount);
-    rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
+    mlir::LLVM::StoreOp::create(rewriter, loc, paramsArray, paramsArrayPtr);
 
     /////////////////////////////////////////////////////////////////////
     // Create an array of struct containing all events and insert
@@ -641,38 +644,38 @@ private:
         mlir::LLVM::LLVMArrayType::get(llvmEventType, eventsCount + 1);
 
     auto eventsArrayPtr = allocaHelper.insert(rewriter, [&]() {
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmPointerType,
+      return mlir::LLVM::AllocaOp::create(rewriter, loc, llvmPointerType,
                                                    eventsArrayType, size, 0);
     });
 
     mlir::Value eventsArray =
-        rewriter.create<mlir::LLVM::UndefOp>(loc, eventsArrayType);
+        mlir::LLVM::UndefOp::create(rewriter, loc, eventsArrayType);
 
     for (auto i : llvm::seq(0u, eventsCount)) {
       mlir::Value evt =
-          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmEventType);
-      evt = rewriter.create<mlir::LLVM::InsertValueOp>(loc, evt, events[i], 0);
+          mlir::LLVM::UndefOp::create(rewriter, loc, llvmEventType);
+      evt = mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, events[i], pos_0);
       eventsArray =
-          rewriter.create<mlir::LLVM::InsertValueOp>(loc, eventsArray, evt, i);
+          mlir::LLVM::InsertValueOp::create(rewriter, loc, eventsArray, evt, i);
     }
 
     auto nullEvent = [&]() {
-      auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
+      auto nullPtr = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
       mlir::Value evt =
-          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmEventType);
-      return rewriter.create<mlir::LLVM::InsertValueOp>(loc, evt, nullPtr, 0);
+          mlir::LLVM::UndefOp::create(rewriter, loc, llvmEventType);
+      return mlir::LLVM::InsertValueOp::create(rewriter, loc, evt, nullPtr, pos_0);
     }();
 
-    eventsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+    eventsArray = mlir::LLVM::InsertValueOp::create(rewriter,
         loc, eventsArray, nullEvent, eventsCount);
-    rewriter.create<mlir::LLVM::StoreOp>(loc, eventsArray, eventsArrayPtr);
+    mlir::LLVM::StoreOp::create(rewriter, loc, eventsArray, eventsArrayPtr);
 
     /////////////////////////////////////////////////////////////////////////
 
     // Get pointer to array of kernel parameters and call launch kernel
-    auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
+    auto paramsArrayVoidPtr = mlir::LLVM::BitcastOp::create(rewriter,
         loc, llvmRangePointerType, paramsArrayPtr);
-    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+    auto zero = mlir::LLVM::ConstantOp::create(rewriter,
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
     mlir::Value dynamicSharedMemorySize =
         adaptor.getDynamicSharedMemorySize()
@@ -741,8 +744,8 @@ private:
     // TODO: Pass nullptrs now for the current workflow where user is
     // not passing device and context. Add different streambuilders
     // later.
-    auto device = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
-    auto context = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
+    auto device = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
+    auto context = mlir::LLVM::ZeroOp::create(rewriter, loc, llvmPointerType);
     auto res = streamCreateCallBuilder.create(loc, rewriter, {device, context});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
