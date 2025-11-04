@@ -53,7 +53,7 @@ void EnvironmentRegionOp::getSuccessorRegions(
   }
 
   // Otherwise, the region branches back to the parent operation.
-  regions.push_back(::mlir::RegionSuccessor(getResults()));
+  regions.push_back(::mlir::RegionSuccessor(getOperation(), getResults()));
 }
 
 void EnvironmentRegionOp::inlineIntoParent(::mlir::PatternRewriter &builder,
@@ -140,16 +140,16 @@ struct MergeAdjacentRegions
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.inlineBlockBefore(nextBody, term);
       rewriter.setInsertionPoint(term);
-      rewriter.create<EnvironmentRegionYieldOp>(term->getLoc(), newYieldArgs);
+      EnvironmentRegionYieldOp::create(rewriter, term->getLoc(), newYieldArgs);
       rewriter.eraseOp(term);
       rewriter.eraseOp(nextTerm);
     }
 
     // Construct new env region op and steal new merged region into it.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
-    auto newOp = rewriter.create<EnvironmentRegionOp>(
-        op->getLoc(), newYieldArgsRange.getTypes(), op.getEnvironment(),
-        op.getArgs());
+    auto newOp = EnvironmentRegionOp::create(rewriter, op->getLoc(),
+                                             newYieldArgsRange.getTypes(),
+                                             op.getEnvironment(), op.getArgs());
     mlir::Region &newRegion = newOp.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
 
@@ -208,9 +208,9 @@ struct CleanupRegionYieldArgs
 
     // Construct new env region op, only yielding values we selected.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
-    auto newOp = rewriter.create<EnvironmentRegionOp>(
-        op->getLoc(), newYieldArgsRange.getTypes(), op.getEnvironment(),
-        op.getArgs());
+    auto newOp = EnvironmentRegionOp::create(rewriter, op->getLoc(),
+                                             newYieldArgsRange.getTypes(),
+                                             op.getEnvironment(), op.getArgs());
     mlir::Region &newRegion = newOp.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
     {

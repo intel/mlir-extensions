@@ -105,12 +105,12 @@ public:
               auto newTy =
                   VectorType::get(vecTy.getShape(), builder.getF32Type());
               auto newOp =
-                  builder.create<arith::ExtFOp>(o->getLoc(), newTy, oper);
+                  arith::ExtFOp::create(builder, o->getLoc(), newTy, oper);
               o->setOperand(idx, newOp);
             }
           } else if (oper.getType().isBF16()) {
-            auto newOp = builder.create<arith::ExtFOp>(
-                o->getLoc(), builder.getF32Type(), oper);
+            auto newOp = arith::ExtFOp::create(builder, o->getLoc(),
+                                               builder.getF32Type(), oper);
             o->setOperand(idx, newOp);
           }
           idx++;
@@ -125,14 +125,14 @@ public:
               auto newTy =
                   VectorType::get(vecTy.getShape(), builder.getBF16Type());
               auto newRes =
-                  builder.create<arith::TruncFOp>(o->getLoc(), newTy, res);
+                  arith::TruncFOp::create(builder, o->getLoc(), newTy, res);
               res.replaceAllUsesExcept(newRes, newRes);
             }
           } else if (res.getType().isBF16()) {
             res.setType(builder.getF32Type());
             builder.setInsertionPointAfter(o);
-            auto newRes = builder.create<arith::TruncFOp>(
-                o->getLoc(), builder.getBF16Type(), res);
+            auto newRes = arith::TruncFOp::create(builder, o->getLoc(),
+                                                  builder.getBF16Type(), res);
             res.replaceAllUsesExcept(newRes, newRes);
           }
         }

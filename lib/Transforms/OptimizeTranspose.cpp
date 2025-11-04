@@ -58,7 +58,7 @@ namespace imex {
 } // namespace imex
 
 #define index_val(value)                                                       \
-  rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(value))
+  arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(value))
 
 using namespace mlir;
 
@@ -352,17 +352,17 @@ static TypedValue<::mlir::VectorType> pack(TypedValue<::mlir::VectorType> value,
   auto loc = value.getLoc();
   // first cast the value to 1D shape
   auto vecTy = VectorType::get({type.getNumElements()}, elemTy);
-  value = rewriter.create<vector::ShapeCastOp>(loc, vecTy, value);
+  value = vector::ShapeCastOp::create(rewriter, loc, vecTy, value);
 
   // cast to 32-bit data, use i32 for intergers and f32 for floats.
   elemTy = elemTy.isInteger() ? (Type)rewriter.getIntegerType(32)
                               : (Type)rewriter.getF32Type();
   vecTy = VectorType::get({shape[0] * shape[1]}, elemTy);
-  value = rewriter.create<vector::BitCastOp>(loc, vecTy, value);
+  value = vector::BitCastOp::create(rewriter, loc, vecTy, value);
 
   // cast to 2D shape
   vecTy = VectorType::get({shape[0], shape[1]}, elemTy);
-  return rewriter.create<vector::ShapeCastOp>(loc, vecTy, value);
+  return vector::ShapeCastOp::create(rewriter, loc, vecTy, value);
 }
 
 static void createStoreScatter(Value data, Value slm, Value base,
@@ -382,22 +382,23 @@ static void createStoreScatter(Value data, Value slm, Value base,
   }
   auto addrTy = VectorType::get(simdLanes, base.getType());
   auto denseOffsets = DenseIntElementsAttr::get(addrTy, staticOffsets);
-  Value offsets = rewriter.create<arith::ConstantOp>(loc, denseOffsets);
-  base = rewriter.create<vector::BroadcastOp>(loc, addrTy, base);
-  offsets = rewriter.create<arith::AddIOp>(loc, base, offsets);
+  Value offsets = arith::ConstantOp::create(rewriter, loc, denseOffsets);
+  base = vector::BroadcastOp::create(rewriter, loc, addrTy, base);
+  offsets = arith::AddIOp::create(rewriter, loc, base, offsets);
   llvm::SmallVector<int64_t> tdescShape({simdLanes});
   if (chunkSize > 1)
     tdescShape.push_back(chunkSize);
 
   auto tdescTy = xegpu::TensorDescType::get(tdescShape, type.getElementType(),
                                             chunkSize, xegpu::MemorySpace::SLM);
-  auto desc = rewriter.create<xegpu::CreateDescOp>(loc, tdescTy, slm, offsets);
+  auto desc = xegpu::CreateDescOp::create(rewriter, loc, tdescTy, slm, offsets);
 
   auto maskTy = VectorType::get(simdLanes, rewriter.getI1Type());
-  auto mask = rewriter.create<arith::ConstantOp>(
-      loc, DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
-  rewriter.create<xegpu::StoreScatterOp>(loc, data, desc, mask, nullptr /*L1*/,
-                                         nullptr /*L2*/, nullptr /*L3*/);
+  auto mask = arith::ConstantOp::create(
+      rewriter, loc,
+      DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
+  xegpu::StoreScatterOp::create(rewriter, loc, data, desc, mask, nullptr /*L1*/,
+                                nullptr /*L2*/, nullptr /*L3*/);
 }
 
 static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
@@ -422,21 +423,21 @@ static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
 
   for (auto i = 0; i < numLoads; i++) {
     Value offset =
-        rewriter.create<arith::AddIOp>(loc, base, index_val(i * vectSize));
-    auto tdesc = rewriter.create<xegpu::CreateNdDescOp>(
-        loc, tdescTy, slm, llvm::ArrayRef<OpFoldResult>({offset}));
-    Value value = rewriter.create<xegpu::LoadNdOp>(
-        loc, loadTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
+        arith::AddIOp::create(rewriter, loc, base, index_val(i * vectSize));
+    auto tdesc = xegpu::CreateNdDescOp::create(
+        rewriter, loc, tdescTy, slm, llvm::ArrayRef<OpFoldResult>({offset}));
+    Value value = xegpu::LoadNdOp::create(
+        rewriter, loc, loadTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
         nullptr /*packed*/, nullptr /*transpose*/,
         nullptr /*transpose_bit_width*/, nullptr /*l1_hint*/,
         nullptr /*l2_hint*/, nullptr /*l3_hint*/);
     // if original data is not 32-bit, need to bitcast current 32-bit data
     //  back to original element type.
     if (bitWidth < 32)
-      value = rewriter.create<vector::BitCastOp>(loc, target1DTy, value);
+      value = vector::BitCastOp::create(rewriter, loc, target1DTy, value);
 
     // shape cast the value to 2D shape.
-    value = rewriter.create<vector::ShapeCastOp>(loc, target2DTy, value);
+    value = vector::ShapeCastOp::create(rewriter, loc, target2DTy, value);
     loads.push_back(value);
   }
   auto result = loads[0];
@@ -481,16 +482,16 @@ struct CreateNdDescOpPattern
     auto origOffsetY = op.getOffsets().back();
     for (int64_t i = 0; i < arrayLength; ++i) {
       auto attr = rewriter.getIndexAttr(i * tdescTy.getShape()[1]);
-      auto offsetIncrementY = rewriter.create<mlir::arith::ConstantOp>(
-          op->getLoc(), rewriter.getIndexType(), attr);
+      auto offsetIncrementY = mlir::arith::ConstantOp::create(
+          rewriter, op->getLoc(), rewriter.getIndexType(), attr);
       // Y offset is adjusted based on col dim size.
-      auto offsetY = rewriter.create<mlir::arith::AddIOp>(
-          op->getLoc(), origOffsetY, offsetIncrementY);
+      auto offsetY = mlir::arith::AddIOp::create(rewriter, op->getLoc(),
+                                                 origOffsetY, offsetIncrementY);
       SmallVector<OpFoldResult> offsets =
           op.getOffsets().drop_back(); // offsets excluding Y offset.
       offsets.push_back(offsetY->getResult(0));
-      auto newOp = rewriter.create<xegpu::CreateNdDescOp>(
-          op.getLoc(), newTdescTy, memrefTypedSource, offsets);
+      auto newOp = xegpu::CreateNdDescOp::create(
+          rewriter, op.getLoc(), newTdescTy, memrefTypedSource, offsets);
       createNdDescOps.push_back(newOp);
     }
 
@@ -515,9 +516,9 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
     auto newLoadTy = VectorType::get(op.getTensorDescType().getShape(),
                                      op.getType().getElementType());
     for (auto source : tdescSources) {
-      auto loadNdOp = rewriter.create<xegpu::LoadNdOp>(
-          op.getLoc(), newLoadTy, source, ValueRange(), DenseI64ArrayAttr(),
-          op.getPackedAttr(), op.getTransposeAttr(),
+      auto loadNdOp = xegpu::LoadNdOp::create(
+          rewriter, op.getLoc(), newLoadTy, source, ValueRange(),
+          DenseI64ArrayAttr(), op.getPackedAttr(), op.getTransposeAttr(),
           op.getTransposeBitWidthAttr(), op.getL1HintAttr(), op.getL2HintAttr(),
           op.getL3HintAttr());
       loadNdOps.push_back(loadNdOp);
@@ -557,9 +558,9 @@ struct ScfForOpPattern : public OpConversionPattern<scf::ForOp> {
     }
     rewriter.applySignatureConversion(oldBody, signatureConversion);
     // Create a new ForOp.
-    auto newForOp = rewriter.create<scf::ForOp>(
-        op.getLoc(), op.getLowerBound(), op.getUpperBound(), op.getStep(),
-        flattenedRemappedInitArgs);
+    auto newForOp = scf::ForOp::create(rewriter, op.getLoc(),
+                                       op.getLowerBound(), op.getUpperBound(),
+                                       op.getStep(), flattenedRemappedInitArgs);
     rewriter.eraseBlock(newForOp.getBody());
     rewriter.inlineRegionBefore(op.getRegion(), newForOp.getRegion(),
                                 newForOp.getRegion().begin());
@@ -642,8 +643,9 @@ struct UpdateNdOffsetOpPattern final
     dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
     llvm::SmallVector<Value> newOps;
     for (auto source : tdescSources) {
-      auto newOp = rewriter.create<xegpu::UpdateNdOffsetOp>(
-          op.getLoc(), source.getType(), source, dynamicOffsets, staticOffsets);
+      auto newOp = xegpu::UpdateNdOffsetOp::create(
+          rewriter, op.getLoc(), source.getType(), source, dynamicOffsets,
+          staticOffsets);
       newOps.push_back(newOp);
     }
     rewriter.replaceOpWithMultiple(op, {newOps});
@@ -791,15 +793,16 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       // TODO: get the number from uArch.
       int64_t totSlmSize = 64 * numElems;
       auto slmTy = MemRefType::get({totSlmSize}, elemTy, {}, 3);
-      auto slm = rewriter.create<memref::AllocOp>(loc, slmTy);
+      auto slm = memref::AllocOp::create(rewriter, loc, slmTy);
 
-      auto sgId = rewriter.create<gpu::SubgroupIdOp>(
-          loc, rewriter.getIndexType(), nullptr /* upper_bound*/);
-      auto offset = rewriter.create<arith::MulIOp>(
-          loc, sgId, index_val(numElems), nullptr /* overflowFlags */);
+      auto sgId = gpu::SubgroupIdOp::create(
+          rewriter, loc, rewriter.getIndexType(), nullptr /* upper_bound*/);
+      auto offset =
+          arith::MulIOp::create(rewriter, loc, sgId, index_val(numElems),
+                                nullptr /* overflowFlags */);
 
       data =
-          rewriter.create<vector::TransposeOp>(loc, data, op.getPermutation());
+          vector::TransposeOp::create(rewriter, loc, data, op.getPermutation());
 
       // store data using store_scatter to SLM at the given offset.
       createStoreScatter(data, slm, offset, rewriter);
@@ -846,10 +849,10 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto transposeBitWidthAttr = IntegerAttr::get(
           rewriter.getIntegerType(32),
           32); // need to do a 32 bit transpose to get the packed layout.
-      auto newLoadOp = rewriter.create<xegpu::LoadNdOp>(
-          loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), ValueRange(),
-          DenseI64ArrayAttr(), packedAttr, transposeAttr, transposeBitWidthAttr,
-          loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+      auto newLoadOp = xegpu::LoadNdOp::create(
+          rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
+          ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
+          transposeBitWidthAttr, loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
           loadOp.getL3HintAttr());
       // Replace the uses of the packed layout conversion with new load.
       rewriter.replaceAllUsesWith(packedLayoutOps.back()->getResult(0),
@@ -871,10 +874,10 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
       auto packedAttr = UnitAttr(); // empty packed attribute.
       auto transposeAttr =
           DenseI64ArrayAttr::get(rewriter.getContext(), {1, 0});
-      auto newLoadOp = rewriter.create<xegpu::LoadNdOp>(
-          loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(), ValueRange(),
-          DenseI64ArrayAttr(), packedAttr, transposeAttr, IntegerAttr(),
-          loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
+      auto newLoadOp = xegpu::LoadNdOp::create(
+          rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
+          ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
+          IntegerAttr(), loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
           loadOp.getL3HintAttr());
       rewriter.replaceAllUsesWith(op.getResult(), newLoadOp.getResult());
     }

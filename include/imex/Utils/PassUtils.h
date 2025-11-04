@@ -42,7 +42,7 @@ template <typename T>
 ::mlir::Value createFloat(const ::mlir::Location &loc,
                           ::mlir::OpBuilder &builder, T val, int W = 64) {
   auto attr = getFloatAttr(builder, val, W);
-  return builder.create<::mlir::arith::ConstantOp>(loc, attr);
+  return ::mlir::arith::ConstantOp::create(builder, loc, attr);
 }
 
 /// @return get ::mlir::IntegerAttr with given Value and bitwidth W
@@ -56,7 +56,7 @@ inline ::mlir::Value createInt(const ::mlir::Location &loc,
                                ::mlir::OpBuilder &builder, int64_t val,
                                int W = 64) {
   auto attr = getIntAttr(builder, val, W);
-  return builder.create<::mlir::arith::ConstantOp>(loc, attr);
+  return ::mlir::arith::ConstantOp::create(builder, loc, attr);
 }
 
 /// @return new index ::mlir::Value with given Value
@@ -204,7 +204,7 @@ extern ::mlir::Value createExtractPtrFromMemRef(::mlir::OpBuilder &builder,
   auto off = easyIdx(loc, builder, meta.getOffset());
   auto aptr = easyIdx(
       loc, builder,
-      builder.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(loc, mr));
+      ::mlir::memref::ExtractAlignedPointerAsIndexOp::create(builder, loc, mr));
   return (aptr + (off * easyIdx(loc, builder, sizeof(uint64_t)))).get();
 }
 

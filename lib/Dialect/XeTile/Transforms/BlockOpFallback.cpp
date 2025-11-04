@@ -184,8 +184,8 @@ public:
     // reinterpret_cast to flat memref of flatSize
     mlir::MemRefLayoutAttrInterface layout = {};
     // Is source offset always 0? No API to check.
-    auto flatMemref = rewriter.create<mlir::memref::ReinterpretCastOp>(
-        initTileOp.getLoc(),
+    auto flatMemref = mlir::memref::ReinterpretCastOp::create(
+        rewriter, initTileOp.getLoc(),
         mlir::MemRefType::get({flatSize}, initTileOp.getSourceMemrefElemType(),
                               layout, initTileOp.getSourceMemorySpace()),
         initTileOp.getSource(), 0, llvm::ArrayRef<int64_t>{flatSize},
@@ -410,8 +410,9 @@ struct UpdateTileOffsetOpPattern final
     auto pitchNumElems = baseShape[baseShape.size() - 1];
     auto loc = updateTileOffsetOp.getLoc();
     // Create update indices by doing vector.splat with (offX*stride + offY)
-    auto pitch = rewriter.create<mlir::arith::ConstantOp>(
-        loc, rewriter.getIndexType(), rewriter.getIndexAttr(pitchNumElems));
+    auto pitch =
+        mlir::arith::ConstantOp::create(rewriter, loc, rewriter.getIndexType(),
+                                        rewriter.getIndexAttr(pitchNumElems));
     auto offX = updateTileOffsetOp.getOffsetX();
     auto stride = rewriter.createOrFold<mlir::arith::MulIOp>(
         loc, rewriter.getIndexType(), offX, pitch);

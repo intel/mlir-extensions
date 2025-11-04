@@ -383,9 +383,9 @@ static void replaceUsesAndPropagateType(
         mlir::cast<mlir::MemRefType>(val.getType()),
         subviewUse.getStaticOffsets(), subviewUse.getStaticSizes(),
         subviewUse.getStaticStrides());
-    mlir::Value newSubview = rewriter.create<mlir::memref::SubViewOp>(
-        subviewUse->getLoc(), mlir::cast<mlir::MemRefType>(newType), val,
-        subviewUse.getMixedOffsets(), subviewUse.getMixedSizes(),
+    mlir::Value newSubview = mlir::memref::SubViewOp::create(
+        rewriter, subviewUse->getLoc(), mlir::cast<mlir::MemRefType>(newType),
+        val, subviewUse.getMixedOffsets(), subviewUse.getMixedSizes(),
         subviewUse.getMixedStrides());
 
     // Ouch recursion ... is this really necessary?

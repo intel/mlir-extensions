@@ -38,8 +38,8 @@ FlatSymbolRefAttr getFuncRefAttr(gpu::GPUModuleOp module, StringRef name,
   auto func = module.lookupSymbol<func::FuncOp>(result.getAttr());
   if (!func) {
     OpBuilder moduleBuilder(module.getBodyRegion());
-    func = moduleBuilder.create<func::FuncOp>(
-        module.getLoc(), name,
+    func = func::FuncOp::create(
+        moduleBuilder, module.getLoc(), name,
         FunctionType::get(context, operands.getTypes(), resultType));
 
     func.setPrivate();
@@ -75,7 +75,7 @@ func::CallOp createFuncCall(PatternRewriter &rewriter, Location loc,
   FlatSymbolRefAttr fn = getFuncRefAttr(
       module, funcName, resultType, operands,
       true /*isVectorComputeFunctionINTEL=true*/, emitCInterface);
-  return rewriter.create<func::CallOp>(loc, fn, resultType, operands);
+  return func::CallOp::create(rewriter, loc, fn, resultType, operands);
 }
 
 Value getOffsetInUnitOfBytes(PatternRewriter &rewriter, Location loc,

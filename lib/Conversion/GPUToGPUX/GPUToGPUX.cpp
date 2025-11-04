@@ -50,12 +50,11 @@ static mlir::Value getGpuStream(mlir::OpBuilder &builder, mlir::Operation *op) {
   mlir::OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&block);
   auto loc = builder.getUnknownLoc();
-  auto stream =
-      builder
-          .create<imex::gpux::CreateStreamOp>(loc, mlir::Value{}, mlir::Value{})
-          .getResult();
+  auto stream = imex::gpux::CreateStreamOp::create(builder, loc, mlir::Value{},
+                                                   mlir::Value{})
+                    .getResult();
   builder.setInsertionPoint(block.getTerminator());
-  builder.create<imex::gpux::DestroyStreamOp>(loc, stream);
+  imex::gpux::DestroyStreamOp::create(builder, loc, stream);
   return stream;
 }
 
@@ -133,8 +132,8 @@ struct ConvertLaunchOp
 
     auto loc = op.getLoc();
     mlir::Value asyncToken = op.getAsyncToken();
-    auto gpux_launch_func = rewriter.create<imex::gpux::LaunchFuncOp>(
-        loc, stream, gpuKernel, op.getGridSizeOperandValues(),
+    auto gpux_launch_func = imex::gpux::LaunchFuncOp::create(
+        rewriter, loc, stream, gpuKernel, op.getGridSizeOperandValues(),
         op.getBlockSizeOperandValues(), op.getDynamicSharedMemorySize(),
         op.getKernelOperands(), asyncToken ? asyncToken.getType() : nullptr,
         op.getAsyncDependencies());

@@ -58,7 +58,7 @@ struct RuntimePrototypes {
 
     auto decl = [&](auto _fname, auto _args) {
       auto funcType = builder.getFunctionType(_args, results);
-      auto func = builder.create<::mlir::func::FuncOp>(loc, _fname, funcType);
+      auto func = ::mlir::func::FuncOp::create(builder, loc, _fname, funcType);
       func.setPrivate();
     };
 
@@ -157,12 +157,12 @@ struct CopyReshapeOpPattern
     auto nlShape = op.getNlShape();
 
     // create output array with target size
-    auto nlArray = rewriter.create<::mlir::tensor::EmptyOp>(
-        loc, op.getNlArray().getType(), nlShape);
+    auto nlArray = ::mlir::tensor::EmptyOp::create(
+        rewriter, loc, op.getNlArray().getType(), nlShape);
 
     auto idxType = rewriter.getIndexType();
-    auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
-        loc, mlir::cast<::mlir::IntegerAttr>(team));
+    auto teamC = ::mlir::arith::ConstantOp::create(
+        rewriter, loc, mlir::cast<::mlir::IntegerAttr>(team));
     auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
     auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
     auto lArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lArray);
@@ -173,8 +173,8 @@ struct CopyReshapeOpPattern
 
     auto fun =
         rewriter.getStringAttr(mkTypedFunc("_idtr_copy_reshape", elType));
-    auto handle = rewriter.create<::mlir::func::CallOp>(
-        loc, fun, rewriter.getI64Type(),
+    auto handle = ::mlir::func::CallOp::create(
+        rewriter, loc, fun, rewriter.getI64Type(),
         ::mlir::ValueRange{teamC, gShapeMR, lOffsMR, lArrayMR, ngShapeMR,
                            nlOffsMR, nlArrayMR});
     rewriter.replaceOp(op, {handle.getResult(0), nlArray});
@@ -204,16 +204,16 @@ struct CopyPermuteOpPattern
     ::mlir::SmallVector<::mlir::Value> axesValues;
     for (auto axis : axes) {
       axesValues.emplace_back(
-          rewriter.create<::mlir::arith::ConstantIndexOp>(loc, axis));
+          ::mlir::arith::ConstantIndexOp::create(rewriter, loc, axis));
     }
 
     // create output array with target size
-    auto nlArray = rewriter.create<::mlir::tensor::EmptyOp>(
-        loc, op.getNlArray().getType(), nlShape);
+    auto nlArray = ::mlir::tensor::EmptyOp::create(
+        rewriter, loc, op.getNlArray().getType(), nlShape);
 
     auto idxType = rewriter.getIndexType();
-    auto teamC = rewriter.create<::mlir::arith::ConstantOp>(
-        loc, mlir::cast<::mlir::IntegerAttr>(team));
+    auto teamC = ::mlir::arith::ConstantOp::create(
+        rewriter, loc, mlir::cast<::mlir::IntegerAttr>(team));
     auto gShapeMR = createURMemRefFromElements(rewriter, loc, idxType, gShape);
     auto lOffsMR = createURMemRefFromElements(rewriter, loc, idxType, lOffs);
     auto lArrayMR = ::imex::ndarray::mkURMemRef(loc, rewriter, lArray);
@@ -224,8 +224,8 @@ struct CopyPermuteOpPattern
 
     auto fun =
         rewriter.getStringAttr(mkTypedFunc("_idtr_copy_permute", elType));
-    auto handle = rewriter.create<::mlir::func::CallOp>(
-        loc, fun, rewriter.getI64Type(),
+    auto handle = ::mlir::func::CallOp::create(
+        rewriter, loc, fun, rewriter.getI64Type(),
         ::mlir::ValueRange{teamC, gShapeMR, lOffsMR, lArrayMR, nlOffsMR,
                            nlArrayMR, axesMR});
     rewriter.replaceOp(op, {handle.getResult(0), nlArray});

@@ -94,11 +94,11 @@ private:
       builder.setInsertionPoint(op);
       auto loc = op->getLoc();
       mlir::Value cst0 =
-          builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(0));
+          arith::ConstantOp::create(builder, loc, builder.getIndexAttr(0));
       mlir::Value cst1 =
-          builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(1));
+          arith::ConstantOp::create(builder, loc, builder.getIndexAttr(1));
       scf::ParallelOp outer =
-          builder.create<scf::ParallelOp>(loc, cst0, cst1, cst1);
+          scf::ParallelOp::create(builder, loc, cst0, cst1, cst1);
       auto yieldOp = outer.getBody()->getTerminator();
       for (auto op : ops) {
         op->moveBefore(yieldOp);
