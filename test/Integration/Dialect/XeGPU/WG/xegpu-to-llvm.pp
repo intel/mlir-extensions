@@ -16,6 +16,7 @@ builtin.module(
       loop-invariant-code-motion
       cse
       xegpu-vector-linearize
+      convert-math-to-xevm
       convert-xegpu-to-xevm
       convert-gpu-to-llvm-spv{use-64bit-index=true}
       convert-xevm-to-llvm
