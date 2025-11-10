@@ -31,32 +31,6 @@ index 426377fcf598..f77aaf0bd02e 100644
 +}
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
-diff --git a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-index e2c7d803e5a5..a55a9a233209 100644
---- a/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-+++ b/mlir/lib/Conversion/VectorToXeGPU/VectorToXeGPU.cpp
-@@ -535,7 +535,9 @@ struct TransferReadLowering : public OpRewritePattern<vector::TransferReadOp> {
-     // By default, no specific caching policy is assigned.
-     xegpu::CachePolicyAttr hint = nullptr;
-     auto loadOp = xegpu::LoadNdOp::create(rewriter, loc, vecTy, ndDesc,
-+                                          ValueRange(), DenseI64ArrayAttr(),
-                                           /*packed=*/nullptr, transposeAttr,
-+                                          /*transpose_bit_width*/nullptr,
-                                           /*l1_hint=*/hint,
-                                           /*l2_hint=*/hint, /*l3_hint=*/hint);
-     rewriter.replaceOp(readOp, loadOp);
-@@ -684,7 +686,10 @@ struct LoadLowering : public OpRewritePattern<vector::LoadOp> {
-     // By default, no specific caching policy is assigned.
-     xegpu::CachePolicyAttr hint = nullptr;
-     auto loadNdOp = xegpu::LoadNdOp::create(
--        rewriter, loc, vecTy, ndDesc, /*packed=*/nullptr, /*transpose=*/nullptr,
-+        rewriter, loc, vecTy, ndDesc,
-+        ValueRange(), DenseI64ArrayAttr(),
-+        /*packed=*/nullptr, /*transpose=*/nullptr,
-+        /*transpose_bit_width*/nullptr,
-         /*l1_hint=*/hint,
-         /*l2_hint=*/hint, /*l3_hint=*/hint);
-     rewriter.replaceOp(loadOp, loadNdOp);
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 index abd12e2e69ac..7d076503c1a9 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
