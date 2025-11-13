@@ -1,0 +1,406 @@
+From 3881cc54a21ba2638ba84127ac3b973dda3201cc Mon Sep 17 00:00:00 2001
+From: "Shahneous Bari, Md Abdullah" <md.abdullah.shahneous.bari@intel.com>
+Date: Tue, 21 Oct 2025 01:05:24 +0000
+Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrapper.
+
+---
+ .../LevelZeroRuntimeWrappers.cpp              | 334 +++++++++++++++++-
+ 1 file changed, 316 insertions(+), 18 deletions(-)
+
+diff --git a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
+index d0728274b94c..c728e3576f11 100644
+--- a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
++++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
+@@ -13,12 +13,16 @@
+ #include "llvm/ADT/Twine.h"
+ 
+ #include "level_zero/ze_api.h"
++#include <algorithm>
++#include <atomic>
+ #include <cassert>
++#include <cmath>
+ #include <deque>
+ #include <exception>
+ #include <functional>
+ #include <iostream>
+ #include <limits>
++#include <numeric>
+ #include <unordered_set>
+ #include <vector>
+ 
+@@ -328,6 +332,92 @@ struct DynamicEventPool {
+   }
+ };
+ 
++// EventPool TimeStamp events, needed for profiling
++struct TimeStampEventPool {
++  static constexpr size_t kNumEventsPerPool{128};
++
++  std::vector<UniqueZeEventPool> eventPools{};
++  std::vector<UniqueZeEvent> availableEvents{};
++  std::unordered_map<ze_event_handle_t, UniqueZeEvent> takenEvents{};
++  L0RTContextWrapper *rtCtx{nullptr};
++
++  size_t currentEventsCount{0};
++  size_t currentEventsLimit{0};
++  const size_t maxEventsCount{32768}; // 32K events
++  bool initialized{false};
++
++  explicit TimeStampEventPool(L0RTContextWrapper *context) : rtCtx{context} {}
++
++  TimeStampEventPool(const TimeStampEventPool &) = delete;
++  TimeStampEventPool &operator=(const TimeStampEventPool &) = delete;
++
++  /// Lazily create the first event pool
++  void lazyInit() {
++    if (initialized)
++      return;
++    createNewPool(kNumEventsPerPool);
++    initialized = true;
++  }
++
++  void createNewPool(size_t numEvents) {
++    assert(rtCtx && "Runtime context must be set for TimeStampEventPool.");
++
++    ze_event_pool_desc_t poolDesc{};
++    poolDesc.stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC;
++    poolDesc.flags =
++        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE;
++    poolDesc.count = static_cast<uint32_t>(numEvents);
++
++    ze_event_pool_handle_t pool{nullptr};
++    L0_SAFE_CALL(zeEventPoolCreate(rtCtx->context.get(), &poolDesc, 1,
++                                   &rtCtx->device, &pool));
++
++    eventPools.emplace_back(UniqueZeEventPool{pool});
++    currentEventsLimit += numEvents;
++  }
++
++  ze_event_handle_t takeEvent() {
++    lazyInit();
++
++    if (!availableEvents.empty()) {
++      auto ev = std::move(availableEvents.back());
++      availableEvents.pop_back();
++      ze_event_handle_t raw{ev.get()};
++      takenEvents[raw] = std::move(ev);
++      return raw;
++    }
++
++    if (currentEventsCount >= maxEventsCount)
++      throw std::runtime_error{"TimeStampEventPool: reached max event limit."};
++
++    if (currentEventsCount == currentEventsLimit)
++      createNewPool(kNumEventsPerPool);
++
++    ze_event_desc_t desc{};
++    desc.stype = ZE_STRUCTURE_TYPE_EVENT_DESC;
++    desc.index = static_cast<uint32_t>(currentEventsCount % kNumEventsPerPool);
++    desc.signal = ZE_EVENT_SCOPE_FLAG_HOST; // ZE_EVENT_SCOPE_FLAG_DEVICE;
++    desc.wait = ZE_EVENT_SCOPE_FLAG_HOST;
++
++    ze_event_handle_t ev{nullptr};
++    L0_SAFE_CALL(zeEventCreate(eventPools.back().get(), &desc, &ev));
++
++    takenEvents[ev] = UniqueZeEvent{ev};
++    ++currentEventsCount;
++    return ev;
++  }
++
++  void releaseEvent(ze_event_handle_t ev) {
++    auto it = takenEvents.find(ev);
++    assert(
++        it != takenEvents.end() &&
++        "Attempting to release unknown or already released timestamp event.");
++    L0_SAFE_CALL(zeEventHostReset(ev));
++    availableEvents.push_back(std::move(it->second));
++    takenEvents.erase(it);
++  }
++};
++
+ static L0RTContextWrapper &getRtContext() {
+   thread_local static L0RTContextWrapper rtContext(0);
+   return rtContext;
+@@ -338,6 +428,75 @@ static DynamicEventPool &getDynamicEventPool() {
+   return dynEventPool;
+ }
+ 
++// Thread-local lazy singleton accessor
++static TimeStampEventPool &getTimeStampEventPool() {
++  thread_local static TimeStampEventPool pool{&getRtContext()};
++  return pool;
++}
++
++class TimeStampEvent {
++private:
++  uint64_t zeTimestampMaxValue{};
++  uint64_t zeTimerResolution{};
++
++public:
++  ze_event_handle_t zeEvent{nullptr};
++
++  TimeStampEvent() {
++    ze_device_properties_t deviceProperties{};
++    deviceProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
++    L0_SAFE_CALL(
++        zeDeviceGetProperties(getRtContext().device, &deviceProperties));
++
++    // Calculate the maximum valid timestamp value based on the number of valid
++    // bits, if the valid bits is 64, then the max value is the maximum value of
++    // uint64_t, we can't do left shift by 64 directly as it is undefined
++    // behavior.
++    zeTimestampMaxValue =
++        (deviceProperties.kernelTimestampValidBits == 64)
++            ? std::numeric_limits<uint64_t>::max()
++            : ((1ULL << deviceProperties.kernelTimestampValidBits) - 1ULL);
++    zeTimerResolution = deviceProperties.timerResolution;
++    zeEvent = getTimeStampEventPool().takeEvent();
++  }
++
++  double getProfilingInfoInNS() {
++    ze_kernel_timestamp_result_t tsResult{};
++    L0_SAFE_CALL(zeEventQueryKernelTimestamp(zeEvent, &tsResult));
++    const double timestampFreqInNS = zeTimerResolution;
++    //  Calculate delta, handle counter wraparound.
++    // auto wrapAroundDelta =
++    //     (tsResult->global.kernelEnd >= tsResult->global.kernelStart)
++    //         ? (tsResult->global.kernelEnd - tsResult->global.kernelStart)
++    //         : ((zeTimestampMaxValue - tsResult->global.kernelStart) +
++    //            tsResult->global.kernelEnd + 1);
++
++    // A more elegant solution, using bitwise modulo, no branching
++    auto wrapAroundDelta =
++        ((tsResult.global.kernelEnd - tsResult.global.kernelStart) &
++         zeTimestampMaxValue);
++    double kernelExecTime = wrapAroundDelta * timestampFreqInNS;
++    return kernelExecTime;
++  }
++
++  // Timing wrapper
++  template <typename Func>
++  double measure(Func &&op) {
++    if (zeEvent == nullptr) {
++      throw std::runtime_error("Timestamp event not initialized");
++    }
++    // Launch user operation (kernel or any Level Zero command)
++    std::forward<Func>(op)(zeEvent);
++    // Wait for GPU to finish
++    L0_SAFE_CALL(
++        zeEventHostSynchronize(zeEvent, std::numeric_limits<uint64_t>::max()));
++    // Return execution time in milliseconds
++    return getProfilingInfoInNS();
++  }
++
++  ~TimeStampEvent() { getTimeStampEventPool().releaseEvent(zeEvent); }
++};
++
+ struct StreamWrapper {
+   // avoid event pointer invalidations
+   std::deque<ze_event_handle_t> implicitEventStack;
+@@ -407,6 +566,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
+   return zeModule;
+ }
+ 
++//===----------------------------------------------------------------------===//
++// Utilities
++//===----------------------------------------------------------------------===//
++
++static void *allocDeviceMemory(uint64_t size, size_t alignment = 64,
++                               bool isShared = false) {
++
++  void *memPtr = nullptr;
++  ze_device_mem_alloc_desc_t deviceDesc = {};
++  deviceDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
++  if (isShared) {
++    ze_host_mem_alloc_desc_t hostDesc = {};
++    hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
++    L0_SAFE_CALL(zeMemAllocShared(getRtContext().context.get(), &deviceDesc,
++                                  &hostDesc, size, alignment,
++                                  getRtContext().device, &memPtr));
++  } else {
++    L0_SAFE_CALL(zeMemAllocDevice(getRtContext().context.get(), &deviceDesc,
++                                  size, alignment, getRtContext().device,
++                                  &memPtr));
++  }
++  if (!memPtr)
++    throw std::runtime_error("mem allocation failed!");
++  return memPtr;
++}
++
++// Utility to discover the Global memory cache (L3) size of the device
++static size_t getGlobalMemoryCacheSize(ze_device_handle_t zeDevice) {
++  static constexpr unsigned MaxPropertyEntries = 16;
++  uint32_t CachePropCount = MaxPropertyEntries;
++  ze_device_cache_properties_t CacheProperties[MaxPropertyEntries];
++  for (uint32_t i = 0; i < MaxPropertyEntries; ++i) {
++    CacheProperties[i].stype = ZE_STRUCTURE_TYPE_DEVICE_CACHE_PROPERTIES;
++    CacheProperties[i].pNext = nullptr;
++  }
++  L0_SAFE_CALL(
++      zeDeviceGetCacheProperties(zeDevice, &CachePropCount, CacheProperties));
++  size_t globaMemoryCacheSize = 0;
++  for (uint32_t i = 0; i < CachePropCount; ++i) {
++    // find largest cache that is not user-controlled
++    if ((CacheProperties[i].flags &
++         ZE_DEVICE_CACHE_PROPERTY_FLAG_USER_CONTROL) != 0u) {
++      continue;
++    }
++    if (globaMemoryCacheSize < CacheProperties[i].cacheSize) {
++      globaMemoryCacheSize = CacheProperties[i].cacheSize;
++    }
++  }
++  return globaMemoryCacheSize;
++}
++
++// Utility to compute stats
++struct StatsResult {
++  double min;
++  double max;
++  double mean;
++  double median;
++  double stddev;
++};
++
++template <typename T>
++StatsResult computeStats(const std::vector<T> &data) {
++  if (data.empty()) {
++    throw std::invalid_argument("compute_stats: input vector is empty");
++  }
++
++  // ---- Min & Max ----
++  auto [minIt, maxIt] = std::minmax_element(data.begin(), data.end());
++  double minVal = static_cast<double>(*minIt);
++  double maxVal = static_cast<double>(*maxIt);
++
++  // ---- Mean ----
++  double mean = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
++
++  // ---- Median ----
++  std::vector<double> sorted(data.begin(), data.end());
++  std::sort(sorted.begin(), sorted.end());
++  size_t n = sorted.size();
++  double median =
++      (n % 2 == 0) ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0 : sorted[n / 2];
++
++  // ---- Standard Deviation ----
++  double variance = std::accumulate(data.begin(), data.end(), 0.0,
++                                    [mean](double acc, double x) {
++                                      return acc + (x - mean) * (x - mean);
++                                    }) /
++                    data.size(); // use (data.size() - 1) for sample stddev
++
++  double stddev = std::sqrt(variance);
++
++  return {minVal, maxVal, mean, median, stddev};
++}
+ //===----------------------------------------------------------------------===//
+ // L0 Wrappers definition
+ //===----------------------------------------------------------------------===//
+@@ -454,24 +705,8 @@ extern "C" void mgpuEventRecord(ze_event_handle_t event,
+ extern "C" void *mgpuMemAlloc(uint64_t size, StreamWrapper *stream,
+                               bool isShared) {
+   return catchAll([&]() {
+-    void *memPtr = nullptr;
+     constexpr size_t alignment{64};
+-    ze_device_mem_alloc_desc_t deviceDesc = {};
+-    deviceDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+-    if (isShared) {
+-      ze_host_mem_alloc_desc_t hostDesc = {};
+-      hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
+-      L0_SAFE_CALL(zeMemAllocShared(getRtContext().context.get(), &deviceDesc,
+-                                    &hostDesc, size, alignment,
+-                                    getRtContext().device, &memPtr));
+-    } else {
+-      L0_SAFE_CALL(zeMemAllocDevice(getRtContext().context.get(), &deviceDesc,
+-                                    size, alignment, getRtContext().device,
+-                                    &memPtr));
+-    }
+-    if (!memPtr)
+-      throw std::runtime_error("mem allocation failed!");
+-    return memPtr;
++    return allocDeviceMemory(size, alignment, isShared);
+   });
+ }
+ 
+@@ -537,7 +772,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+                                  size_t sharedMemBytes, StreamWrapper *stream,
+                                  void **params, void ** /*extra*/,
+                                  size_t paramsCount) {
+-
+   if (sharedMemBytes > 0) {
+     paramsCount = paramsCount - 1; // Last param is shared memory size
+     L0_SAFE_CALL(
+@@ -551,6 +785,70 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+   dispatch.groupCountX = static_cast<uint32_t>(gridX);
+   dispatch.groupCountY = static_cast<uint32_t>(gridY);
+   dispatch.groupCountZ = static_cast<uint32_t>(gridZ);
++
++  if (getenv("IMEX_ENABLE_PROFILING")) {
++    auto rounds = 100;
++    auto warmups = 100;
++
++    size_t cacheSize = getGlobalMemoryCacheSize(getRtContext().device);
++    std::cout << "Cache Size: " << cacheSize << "\n";
++    auto *cache = allocDeviceMemory(2 * cacheSize, 64, false);
++
++    if (getenv("IMEX_PROFILING_RUNS")) {
++      auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), nullptr, 10L);
++      if (runs)
++        rounds = runs;
++    }
++    if (getenv("IMEX_PROFILING_WARMUPS")) {
++      auto runs = strtol(getenv("IMEX_PROFILING_WARMUPS"), nullptr, 10L);
++      if (runs)
++        warmups = runs;
++    }
++
++    std::vector<double> warmUpTime(warmups, 0.0);
++    std::vector<double> executionTime(rounds, 0.0);
++
++    // Warmup
++    for (int r = 0; r < warmups; r++) {
++      TimeStampEvent tstampEvent;
++      double execTimeNS = tstampEvent.measure([&](ze_event_handle_t tStmpEvt) {
++        L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
++            getRtContext().immCmdListCompute.get(), kernel, &dispatch, tStmpEvt,
++            0, nullptr));
++      });
++      warmUpTime[r] = execTimeNS;
++    }
++
++    // Profiling loop
++    for (int r = 0; r < rounds; r++) {
++      if (getenv("IMEX_ENABLE_CACHE_FLUSHING")) {
++        int init_val = 5;
++        L0_SAFE_CALL(zeCommandListAppendMemoryFill(
++            getRtContext().immCmdListCopy.get(), cache, &init_val, 1, cacheSize,
++            nullptr, 0, nullptr));
++      }
++
++      TimeStampEvent tstampEvent;
++      double execTimeNS = tstampEvent.measure([&](ze_event_handle_t tStmpEvt) {
++        L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
++            getRtContext().immCmdListCompute.get(), kernel, &dispatch, tStmpEvt,
++            0, nullptr));
++      });
++      executionTime[r] = execTimeNS / 1e6; // convert ns ->ms
++    }
++
++    if (cache)
++      L0_SAFE_CALL(zeMemFree(getRtContext().context.get(), cache));
++
++    // Compute stats
++    StatsResult statRes = computeStats<double>(executionTime);
++
++    std::cout << "Min: " << statRes.min << "\n";
++    std::cout << "Max: " << statRes.max << "\n";
++    std::cout << "Avg: " << statRes.mean << "\n";
++    std::cout << "Median: " << statRes.median << "\n";
++    std::cout << "Std Dev: " << statRes.stddev << "\n";
++  }
+   stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
+                         ze_event_handle_t *waitEvents) {
+     L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
+-- 
+2.43.0
+
