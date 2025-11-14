@@ -13,7 +13,7 @@ index d0728274b94c..c728e3576f11 100644
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 @@ -13,12 +13,16 @@
  #include "llvm/ADT/Twine.h"
- 
+
  #include "level_zero/ze_api.h"
 +#include <algorithm>
 +#include <atomic>
@@ -27,11 +27,11 @@ index d0728274b94c..c728e3576f11 100644
 +#include <numeric>
  #include <unordered_set>
  #include <vector>
- 
+
 @@ -328,6 +332,92 @@ struct DynamicEventPool {
    }
  };
- 
+
 +// EventPool TimeStamp events, needed for profiling
 +struct TimeStampEventPool {
 +  static constexpr size_t kNumEventsPerPool{128};
@@ -124,7 +124,7 @@ index d0728274b94c..c728e3576f11 100644
 @@ -338,6 +428,75 @@ static DynamicEventPool &getDynamicEventPool() {
    return dynEventPool;
  }
- 
+
 +// Thread-local lazy singleton accessor
 +static TimeStampEventPool &getTimeStampEventPool() {
 +  thread_local static TimeStampEventPool pool{&getRtContext()};
@@ -200,7 +200,7 @@ index d0728274b94c..c728e3576f11 100644
 @@ -407,6 +566,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
    return zeModule;
  }
- 
+
 +//===----------------------------------------------------------------------===//
 +// Utilities
 +//===----------------------------------------------------------------------===//
@@ -321,7 +321,7 @@ index d0728274b94c..c728e3576f11 100644
 +    return allocDeviceMemory(size, alignment, isShared);
    });
  }
- 
+
 @@ -537,7 +772,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
                                   size_t sharedMemBytes, StreamWrapper *stream,
                                   void **params, void ** /*extra*/,
@@ -401,6 +401,5 @@ index d0728274b94c..c728e3576f11 100644
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
--- 
+--
 2.43.0
-
