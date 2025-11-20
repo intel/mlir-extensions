@@ -187,7 +187,9 @@ public:
     deviceProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
     CHECK_ZE_RESULT(zeDeviceGetProperties(zeDevice_, &deviceProperties));
     zeTimestampMaxValue_ =
-        ((1ULL << deviceProperties.kernelTimestampValidBits) - 1ULL);
+        (deviceProperties.kernelTimestampValidBits == 64)
+            ? std::numeric_limits<uint64_t>::max()
+            : ((1ULL << deviceProperties.kernelTimestampValidBits) - 1ULL);
     zeTimerResolution_ = deviceProperties.timerResolution;
 
     ze_event_desc_t eventDesc = {
