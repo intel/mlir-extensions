@@ -1,0 +1,96 @@
+diff --git a/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp b/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
+index 8b5e950733a2..bbd9a1efa18f 100644
+--- a/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
++++ b/mlir/lib/Dialect/Vector/Transforms/VectorDistribute.cpp
+@@ -1319,53 +1319,56 @@ struct WarpOpExtractStridedSlice : public WarpDistributionPattern {
+     // Find the distributed dimension. There should be exactly one.
+     auto yieldedType = cast<VectorType>(operand->get().getType());
+     int64_t distributedDim = getDistributedDim(yieldedType, distributedType);
+-    assert(distributedDim != -1 && "could not find distributed dimension");
+
+-    int64_t numOfExtractedDims =
+-        static_cast<int64_t>(extractOp.getSizes().size());
+-    // If the distributed dim is included in the extracted dims,  then we make
+-    // sure distributed dim is fully extracted. If distributed dim is not
+-    // included in extracted dims, it is guaranteed to be fully extracted (i.e.
+-    // distributed dim comes after all the extracted dims)
+-    // TODO: Partial extraction from distributed dimension require cross lane
+-    // communication.
+-    if (distributedDim < numOfExtractedDims) {
+-      int64_t distributedDimOffset =
+-          llvm::cast<IntegerAttr>(extractOp.getOffsets()[distributedDim])
+-              .getInt();
+-      int64_t distributedDimSize =
+-          llvm::cast<IntegerAttr>(extractOp.getSizes()[distributedDim])
+-              .getInt();
+-      if (distributedDimOffset != 0 ||
+-          distributedDimSize != yieldedType.getDimSize(distributedDim))
+-        return rewriter.notifyMatchFailure(
+-            extractOp, "distributed dimension must be fully extracted");
+-    }
+-    SmallVector<int64_t> newDistributedShape(
++    SmallVector<int64_t> updatedShape(
+         extractOp.getSourceVectorType().getShape());
+-    newDistributedShape[distributedDim] =
+-        distributedType.getDimSize(distributedDim);
+-    auto newDistributedType =
+-        VectorType::get(newDistributedShape, distributedType.getElementType());
++    SmallVector<Attribute> updatedSizes = llvm::map_to_vector(
++        extractOp.getSizes(), [](Attribute attr) { return attr; });
++    // It there is no distributed dimension, we simply proceed to move the op
++    // out of the warp op (This means the extraction happens uniformly on all
++    // lanes).
++    if (distributedDim != -1) {
++      int64_t numOfExtractedDims =
++          static_cast<int64_t>(extractOp.getSizes().size());
++      // If the distributed dim is included in the extracted dims,  then we make
++      // sure distributed dim is fully extracted. If distributed dim is not
++      // included in extracted dims, it is guaranteed to be fully extracted
++      // (i.e. distributed dim comes after all the extracted dims)
++      // TODO: Partial extraction from distributed dimension require cross lane
++      // communication.
++      if (distributedDim < numOfExtractedDims) {
++        int64_t distributedDimOffset =
++            llvm::cast<IntegerAttr>(extractOp.getOffsets()[distributedDim])
++                .getInt();
++        int64_t distributedDimSize =
++            llvm::cast<IntegerAttr>(extractOp.getSizes()[distributedDim])
++                .getInt();
++        if (distributedDimOffset != 0 ||
++            distributedDimSize != yieldedType.getDimSize(distributedDim))
++          return rewriter.notifyMatchFailure(
++              extractOp, "distributed dimension must be fully extracted");
++      }
++      updatedShape[distributedDim] = distributedType.getDimSize(distributedDim);
++
++      // Update the distributed sizes to match the distributed type.
++      if (distributedDim < static_cast<int64_t>(updatedSizes.size()))
++        updatedSizes[distributedDim] = rewriter.getI64IntegerAttr(
++            distributedType.getDimSize(distributedDim));
++    }
++    auto updatedType =
++        VectorType::get(updatedShape, distributedType.getElementType());
+     SmallVector<size_t> newRetIndices;
+     WarpExecuteOnLane0Op newWarpOp = moveRegionToNewWarpOpAndAppendReturns(
+-        rewriter, warpOp, {extractOp.getSource()}, {newDistributedType},
++        rewriter, warpOp, {extractOp.getSource()}, {updatedType},
+         newRetIndices);
+     rewriter.setInsertionPointAfter(newWarpOp);
+-    SmallVector<Attribute> distributedSizes = llvm::map_to_vector(
+-        extractOp.getSizes(), [](Attribute attr) { return attr; });
+-    // Update the distributed sizes to match the distributed type.
+-    if (distributedDim < static_cast<int64_t>(distributedSizes.size()))
+-      distributedSizes[distributedDim] = rewriter.getI64IntegerAttr(
+-          distributedType.getDimSize(distributedDim));
+-
+     // Create a new extract strided slice op that extracts from the
+     // distributed vector.
+     Value distributedVec = newWarpOp->getResult(newRetIndices[0]);
+     Value newExtract = vector::ExtractStridedSliceOp::create(
+         rewriter, extractOp.getLoc(), distributedType, distributedVec,
+         extractOp.getOffsets(),
+-        ArrayAttr::get(rewriter.getContext(), distributedSizes),
++        ArrayAttr::get(rewriter.getContext(), updatedSizes),
+         extractOp.getStrides());
+     rewriter.replaceAllUsesWith(newWarpOp->getResult(operandNumber),
+                                 newExtract);

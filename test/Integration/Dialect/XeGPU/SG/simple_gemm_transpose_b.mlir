@@ -22,16 +22,12 @@ module @gemm attributes {gpu.container_module} {
       %c_tdesc = xegpu.create_nd_tdesc %c : memref<256x256xf32> -> !xegpu.tensor_desc<8x16xf32>
       %c_init_value = xegpu.load_nd %c_tdesc[%x_block_offset, %y_block_offset] : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
       %a_tdesc = xegpu.create_nd_tdesc %a : memref<256x256xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %b_ptr_index = memref.extract_aligned_pointer_as_index %b : memref<256x256xf16> -> index
-      %b_ptr_i64 = arith.index_cast %b_ptr_index : index to i64
-      %b_tdesc = xegpu.create_nd_tdesc %b_ptr_i64, shape : [%c256, %c128], strides : [%c128, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32>
+      %b_tdesc = xegpu.create_nd_tdesc %b : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16>
 
       %r = scf.for %k = %c0 to %c256 step %c16 iter_args(%arg_c = %c_init_value) -> (vector<8x16xf32>) {
         %a_val = xegpu.load_nd %a_tdesc[%x_block_offset, %k] : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-        %k_div_2 = index.shru %k, %c1 // B tile moves by 8 because of f32 cast.
-        %b_val_f32 = xegpu.load_nd %b_tdesc[%y_block_offset, %k_div_2] : !xegpu.tensor_desc<16x8xf32> -> vector<16x8xf32>
-        %b_val_bitcast = vector.bitcast %b_val_f32 : vector<16x8xf32> to vector<16x16xf16>
-        %b_trans = vector.transpose %b_val_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val = xegpu.load_nd %b_tdesc[%y_block_offset, %k] : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
+        %b_trans = vector.transpose %b_val, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
         %dpas = xegpu.dpas %a_val, %b_trans, %arg_c : vector<8x16xf16>, vector<16x16xf16>, vector<8x16xf32> -> vector<8x16xf32>
         scf.yield %dpas : vector<8x16xf32>
       }
