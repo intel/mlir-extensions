@@ -10,6 +10,10 @@ builtin.module(
       canonicalize
       cse
       xegpu-propagate-layout
+      xegpu-optimize-block-loads
+      canonicalize
+      cse
+      xegpu-propagate-layout
       xegpu-subgroup-distribute
       canonicalize
       cse

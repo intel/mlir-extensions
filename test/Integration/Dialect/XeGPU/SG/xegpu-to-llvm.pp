@@ -3,6 +3,10 @@ builtin.module(
     xevm-attach-target
     gpu.module(
       xegpu-propagate-layout
+      xegpu-optimize-block-loads
+      canonicalize
+      cse
+      xegpu-propagate-layout
       xegpu-subgroup-distribute
       canonicalize
       cse

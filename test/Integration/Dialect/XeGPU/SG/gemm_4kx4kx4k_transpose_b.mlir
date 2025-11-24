@@ -100,14 +100,8 @@ module @gemm attributes {gpu.container_module} {
       // TODO: Add prefetch support. B prefetch requires sightly different prefetch tile calculation.
 
       // two 32x16 A tiles from 256x32 WG slice
-      %A_tile_0 = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
-      // create B tiles considering the transposed B matrix.
-      // 1. First view the B matrix as 4096x2048xf32 because we need to transpose it in 32 bits.
-      // 2. Then create 16x8 B tiles from the 4096x2048 view. Note that we can not use array length > 1 and max size supported for 32 bitwidth is 16x8.
-      %B_ptr_index = memref.extract_aligned_pointer_as_index %B : memref<4096x4096xf16> -> index
-      %b_ptr_i64 = arith.index_cast %B_ptr_index : index to i64
-
-      %B_tile = xegpu.create_nd_tdesc %b_ptr_i64, shape: [%c4096, %c2048], strides: [%c2048, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>>
+      %A_tile = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+      %B_tile = xegpu.create_nd_tdesc %B : memref<4096x4096xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>>
       %C_sg_tile_offset_y_plus_16_t0 = arith.addi %C_sg_tile_offset_y, %c16 : index
       %C_sg_tile_offset_y_plus_32_t0 = arith.addi %C_sg_tile_offset_y_plus_16_t0, %c16 : index
       %C_sg_tile_offset_y_plus_48_t0 = arith.addi %C_sg_tile_offset_y_plus_32_t0, %c16 : index
@@ -153,42 +147,30 @@ module @gemm attributes {gpu.container_module} {
         // sync all threads
         gpu.barrier
         // load A tiles
-        %a_val = xegpu.load_nd %A_tile_0[%C_sg_tile_offset_x, %k]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
-        // %a_val = vector.shape_cast %a_val_t0 : vector<64xf16> to vector<2x32xf16>
+        %a_val = xegpu.load_nd %A_tile[%C_sg_tile_offset_x, %k]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
         %a_val_0 = vector.extract %a_val [0] : vector<32x16xf16> from vector<2x32x16xf16>
         %a_val_1 = vector.extract %a_val [1] : vector<32x16xf16> from vector<2x32x16xf16>
 
         // load B tiles (transposed view)
-        %k_div_2 = index.shru %k, %c1 // B tile moves by 16 because of f32 cast.
-        %k_div_2_plus_8 = arith.addi %k_div_2, %c8 : index
-        %b_val_0_0_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y, %k_div_2] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_1_0_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y, %k_div_2_plus_8] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_0_1_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_16_t0, %k_div_2] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_1_1_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_16_t0, %k_div_2_plus_8] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_0_2_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_32_t0, %k_div_2] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_1_2_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_32_t0, %k_div_2_plus_8] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_0_3_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_48_t0, %k_div_2] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
-        %b_val_1_3_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_48_t0, %k_div_2_plus_8] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x8xf32, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x8xf32>
+        %k_plus_16 = arith.addi %k, %c16 : index
+        %b_val_0_0_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y, %k] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_1_0_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y, %k_plus_16] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_0_1_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_16_t0, %k] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_1_1_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_16_t0, %k_plus_16] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_0_2_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_32_t0, %k] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_1_2_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_32_t0, %k_plus_16] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_0_3_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_48_t0, %k] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
+        %b_val_1_3_t0 = xegpu.load_nd %B_tile[%C_sg_tile_offset_y_plus_48_t0, %k_plus_16] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 1>> -> vector<16x16xf16>
 
-        // Bitcast B data slices to f16.
-        %b_val_0_0_bitcast = vector.bitcast %b_val_0_0_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_1_0_bitcast = vector.bitcast %b_val_1_0_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_0_1_bitcast = vector.bitcast %b_val_0_1_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_1_1_bitcast = vector.bitcast %b_val_1_1_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_0_2_bitcast = vector.bitcast %b_val_0_2_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_1_2_bitcast = vector.bitcast %b_val_1_2_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_0_3_bitcast = vector.bitcast %b_val_0_3_t0 : vector<16x8xf32> to vector<16x16xf16>
-        %b_val_1_3_bitcast = vector.bitcast %b_val_1_3_t0 : vector<16x8xf32> to vector<16x16xf16>
-
-        // Transpose B slices.
-        %b_val_0_0 = vector.transpose %b_val_0_0_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_1_0 = vector.transpose %b_val_1_0_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_0_1 = vector.transpose %b_val_0_1_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_1_1 = vector.transpose %b_val_1_1_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_0_2 = vector.transpose %b_val_0_2_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_1_2 = vector.transpose %b_val_1_2_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_0_3 = vector.transpose %b_val_0_3_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
-        %b_val_1_3 = vector.transpose %b_val_1_3_bitcast, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        // Transpose B tiles.
+        %b_val_0_0 = vector.transpose %b_val_0_0_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_1_0 = vector.transpose %b_val_1_0_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_0_1 = vector.transpose %b_val_0_1_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_1_1 = vector.transpose %b_val_1_1_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_0_2 = vector.transpose %b_val_0_2_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_1_2 = vector.transpose %b_val_1_2_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_0_3 = vector.transpose %b_val_0_3_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
+        %b_val_1_3 = vector.transpose %b_val_1_3_t0, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
 
         %a_val_0_0 = vector.extract_strided_slice %a_val_0 { offsets = [0], sizes = [8], strides = [1]} :
           vector<32x16xf16> to vector<8x16xf16>
