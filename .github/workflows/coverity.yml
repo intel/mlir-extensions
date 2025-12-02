@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Check disk usage
         run: df -h
-    
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
