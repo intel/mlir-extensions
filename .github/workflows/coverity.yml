@@ -53,32 +53,6 @@ jobs:
           conda install cmake ninja conda-forge::lit conda-forge::doxygen
           conda list
 
-      - name: Download coverity
-        if: steps.cache-coverity.outputs.cache-hit != 'true'
-        run: |
-          cd
-          curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
-          tar zxf coverity.tgz
-          mv -T cov-analysis-linux64-* coverity
-
-      - name: Add coverity to PATH
-        run: |
-          echo "$HOME/coverity/bin" >> $GITHUB_PATH
-
-      - name: Show coverity version
-        run: |
-          coverity --version
-
-      - name: Add coverity inputs to env
-        run: |
-          version="$(git rev-parse --short HEAD)"
-          email="alexei.fedotov@intel.com"
-          project_id=30755
-
-          echo "project_id=$project_id" | tee -a $GITHUB_ENV
-          echo "email=$email" | tee -a $GITHUB_ENV
-          echo "version=$version" | tee -a $GITHUB_ENV
-
       - name: Setup Cache Vars
         run: |
           echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
@@ -118,6 +92,33 @@ jobs:
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install
           cmake --build _build --target install
+          rm -rf _build
+
+      - name: Download coverity
+        if: steps.cache-coverity.outputs.cache-hit != 'true'
+        run: |
+          cd
+          curl -X POST https://scan.coverity.com/download/linux64 -d "token=$COV_TOKEN" --data-urlencode "project=MLIR Extensions" -o coverity.tgz
+          tar zxf coverity.tgz
+          mv -T cov-analysis-linux64-* coverity
+
+      - name: Add coverity to PATH
+        run: |
+          echo "$HOME/coverity/bin" >> $GITHUB_PATH
+
+      - name: Show coverity version
+        run: |
+          coverity --version
+
+      - name: Add coverity inputs to env
+        run: |
+          version="$(git rev-parse --short HEAD)"
+          email="alexei.fedotov@intel.com"
+          project_id=30755
+
+          echo "project_id=$project_id" | tee -a $GITHUB_ENV
+          echo "email=$email" | tee -a $GITHUB_ENV
+          echo "version=$version" | tee -a $GITHUB_ENV
 
       - name: Create coverity build
         run: |
