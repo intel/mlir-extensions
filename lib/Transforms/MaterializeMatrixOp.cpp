@@ -48,7 +48,7 @@ public:
   LogicalResult
   matchAndRewrite(xegpu::CreateMemDescOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    TypedValue<MemRefType> src = op.getSource();
+    TypedValue<MemRefType> src = dyn_cast<TypedValue<MemRefType>>(op.getSource());
     MemDescType resTy = op.getMemDesc().getType();
     auto *converter = getTypeConverter();
     MemRefType newResTy = converter->convertType<MemRefType>(resTy);
@@ -120,7 +120,7 @@ public:
     VectorType newResTy = VectorType::get(vecSize, elemTy);
     auto ldOp = xegpu::LoadNdOp::create(
         rewriter, loc, newResTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
-        packAttr, transAttr, bitWidthAttr, nullptr, nullptr, nullptr);
+        packAttr, transAttr, bitWidthAttr, nullptr, nullptr, nullptr, nullptr);
 
     Value result = ldOp.getResult();
 

@@ -110,8 +110,7 @@ public:
     // Create the new op in canonical form.
     auto sourceTnsrType =
         mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-            insertSliceOp.getSourceType().getRank(), dstTnsrType, mixedOffsets,
-            mixedSizes, mixedStrides);
+            insertSliceOp.getSourceType().getRank(), dstTnsrType, mixedSizes);
     auto newSourceType = sourceType.cloneWith(sourceTnsrType.getShape(),
                                               sourceTnsrType.getElementType());
 
