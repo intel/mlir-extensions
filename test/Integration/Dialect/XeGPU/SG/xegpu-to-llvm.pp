@@ -2,11 +2,11 @@ builtin.module(
     cse
     xevm-attach-target
     gpu.module(
-      xegpu-propagate-layout
+      xegpu-propagate-layout{layout-kind="lane"}
       xegpu-optimize-block-loads
       canonicalize
       cse
-      xegpu-propagate-layout
+      xegpu-propagate-layout{layout-kind="lane"}
       xegpu-subgroup-distribute
       canonicalize
       cse

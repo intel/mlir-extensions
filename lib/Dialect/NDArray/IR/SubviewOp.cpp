@@ -218,29 +218,6 @@ llvm::SmallBitVector imex::ndarray::SubviewOp::getDroppedDims() {
   return droppedDims;
 }
 
-// Copypasted from upstream tensor.
-mlir::LogicalResult imex::ndarray::SubviewOp::reifyResultShapes(
-    mlir::OpBuilder &builder,
-    mlir::ReifiedRankedShapedTypeDims &reifiedReturnShapes) {
-  reifiedReturnShapes.resize(1);
-  reifiedReturnShapes[0].reserve(getType().getRank());
-  mlir::SmallVector<mlir::OpFoldResult> mixedSizes = getMixedSizes();
-  llvm::SmallBitVector droppedDims = getDroppedDims();
-  mlir::Location loc = getLoc();
-  for (const auto &size : enumerate(mixedSizes)) {
-    if (droppedDims.test(size.index()))
-      continue;
-    if (auto attr = mlir::dyn_cast<mlir::Attribute>(size.value())) {
-      reifiedReturnShapes[0].push_back(
-          builder.createOrFold<mlir::arith::ConstantIndexOp>(
-              loc, mlir::cast<mlir::IntegerAttr>(attr).getInt()));
-      continue;
-    }
-    reifiedReturnShapes[0].push_back(llvm::cast<mlir::Value>(size.value()));
-  }
-  return mlir::success();
-}
-
 namespace {
 /// Pattern to rewrite a subview op with CastOp arguments.
 /// Ported from mlir::tensor::ExtractSliceOp

@@ -430,7 +430,7 @@ static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,
         rewriter, loc, loadTy, tdesc, ValueRange(), DenseI64ArrayAttr(),
         nullptr /*packed*/, nullptr /*transpose*/,
         nullptr /*transpose_bit_width*/, nullptr /*l1_hint*/,
-        nullptr /*l2_hint*/, nullptr /*l3_hint*/);
+        nullptr /*l2_hint*/, nullptr /*l3_hint*/, nullptr);
     // if original data is not 32-bit, need to bitcast current 32-bit data
     //  back to original element type.
     if (bitWidth < 32)
@@ -520,7 +520,7 @@ struct LoadNdOpPattern : public OpConversionPattern<xegpu::LoadNdOp> {
           rewriter, op.getLoc(), newLoadTy, source, ValueRange(),
           DenseI64ArrayAttr(), op.getPackedAttr(), op.getTransposeAttr(),
           op.getTransposeBitWidthAttr(), op.getL1HintAttr(), op.getL2HintAttr(),
-          op.getL3HintAttr());
+          op.getL3HintAttr(), nullptr);
       loadNdOps.push_back(loadNdOp);
     }
     rewriter.replaceOpWithMultiple(op, {loadNdOps});
@@ -853,7 +853,7 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
           rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
           ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
           transposeBitWidthAttr, loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
-          loadOp.getL3HintAttr());
+          loadOp.getL3HintAttr(), nullptr);
       // Replace the uses of the packed layout conversion with new load.
       rewriter.replaceAllUsesWith(packedLayoutOps.back()->getResult(0),
                                   newLoadOp.getResult());
@@ -878,7 +878,7 @@ struct TransposeRewritePattern : public OpRewritePattern<vector::TransposeOp> {
           rewriter, loadOp.getLoc(), newVectorTy, loadOp.getTensorDesc(),
           ValueRange(), DenseI64ArrayAttr(), packedAttr, transposeAttr,
           IntegerAttr(), loadOp.getL1HintAttr(), loadOp.getL2HintAttr(),
-          loadOp.getL3HintAttr());
+          loadOp.getL3HintAttr(), nullptr);
       rewriter.replaceAllUsesWith(op.getResult(), newLoadOp.getResult());
     }
 

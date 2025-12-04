@@ -6,14 +6,15 @@ builtin.module(
       cse
       lower-affine
       cse
+      xegpu-propagate-layout{layout-kind="inst"}
       xegpu-blocking
       canonicalize
       cse
-      xegpu-propagate-layout
+      xegpu-propagate-layout{layout-kind="lane"}
       xegpu-optimize-block-loads
       canonicalize
       cse
-      xegpu-propagate-layout
+      xegpu-propagate-layout{layout-kind="lane"}
       xegpu-subgroup-distribute
       canonicalize
       cse

@@ -494,7 +494,7 @@ public:
     auto bitWidthAttr = IntegerAttr();
     auto ldOp = xegpu::LoadNdOp::create(
         rewriter, loc, vecTy, adaptor.getTile(), ValueRange(),
-        DenseI64ArrayAttr(), packAttr, transAttr, bitWidthAttr, L1, L2, L3);
+        DenseI64ArrayAttr(), packAttr, transAttr, bitWidthAttr, L1, L2, L3, nullptr);
 
     llvm::SmallVector<Value> results({ldOp.getResult()});
     if (memSpace == xegpu::MemorySpace::SLM) {
@@ -639,7 +639,7 @@ public:
     Value mask = arith::ConstantOp::create(rewriter, loc, maskTy, maskAttr);
     value = vector::ShapeCastOp::create(rewriter, loc, valTy, value);
     auto rmwOp = xegpu::AtomicRMWOp::create(rewriter, loc, valTy, op.getKind(),
-                                            adaptor.getTile(), mask, value);
+                                            adaptor.getTile(), mask, value, nullptr);
     auto v = vector::ShapeCastOp::create(rewriter, loc, op.getType(), rmwOp);
     rewriter.replaceOp(op, v);
     return success();
@@ -654,7 +654,8 @@ public:
   matchAndRewrite(xetile::TileMMAOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<xegpu::DpasOp>(op, op.getType(), adaptor.getA(),
-                                               adaptor.getB(), adaptor.getC());
+                                               adaptor.getB(), adaptor.getC(), 
+                                               nullptr, nullptr, nullptr);
     return success();
   }
 };
