@@ -1,0 +1,152 @@
+diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
+index ec5feb8bc8c4..c8b9f0eb6a06 100644
+--- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
++++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
+@@ -228,7 +228,7 @@ XeGPUBlockingPass::getTileShape(Operation *op) const {
+   if (isa<vector::MultiDimReductionOp>(op))
+     return getTileShape(op->getOpOperand(0));
+
+-  if (isa<vector::TransposeOp, vector::BroadcastOp>(op))
++  if (isa<vector::TransposeOp, vector::BroadcastOp, vector::ShapeCastOp>(op))
+     return getTileShape(op->getOpResult(0));
+
+   return std::nullopt;
+@@ -413,14 +413,14 @@ void XeGPUBlockingPass::runOnOperation() {
+     // Remove the layout attributes cached per operands.
+     for (OpOperand &opr : op->getOpOperands()) {
+       std::string name = xegpu::getLayoutName(opr);
+-      if (op->hasAttrOfType<xegpu::LayoutAttr>(name))
++      if (op->hasAttrOfType<xegpu::DistributeLayoutAttr>(name))
+         op->removeAttr(name);
+     }
+
+     // Update the layout attributes per result.
+     for (OpResult result : op->getOpResults()) {
+       std::string name = xegpu::getLayoutName(result);
+-      if (auto layout = op->getAttrOfType<xegpu::LayoutAttr>(name)) {
++      if (auto layout = op->getAttrOfType<xegpu::DistributeLayoutAttr>(name)) {
+         op->removeAttr(name);
+         if (!isa<LoopLikeOpInterface>(op))
+           xegpu::setDistributeLayoutAttr(result, layout.dropInstData());
+diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
+index 574fe29f4bab..64b4436d7016 100644
+--- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
++++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
+@@ -1273,6 +1273,60 @@ static LogicalResult updateFunctionOpInterface(mlir::OpBuilder &builder,
+   return success();
+ }
+
++static LogicalResult resolveConflicts(Operation *op) {
++  auto r = op->walk([&](xegpu::LoadNdOp loadNdOp) -> WalkResult {
++    // Load op has a conflict if tensor desc layout is different from the its
++    // result layout.
++    auto getResultLayout = [](OpResult result) {
++      auto resultLayoutName = xegpu::getLayoutName(result);
++      return result.getOwner()->getAttrOfType<xegpu::DistributeLayoutAttr>(
++          resultLayoutName);
++    };
++    auto hasConflict = [&getResultLayout](xegpu::LoadNdOp loadNdOp) -> bool {
++      auto tdescType = loadNdOp.getTensorDescType();
++      auto tdescLayout = tdescType.getLayout();
++      // auto resultLayoutName = xegpu::getLayoutName(loadNdOp->getOpResult(0));
++      auto resultLayout = getResultLayout(loadNdOp->getOpResult(0));
++      return tdescLayout && resultLayout && tdescLayout != resultLayout;
++    };
++    if (hasConflict(loadNdOp)) {
++      OpBuilder builder(loadNdOp);
++      // Try to get the defining createNdDesc op.
++      auto createNdOp =
++          loadNdOp.getTensorDesc().getDefiningOp<xegpu::CreateNdDescOp>();
++      if (!createNdOp) {
++        DBGS() << "Failed to resolve LoadNdOp layout conflict: " << *loadNdOp
++               << "\n";
++        return WalkResult::interrupt();
++      }
++
++      builder.setInsertionPointAfter(createNdOp);
++      auto tdescType = loadNdOp.getTensorDescType();
++      auto expectedLayout = getResultLayout(loadNdOp->getOpResult(0));
++      auto newTensorDescType = xegpu::TensorDescType::get(
++          createNdOp.getContext(), tdescType.getShape(),
++          tdescType.getElementType(), tdescType.getEncoding(), expectedLayout);
++      auto newOp = xegpu::CreateNdDescOp::create(
++          builder, loadNdOp.getLoc(), newTensorDescType,
++          createNdOp->getOperands(), createNdOp->getAttrs());
++      // Replace only the conflicting uses of the createNdOp that can be
++      // resolved using the new layout.
++      createNdOp->replaceUsesWithIf(
++          ArrayRef<Value>(newOp.getResult()), [&](OpOperand &opnd) {
++            auto userLoadNdOp = dyn_cast<xegpu::LoadNdOp>(opnd.getOwner());
++            if (!userLoadNdOp)
++              return false;
++            auto resultLayout = getResultLayout(userLoadNdOp->getOpResult(0));
++            return hasConflict(userLoadNdOp) && resultLayout == expectedLayout;
++          });
++    }
++    return WalkResult::advance();
++  });
++  if (r.wasInterrupted())
++    return failure();
++  return success();
++}
++
+ namespace {
+ struct XeGPUPropagateLayoutPass final
+     : public xegpu::impl::XeGPUPropagateLayoutBase<XeGPUPropagateLayoutPass> {
+@@ -1346,4 +1400,9 @@ void XeGPUPropagateLayoutPass::runOnOperation() {
+     signalPassFailure();
+     return;
+   }
++  if (failed(resolveConflicts(op))) {
++    DBGS() << "Failed to resolve layout conflicts after propagation.\n";
++    signalPassFailure();
++    return;
++  }
+ }
+diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
+index 48bd0662b03f..76ed73fdfaef 100644
+--- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
++++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
+@@ -1129,14 +1129,14 @@ struct WgToSgVectorShapeCastOp
+
+     // For rank reducing or increasing shape_cast ops, the lower rank layout
+     // must be a slice of higher rank layout.
+-    int64_t sourceRank = srcType.getRank();
+-    int64_t resultRank = sgShape.size();
+-    xegpu::DistributeLayoutAttr sourceLayout =
+-        xegpu::getDistributeLayoutAttr(op.getSource());
+-    if (sourceRank < resultRank && !sourceLayout.isSliceOf(layout))
+-      return failure();
+-    if (sourceRank > resultRank && !layout.isSliceOf(sourceLayout))
+-      return failure();
++    // int64_t sourceRank = srcType.getRank();
++    // int64_t resultRank = sgShape.size();
++    // xegpu::DistributeLayoutAttr sourceLayout =
++    //     xegpu::getDistributeLayoutAttr(op.getSource());
++    // if (sourceRank < resultRank && !sourceLayout.isSliceOf(layout))
++    //   return failure();
++    // if (sourceRank > resultRank && !layout.isSliceOf(sourceLayout))
++    //   return failure();
+
+     SmallVector<Value> newShapeCastOps;
+     for (auto src : adaptor.getSource()) {
+@@ -1238,13 +1238,13 @@ struct WgToSgVectorTransposeOp
+     SmallVector<int64_t> sourceSgLayout =
+         sourceLayout.getEffectiveSgLayoutAsInt();
+     SmallVector<int64_t> resultSgLayout = layout.getEffectiveSgLayoutAsInt();
+-    DenseI32ArrayAttr sourceOrder = sourceLayout.getOrder();
+-    DenseI32ArrayAttr resultOrder = layout.getOrder();
++    // DenseI32ArrayAttr sourceOrder = sourceLayout.getOrder();
++    // DenseI32ArrayAttr resultOrder = layout.getOrder();
+
+-    if (!sourceOrder || !resultOrder) {
+-      return rewriter.notifyMatchFailure(
+-          op, "Both source and result must have order attributes");
+-    }
++    // if (!sourceOrder || !resultOrder) {
++    //   return rewriter.notifyMatchFailure(
++    //       op, "Both source and result must have order attributes");
++    // }
+
+     ArrayRef<int64_t> permutation = op.getPermutation();
+     size_t permutationSize = permutation.size();

@@ -148,7 +148,7 @@ module @flash_attention attributes {gpu.container_module} {
 
           // K prefetch
           %prefetch_offset_x_running_t = arith.addi %BLOCK_N_3, %k : index
-          %prefetch_offset_x_running = arith.addi %wg_q_x_offset, %prefetch_offset_x_running_t : index
+          %prefetch_offset_x_running = arith.addi %prefetch_offset_x, %prefetch_offset_x_running_t : index
           xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %prefetch_offset_y] : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
           // V prefetch
