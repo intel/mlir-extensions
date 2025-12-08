@@ -55,9 +55,10 @@ jobs:
 
       - name: Setup Cache Vars
         run: |
-          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
-          cat $LLVM_SHA_FILE >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+          echo LLVM_SHA=$(cat build_tools/llvm_version.txt) | tee -a $GITHUB_ENV
+          #echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          #cat $LLVM_SHA_FILE >> $GITHUB_ENV
+          #echo 'EOF' >> $GITHUB_ENV
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
