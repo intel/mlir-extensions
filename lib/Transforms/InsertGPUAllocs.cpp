@@ -131,11 +131,11 @@ public:
       bool deviceWrite = false;
     };
 
-    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> gpuBufferAllocs;
-    llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams;
+    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> gpuBufferAllocs {};
+    llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams {};
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8>
         gpuGetMemrefGlobalParams;
-    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> callOpReturnedBuffer;
+    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> callOpReturnedBuffer {};
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
     // This lamda function checks the type of memref operation and
