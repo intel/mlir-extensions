@@ -384,7 +384,6 @@ struct CoalesceShardOpsPass
 
     auto root = this->getOperation();
     ::mlir::IRRewriter builder(&getContext());
-    //::mlir::SymbolTableCollection symbolTableCollection;
 
     // back-propagate targets from RePartitionOps
 
