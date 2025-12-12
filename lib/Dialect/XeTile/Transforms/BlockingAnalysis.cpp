@@ -123,7 +123,7 @@ public:
 private:
   int array_length = 1;
   Block def;
-  llvm::DenseMap<mlir::OpOperand *, Block> requests;
+  llvm::DenseMap<mlir::OpOperand *, Block> requests {};
 };
 
 BlockingRequests::BlockingRequests(Block block, mlir::OpOperand &point) {

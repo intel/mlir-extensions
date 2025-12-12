@@ -134,7 +134,7 @@ public:
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8> gpuBufferAllocs {};
     llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams {};
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8>
-        gpuGetMemrefGlobalParams;
+        gpuGetMemrefGlobalParams {};
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8> callOpReturnedBuffer {};
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
