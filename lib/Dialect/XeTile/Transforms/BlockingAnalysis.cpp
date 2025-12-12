@@ -110,7 +110,7 @@ public:
   }
 
   llvm::SmallVector<Block> getRequests() const {
-    llvm::SmallDenseSet<Block, 8> reqs;
+    llvm::SmallDenseSet<Block, 8> reqs {};
     for (auto [point, block] : requests)
       reqs.insert(block);
     return llvm::SmallVector<Block>(reqs.begin(), reqs.end());

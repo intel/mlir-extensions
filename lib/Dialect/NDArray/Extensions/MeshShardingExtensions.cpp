@@ -119,7 +119,7 @@ static Sharding ShardingFromOption(const ShardingOption &option,
 // Requires sharding of input tensor.
 static FailureOr<Sharding>
 getShardingWithShardedDimsOffs(Value ary, OffsetSizeAndStrideOpInterface op) {
-  SymbolTableCollection symbolTable;
+  SymbolTableCollection symbolTable {};
   auto aryType = cast<RankedTensorType>(ary.getType());
   // currently no support for dynamic input shapes
   if (!aryType.hasStaticShape())

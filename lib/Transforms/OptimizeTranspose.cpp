@@ -221,7 +221,7 @@ private:
     if (!patternMatcher.match(*transposeOp->user_begin(), packedLayoutOps))
       return;
 
-    llvm::DenseSet<Operation *> worklist;
+    llvm::DenseSet<Operation *> worklist {};
     worklist.insert(transposeOp);
     Block *parentBlock = transposeOp->getBlock();
     while (!worklist.empty()) {
@@ -280,7 +280,7 @@ public:
       }
       // Traverse the def-use chain of the transposeOps and find leaf
       // operations.
-      llvm::DenseSet<Operation *> leaves;
+      llvm::DenseSet<Operation *> leaves {};
       for (auto transposeOp : transposeOps)
         visitTransposeOp(llvm::cast<vector::TransposeOp>(transposeOp), leaves);
       // If not leaf nodes are found, skip.

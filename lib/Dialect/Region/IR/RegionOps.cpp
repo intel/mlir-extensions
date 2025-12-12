@@ -180,7 +180,7 @@ struct CleanupRegionYieldArgs
     // Build new yield args list, and mapping between old and new results
     llvm::SmallVector<mlir::Value> newYieldArgs;
     llvm::SmallVector<int> newResultsMapping(count, -1);
-    llvm::SmallDenseMap<mlir::Value, int> argsMap;
+    llvm::SmallDenseMap<mlir::Value, int> argsMap {};
     for (auto i : llvm::seq(0u, count)) {
       auto res = results[i];
 
