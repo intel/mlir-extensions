@@ -1,29 +1,29 @@
-From e77e0d6492be15747db4577305de18dcad87b92b Mon Sep 17 00:00:00 2001
+From d648c9d2403baac3c757157ab8bfd72111c5fa48 Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Mon, 1 Dec 2025 19:16:15 +0100
+Date: Wed, 10 Dec 2025 16:52:10 +0100
 Subject: [PATCH] xegpu temporary downstream defintion changes and vec
 
 ---
  mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td | 6 ++++++
- mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp         | 9 ++++++---
- 2 files changed, 12 insertions(+), 3 deletions(-)
+ mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp         | 8 +++++---
+ 2 files changed, 11 insertions(+), 3 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-index d93ffb70881b..6e8c5884bfe6 100644
+index b54d620c3c0c..3d9cc4a071bc 100644
 --- a/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
 +++ b/mlir/include/mlir/Dialect/XeGPU/IR/XeGPUOps.td
-@@ -402,6 +402,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
+@@ -403,6 +403,7 @@ def XeGPU_LoadNdOp : XeGPU_Op<"load_nd", [
                         OptionalAttr<DenseI64ArrayAttr>: $const_offsets,
                         OptionalAttr<UnitAttr>: $packed,
                         OptionalAttr<DenseI64ArrayAttr>: $transpose,
 +                       OptionalAttr<I32Attr>: $transpose_bit_width,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l1_hint,
                         OptionalAttr<XeGPU_CacheHintAttr>: $l2_hint,
-                        OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint, 
-@@ -1619,4 +1620,9 @@ def XeGPU_StoreMatrixOp: XeGPU_Op<"store_matrix", [MemoryEffects<[MemWrite]>,
+                        OptionalAttr<XeGPU_CacheHintAttr>: $l3_hint,
+@@ -1622,4 +1623,9 @@ def XeGPU_StoreMatrixOp: XeGPU_Op<"store_matrix", [MemoryEffects<[MemWrite]>,
    let hasVerifier = 1;
  }
- 
+
 +def XeGPU_CompileHintOp : XeGPU_Op<"compile_hint", []> {
 +  let summary = "prevents the compiler from scheduling.";
 +  let assemblyFormat = [{ attr-dict }];
@@ -31,7 +31,7 @@ index d93ffb70881b..6e8c5884bfe6 100644
 +
  #endif // MLIR_DIALECT_XEGPU_IR_XEGPUOPS_TD
 diff --git a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
-index 8cb666298c95..ff7f1afeb4af 100644
+index 91ba07a8e025..6ebcd3818bb6 100644
 --- a/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 +++ b/mlir/lib/Dialect/XeGPU/IR/XeGPUOps.cpp
 @@ -71,6 +71,7 @@ static bool isWriteHintOrNone(const CachePolicyAttr &attr) {
@@ -41,36 +41,34 @@ index 8cb666298c95..ff7f1afeb4af 100644
 +         kind == CachePolicy::STREAMING ||
           kind == CachePolicy::WRITE_BACK || kind == CachePolicy::WRITE_THROUGH;
  }
- 
-@@ -518,7 +519,8 @@ void LoadNdOp::build(OpBuilder &builder, OperationState &state, Type retType,
+
+@@ -519,7 +520,8 @@ void LoadNdOp::build(OpBuilder &builder, OperationState &state, Type retType,
                       xegpu::CachePolicyAttr l3_hint) {
- 
+
    return build(builder, state, retType, tensorDesc, ValueRange(),
 -               DenseI64ArrayAttr(), packed, transpose, l1_hint, l2_hint,
 +               DenseI64ArrayAttr(), packed, transpose, nullptr, /*transpose_bit_width*/
 +               l1_hint, l2_hint,
                 l3_hint, /*anchor_layout=*/nullptr);
  }
- 
-@@ -535,7 +537,8 @@ void LoadNdOp::build(OpBuilder &builder, OperationState &state, Type retType,
+
+@@ -537,7 +539,7 @@ void LoadNdOp::build(OpBuilder &builder, OperationState &state, Type retType,
    auto staticOffsetsAttr = builder.getDenseI64ArrayAttr(staticOffsets);
- 
+
    build(builder, state, retType, tensorDesc, dynamicOffsets, staticOffsetsAttr,
 -        packed, transpose, l1_hint, l2_hint, l3_hint,
-+        packed, transpose, nullptr, /*transpose_bit_width*/
-+        l1_hint, l2_hint, l3_hint,
-         /*anchor_layout=*/nullptr);
++        packed, transpose, nullptr /*transpose_bit_width*/, l1_hint, l2_hint, l3_hint,
+         /*anchor_layout=*/layout);
  }
- 
-@@ -598,7 +601,7 @@ LogicalResult LoadNdOp::verify() {
+
+@@ -600,7 +602,7 @@ LogicalResult LoadNdOp::verify() {
        mlir::emitWarning(getLoc()) << "Invalid transpose attr. It is ignored.";
    }
- 
+
 -  if (getPacked()) {
 +  if (getPacked() || getTransposeBitWidth() == 32) {
      if (tdescTy.getRank() == 2) {
        const int axis = 0;
        auto vnni_factor = valueShape.back();
--- 
+--
 2.34.1
-
