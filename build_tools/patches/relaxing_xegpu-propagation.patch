@@ -29,6 +29,5 @@ index 6b3ba5a5981c..ecd6a3358f4a 100644
    return llvm::map_to_vector(storage.getEffectiveLaneDataAsInt(),
                               [](int64_t val) { return static_cast<int>(val); });
  }
--- 
+--
 2.34.1
-
