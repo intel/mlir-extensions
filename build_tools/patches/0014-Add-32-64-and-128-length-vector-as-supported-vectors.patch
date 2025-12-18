@@ -1,0 +1,144 @@
+From 27bd5d19a0f122d9acded716fe936d07416e1308 Mon Sep 17 00:00:00 2001
+From: "Shahneous Bari, Md Abdullah" <md.abdullah.shahneous.bari@intel.com>
+Date: Wed, 17 Dec 2025 14:21:48 +0000
+Subject: [PATCH] Add 32, 64 and 128 length vector as supported vectors.
+
+This is needed to support large loads/stores using OpenCL intrinsics in
+MLIR workflow.
+THIS IS A HACK and temporary solution,
+need to re-visit this with better solution later.
+---
+ llvm/lib/Target/SPIRV/SPIRVLegalizerInfo.cpp | 81 ++++++++++++++------
+ 1 file changed, 59 insertions(+), 22 deletions(-)
+
+diff --git a/llvm/lib/Target/SPIRV/SPIRVLegalizerInfo.cpp b/llvm/lib/Target/SPIRV/SPIRVLegalizerInfo.cpp
+index 30703ee40be0..2f3baa1b6c7e 100644
+--- a/llvm/lib/Target/SPIRV/SPIRVLegalizerInfo.cpp
++++ b/llvm/lib/Target/SPIRV/SPIRVLegalizerInfo.cpp
+@@ -50,6 +50,28 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
+   const LLT s64 = LLT::scalar(64);
+   const LLT s128 = LLT::scalar(128);
+ 
++  // @IMEX, Add 32, 64 and 128 length vector as supported vectors.
++  // This is needed to support large loads/stores using OpenCL intrinsics in
++  // MLIR workflow.
++  // @TODO: THIS IS A HACK, need to re-visit this with better solution later.
++  const LLT v128s64 = LLT::fixed_vector(128, 64);
++  const LLT v128s32 = LLT::fixed_vector(128, 32);
++  const LLT v128s16 = LLT::fixed_vector(128, 16);
++  const LLT v128s8 = LLT::fixed_vector(128, 8);
++  const LLT v128s1 = LLT::fixed_vector(128, 1);
++
++  const LLT v64s64 = LLT::fixed_vector(64, 64);
++  const LLT v64s32 = LLT::fixed_vector(64, 32);
++  const LLT v64s16 = LLT::fixed_vector(64, 16);
++  const LLT v64s8 = LLT::fixed_vector(64, 8);
++  const LLT v64s1 = LLT::fixed_vector(64, 1);
++
++  const LLT v32s64 = LLT::fixed_vector(32, 64);
++  const LLT v32s32 = LLT::fixed_vector(32, 32);
++  const LLT v32s16 = LLT::fixed_vector(32, 16);
++  const LLT v32s8 = LLT::fixed_vector(32, 8);
++  const LLT v32s1 = LLT::fixed_vector(32, 1);
++
+   const LLT v16s64 = LLT::fixed_vector(16, 64);
+   const LLT v16s32 = LLT::fixed_vector(16, 32);
+   const LLT v16s16 = LLT::fixed_vector(16, 16);
+@@ -99,41 +121,53 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
+ 
+   // TODO: remove copy-pasting here by using concatenation in some way.
+   auto allPtrsScalarsAndVectors = {
+-      p0,    p1,    p2,    p3,    p4,     p5,     p6,    p7,    p8,
+-      p9,    p10,   p11,   p12,   s1,     s8,     s16,   s32,   s64,
+-      v2s1,  v2s8,  v2s16, v2s32, v2s64,  v3s1,   v3s8,  v3s16, v3s32,
+-      v3s64, v4s1,  v4s8,  v4s16, v4s32,  v4s64,  v8s1,  v8s8,  v8s16,
+-      v8s32, v8s64, v16s1, v16s8, v16s16, v16s32, v16s64};
+-
+-  auto allVectors = {v2s1,  v2s8,   v2s16,  v2s32, v2s64, v3s1,  v3s8,
+-                     v3s16, v3s32,  v3s64,  v4s1,  v4s8,  v4s16, v4s32,
+-                     v4s64, v8s1,   v8s8,   v8s16, v8s32, v8s64, v16s1,
+-                     v16s8, v16s16, v16s32, v16s64};
++      p0,     p1,     p2,      p3,      p4,     p5,     p6,     p7,     p8,
++      p9,     p10,    p11,     p12,     s1,     s8,     s16,    s32,    s64,
++      s128,   v2s1,   v2s8,    v2s16,   v2s32,  v2s64,  v3s1,   v3s8,   v3s16,
++      v3s32,  v3s64,  v4s1,    v4s8,    v4s16,  v4s32,  v4s64,  v8s1,   v8s8,
++      v8s16,  v8s32,  v8s64,   v16s1,   v16s8,  v16s16, v16s32, v16s64, v32s1,
++      v32s8,  v32s16, v32s32,  v32s64,  v64s1,  v64s8,  v64s16, v64s32, v64s64,
++      v128s1, v128s8, v128s16, v128s32, v128s64};
++
++  // @IMEX, add the 32 and 64 length vector as supported vectors
++  auto allVectors = {v2s1,   v2s8,   v2s16,   v2s32,   v2s64,  v3s1,   v3s8,
++                     v3s16,  v3s32,  v3s64,   v4s1,    v4s8,   v4s16,  v4s32,
++                     v4s64,  v8s1,   v8s8,    v8s16,   v8s32,  v8s64,  v16s1,
++                     v16s8,  v16s16, v16s32,  v16s64,  v32s1,  v32s8,  v32s16,
++                     v32s32, v32s64, v64s1,   v64s8,   v64s16, v64s32, v64s64,
++                     v128s1, v128s8, v128s16, v128s32, v128s64};
+ 
+   auto allShaderVectors = {v2s1, v2s8, v2s16, v2s32, v2s64,
+                            v3s1, v3s8, v3s16, v3s32, v3s64,
+                            v4s1, v4s8, v4s16, v4s32, v4s64};
+ 
+   auto allScalarsAndVectors = {
+-      s1,    s8,    s16,   s32,   s64,    s128,   v2s1,  v2s8,
+-      v2s16, v2s32, v2s64, v3s1,  v3s8,   v3s16,  v3s32, v3s64,
+-      v4s1,  v4s8,  v4s16, v4s32, v4s64,  v8s1,   v8s8,  v8s16,
+-      v8s32, v8s64, v16s1, v16s8, v16s16, v16s32, v16s64};
++      s1,     s8,     s16,    s32,     s64,     s128,   v2s1,   v2s8,
++      v2s16,  v2s32,  v2s64,  v3s1,    v3s8,    v3s16,  v3s32,  v3s64,
++      v4s1,   v4s8,   v4s16,  v4s32,   v4s64,   v8s1,   v8s8,   v8s16,
++      v8s32,  v8s64,  v16s1,  v16s8,   v16s16,  v16s32, v16s64, v32s1,
++      v32s8,  v32s16, v32s32, v32s64,  v64s1,   v64s8,  v64s16, v64s32,
++      v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
+ 
+   auto allIntScalarsAndVectors = {
+-      s8,    s16,   s32,   s64,   s128,   v2s8,   v2s16, v2s32, v2s64,
+-      v3s8,  v3s16, v3s32, v3s64, v4s8,   v4s16,  v4s32, v4s64, v8s8,
+-      v8s16, v8s32, v8s64, v16s8, v16s16, v16s32, v16s64};
++      s8,     s16,    s32,    s64,    v2s8,    v2s16,   v2s32,  v2s64,
++      v3s8,   v3s16,  v3s32,  v3s64,  v4s8,    v4s16,   v4s32,  v4s64,
++      v8s8,   v8s16,  v8s32,  v8s64,  v16s8,   v16s16,  v16s32, v16s64,
++      v32s1,  v32s8,  v32s16, v32s32, v32s64,  v64s1,   v64s8,  v64s16,
++      v64s32, v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
+ 
+-  auto allBoolScalarsAndVectors = {s1, v2s1, v3s1, v4s1, v8s1, v16s1};
++  auto allBoolScalarsAndVectors = {s1,   v2s1,  v3s1,  v4s1,
++                                   v8s1, v16s1, v32s1, v64s1};
+ 
+   auto allIntScalars = {s8, s16, s32, s64, s128};
+ 
+   auto allFloatScalarsAndF16Vector2AndVector4s = {s16, s32, s64, v2s16, v4s16};
+ 
+   auto allFloatScalarsAndVectors = {
+-      s16,   s32,   s64,   v2s16, v2s32, v2s64, v3s16,  v3s32,  v3s64,
+-      v4s16, v4s32, v4s64, v8s16, v8s32, v8s64, v16s16, v16s32, v16s64};
++      s16,    s32,    s64,    v2s16,   v2s32,   v2s64,  v3s16,  v3s32,  v3s64,
++      v4s16,  v4s32,  v4s64,  v8s16,   v8s32,   v8s64,  v16s16, v16s32, v16s64,
++      v32s1,  v32s8,  v32s16, v32s32,  v32s64,  v64s1,  v64s8,  v64s16, v64s32,
++      v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
+ 
+   auto allFloatAndIntScalarsAndPtrs = {s8, s16, s32, s64, p0, p1,  p2,  p3, p4,
+                                        p5, p6,  p7,  p8,  p9, p10, p11, p12};
+@@ -170,7 +204,9 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
+   // shader execution models, vector sizes are strictly limited to 4. In
+   // non-shader contexts, vector sizes of 8 and 16 are also permitted, but
+   // arbitrary sizes (e.g., 6 or 11) are not.
+-  uint32_t MaxVectorSize = ST.isShader() ? 4 : 16;
++
++  // @IMEX, make the max vector size to be 128 for now.
++  uint32_t MaxVectorSize = ST.isShader() ? 4 : 128;
+ 
+   for (auto Opc : getTypeFoldingSupportedOpcodes()) {
+     if (Opc != G_EXTRACT_VECTOR_ELT)
+@@ -531,7 +567,8 @@ bool SPIRVLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
+     LLT DstTy = MRI.getType(DstReg);
+     LLT SrcTy = MRI.getType(SrcReg);
+ 
+-    int32_t MaxVectorSize = ST.isShader() ? 4 : 16;
++    // @IMEX make the max vector size to be 128
++    int32_t MaxVectorSize = ST.isShader() ? 4 : 128;
+ 
+     bool DstNeedsLegalization = false;
+     bool SrcNeedsLegalization = false;
+-- 
+2.43.0
+
