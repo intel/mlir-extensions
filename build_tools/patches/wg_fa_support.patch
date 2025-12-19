@@ -107,29 +107,6 @@ diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp b/mlir/
 index 48bd0662b03f..76ed73fdfaef 100644
 --- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
 +++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
-@@ -1129,14 +1129,14 @@ struct WgToSgVectorShapeCastOp
-
-     // For rank reducing or increasing shape_cast ops, the lower rank layout
-     // must be a slice of higher rank layout.
--    int64_t sourceRank = srcType.getRank();
--    int64_t resultRank = sgShape.size();
--    xegpu::DistributeLayoutAttr sourceLayout =
--        xegpu::getDistributeLayoutAttr(op.getSource());
--    if (sourceRank < resultRank && !sourceLayout.isSliceOf(layout))
--      return failure();
--    if (sourceRank > resultRank && !layout.isSliceOf(sourceLayout))
--      return failure();
-+    // int64_t sourceRank = srcType.getRank();
-+    // int64_t resultRank = sgShape.size();
-+    // xegpu::DistributeLayoutAttr sourceLayout =
-+    //     xegpu::getDistributeLayoutAttr(op.getSource());
-+    // if (sourceRank < resultRank && !sourceLayout.isSliceOf(layout))
-+    //   return failure();
-+    // if (sourceRank > resultRank && !layout.isSliceOf(sourceLayout))
-+    //   return failure();
-
-     SmallVector<Value> newShapeCastOps;
-     for (auto src : adaptor.getSource()) {
 @@ -1238,13 +1238,13 @@ struct WgToSgVectorTransposeOp
      SmallVector<int64_t> sourceSgLayout =
          sourceLayout.getEffectiveSgLayoutAsInt();
