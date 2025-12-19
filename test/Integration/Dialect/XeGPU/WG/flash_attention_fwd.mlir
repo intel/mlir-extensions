@@ -2,6 +2,7 @@
 // RUN:                                       --runner mlir-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+
 #q = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [8, 16]>
 #k = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [16, 16]>
 #v = #k
