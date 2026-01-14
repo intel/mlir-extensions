@@ -14,7 +14,7 @@ index 590182731b00..0d9f4df374f9 100644
 @@ -50,6 +50,28 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
    const LLT s64 = LLT::scalar(64);
    const LLT s128 = LLT::scalar(128);
- 
+
 +  // @IMEX, Add 32, 64 and 128 length vector as supported vectors.
 +  // This is needed to support large loads/stores using OpenCL intrinsics in
 +  // MLIR workflow.
@@ -41,7 +41,7 @@ index 590182731b00..0d9f4df374f9 100644
    const LLT v16s32 = LLT::fixed_vector(16, 32);
    const LLT v16s16 = LLT::fixed_vector(16, 16);
 @@ -100,16 +122,22 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
- 
+
    // TODO: remove copy-pasting here by using concatenation in some way.
    auto allPtrsScalarsAndVectors = {
 -      p0,    p1,    p2,    p3,    p4,    p5,     p6,     p7,    p8,
@@ -64,17 +64,17 @@ index 590182731b00..0d9f4df374f9 100644
 +                     v16s8,  v16s16, v16s32,  v16s64,  v32s1,  v32s8,  v32s16,
 +                     v32s32, v32s64, v64s1,   v64s8,   v64s16, v64s32, v64s64,
 +                     v128s1, v128s8, v128s16, v128s32, v128s64};
- 
+
 -  auto allVectors = {v2s1,  v2s8,   v2s16,  v2s32, v2s64, v3s1,  v3s8,
 -                     v3s16, v3s32,  v3s64,  v4s1,  v4s8,  v4s16, v4s32,
 -                     v4s64, v8s1,   v8s8,   v8s16, v8s32, v8s64, v16s1,
 -                     v16s8, v16s16, v16s32, v16s64};
- 
+
    auto allShaderVectors = {v2s1, v2s8, v2s16, v2s32, v2s64,
                             v3s1, v3s8, v3s16, v3s32, v3s64,
 @@ -118,25 +146,32 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
    auto allScalars = {s1, s8, s16, s32, s64};
- 
+
    auto allScalarsAndVectors = {
 -      s1,    s8,    s16,   s32,   s64,    s128,   v2s1,  v2s8,
 -      v2s16, v2s32, v2s64, v3s1,  v3s8,   v3s16,  v3s32, v3s64,
@@ -86,7 +86,7 @@ index 590182731b00..0d9f4df374f9 100644
 +      v8s32,  v8s64,  v16s1,  v16s8,   v16s16,  v16s32, v16s64, v32s1,
 +      v32s8,  v32s16, v32s32, v32s64,  v64s1,   v64s8,  v64s16, v64s32,
 +      v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
- 
+
    auto allIntScalarsAndVectors = {
 -      s8,    s16,   s32,   s64,   s128,   v2s8,   v2s16, v2s32, v2s64,
 -      v3s8,  v3s16, v3s32, v3s64, v4s8,   v4s16,  v4s32, v4s64, v8s8,
@@ -96,15 +96,15 @@ index 590182731b00..0d9f4df374f9 100644
 +      v8s8,   v8s16,  v8s32,  v8s64,  v16s8,   v16s16,  v16s32, v16s64,
 +      v32s1,  v32s8,  v32s16, v32s32, v32s64,  v64s1,   v64s8,  v64s16,
 +      v64s32, v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
- 
+
 -  auto allBoolScalarsAndVectors = {s1, v2s1, v3s1, v4s1, v8s1, v16s1};
 +  auto allBoolScalarsAndVectors = {s1,   v2s1,  v3s1,  v4s1,
 +                                   v8s1, v16s1, v32s1, v64s1};
- 
+
    auto allIntScalars = {s8, s16, s32, s64, s128};
- 
+
    auto allFloatScalarsAndF16Vector2AndVector4s = {s16, s32, s64, v2s16, v4s16};
- 
+
    auto allFloatScalarsAndVectors = {
 -      s16,   s32,   s64,   v2s16, v2s32, v2s64, v3s16,  v3s32,  v3s64,
 -      v4s16, v4s32, v4s64, v8s16, v8s32, v8s64, v16s16, v16s32, v16s64};
@@ -112,7 +112,7 @@ index 590182731b00..0d9f4df374f9 100644
 +      v4s16,  v4s32,  v4s64,  v8s16,   v8s32,   v8s64,  v16s16, v16s32, v16s64,
 +      v32s1,  v32s8,  v32s16, v32s32,  v32s64,  v64s1,  v64s8,  v64s16, v64s32,
 +      v64s64, v128s1, v128s8, v128s16, v128s32, v128s64};
- 
+
    auto allFloatAndIntScalarsAndPtrs = {s8, s16, s32, s64, p0,  p1,
                                         p2, p3,  p4,  p5,  p6,  p7,
 @@ -174,7 +209,9 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
@@ -124,7 +124,7 @@ index 590182731b00..0d9f4df374f9 100644
 +  // @IMEX, make the max vector size to be 128 for now.
 +  uint32_t MaxVectorSize = ST.isShader() ? 4 : 128;
    LLVM_DEBUG(dbgs() << "MaxVectorSize: " << MaxVectorSize << "\n");
- 
+
    for (auto Opc : getTypeFoldingSupportedOpcodes()) {
 @@ -579,7 +616,10 @@ static bool needsVectorLegalization(const LLT &Ty, const SPIRVSubtarget &ST) {
    if (!Ty.isVector())
@@ -138,6 +138,5 @@ index 590182731b00..0d9f4df374f9 100644
    return (NumElements > 4 && !isPowerOf2_32(NumElements)) ||
           NumElements > MaxVectorSize;
  }
--- 
+--
 2.34.1
-

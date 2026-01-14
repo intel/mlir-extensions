@@ -75,8 +75,8 @@ module @gemm attributes {gpu.container_module} {
         %b_transposed = vector.transpose %b_value, [1, 0] {layout_result_0 = #b} : vector<256x32xf16> to vector<32x256xf16>
         %c_new_value = xegpu.dpas %a_value, %b_transposed, %c_value {layout_a = #a, layout_b = #b, layout_cd = #c}
           : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
-        scf.yield %c_new_value : vector<256x256xf32> 
-      } 
+        scf.yield %c_new_value : vector<256x256xf32>
+      }
       xegpu.store_nd %out, %c_tdesc[%m, %n]  {layout = #c}: vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #c>
       gpu.return
     }

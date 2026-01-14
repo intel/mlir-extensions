@@ -18,7 +18,7 @@ index 1bc3c63646fd..cf5b5ffa451d 100644
 @@ -56,6 +56,17 @@ def SPIRV_LinkageAttributesAttr : SPIRV_Attr<"LinkageAttributes", "linkage_attri
    let assemblyFormat = "`<` struct(params) `>`";
  }
- 
+
 +// This attribute specifies SPIR-V execution mode information via GPU functions
 +// 1) Execution mode attribute.
 +// 2) [optional] Execution mode value.
@@ -40,7 +40,7 @@ index 24574bfaf619..f64f99294038 100644
 @@ -137,6 +137,14 @@ FailureOr<ExecutionModel> getExecutionModel(TargetEnvAttr targetAttr);
  /// Returns failure if it cannot be selected.
  FailureOr<MemoryModel> getMemoryModel(TargetEnvAttr targetAttr);
- 
+
 +/// Returns the attribute name for specifying execution mode attribute
 +/// information.
 +StringRef getExecutionModeFuncAttrName();
@@ -51,7 +51,7 @@ index 24574bfaf619..f64f99294038 100644
 +
  } // namespace spirv
  } // namespace mlir
- 
+
 diff --git a/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp b/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp
 index c33a903d0339..a6578465abac 100644
 --- a/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp
@@ -76,7 +76,7 @@ index c33a903d0339..a6578465abac 100644
 +
    return success();
  }
- 
+
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 index 8f02dd856d4e..dfb13c173596 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
@@ -118,6 +118,5 @@ index 8c52ba8b8583..864fc75c53b1 100644
 +
 +  return {};
 +}
--- 
+--
 2.34.1
-

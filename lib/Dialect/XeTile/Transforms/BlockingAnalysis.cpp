@@ -282,9 +282,9 @@ public:
 
   void visitBranchOperand(mlir::OpOperand &operand) override {}
 
-  void
-  visitNonControlFlowArguments(mlir::RegionSuccessor &successor,
-                               mlir::ArrayRef<mlir::BlockArgument> arguments) override {};
+  void visitNonControlFlowArguments(
+      mlir::RegionSuccessor &successor,
+      mlir::ArrayRef<mlir::BlockArgument> arguments) override{};
 
   void visitCallOperand(mlir::OpOperand &operand) override {}
 
