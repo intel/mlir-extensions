@@ -45,12 +45,12 @@ module @gemm attributes {gpu.container_module} {
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
       %input_tdesc_1 = xegpu.create_nd_tdesc %input1_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val_1 = xegpu.load_nd %input_tdesc_1[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %input_val_1 = xegpu.load_nd %input_tdesc_1[%m, %n] {layout = #map}: !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
       %input_tdesc_2 = xegpu.create_nd_tdesc %input2_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val_2 = xegpu.load_nd %input_tdesc_2[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %input_val_2 = xegpu.load_nd %input_tdesc_2[%m, %n] {layout = #map}: !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
       %result_val = arith.maximumf %input_val_1, %input_val_2 {layout_result_0 = #map} : vector<256x256xf32>
       %result_tdesc = xegpu.create_nd_tdesc %result_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      xegpu.store_nd %result_val, %result_tdesc[%m, %n] : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
+      xegpu.store_nd %result_val, %result_tdesc[%m, %n] {layout = #map}: vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
       gpu.return
     }
   }
@@ -64,12 +64,12 @@ module @gemm attributes {gpu.container_module} {
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
       %input_tdesc_1 = xegpu.create_nd_tdesc %input1_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val_1 = xegpu.load_nd %input_tdesc_1[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %input_val_1 = xegpu.load_nd %input_tdesc_1[%m, %n] {layout = #map}: !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
       %input_tdesc_2 = xegpu.create_nd_tdesc %input2_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val_2 = xegpu.load_nd %input_tdesc_2[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %input_val_2 = xegpu.load_nd %input_tdesc_2[%m, %n] {layout = #map}: !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
       %result_val = arith.maximumf %input_val_1, %input_val_2 fastmath<fast> {layout_result_0 = #map} : vector<256x256xf32>
       %result_tdesc = xegpu.create_nd_tdesc %result_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      xegpu.store_nd %result_val, %result_tdesc[%m, %n] : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
+      xegpu.store_nd %result_val, %result_tdesc[%m, %n] {layout = #map}: vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
       gpu.return
     }
   }

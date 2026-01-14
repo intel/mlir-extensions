@@ -1,7 +1,7 @@
-From 887ae8599b205921bc4fd34da3c1de767f5568ae Mon Sep 17 00:00:00 2001
+From 1dd1130e8647473448ca9ce808e7bc6efa424675 Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Tue, 23 Sep 2025 21:22:18 +0200
-Subject: [PATCH] Add support for VectorAnyINTEL capability
+Date: Mon, 5 Jan 2026 17:46:15 +0100
+Subject: [PATCH] Add-support-for-VectorAnyINTEL-capability
 
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  11 +-
@@ -24,7 +24,7 @@ Subject: [PATCH] Add support for VectorAnyINTEL capability
  17 files changed, 324 insertions(+), 68 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index 0e42d08cdb1f..f821b0d2e59b 100644
+index ecbbf39a534e..d6a72472bd1b 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 @@ -4240,7 +4240,14 @@ def SPIRV_BFloat16KHR : TypeAlias<BF16, "BFloat16">;
@@ -53,10 +53,10 @@ index 0e42d08cdb1f..f821b0d2e59b 100644
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index 6b4e3dd60319..987b33c055e9 100644
+index 0fb4837e528b..a33b18e8c868 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
-@@ -654,6 +654,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
+@@ -696,6 +696,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
 
@@ -150,7 +150,7 @@ index 6b4e3dd60319..987b33c055e9 100644
  // Negative values for `n` index in reverse.
  class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index c8efdf009422..5236dc299f81 100644
+index 22b57d6c0821..8f02dd856d4e 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 @@ -186,9 +186,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
@@ -169,7 +169,7 @@ index c8efdf009422..5236dc299f81 100644
        return Type();
      }
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index 7e9a80e7d73a..1db6233cf73f 100644
+index 53a48abe5ad0..4c39a7c83281 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -186,9 +186,10 @@ bool CompositeType::classof(Type type) {
@@ -178,15 +178,15 @@ index 7e9a80e7d73a..1db6233cf73f 100644
  bool CompositeType::isValid(VectorType type) {
 -  return type.getRank() == 1 &&
 -         llvm::is_contained({2, 3, 4, 8, 16}, type.getNumElements()) &&
--         llvm::isa<ScalarType>(type.getElementType());
+-         isa<ScalarType>(type.getElementType());
 +  // Number of elements should be between [2 to 2^32 - 1].
-+  return type.getRank() == 1 && mlir::isa<ScalarType>(type.getElementType()) &&
++  return type.getRank() == 1 && isa<ScalarType>(type.getElementType()) &&
 +         type.getNumElements() >= 2 &&
 +         type.getNumElements() <= std::numeric_limits<uint32_t>::max();
  }
 
  Type CompositeType::getElementType(unsigned index) const {
-@@ -221,8 +222,23 @@ void TypeCapabilityVisitor::addConcrete(VectorType type) {
+@@ -218,8 +219,23 @@ void TypeCapabilityVisitor::addConcrete(VectorType type) {
 
    int64_t vecSize = type.getNumElements();
    if (vecSize == 8 || vecSize == 16) {
@@ -213,7 +213,7 @@ index 7e9a80e7d73a..1db6233cf73f 100644
  }
 
 diff --git a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
-index 122f61e0a66a..c6f37e9345ed 100644
+index 816226749463..31c590efcda3 100644
 --- a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 +++ b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 @@ -84,9 +84,13 @@ static std::optional<SmallVector<int64_t>> getTargetShape(VectorType vecType) {
@@ -385,7 +385,7 @@ index 122f61e0a66a..c6f37e9345ed 100644
  }
 
  static Type
-@@ -1693,16 +1780,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
+@@ -1694,16 +1781,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
    SmallVector<ArrayRef<spirv::Extension>, 4> typeExtensions;
    SmallVector<ArrayRef<spirv::Capability>, 8> typeCapabilities;
    for (Type valueType : valueTypes) {
