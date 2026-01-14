@@ -1,9 +1,8 @@
-From a18280b49a33d421477db322d642aff187b029f8 Mon Sep 17 00:00:00 2001
-From: Dimple Prajapati <dimpalben.r.prajapati@intel.com>
-Date: Tue, 7 May 2024 23:26:34 +0000
-Subject: [PATCH] Add SPIRV_ExecutionModeAttributesAttr
+From ab51a97f5358afe72bfce6483a3416a50dc40018 Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Mon, 5 Jan 2026 17:51:39 +0100
+Subject: [PATCH] Add-SPIRV_ExecutionModeAttributesAttr
 
-add spirv.ExecutionMode Op during GPUToSPIRV Pass lowering
 ---
  .../mlir/Dialect/SPIRV/IR/SPIRVAttributes.td   | 11 +++++++++++
  .../mlir/Dialect/SPIRV/IR/TargetAndABI.h       |  8 ++++++++
@@ -13,13 +12,13 @@ add spirv.ExecutionMode Op during GPUToSPIRV Pass lowering
  5 files changed, 55 insertions(+)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
-index 3a11284da051..1267ecd251ae 100644
+index 1bc3c63646fd..cf5b5ffa451d 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
 @@ -56,6 +56,17 @@ def SPIRV_LinkageAttributesAttr : SPIRV_Attr<"LinkageAttributes", "linkage_attri
    let assemblyFormat = "`<` struct(params) `>`";
  }
-
+ 
 +// This attribute specifies SPIR-V execution mode information via GPU functions
 +// 1) Execution mode attribute.
 +// 2) [optional] Execution mode value.
@@ -41,7 +40,7 @@ index 24574bfaf619..f64f99294038 100644
 @@ -137,6 +137,14 @@ FailureOr<ExecutionModel> getExecutionModel(TargetEnvAttr targetAttr);
  /// Returns failure if it cannot be selected.
  FailureOr<MemoryModel> getMemoryModel(TargetEnvAttr targetAttr);
-
+ 
 +/// Returns the attribute name for specifying execution mode attribute
 +/// information.
 +StringRef getExecutionModeFuncAttrName();
@@ -52,12 +51,12 @@ index 24574bfaf619..f64f99294038 100644
 +
  } // namespace spirv
  } // namespace mlir
-
+ 
 diff --git a/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp b/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp
-index d7885e035959..5195035f088f 100644
+index c33a903d0339..a6578465abac 100644
 --- a/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp
 +++ b/mlir/lib/Conversion/GPUToSPIRV/GPUToSPIRV.cpp
-@@ -343,6 +343,20 @@ LogicalResult GPUFuncOpConversion::matchAndRewrite(
+@@ -346,6 +346,20 @@ LogicalResult GPUFuncOpConversion::matchAndRewrite(
      return failure();
    newFuncOp->removeAttr(
        rewriter.getStringAttr(gpu::GPUDialect::getKernelFuncAttrName()));
@@ -77,27 +76,27 @@ index d7885e035959..5195035f088f 100644
 +
    return success();
  }
-
+ 
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 65aaafa55386..b9f906ada3ee 100644
+index 8f02dd856d4e..dfb13c173596 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -948,6 +948,10 @@ LogicalResult SPIRVDialect::verifyOperationAttribute(Operation *op,
+@@ -1026,6 +1026,10 @@ LogicalResult SPIRVDialect::verifyOperationAttribute(Operation *op,
    } else if (symbol == spirv::getTargetEnvAttrName()) {
-     if (!llvm::isa<spirv::TargetEnvAttr>(attr))
+     if (!isa<spirv::TargetEnvAttr>(attr))
        return op->emitError("'") << symbol << "' must be a spirv::TargetEnvAttr";
 +  } else if (symbol == spirv::getExecutionModeFuncAttrName()) {
-+    if (!llvm::isa<spirv::ExecutionModeFuncAttributeAttr>(attr))
++    if (!isa<spirv::ExecutionModeFuncAttributeAttr>(attr))
 +      return op->emitError("'")
 +             << symbol << "' must be a spirv::ExecutionModeFuncAttributeAttr";
    } else {
      return op->emitError("found unsupported '")
             << symbol << "' attribute on operation";
 diff --git a/mlir/lib/Dialect/SPIRV/IR/TargetAndABI.cpp b/mlir/lib/Dialect/SPIRV/IR/TargetAndABI.cpp
-index bbc318e17300..56251a8f3990 100644
+index 8c52ba8b8583..864fc75c53b1 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/TargetAndABI.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/TargetAndABI.cpp
-@@ -242,3 +242,21 @@ spirv::getMemoryModel(spirv::TargetEnvAttr targetAttr) {
+@@ -238,3 +238,21 @@ spirv::getMemoryModel(spirv::TargetEnvAttr targetAttr) {
    }
    return failure();
  }
@@ -119,5 +118,6 @@ index bbc318e17300..56251a8f3990 100644
 +
 +  return {};
 +}
---
+-- 
 2.34.1
+

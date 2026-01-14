@@ -68,17 +68,17 @@ module @flash_attention attributes {gpu.container_module} {
       // For prefetch SG layout is 4x2. Each SG prefetch 16x32xf16 tile.
       // Note that prefetch x offset is same as Q x offset. This is because WGs in same batch colloborate on K and V prefetch.
       %k_prefetch_tile = xegpu.create_nd_tdesc %K , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #k_prefetch>
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
       %wg_q_x_offset_plus_BLOCK_N = arith.addi %wg_q_x_offset, %BLOCK_N : index
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
       %wg_q_x_offset_plus_2_BLOCK_N = arith.addi %wg_q_x_offset_plus_BLOCK_N, %BLOCK_N : index
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
 
       // V prefetch is similar to K
       %v_prefetch_tile = xegpu.create_nd_tdesc %V , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
       %BLOCK_N_3_t = arith.addi %BLOCK_N, %BLOCK_N : index
       %BLOCK_N_3 = arith.addi %BLOCK_N_3_t, %BLOCK_N : index
 
@@ -98,7 +98,7 @@ module @flash_attention attributes {gpu.container_module} {
 
 
       // Load Q tile. Each WG loads 128x64xf16 tile of Q.
-      %q_value = xegpu.load_nd %q_tile[%wg_q_x_offset, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}  : !xegpu.tensor_desc<128x64xf16, #q> -> vector<128x64xf16>
+      %q_value = xegpu.load_nd %q_tile[%wg_q_x_offset, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #q}  : !xegpu.tensor_desc<128x64xf16, #q> -> vector<128x64xf16>
 
       // Inner loop. This loop iterate over K and V tiles and update the accumulator by computing softmax(q*k^T)*v
       // K and V tiles are accessed in 64x64xf16 blocks (BLOCK_N=64). However, we load them in 16x64xf16 slices.
@@ -116,42 +116,42 @@ module @flash_attention attributes {gpu.container_module} {
           // K prefetch
           %prefetch_offset_x_running_t = arith.addi %BLOCK_N_3, %k : index
           %prefetch_offset_x_running = arith.addi %wg_q_x_offset, %prefetch_offset_x_running_t : index
-          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %c0] : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #k_prefetch}: !xegpu.tensor_desc<64x64xf16, #k_prefetch>
 
           // V prefetch
-          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %c0] : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #v_prefetch}: !xegpu.tensor_desc<64x64xf16, #v_prefetch>
 
           // Load first 16x64xf16 K slice. K is in column major layout, so we need to transpose after loading.
           %wg_x_offset_running = arith.addi %wg_x_offset, %k : index
-          %k_value_slice_0_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
+          %k_value_slice_0_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
           %k_value_slice_0 = vector.transpose %k_value_slice_0_t0, [1, 0] {layout_result_0 = #kt} : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute first 128x16 of Q * K^T using DPAS.
-          %qk_out_0 = xegpu.dpas %q_value, %k_value_slice_0, %zero_dpas_128x16 {layout_result_0 = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
+          %qk_out_0 = xegpu.dpas %q_value, %k_value_slice_0, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
 
           // Load second 16x64xf16 K slice.
           %wg_x_offset_running_plus_16 = arith.addi %wg_x_offset_running, %c16 : index
-          %k_value_slice_1_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_16, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
+          %k_value_slice_1_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_16, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
           %k_value_slice_1 = vector.transpose %k_value_slice_1_t0, [1, 0] {layout_result_0 = #kt} : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute second 128x16 of Q * K^T using DPAS
-          %qk_out_1 = xegpu.dpas %q_value, %k_value_slice_1, %zero_dpas_128x16 {layout_result_0 = #layout_128x16}   : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
+          %qk_out_1 = xegpu.dpas %q_value, %k_value_slice_1, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
 
           // Load third  16x64xf16 K slice
           %wg_x_offset_running_plus_32 = arith.addi %wg_x_offset_running_plus_16, %c16 : index
-          %k_value_slice_2_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_32, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
+          %k_value_slice_2_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_32, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
           %k_value_slice_2 = vector.transpose %k_value_slice_2_t0, [1, 0] {layout_result_0 = #kt}  : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute third 128x16 of Q * K^T using DPAS
-          %qk_out_2 = xegpu.dpas %q_value, %k_value_slice_2, %zero_dpas_128x16 {layout_result_0 = #layout_128x16}  : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
+          %qk_out_2 = xegpu.dpas %q_value, %k_value_slice_2, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16}  : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
 
           // Load forth  16x64 K slice
           %wg_x_offset_running_plus_48 = arith.addi %wg_x_offset_running_plus_32, %c16 : index
-          %k_value_slice_3_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_48, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
+          %k_value_slice_3_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_48, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
           %k_value_slice_3 = vector.transpose %k_value_slice_3_t0, [1, 0] {layout_result_0 = #kt}  : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute forth 128x16 of Q * K^T using DPAS
-          %qk_out_3 = xegpu.dpas %q_value, %k_value_slice_3, %zero_dpas_128x16 {layout_result_0 = #layout_128x16}  : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
+          %qk_out_3 = xegpu.dpas %q_value, %k_value_slice_3, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
 
           // Softmax computation on QK_out tile
           // Do max reduction on qk_out
@@ -209,24 +209,24 @@ module @flash_attention attributes {gpu.container_module} {
           %qk_out_3_f16 = arith.truncf %qk_out_3_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32> to vector<128x16xf16>
 
           // Load first 16x64 V slice.
-          %v_val_slice_0 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running, %c0] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
+          %v_val_slice_0 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute first iteration update of 128x64 of P * V
-          %pv_out_iter0 = xegpu.dpas %qk_out_0_f16, %v_val_slice_0, %acc_in_updated {layout_result_0 = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter0 = xegpu.dpas %qk_out_0_f16, %v_val_slice_0, %acc_in_updated {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load second 16x64 V slice.
-          %v_val_slice_1 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_16, %c0] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
+          %v_val_slice_1 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_16, %c0] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute second iteration update of 128x64 of P * V
-          %pv_out_iter1 = xegpu.dpas %qk_out_1_f16, %v_val_slice_1, %pv_out_iter0 {layout_result_0 = #out}  : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter1 = xegpu.dpas %qk_out_1_f16, %v_val_slice_1, %pv_out_iter0 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load third 16x64 V slice.
-          %v_val_slice_2 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_32, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
+          %v_val_slice_2 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_32, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute third iteration update of 128x64 of P * V
-          %pv_out_iter2 = xegpu.dpas %qk_out_2_f16, %v_val_slice_2, %pv_out_iter1 {layout_result_0 = #out}  : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter2 = xegpu.dpas %qk_out_2_f16, %v_val_slice_2, %pv_out_iter1 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load forth 16x64 V slice.
-          %v_val_slice_3 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_48, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
+          %v_val_slice_3 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_48, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute forth iteration update of 128x64 of P * V
-          %pv_out_iter3 = xegpu.dpas %qk_out_3_f16, %v_val_slice_3, %pv_out_iter2 {layout_result_0 = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter3 = xegpu.dpas %qk_out_3_f16, %v_val_slice_3, %pv_out_iter2 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           scf.yield %pv_out_iter3, %m_ij_row, %l_i_row_new : vector<128x64xf32>, vector<128x1xf32>, vector<128x1xf32>
         } {layout_result_0 = #out, layout_result_1 = #layout_128x1, layout_result_2 = #layout_128x1}// end of inner loop

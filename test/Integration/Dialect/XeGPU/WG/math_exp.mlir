@@ -44,10 +44,10 @@ module @gemm attributes {gpu.container_module} {
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
       %input_tdesc = xegpu.create_nd_tdesc %input_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val = xegpu.load_nd %input_tdesc[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
-      %result_val = math.exp %input_val {layout_result_0 = #map} : vector<256x256xf32>
+      %input_val = xegpu.load_nd %input_tdesc[%m, %n] {layout = #map} : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %result_val = math.exp %input_val {layout_result_0 = #map}: vector<256x256xf32>
       %result_tdesc = xegpu.create_nd_tdesc %result_gpu : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      xegpu.store_nd %result_val, %result_tdesc[%m, %n] : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
+      xegpu.store_nd %result_val, %result_tdesc[%m, %n] {layout = #map} : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
       gpu.return
     }
 
@@ -63,10 +63,10 @@ module @gemm attributes {gpu.container_module} {
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
       %input_tdesc = xegpu.create_nd_tdesc %input_gpu_with_fast_math : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      %input_val = xegpu.load_nd %input_tdesc[%m, %n] : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
-      %result_val = math.exp %input_val fastmath<fast> {layout_result_0 = #map} : vector<256x256xf32>
+      %input_val = xegpu.load_nd %input_tdesc[%m, %n] {layout = #map} : !xegpu.tensor_desc<256x256xf32, #map> -> vector<256x256xf32>
+      %result_val = math.exp %input_val fastmath<fast> {layout_result_0 = #map}: vector<256x256xf32>
       %result_tdesc = xegpu.create_nd_tdesc %result_gpu_with_fastmath : memref<256x256xf32> -> !xegpu.tensor_desc<256x256xf32, #map>
-      xegpu.store_nd %result_val, %result_tdesc[%m, %n] : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
+      xegpu.store_nd %result_val, %result_tdesc[%m, %n] {layout = #map} : vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #map>
       gpu.return
     }
   }

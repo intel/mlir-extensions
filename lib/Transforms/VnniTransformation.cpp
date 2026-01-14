@@ -231,6 +231,10 @@ public:
 
   void visitCallOperand(mlir::OpOperand &operand) override {}
 
+  void
+  visitNonControlFlowArguments(mlir::RegionSuccessor &successor,
+                               mlir::ArrayRef<mlir::BlockArgument> arguments) override {};
+
   void setToExitState(LayoutLattice *lattice) override {
     (void)lattice->meet(false);
   }
