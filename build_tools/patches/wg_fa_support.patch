@@ -16,13 +16,13 @@ index 931834ba16d9..f59464a55d60 100644
 @@ -228,7 +228,8 @@ XeGPUBlockingPass::getTileShape(Operation *op) const {
    if (isa<vector::MultiDimReductionOp>(op))
      return getTileShape(op->getOpOperand(0));
- 
+
 -  if (isa<vector::TransposeOp, vector::BroadcastOp, vector::StepOp,
 +  if (isa<vector::TransposeOp, vector::BroadcastOp,
 +          vector::ShapeCastOp, vector::StepOp,
            vector::ConstantMaskOp, vector::CreateMaskOp>(op))
      return getTileShape(op->getOpResult(0));
- 
+
 diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
 index 8328c2797be4..679f11bd1d43 100644
 --- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
@@ -35,7 +35,7 @@ index 8328c2797be4..679f11bd1d43 100644
 -    DenseI32ArrayAttr resultOrder = layout.getOrder();
 +    // DenseI32ArrayAttr sourceOrder = sourceLayout.getOrder();
 +    // DenseI32ArrayAttr resultOrder = layout.getOrder();
- 
+
 -    if (!sourceOrder || !resultOrder) {
 -      return rewriter.notifyMatchFailure(
 -          op, "Both source and result must have order attributes");
@@ -44,9 +44,8 @@ index 8328c2797be4..679f11bd1d43 100644
 +    //   return rewriter.notifyMatchFailure(
 +    //       op, "Both source and result must have order attributes");
 +    // }
- 
+
      ArrayRef<int64_t> permutation = op.getPermutation();
      size_t permutationSize = permutation.size();
--- 
+--
 2.34.1
-

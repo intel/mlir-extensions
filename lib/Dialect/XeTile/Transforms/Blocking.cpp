@@ -1336,8 +1336,8 @@ public:
     // the region iter arguments will be used as the anchor if it is a loop,
     // otherwise, the op results will be used as the anchor.
     // TODO: is it safe to assume that first is always the entry successor?
-    auto anchor =
-        iface.hasLoop() ? iface.getSuccessorInputs(successors[0]) : op->getResults();
+    auto anchor = iface.hasLoop() ? iface.getSuccessorInputs(successors[0])
+                                  : op->getResults();
 
     // Collect blockSZ for each value and check whether they need a rewrite
     bool toChange = false;

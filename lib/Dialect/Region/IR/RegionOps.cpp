@@ -64,8 +64,8 @@ void EnvironmentRegionOp::getSuccessorRegions(
   regions.push_back(::mlir::RegionSuccessor::parent());
 }
 
-::mlir::ValueRange EnvironmentRegionOp::getSuccessorInputs(
-    ::mlir::RegionSuccessor successor) {
+::mlir::ValueRange
+EnvironmentRegionOp::getSuccessorInputs(::mlir::RegionSuccessor successor) {
   return successor.isParent() ? getOperation()->getResults()
                               : ::mlir::ValueRange();
 }

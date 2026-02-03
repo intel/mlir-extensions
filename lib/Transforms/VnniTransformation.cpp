@@ -423,7 +423,8 @@ static void handleBranchTerminatorOpInterface(
   if (!mlir::isa<mlir::RegionBranchOpInterface>(terminator->getParentOp()))
     return;
 
-  auto iface = mlir::cast<mlir::RegionBranchOpInterface>(terminator->getParentOp());
+  auto iface =
+      mlir::cast<mlir::RegionBranchOpInterface>(terminator->getParentOp());
   llvm::SmallVector<mlir::RegionSuccessor> successors;
   llvm::SmallVector<mlir::Attribute> operands(terminator->getNumOperands(),
                                               nullptr);
