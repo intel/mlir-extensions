@@ -423,6 +423,7 @@ static void handleBranchTerminatorOpInterface(
   if (!mlir::isa<mlir::RegionBranchOpInterface>(terminator->getParentOp()))
     return;
 
+  auto iface = mlir::cast<mlir::RegionBranchOpInterface>(terminator->getParentOp());
   llvm::SmallVector<mlir::RegionSuccessor> successors;
   llvm::SmallVector<mlir::Attribute> operands(terminator->getNumOperands(),
                                               nullptr);
@@ -433,7 +434,7 @@ static void handleBranchTerminatorOpInterface(
       continue;
 
     mlir::OperandRange operands = terminator.getSuccessorOperands(successor);
-    mlir::ValueRange inputs = successor.getSuccessorInputs();
+    mlir::ValueRange inputs = iface.getSuccessorInputs(successor);
     for (auto [arg, inp] : llvm::zip(operands, inputs)) {
       if (analysis.getLayout(arg)) {
         auto vecTy = mlir::cast<mlir::VectorType>(arg.getType());
@@ -461,7 +462,7 @@ static void handleBranchOpInterface(mlir::OpBuilder &builder,
       continue;
 
     mlir::OperandRange operands = branch.getEntrySuccessorOperands(successor);
-    mlir::ValueRange inputs = successor.getSuccessorInputs();
+    mlir::ValueRange inputs = branch.getSuccessorInputs(successor);
 
     for (auto [arg, input] : llvm::zip(operands, inputs)) {
       if (analysis.getLayout(input)) {

@@ -1,7 +1,7 @@
-From 8605245100a7e20cfd7fac73b28536e0f0d3c93b Mon Sep 17 00:00:00 2001
+From 0560ef541b96e0e1e4b9e9597e52545efe06866c Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Tue, 2 Dec 2025 19:04:17 +0100
-Subject: [PATCH] Add serialization and de-serialization support for s
+Date: Fri, 30 Jan 2026 20:27:27 +0100
+Subject: [PATCH] Add-serialization and de serialization support for spirv
 
 ---
  mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 6 ++++++
@@ -9,7 +9,7 @@ Subject: [PATCH] Add serialization and de-serialization support for s
  2 files changed, 12 insertions(+)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 50883d9ed5e7..c5da338f6339 100644
+index 8d1f9c26fe59..922fefabe21c 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 @@ -283,6 +283,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
@@ -31,16 +31,16 @@ index 50883d9ed5e7..c5da338f6339 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -355,6 +360,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-     break;
+@@ -356,6 +361,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::Location:
    case spirv::Decoration::SpecId:
+   case spirv::Decoration::Index:
 +  case spirv::Decoration::FuncParamIOKindINTEL:
      if (words.size() != 3) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single integer literal";
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index c879a2b3e020..0ccaa72d319b 100644
+index 840c9c990f9c..742bc4b7479c 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 @@ -335,8 +335,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
@@ -52,9 +52,9 @@ index c879a2b3e020..0ccaa72d319b 100644
    case spirv::Decoration::DescriptorSet:
 +  case spirv::Decoration::FuncParamIOKindINTEL:
    case spirv::Decoration::Location:
+   case spirv::Decoration::Index:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
-       args.push_back(intAttr.getValue().getZExtValue());
-@@ -374,6 +376,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -375,6 +377,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::Invariant:
    case spirv::Decoration::Patch:
    case spirv::Decoration::Coherent:
@@ -65,5 +65,6 @@ index c879a2b3e020..0ccaa72d319b 100644
      // For unit attributes and decoration attributes, the args list
      // has no values so we do nothing.
      if (isa<UnitAttr, DecorationAttr>(attr))
---
+-- 
 2.34.1
+

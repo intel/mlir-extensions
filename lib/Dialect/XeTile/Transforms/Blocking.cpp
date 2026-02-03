@@ -1337,7 +1337,7 @@ public:
     // otherwise, the op results will be used as the anchor.
     // TODO: is it safe to assume that first is always the entry successor?
     auto anchor =
-        iface.hasLoop() ? successors[0].getSuccessorInputs() : op->getResults();
+        iface.hasLoop() ? iface.getSuccessorInputs(successors[0]) : op->getResults();
 
     // Collect blockSZ for each value and check whether they need a rewrite
     bool toChange = false;
@@ -1394,7 +1394,7 @@ public:
       { // convert the region arguments for loops
         if (iface.hasLoop()) {
           rewriter.setInsertionPointToStart(&r->front());
-          auto arguments = llvm::to_vector(s.getSuccessorInputs());
+          auto arguments = llvm::to_vector(iface.getSuccessorInputs(s));
           convertOperandsOrResults(
               llvm::ArrayRef<Value>(arguments), blockSZs,
               [&](int64_t i, Value arg, ShapedType type,
