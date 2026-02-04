@@ -16,7 +16,6 @@
 #ifndef _IMEX_XECOMMON_H_
 #define _IMEX_XECOMMON_H_
 
-#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/SmallVector.h"
@@ -42,24 +41,6 @@ bool isColMajorOrder(mlir::DenseI32ArrayAttr order);
 // block load/store. Also shape[0] % height == 0. otherwise, it returns 0.
 int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
                          int vnniFactor, bool colMajor);
-
-// a helper util to check whether the tile type is supported
-// for optimal SLM access lowering. It currently has to meet
-// the following conditions:
-//   tileShape[1] % 16 == 0
-//   slmShape[0] % tileShape[0] == 0
-//   slmShape[1] % tileShape[1] == 0
-//   TileOffset[0] % tileShape[0] == 0
-//   TileOffset[1] % tileShape[1] == 0
-//
-//   regular tile (tile without order attribute)
-//   tileShape[0] x tileShape[1] % 64 == 0 (in bytes) to work
-//   tileShape[0] x tileShape[1] % 256 == 0 (in bytes) for best performance
-//
-//   transposed tile (tile with order attribute)
-//   tileShape[0] % vnni == 0 to work
-//   tileShape[0] % (8 * vnni) == 0 for best performance.
-bool isSupportedOptimalSLMAccess(xetile::TileType tileTy);
 
 // this method computes the vnni factor for the given element type.
 // it returns 1 by default for types does not need vnni transformation.
@@ -95,9 +76,7 @@ mlir::TypedValue<mlir::VectorType> stack(mlir::Value vecUp, mlir::Value vecDown,
                                          mlir::Location loc,
                                          mlir::OpBuilder &builder);
 
-// It checks each GPUFuncOp in the module to see
-// whether they have arguments and outputs with
-// xetile.TileType. They are currently not supported yet.
+// Checks if the GPU module is supported (XeTile support removed)
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod);
 
 llvm::SmallVector<int64_t> getOperandIndices(mlir::Operation *op,
@@ -113,188 +92,6 @@ llvm::SmallVector<mlir::BlockArgument> getArgsForOperand(mlir::scf::ForOp &op,
 mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,
                                      mlir::TypeRange resultTypes,
                                      mlir::ValueRange inputs);
-
-// An analysis hook used by mlir::getUsageAnalysis for analyzing
-// how a tile created by init_tile are used in the program, e.g.,
-// is it created for load, store, or prefetch. It also analyzes
-// how the result of a load_tile is used, including as A operand
-// of tile_mma, B operand of tile_mma or C operand of tile_mma.
-// since they need different lowering strategy for in each use
-// case.
-class TileUsageAnalysis {
-public:
-  TileUsageAnalysis(mlir::Operation *op) {
-    op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::InitTileOp op) {
-      Usage[op] = (uint)UsageType::None;
-      llvm::SmallVector<mlir::Value> q({op});
-      while (q.size()) {
-        auto curr = q.pop_back_val();
-        for (mlir::Operation *user : curr.getUsers()) {
-          if (llvm::isa<imex::xetile::LoadTileOp>(user)) {
-            Usage[op] |= (uint)UsageType::LOAD;
-          } else if (llvm::isa<imex::xetile::PrefetchTileOp>(user)) {
-            Usage[op] |= (uint)UsageType::PREFETCH;
-          } else if (llvm::isa<imex::xetile::StoreTileOp>(user)) {
-            Usage[op] |= (uint)UsageType::STORE;
-          } else if (llvm::isa<imex::xetile::AtomicRMWOp>(user)) {
-            Usage[op] |= (uint)UsageType::ATOMICRMW;
-          } else if (llvm::isa<imex::xetile::UpdateTileOffsetOp>(user)) {
-            Usage[op] |= (uint)UsageType::OTHER;
-          } else if (auto forOp =
-                         llvm::dyn_cast_if_present<mlir::scf::ForOp>(user)) {
-            // we need to check all ForOp arguments for using initTileOp result
-            auto args = getArgsForOperand(forOp, curr);
-            q.insert(q.end(), args.begin(), args.end());
-          }
-        }
-      }
-    }); // walk on InitTileOp
-
-    op->walk<mlir::WalkOrder::PreOrder>([&](imex::xetile::LoadTileOp op) {
-      Usage[op] = (uint)UsageType::None;
-      llvm::SmallVector<mlir::Value> q(op.getValues());
-      while (q.size()) {
-        auto curr = q.pop_back_val();
-        for (mlir::Operation *user : curr.getUsers()) {
-          if (auto mma = llvm::dyn_cast_if_present<xetile::TileMMAOp>(user)) {
-            auto opIndices = getOperandIndices(mma, curr);
-            assert(opIndices.size() == 1 &&
-                   "Only MMA operations with non-equal ops supported");
-            auto idx = opIndices[0];
-            if (idx == 0)
-              Usage[op] |= (uint)UsageType::DPAS_A;
-            else if (idx == 1)
-              Usage[op] |= (uint)UsageType::DPAS_B;
-            else if (idx == 2)
-              Usage[op] |= (uint)UsageType::DPAS_C;
-            else
-              op->emitOpError() << "unknown usage: " << idx;
-          }
-        }
-      }
-    }); // walk on LoadTileOp
-  };
-
-  bool isForDPASA(imex::xetile::LoadTileOp op) {
-    if (Usage.count(op)) {
-      return Usage[op] & UsageType::DPAS_A;
-    }
-    return false;
-  }
-
-  bool isForDPASB(imex::xetile::LoadTileOp op) {
-    if (Usage.count(op)) {
-      return Usage[op] & UsageType::DPAS_B;
-    }
-    return false;
-  }
-
-  bool isForDPASC(imex::xetile::LoadTileOp op) {
-    if (Usage.count(op)) {
-      return Usage[op] & UsageType::DPAS_C;
-    }
-    return false;
-  }
-
-  bool isForLoad(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      return load && !store && !prefetch;
-    }
-    return false;
-  }
-
-  bool isForPrefetch(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      return !load && !store && prefetch;
-    }
-    return false;
-  }
-
-  bool isForAtomicRMW(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
-      return !load && !store && !prefetch && atomic_rmw;
-    }
-    return false;
-  }
-
-  //
-  bool isForLoadAndPrefetch(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      return load && !store && prefetch;
-    }
-    return false;
-  }
-
-  bool isForStore(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      return !load && store && !prefetch;
-    }
-    return false;
-  }
-
-  bool isForLoadAndStore(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      return load && store && !prefetch;
-    }
-    return false;
-  }
-
-  bool isForLoadAndAtomicRMW(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
-      return load && !store && !prefetch && atomic_rmw;
-    }
-    return false;
-  }
-
-  bool isForAtomicRMWAndStore(imex::xetile::InitTileOp op) {
-    if (Usage.count(op)) {
-      bool load = Usage[op] & UsageType::LOAD;
-      bool store = Usage[op] & UsageType::STORE;
-      bool prefetch = Usage[op] & UsageType::PREFETCH;
-      bool atomic_rmw = Usage[op] & UsageType::ATOMICRMW;
-      return !load && store && !prefetch && atomic_rmw;
-    }
-    return false;
-  }
-
-private:
-  enum UsageType {
-    None = 0,
-    LOAD = 1,
-    PREFETCH = 2,
-    STORE = 4,
-    DPAS_A = 8,
-    DPAS_B = 16,
-    DPAS_C = 32,
-    ATOMICRMW = 64,
-    OTHER = 128
-  };
-
-  llvm::DenseMap<mlir::Operation *, uint> Usage;
-};
 
 std::pair<std::string, mlir::VectorType>
 encodeVectorType(mlir::ConversionPatternRewriter &rewriter,
@@ -348,10 +145,10 @@ mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
                                  mlir::Type type = nullptr);
 
 // A universal get method for offsets or shapes or strides (OSS) of
-// xetile::InitTileOp and xegpu::CreateNdDescOp op.
+// xegpu::CreateNdDescOp op.
 // OSS (Offsets, Shapes, Strides) information provided
-// to InitTileOp & CreateNdDescOp is multifaceted. In other words oss info
-// provided to InitTileOp & CreateNdDescOp in multiple ways, especially the
+// to CreateNdDescOp is multifaceted. In other words oss info
+// provided to CreateNdDescOp in multiple ways, especially the
 // shapes and strides:
 // 1. For static memrefs: the shapes and strides  info are inherent in the
 // memref data type
@@ -368,7 +165,7 @@ mlir::Value getValueOrConstantOp(mlir::OpFoldResult ofr, mlir::Location loc,
 
 // One can pass the result of getMixedOffsets(), getMixedSizes(),
 // getMixedStrides() to the following utility to get them as Value types.
-// Since both xetile::InitTileOp and xegpu::CreateNdDescOp ops implement the
+// xegpu::CreateNdDescOp ops implement the
 // OffsetSizeAndStrideOpInterface, getMixedOffsets(), getMixedSizes(),
 // getMixedStrides() takes care of the different scenarios mentioned above.
 

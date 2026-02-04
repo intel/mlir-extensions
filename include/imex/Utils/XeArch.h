@@ -23,7 +23,6 @@
 #include <mlir/Support/LLVM.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/XeCommon.h"
 
