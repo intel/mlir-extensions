@@ -93,8 +93,8 @@ else()
     # Check if the llvm SHA is consistent with llvm_version.txt
     file(STRINGS ${LLVM_INCLUDE_DIR}/llvm/Support/VCSRevision.h REVISION_FILE_DATA)
     message(DEBUG "VCSRevision: ${REVISION_FILE_DATA}")
-    string(REGEX MATCH "\"([^\"]*)\"" LLVM_SHA ${REVISION_FILE_DATA})
-    string(REPLACE "\"" "" LLVM_SHA ${LLVM_SHA})
+    string(REGEX MATCH "\\(([0-9a-fA-F]+)\\)" LLVM_SHA ${REVISION_FILE_DATA})
+    string(REPLACE "\"" "" LLVM_SHA ${CMAKE_MATCH_1}) # In CMake, CMAKE_MATCH_1 contains the first capture group
     message(STATUS "llvm sha: \"${LLVM_SHA}\"")
 
     if (IMEX_CHECK_LLVM_VERSION AND (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA))
