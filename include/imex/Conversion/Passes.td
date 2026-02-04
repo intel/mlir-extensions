@@ -373,51 +373,6 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 }
 
 
-//===----------------------------------------------------------------------===//
-// XeTileToXeGPU
-//===----------------------------------------------------------------------===//
-
-def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::gpu::GPUModuleOp"> {
-  let summary = "Convert from the XeTile dialect to the XeGPU dialect.";
-  let description = [{
-    Convert XeTile dialect operations into the XeGPU dialect operations. It expects
-    the input code is tiled using xetile-blocking.
-
-    #### Input invariant
-
-    func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
-      %c0 = arith.constant 0 : index
-      %c64 = arith.constant 64 : index
-      %1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<8x16xf16>
-      %2 = xetile.load_tile %1 : !xetile.tile<8x16xf16> -> vector<8x16xf16>
-	    return
-    }
-
-    #### Output IR
-
-    func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
-      %c0 = arith.constant 0 : index
-      %c64 = arith.constant 64 : index
-      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c64] {boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %2 = xegpu.load_nd %0 {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<uncached>, l3_hint = #xegpu.cache_hint<uncached>} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
-	    return
-    }
-  }];
-
-  let constructor = "::imex::createConvertXeTileToXeGPUPass()";
-  let dependentDialects = ["::mlir::xegpu::XeGPUDialect",
-                           "::imex::xetile::XeTileDialect",
-                           "::mlir::gpu::GPUDialect",
-                           "::mlir::vector::VectorDialect",
-                           "::mlir::arith::ArithDialect",
-                           ];
-  let options = [
-    Option<"device", "device", "std::string",
-            /*default=*/"\"pvc\"",
-            "gpu platform architecture where these ops are running">
- ];
-}
-
 
 //===----------------------------------------------------------------------===//
 // XeGPUToVC

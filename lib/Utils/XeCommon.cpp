@@ -16,7 +16,6 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <unordered_set>
 
-#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/XeCommon.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -49,25 +48,6 @@ int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
   return 0;
 }
 
-bool isSupportedOptimalSLMAccess(xetile::TileType tileTy) {
-  // 1D load/store supports maximumly 64 elements, and scattered load/store
-  // (used for transposed cases) supports maximumly 128 elements (16x8, since
-  // we fixed block width to 16, which is mapped to simd16). For simplicity,
-  // we start with simple cases, that can be evenly divided by the maximum
-  // capacity of one instruction.
-
-  const int width = 16;
-  auto memSpace = tileTy.getMemorySpaceAsInt();
-  auto shape = tileTy.getShape();
-  auto vnni = getVnniFactor(tileTy.getElementType());
-
-  if (memSpace == 3 && shape[1] % width == 0 && shape[0] % vnni == 0) {
-    auto colMajor = isColMajorOrder(tileTy.getOrder());
-    auto h = getHeightForSLMBlock(shape, width, vnni, colMajor);
-    return h != 0;
-  }
-  return false;
-}
 
 static llvm::SmallVector<int64_t>
 getVNNIShuffleIndices(mlir::VectorType srcType) {
@@ -177,18 +157,8 @@ llvm::SmallVector<mlir::BlockArgument> getArgsForOperand(mlir::scf::ForOp &op,
 }
 
 bool isSupportedModule(mlir::gpu::GPUModuleOp mod) {
-  bool hasTileTyInFuncTy = false;
-  mod.walk<mlir::WalkOrder::PreOrder>([&](mlir::gpu::GPUFuncOp op) {
-    auto funcTy = op.getFunctionType();
-    hasTileTyInFuncTy |= std::any_of(
-        funcTy.getInputs().begin(), funcTy.getInputs().end(),
-        [](mlir::Type ty) { return llvm::isa<imex::xetile::TileType>(ty); });
-    hasTileTyInFuncTy |= std::any_of(
-        funcTy.getResults().begin(), funcTy.getResults().end(),
-        [](mlir::Type ty) { return llvm::isa<imex::xetile::TileType>(ty); });
-  });
-
-  return hasTileTyInFuncTy == false;
+  // XeTile support removed - all modules are now supported
+  return true;
 }
 
 mlir::ValueRange buildUnrealizedCast(mlir::OpBuilder &builder,

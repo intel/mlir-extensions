@@ -1,7 +1,5 @@
 set(IMEX_ALL_LIBS
   IMEXTransforms
-  IMEXXeTileTransforms
-  IMEXXeTileDialect
   IMEXNDArrayTransforms
   IMEXNDArrayDialect
   IMEXGPUXDialect
@@ -18,7 +16,6 @@ set(IMEX_ALL_LIBS
   IMEXNDArrayToLinalg
   IMEXSCFToGPU
   IMEXXeGPUToVC
-  IMEXXeTileToXeGPU
   MLIRXeGPUToXeVM
   IMEXUtil
   imex_runner_utils

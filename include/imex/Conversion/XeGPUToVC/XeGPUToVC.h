@@ -18,7 +18,6 @@
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/Dialect/XeGPU/IR/XeGPU.h>
 
-#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/XeCommon.h"
 
 namespace mlir {

@@ -24,7 +24,6 @@
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/Region/Transforms/BufferizableOpInterfaceImpl.h>
-#include <imex/Dialect/XeTile/IR/XeTileOps.h>
 #include <imex/Target/LLVM/XeVM/Target.h>
 
 namespace imex {
@@ -35,7 +34,6 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
     registry.insert<::imex::distruntime::DistRuntimeDialect,
                     ::imex::ndarray::NDArrayDialect,
                     ::imex::region::RegionDialect,
-                    ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect>();
   // clang-format on
   ndarray::registerAllExtensions(registry);
