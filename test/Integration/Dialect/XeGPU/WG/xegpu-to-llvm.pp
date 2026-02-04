@@ -11,7 +11,7 @@ builtin.module(
       canonicalize
       cse
       xegpu-propagate-layout{layout-kind="lane"}
-      xegpu-optimize-block-loads
+      xegpu-optimize-peephole
       canonicalize
       cse
       xegpu-propagate-layout{layout-kind="lane"}

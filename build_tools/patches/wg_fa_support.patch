@@ -1,124 +1,33 @@
-From 4342fab14630d1ee774ec78dea66fd78f200a3ad Mon Sep 17 00:00:00 2001
+From 1556527c6b9b4a99438172118f4202a77731dcbc Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Mon, 22 Dec 2025 16:40:20 +0100
-Subject: [PATCH] wg_fa_support
+Date: Tue, 20 Jan 2026 15:53:45 +0100
+Subject: [PATCH] wg_fa
 
 ---
- .../XeGPU/Transforms/XeGPUBlocking.cpp        |  6 +-
+ .../XeGPU/Transforms/XeGPUBlocking.cpp        |  3 +-
  .../XeGPU/Transforms/XeGPUPropagateLayout.cpp | 59 +++++++++++++++++++
  .../Transforms/XeGPUWgToSgDistribute.cpp      | 12 ++--
- 3 files changed, 68 insertions(+), 9 deletions(-)
+ 3 files changed, 67 insertions(+), 7 deletions(-)
 
 diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
-index ba2753f517ce..dc4f05c0d914 100644
+index 931834ba16d9..f59464a55d60 100644
 --- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
 +++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUBlocking.cpp
-@@ -228,7 +228,7 @@ XeGPUBlockingPass::getTileShape(Operation *op) const {
+@@ -228,7 +228,8 @@ XeGPUBlockingPass::getTileShape(Operation *op) const {
    if (isa<vector::MultiDimReductionOp>(op))
      return getTileShape(op->getOpOperand(0));
 
--  if (isa<vector::TransposeOp, vector::BroadcastOp>(op))
-+  if (isa<vector::TransposeOp, vector::BroadcastOp, vector::ShapeCastOp>(op))
+-  if (isa<vector::TransposeOp, vector::BroadcastOp, vector::StepOp,
++  if (isa<vector::TransposeOp, vector::BroadcastOp,
++          vector::ShapeCastOp, vector::StepOp,
+           vector::ConstantMaskOp, vector::CreateMaskOp>(op))
      return getTileShape(op->getOpResult(0));
 
-   return std::nullopt;
-@@ -415,14 +415,14 @@ void XeGPUBlockingPass::runOnOperation() {
-     // Remove the layout attributes cached per operands.
-     for (OpOperand &opr : op->getOpOperands()) {
-       std::string name = xegpu::getTemporaryLayoutName(opr);
--      if (op->hasAttrOfType<xegpu::LayoutAttr>(name))
-+      if (op->hasAttrOfType<xegpu::DistributeLayoutAttr>(name))
-         op->removeAttr(name);
-     }
-
-     // Update the layout attributes per result.
-     for (OpResult result : op->getOpResults()) {
-       std::string name = xegpu::getTemporaryLayoutName(result);
--      if (auto layout = op->getAttrOfType<xegpu::LayoutAttr>(name)) {
-+      if (auto layout = op->getAttrOfType<xegpu::DistributeLayoutAttr>(name)) {
-         op->removeAttr(name);
-         if (!isa<LoopLikeOpInterface>(op))
-           xegpu::setDistributeLayoutAttr(result, layout.dropInstData());
-diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
-index 7fc75e7294ea..94f31e653511 100644
---- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
-+++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUPropagateLayout.cpp
-@@ -1336,6 +1336,60 @@ static LogicalResult updateFunctionOpInterface(mlir::OpBuilder &builder,
-   return success();
- }
-
-+static LogicalResult resolveConflicts(Operation *op) {
-+  auto r = op->walk([&](xegpu::LoadNdOp loadNdOp) -> WalkResult {
-+    // Load op has a conflict if tensor desc layout is different from the its
-+    // result layout.
-+    auto getResultLayout = [](OpResult result) {
-+      auto resultLayoutName = xegpu::getTemporaryLayoutName(result);
-+      return result.getOwner()->getAttrOfType<xegpu::DistributeLayoutAttr>(
-+          resultLayoutName);
-+    };
-+    auto hasConflict = [&getResultLayout](xegpu::LoadNdOp loadNdOp) -> bool {
-+      auto tdescType = loadNdOp.getTensorDescType();
-+      auto tdescLayout = tdescType.getLayout();
-+      // auto resultLayoutName = xegpu::getTemporaryLayoutName(loadNdOp->getOpResult(0));
-+      auto resultLayout = getResultLayout(loadNdOp->getOpResult(0));
-+      return tdescLayout && resultLayout && tdescLayout != resultLayout;
-+    };
-+    if (hasConflict(loadNdOp)) {
-+      OpBuilder builder(loadNdOp);
-+      // Try to get the defining createNdDesc op.
-+      auto createNdOp =
-+          loadNdOp.getTensorDesc().getDefiningOp<xegpu::CreateNdDescOp>();
-+      if (!createNdOp) {
-+        DBGS() << "Failed to resolve LoadNdOp layout conflict: " << *loadNdOp
-+               << "\n";
-+        return WalkResult::interrupt();
-+      }
-+
-+      builder.setInsertionPointAfter(createNdOp);
-+      auto tdescType = loadNdOp.getTensorDescType();
-+      auto expectedLayout = getResultLayout(loadNdOp->getOpResult(0));
-+      auto newTensorDescType = xegpu::TensorDescType::get(
-+          createNdOp.getContext(), tdescType.getShape(),
-+          tdescType.getElementType(), tdescType.getEncoding(), expectedLayout);
-+      auto newOp = xegpu::CreateNdDescOp::create(
-+          builder, loadNdOp.getLoc(), newTensorDescType,
-+          createNdOp->getOperands(), createNdOp->getAttrs());
-+      // Replace only the conflicting uses of the createNdOp that can be
-+      // resolved using the new layout.
-+      createNdOp->replaceUsesWithIf(
-+          ArrayRef<Value>(newOp.getResult()), [&](OpOperand &opnd) {
-+            auto userLoadNdOp = dyn_cast<xegpu::LoadNdOp>(opnd.getOwner());
-+            if (!userLoadNdOp)
-+              return false;
-+            auto resultLayout = getResultLayout(userLoadNdOp->getOpResult(0));
-+            return hasConflict(userLoadNdOp) && resultLayout == expectedLayout;
-+          });
-+    }
-+    return WalkResult::advance();
-+  });
-+  if (r.wasInterrupted())
-+    return failure();
-+  return success();
-+}
-+
- namespace {
- struct XeGPUPropagateLayoutPass final
-     : public xegpu::impl::XeGPUPropagateLayoutBase<XeGPUPropagateLayoutPass> {
-@@ -1411,4 +1465,9 @@ void XeGPUPropagateLayoutPass::runOnOperation() {
-     signalPassFailure();
-     return;
-   }
-+  if (failed(resolveConflicts(op))) {
-+    DBGS() << "Failed to resolve layout conflicts after propagation.\n";
-+    signalPassFailure();
-+    return;
-+  }
- }
 diff --git a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
-index 07572a495076..448d78f4dc4f 100644
+index 8328c2797be4..679f11bd1d43 100644
 --- a/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
 +++ b/mlir/lib/Dialect/XeGPU/Transforms/XeGPUWgToSgDistribute.cpp
-@@ -1270,13 +1270,13 @@ struct WgToSgVectorTransposeOp
+@@ -1582,13 +1582,13 @@ struct WgToSgVectorTransposeOp
      SmallVector<int64_t> sourceSgLayout =
          sourceLayout.getEffectiveSgLayoutAsInt();
      SmallVector<int64_t> resultSgLayout = layout.getEffectiveSgLayoutAsInt();

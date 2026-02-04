@@ -84,7 +84,7 @@ class Region_Op<string mnemonic, list<Trait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 def EnvironmentRegionOp : Region_Op<"env_region", [
-    DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+    DeclareOpInterfaceMethods<RegionBranchOpInterface, ["getSuccessorRegions", "getSuccessorInputs"]>,
     SingleBlockImplicitTerminator<"::imex::region::EnvironmentRegionYieldOp">,
     RecursiveMemoryEffects]> {
   let summary = "Operation that executes its region with a specific environment";
