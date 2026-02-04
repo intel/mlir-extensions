@@ -42,7 +42,6 @@ bool isColMajorOrder(mlir::DenseI32ArrayAttr order);
 int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
                          int vnniFactor, bool colMajor);
 
-
 // this method computes the vnni factor for the given element type.
 // it returns 1 by default for types does not need vnni transformation.
 int getVnniFactor(mlir::Type elemTy);

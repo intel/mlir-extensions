@@ -48,7 +48,6 @@ int getHeightForSLMBlock(llvm::ArrayRef<int64_t> shape, int width,
   return 0;
 }
 
-
 static llvm::SmallVector<int64_t>
 getVNNIShuffleIndices(mlir::VectorType srcType) {
   auto numElements = srcType.getNumElements();
