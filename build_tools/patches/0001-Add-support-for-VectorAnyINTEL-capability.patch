@@ -39,13 +39,13 @@ index 2f189c64300a..983d9e6c4dd1 100644
  // dialect-specific types so we use "Any" here.
 @@ -4328,7 +4341,9 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
      "Matrix">;
- 
+
  class SPIRV_VectorOf<Type type> :
 -    FixedVectorOfRankAndLengthAndType<[1], [2, 3, 4, 8, 16], [type]>;
 +    FixedVectorOfRankAndLengthAndType<[1],
 +                                      [2, 3, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
 +                                      [type]>;
- 
+
  class SPIRV_ScalarOrVectorOf<Type type> :
      AnyTypeOf<[type, SPIRV_VectorOf<type>]>;
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
@@ -55,7 +55,7 @@ index a49880b81e90..b351a23b7b5b 100644
 @@ -718,6 +718,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
- 
+
 +// Whether the number of elements of a vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsVectorOfLengthRangePred<list<int> allowedRanges> :
@@ -170,7 +170,7 @@ index 63b51d1836f7..a31d96d6bbb0 100644
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -186,9 +186,10 @@ bool CompositeType::classof(Type type) {
  }
- 
+
  bool CompositeType::isValid(VectorType type) {
 -  return type.getRank() == 1 &&
 -         llvm::is_contained({2, 3, 4, 8, 16}, type.getNumElements()) &&
@@ -180,10 +180,10 @@ index 63b51d1836f7..a31d96d6bbb0 100644
 +         type.getNumElements() >= 2 &&
 +         type.getNumElements() <= std::numeric_limits<uint32_t>::max();
  }
- 
+
  Type CompositeType::getElementType(unsigned index) const {
 @@ -217,8 +218,23 @@ void TypeCapabilityVisitor::addConcrete(VectorType type) {
- 
+
    int64_t vecSize = type.getNumElements();
    if (vecSize == 8 || vecSize == 16) {
 -    static constexpr auto cap = Capability::Vector16;
@@ -207,7 +207,7 @@ index 63b51d1836f7..a31d96d6bbb0 100644
 +    capabilities.push_back(ref);
    }
  }
- 
+
 diff --git a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp b/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
 index 973c16e62bb1..51e81ee0a356 100644
 --- a/mlir/lib/Dialect/SPIRV/Transforms/SPIRVConversion.cpp
@@ -226,7 +226,7 @@ index 973c16e62bb1..51e81ee0a356 100644
 +          return llvm::is_contained(ors, elidedExt);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -112,9 +116,13 @@ static LogicalResult checkExtensionRequirements(
  template <typename LabelT>
@@ -242,12 +242,12 @@ index 973c16e62bb1..51e81ee0a356 100644
 +          return llvm::is_contained(ors, elidedCap);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -131,6 +139,55 @@ static LogicalResult checkCapabilityRequirements(
    return success();
  }
- 
+
 +/// Check capabilities and extensions requirements,
 +/// this function also checks for capability infered extension requirements,
 +/// the check is based on capabilities that are passed to the targetEnv.
@@ -303,20 +303,20 @@ index 973c16e62bb1..51e81ee0a356 100644
 @@ -284,11 +341,14 @@ convertScalarType(const spirv::TargetEnv &targetEnv,
      return nullptr;
    }
- 
+
 +  //  Convert to 32-bit float and remove floatType related capability
 +  //  restriction
    if (auto floatType = dyn_cast<FloatType>(type)) {
      LLVM_DEBUG(llvm::dbgs() << type << " converted to 32-bit for SPIR-V\n");
      return Builder(targetEnv.getContext()).getF32Type();
    }
- 
+
 +  //  Convert to 32-bit int and remove intType related capability restriction
    auto intType = cast<IntegerType>(type);
    LLVM_DEBUG(llvm::dbgs() << type << " converted to 32-bit for SPIR-V\n");
    return IntegerType::get(targetEnv.getContext(), /*width=*/32,
 @@ -402,10 +462,13 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
- 
+
      if (type.getRank() <= 1 && type.getNumElements() == 1)
        return elementType;
 -
@@ -332,11 +332,11 @@ index 973c16e62bb1..51e81ee0a356 100644
 +                                 "between [2 - 2^32 -1]\n");
        return nullptr;
      }
- 
+
 @@ -427,16 +490,40 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
    cast<spirv::CompositeType>(type).getExtensions(extensions, storageClass);
    cast<spirv::CompositeType>(type).getCapabilities(capabilities, storageClass);
- 
+
 -  // If all requirements are met, then we can accept this type as-is.
 -  if (succeeded(checkCapabilityRequirements(type, targetEnv, capabilities)) &&
 -      succeeded(checkExtensionRequirements(type, targetEnv, extensions)))
@@ -379,7 +379,7 @@ index 973c16e62bb1..51e81ee0a356 100644
 +    return nullptr;
 +  }
  }
- 
+
  static Type
 @@ -1694,16 +1781,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
    SmallVector<ArrayRef<spirv::Extension>, 4> typeExtensions;
@@ -407,7 +407,6 @@ index 973c16e62bb1..51e81ee0a356 100644
 +            op->getName(), this->targetEnv, typeCapabilities, typeExtensions)))
        return false;
    }
- 
--- 
-2.34.1
 
+--
+2.34.1
