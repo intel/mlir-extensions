@@ -1,24 +1,24 @@
-From 44a19189352d77f3e7caa43cb327238dd6243b75 Mon Sep 17 00:00:00 2001
+From 2cea04474a86c5c55996b72af05c411e9eb87dd7 Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Thu, 29 Jan 2026 19:10:23 +0100
-Subject: [PATCH] Add-support-for-VectorAnyINTEL-capability
+Date: Thu, 12 Feb 2026 22:33:24 +0100
+Subject: [PATCH] Add support for VectorAnyINTEL capability
 
 ---
- .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  11 +-
+ .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        |  19 ++-
  mlir/include/mlir/IR/CommonTypeConstraints.td |  86 +++++++++++
  mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    |   7 +-
  mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      |  26 +++-
  .../SPIRV/Transforms/SPIRVConversion.cpp      | 135 +++++++++++++++---
- 5 files changed, 233 insertions(+), 32 deletions(-)
+ 5 files changed, 241 insertions(+), 32 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index f8093d3042c5..1390b8e03b86 100644
+index 2f189c64300a..983d9e6c4dd1 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4242,7 +4242,20 @@ def SPIRV_BFloat16KHR : TypeAlias<BF16, "BFloat16">;
+@@ -4275,7 +4275,20 @@ def SPIRV_Float8E5M2EXT : TypeAlias<F8E5M2, "Float8E5M2">;
  def SPIRV_Float : FloatOfWidths<[16, 32, 64]>;
  def SPIRV_Float16or32 : FloatOfWidths<[16, 32]>;
- def SPIRV_AnyFloat : AnyTypeOf<[SPIRV_Float, SPIRV_BFloat16KHR]>;
+ def SPIRV_AnyFloat : AnyTypeOf<[SPIRV_Float, SPIRV_BFloat16KHR, SPIRV_Float8E4M3EXT, SPIRV_Float8E5M2EXT]>;
 -def SPIRV_Vector : VectorOfRankAndLengthAndType<[1], [2, 3, 4, 8, 16],
 +// Vector type is quite restrictive in SPIR-V.
 +// It only allows length of 2, 3, and 4 by default and
@@ -37,7 +37,7 @@ index f8093d3042c5..1390b8e03b86 100644
                                         [SPIRV_Bool, SPIRV_Integer, SPIRV_AnyFloat]>;
  // Component type check is done in the type parser for the following SPIR-V
  // dialect-specific types so we use "Any" here.
-@@ -4295,7 +4308,9 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
+@@ -4328,7 +4341,9 @@ class SPIRV_MatrixOfType<list<Type> allowedTypes> :
      "Matrix">;
 
  class SPIRV_VectorOf<Type type> :
@@ -146,11 +146,11 @@ index a49880b81e90..b351a23b7b5b 100644
  // Negative values for `n` index in reverse.
  class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 7c3bfd72115e..c9c8e8305062 100644
+index 78f33c238d41..8602b5d81140 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -186,9 +186,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
-       parser.emitError(typeLoc, "only 1-D vector allowed but found ") << t;
+@@ -190,9 +190,12 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
+       parser.emitError(typeLoc, "SPIR-V does not allow one-element vectors");
        return Type();
      }
 -    if (t.getNumElements() > 4) {
@@ -165,7 +165,7 @@ index 7c3bfd72115e..c9c8e8305062 100644
        return Type();
      }
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index 342a47cdefbf..b7ccd05fff17 100644
+index 63b51d1836f7..a31d96d6bbb0 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -186,9 +186,10 @@ bool CompositeType::classof(Type type) {
