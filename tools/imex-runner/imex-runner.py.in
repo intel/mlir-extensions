@@ -53,7 +53,7 @@ import subprocess
 imex_enable_vulkan_runner = @IMEX_ENABLE_VULKAN_RUNNER@
 imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
-imex_enable_spirv_backend = @IMEX_SPIRV_BACKEND_ENABLED@
+mlir_enable_spirv_backend = @MLIR_SPIRV_BACKEND_ENABLED@
 mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
 mlir_enable_levelzero_runtime = @MLIR_ENABLE_LEVELZERO_RUNNER@
 
@@ -68,7 +68,7 @@ if imex_enable_l0_runtime:
     enabled_features.append('l0-runtime')
 if imex_enable_sycl_runtime:
     enabled_features.append('sycl-runtime')
-if imex_enable_spirv_backend:
+if mlir_enable_spirv_backend:
     enabled_features.append('spirv-backend')
 if mlir_enable_sycl_runtime:
     enabled_features.append('mlir-sycl-runtime')

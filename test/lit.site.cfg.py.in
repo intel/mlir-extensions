@@ -45,6 +45,7 @@ config.imex_enable_bmg_target = @IMEX_ENABLE_BMG_TARGET@
 config.imex_enable_bindings_python = @IMEX_ENABLE_BINDINGS_PYTHON@
 config.mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
 config.mlir_enable_levelzero_runtime = @MLIR_ENABLE_LEVELZERO_RUNNER@
+config.mlir_enable_spirv_backend = @MLIR_SPIRV_BACKEND_ENABLED@
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""

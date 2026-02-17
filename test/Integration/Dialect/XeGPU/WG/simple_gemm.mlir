@@ -1,7 +1,17 @@
-// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
-// RUN:                                       --runner mlir-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup" \
+// RUN: | mlir-runner \
+// RUN:   --shared-libs=%mlir_levelzero_runtime \
+// RUN:   --shared-libs=%mlir_runner_utils \
+// RUN:   --shared-libs=%mlir_c_runner_utils \
+// RUN:   --shared-libs=%irunner_utils \
+// RUN:   --entry-point-result=void \
+// RUN: | FileCheck %s
+
+// Example of pass pipeline usage:
+// %python_executable %imex_runner --requires=mlir-levelzero-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
+//                                        --runner mlir-runner -e main \
+//                                        --entry-point-result=void \
+//                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 
 #a = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data = [8, 16]>
 #b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [16, 16]>
@@ -56,9 +66,9 @@ module @gemm attributes {gpu.container_module} {
       %b_tdesc = xegpu.create_nd_tdesc %B : memref<256x256xf16> -> !xegpu.tensor_desc<32x256xf16, #b>
       // Prefetch A 3 times.
       %a_prefetch_tdesc = xegpu.create_nd_tdesc %A : memref<256x256xf16> -> !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c0] {layout = #b_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c32] {layout = #b_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
-      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c64] {layout = #b_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c0] {layout = #a_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c32] {layout = #a_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
+      xegpu.prefetch_nd %a_prefetch_tdesc[%m, %c64] {layout = #a_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
        // Prefetch B 3 times.
       %b_prefetch_tdesc = xegpu.create_nd_tdesc %B : memref<256x256xf16> -> !xegpu.tensor_desc<32x256xf16, #b_prefetch>
       xegpu.prefetch_nd %b_prefetch_tdesc[%c0, %n] {layout = #b_prefetch}: !xegpu.tensor_desc<32x256xf16, #b_prefetch>
