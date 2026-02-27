@@ -32,6 +32,8 @@ add_mlir_library(sycl-runtime
 
     EXCLUDE_FROM_LIBMLIR
 
+    STANDALONE
+
     LINK_LIBS
     imex_execution_engine_utils
 )

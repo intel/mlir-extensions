@@ -764,7 +764,11 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
 
     populateMathToVCPatterns(typeConverter, patterns);
 
-    mlir::vector::populateVectorMultiReductionLoweringPatterns(
+    mlir::vector::populateVectorMultiReductionReorderAndExpandPatterns(
+        patterns, mlir::vector::VectorMultiReductionLowering::InnerReduction);
+    mlir::vector::populateVectorMultiReductionFlatteningPatterns(
+        patterns, mlir::vector::VectorMultiReductionLowering::InnerReduction);
+    mlir::vector::populateVectorMultiReductionUnrollingPatterns(
         patterns, mlir::vector::VectorMultiReductionLowering::InnerReduction);
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))

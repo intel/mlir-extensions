@@ -24,6 +24,8 @@ add_mlir_library(level-zero-runtime
 
   EXCLUDE_FROM_LIBMLIR
 
+  STANDALONE
+
   LINK_LIBS
   imex_execution_engine_utils
 )
