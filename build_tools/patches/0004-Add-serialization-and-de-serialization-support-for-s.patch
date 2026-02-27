@@ -1,7 +1,7 @@
-From 0560ef541b96e0e1e4b9e9597e52545efe06866c Mon Sep 17 00:00:00 2001
+From 3d426ddc810349f932191bfd0bcc6b59d8a0097a Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Fri, 30 Jan 2026 20:27:27 +0100
-Subject: [PATCH] Add-serialization and de serialization support for spirv
+Date: Thu, 19 Feb 2026 23:11:28 +0100
+Subject: [PATCH] Add serialization and de serialization support for spirv
 
 ---
  mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 6 ++++++
@@ -9,7 +9,7 @@ Subject: [PATCH] Add-serialization and de serialization support for spirv
  2 files changed, 12 insertions(+)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 8d1f9c26fe59..922fefabe21c 100644
+index e218bee4b4fe..4e486a2c203b 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 @@ -283,6 +283,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
@@ -19,8 +19,16 @@ index 8d1f9c26fe59..922fefabe21c 100644
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::DescriptorSet:
    case spirv::Decoration::Binding:
+   case spirv::Decoration::Location:
+@@ -291,6 +292,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+   case spirv::Decoration::Offset:
+   case spirv::Decoration::XfbBuffer:
+   case spirv::Decoration::XfbStride:
++  case spirv::Decoration::FuncParamIOKindINTEL:
      if (words.size() != 3) {
-@@ -347,6 +348,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+       return emitError(unknownLoc, "OpDecorate with ")
+              << decorationName << " needs a single integer literal";
+@@ -353,6 +355,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
    case spirv::Decoration::Invariant:
    case spirv::Decoration::Patch:
    case spirv::Decoration::Coherent:
@@ -29,32 +37,25 @@ index 8d1f9c26fe59..922fefabe21c 100644
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
 +  case spirv::Decoration::VectorComputeVariableINTEL:
      if (words.size() != 2) {
-       return emitError(unknownLoc, "OpDecoration with ")
-              << decorationName << "needs a single target <id>";
-@@ -356,6 +361,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   case spirv::Decoration::Location:
-   case spirv::Decoration::SpecId:
-   case spirv::Decoration::Index:
-+  case spirv::Decoration::FuncParamIOKindINTEL:
-     if (words.size() != 3) {
-       return emitError(unknownLoc, "OpDecoration with ")
-              << decorationName << "needs a single integer literal";
+       return emitError(unknownLoc, "OpDecorate with ")
+              << decorationName << " needs a single target <id>";
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 840c9c990f9c..742bc4b7479c 100644
+index c21cb27b072f..37085c6e42a4 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -335,8 +335,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+@@ -335,9 +335,11 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
      }
      return emitError(loc, "expected FPRoundingModeAttr attribute for ")
             << stringifyDecoration(decoration);
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::Binding:
    case spirv::Decoration::DescriptorSet:
-+  case spirv::Decoration::FuncParamIOKindINTEL:
    case spirv::Decoration::Location:
++  case spirv::Decoration::FuncParamIOKindINTEL:
    case spirv::Decoration::Index:
-     if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
-@@ -375,6 +377,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
+   case spirv::Decoration::Offset:
+   case spirv::Decoration::XfbBuffer:
+@@ -378,6 +380,10 @@ LogicalResult Serializer::processDecorationAttr(Location loc, uint32_t resultID,
    case spirv::Decoration::Invariant:
    case spirv::Decoration::Patch:
    case spirv::Decoration::Coherent:
