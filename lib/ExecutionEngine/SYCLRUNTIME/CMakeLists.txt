@@ -26,6 +26,8 @@ if(NOT LevelZero_FOUND)
     message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
+set(LLVM_REQUIRES_EH ON)
+set(LLVM_REQUIRES_RTTI ON)
 add_mlir_library(sycl-runtime
     SHARED
     SyclRuntimeWrappers.cpp
@@ -37,14 +39,6 @@ add_mlir_library(sycl-runtime
     LINK_LIBS
     imex_execution_engine_utils
 )
-
-check_cxx_compiler_flag("-frtti" CXX_HAS_FRTTI_FLAG)
-
-if(NOT CXX_HAS_FRTTI_FLAG)
-    message(FATAL_ERROR "CXX compiler does not accept flag -frtti")
-endif()
-
-target_compile_options(sycl-runtime PUBLIC -fexceptions -frtti)
 
 target_include_directories(sycl-runtime PRIVATE
     ${MLIR_INCLUDE_DIRS}

@@ -18,6 +18,8 @@ if(NOT LevelZero_FOUND)
   message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
+set(LLVM_REQUIRES_EH ON)
+set(LLVM_REQUIRES_RTTI ON)
 add_mlir_library(level-zero-runtime
   SHARED
   LevelZeroRuntimeWrappers.cpp
@@ -29,8 +31,6 @@ add_mlir_library(level-zero-runtime
   LINK_LIBS
   imex_execution_engine_utils
 )
-
-target_compile_options(level-zero-runtime PUBLIC -fexceptions)
 
 target_link_libraries(level-zero-runtime PRIVATE LevelZero::LevelZero)
 
