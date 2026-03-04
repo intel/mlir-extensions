@@ -1,19 +1,19 @@
-From 3881cc54a21ba2638ba84127ac3b973dda3201cc Mon Sep 17 00:00:00 2001
-From: "Shahneous Bari, Md Abdullah" <md.abdullah.shahneous.bari@intel.com>
-Date: Tue, 21 Oct 2025 01:05:24 +0000
-Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrapper.
+From a4c92dc66a3de2561ae1b9d4055b5498aa05d7aa Mon Sep 17 00:00:00 2001
+From: Garra1980 <igor.zamyatin@intel.com>
+Date: Wed, 4 Mar 2026 01:02:08 +0100
+Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrappers.cpp
 
 ---
  .../LevelZeroRuntimeWrappers.cpp              | 334 +++++++++++++++++-
  1 file changed, 316 insertions(+), 18 deletions(-)
 
 diff --git a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
-index d0728274b94c..c728e3576f11 100644
+index 7859fb3feaab..6a1cd7ba3b4d 100644
 --- a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
-@@ -13,12 +13,16 @@
- #include "llvm/ADT/Twine.h"
-
+@@ -11,12 +11,16 @@
+ //===----------------------------------------------------------------------===//
+ 
  #include "level_zero/ze_api.h"
 +#include <algorithm>
 +#include <atomic>
@@ -25,13 +25,13 @@ index d0728274b94c..c728e3576f11 100644
  #include <iostream>
  #include <limits>
 +#include <numeric>
+ #include <memory>
+ #include <stdexcept>
  #include <unordered_set>
- #include <vector>
-
-@@ -328,6 +332,92 @@ struct DynamicEventPool {
+@@ -327,6 +331,92 @@ struct DynamicEventPool {
    }
  };
-
+ 
 +// EventPool TimeStamp events, needed for profiling
 +struct TimeStampEventPool {
 +  static constexpr size_t kNumEventsPerPool{128};
@@ -121,10 +121,10 @@ index d0728274b94c..c728e3576f11 100644
  static L0RTContextWrapper &getRtContext() {
    thread_local static L0RTContextWrapper rtContext(0);
    return rtContext;
-@@ -338,6 +428,75 @@ static DynamicEventPool &getDynamicEventPool() {
+@@ -337,6 +427,75 @@ static DynamicEventPool &getDynamicEventPool() {
    return dynEventPool;
  }
-
+ 
 +// Thread-local lazy singleton accessor
 +static TimeStampEventPool &getTimeStampEventPool() {
 +  thread_local static TimeStampEventPool pool{&getRtContext()};
@@ -197,10 +197,10 @@ index d0728274b94c..c728e3576f11 100644
  struct StreamWrapper {
    // avoid event pointer invalidations
    std::deque<ze_event_handle_t> implicitEventStack;
-@@ -407,6 +566,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
+@@ -406,6 +565,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
    return zeModule;
  }
-
+ 
 +//===----------------------------------------------------------------------===//
 +// Utilities
 +//===----------------------------------------------------------------------===//
@@ -296,7 +296,7 @@ index d0728274b94c..c728e3576f11 100644
  //===----------------------------------------------------------------------===//
  // L0 Wrappers definition
  //===----------------------------------------------------------------------===//
-@@ -454,24 +705,8 @@ extern "C" void mgpuEventRecord(ze_event_handle_t event,
+@@ -453,24 +704,8 @@ extern "C" void mgpuEventRecord(ze_event_handle_t event,
  extern "C" void *mgpuMemAlloc(uint64_t size, StreamWrapper *stream,
                                bool isShared) {
    return catchAll([&]() {
@@ -321,8 +321,8 @@ index d0728274b94c..c728e3576f11 100644
 +    return allocDeviceMemory(size, alignment, isShared);
    });
  }
-
-@@ -537,7 +772,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+ 
+@@ -536,7 +771,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
                                   size_t sharedMemBytes, StreamWrapper *stream,
                                   void **params, void ** /*extra*/,
                                   size_t paramsCount) {
@@ -330,7 +330,7 @@ index d0728274b94c..c728e3576f11 100644
    if (sharedMemBytes > 0) {
      paramsCount = paramsCount - 1; // Last param is shared memory size
      L0_SAFE_CALL(
-@@ -551,6 +785,70 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+@@ -550,6 +784,70 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
    dispatch.groupCountX = static_cast<uint32_t>(gridX);
    dispatch.groupCountY = static_cast<uint32_t>(gridY);
    dispatch.groupCountZ = static_cast<uint32_t>(gridZ);
@@ -401,5 +401,6 @@ index d0728274b94c..c728e3576f11 100644
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
---
-2.43.0
+-- 
+2.34.1
+
