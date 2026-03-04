@@ -13,7 +13,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 @@ -11,12 +11,16 @@
  //===----------------------------------------------------------------------===//
- 
+
  #include "level_zero/ze_api.h"
 +#include <algorithm>
 +#include <atomic>
@@ -31,7 +31,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 @@ -327,6 +331,92 @@ struct DynamicEventPool {
    }
  };
- 
+
 +// EventPool TimeStamp events, needed for profiling
 +struct TimeStampEventPool {
 +  static constexpr size_t kNumEventsPerPool{128};
@@ -124,7 +124,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 @@ -337,6 +427,75 @@ static DynamicEventPool &getDynamicEventPool() {
    return dynEventPool;
  }
- 
+
 +// Thread-local lazy singleton accessor
 +static TimeStampEventPool &getTimeStampEventPool() {
 +  thread_local static TimeStampEventPool pool{&getRtContext()};
@@ -200,7 +200,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 @@ -406,6 +565,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
    return zeModule;
  }
- 
+
 +//===----------------------------------------------------------------------===//
 +// Utilities
 +//===----------------------------------------------------------------------===//
@@ -321,7 +321,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +    return allocDeviceMemory(size, alignment, isShared);
    });
  }
- 
+
 @@ -536,7 +771,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
                                   size_t sharedMemBytes, StreamWrapper *stream,
                                   void **params, void ** /*extra*/,
@@ -401,6 +401,5 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
--- 
+--
 2.34.1
-
