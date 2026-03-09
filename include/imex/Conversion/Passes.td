@@ -374,6 +374,7 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 
 
 
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 //===----------------------------------------------------------------------===//
 // XeGPUToVC
 //===----------------------------------------------------------------------===//
@@ -397,7 +398,6 @@ def ConvertXeGPUToVC : Pass<"convert-xegpu-to-vc", "::mlir::gpu::GPUModuleOp"> {
                             ];
   let constructor = "imex::createConvertXeGPUToVCPass()";
 }
-
 
 //===----------------------------------------------------------------------===//
 // MathToVC
@@ -428,7 +428,6 @@ def ConvertMathToVC : Pass<"convert-math-to-vc", "::mlir::gpu::GPUModuleOp"> {
   let constructor = "imex::createConvertMathToVCPass()";
 }
 
-
 //===----------------------------------------------------------------------===//
 // ArithToVC
 //===----------------------------------------------------------------------===//
@@ -457,5 +456,6 @@ def ConvertArithToVC : Pass<"convert-arith-to-vc", "::mlir::gpu::GPUModuleOp"> {
                             ];
   let constructor = "imex::createConvertArithToVCPass()";
 }
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

@@ -7,19 +7,25 @@ set(IMEX_ALL_LIBS
   IMEXDistRuntimeDialect
   IMEXRegionTransforms
   IMEXRegionDialect
-  IMEXArithToVC
   IMEXDropRegions
   IMEXGPUToGPUX
   IMEXGPUToSPIRV
   IMEXGPUXToLLVM
-  IMEXMathToVC
   IMEXNDArrayToLinalg
   IMEXSCFToGPU
-  IMEXXeGPUToVC
   MLIRXeGPUToXeVM
   IMEXUtil
   imex_runner_utils
 )
+
+# Add VC conversion libraries if enabled
+if(IMEX_BUILD_VC_CONVERSIONS)
+  list(APPEND IMEX_ALL_LIBS
+    IMEXArithToVC
+    IMEXMathToVC
+    IMEXXeGPUToVC
+  )
+endif()
 
 if(IMEX_ENABLE_L0_RUNTIME)
   list(APPEND IMEX_ALL_LIBS level-zero-runtime)
