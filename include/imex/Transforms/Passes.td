@@ -179,6 +179,7 @@ def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
   ];
 }
 
+#ifdef IMEX_ENABLE_XEGPU_LAYOUT_PASSES
 def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
   let summary = "Eliminate in-register vector transpose by fusing with load.";
   let constructor = "imex::createOptimizeTransposePass()";
@@ -193,6 +194,7 @@ def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
             "gpu platform architecture where these ops are running">
  ];
 }
+#endif // IMEX_ENABLE_XEGPU_LAYOUT_PASSES
 
 def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
   let summary = "Move vector transpose ops closer to the load ops to enable load+tranpose fusion by OptimizeTranpose pass later in the pipeline.";
@@ -226,6 +228,7 @@ def TileLoops : Pass<"tile-loops", "::mlir::func::FuncOp"> {
   ];
 }
 
+#ifdef IMEX_ENABLE_XEGPU_LAYOUT_PASSES
 def MaterializeMatrixOp: Pass<"imex-xegpu-materialize-matrix-op"> {
   let summary = "materialize matrix ops for Xe2/Xe3";
   let description = [{
@@ -240,5 +243,6 @@ def MaterializeMatrixOp: Pass<"imex-xegpu-materialize-matrix-op"> {
     "::mlir::memref::MemRefDialect"
   ];
 }
+#endif // IMEX_ENABLE_XEGPU_LAYOUT_PASSES
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

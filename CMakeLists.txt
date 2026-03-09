@@ -57,6 +57,8 @@ endif()
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
 message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
 option(IMEX_CHECK_LLVM_VERSION "Check expected llvm version." ON)
+option(IMEX_BUILD_VC_CONVERSIONS "Build ArithToVC, MathToVC, and XeGPUToVC conversion passes." ON)
+option(IMEX_ENABLE_XEGPU_LAYOUT_PASSES "Enable XeGPU layout transformation passes (MaterializeMatrixOp, OptimizeTranspose)." ON)
 
 if(IMEX_EXTERNAL_PROJECT_BUILD)
     message(STATUS "Building IMEX with LLVM_EXTERNAL_PROJECTS")
