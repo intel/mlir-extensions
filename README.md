@@ -138,11 +138,12 @@ cmake --build build --target check-imex
 If you want to make sure changes you're going to merge in the upstream LLVM don't break XeGPU testing you can run
 
 ```sh
-./scripts/run_xegpu_integration_tests.sh path_to_build_dir_of_your_llvm_repo
+./scripts/run_xegpu_simt_integration_tests.sh path_to_build_dir_of_your_llvm_repo
 ```
 
 that will launch integration tests from Integration/Dialect/XeGPU/[SG, WG, SIMT] and Integration/Dialect/XeVM.
 Make sure you have Intel GPU availaible to get tests running.
+You can also run specific tests using option --test <pattern>.
 
 ### Building docs
 To build user documentation do

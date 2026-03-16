@@ -33,12 +33,58 @@ print_section() {
     echo -e "${GREEN}========================================${NC}\n"
 }
 
+# Function to print usage
+print_usage() {
+    print_error "Usage: $0 [options] <llvm-project-path> [imex-project-path]"
+    echo ""
+    echo "Arguments:"
+    echo "  <llvm-project-path>    Path to llvm-project repository or pre-built installation"
+    echo "  [imex-project-path]    Optional path to IMEX repository"
+    echo "                         (default: current directory if it's IMEX root, or parent of script directory)"
+    echo ""
+    echo "Options:"
+    echo "  -t, --test <pattern>   Test name pattern (regex) to pass to LIT --filter"
+    echo "                         Example: -t 'load_nd.*f16' or -t 'transpose'"
+    echo "  -h, --help            Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 /path/to/llvm-project"
+    echo "  $0 -t 'load_nd.*f16' /path/to/llvm-project"
+    echo "  $0 --test 'transpose' /path/to/llvm-project /path/to/imex"
+}
+
+# Parse command-line options
+TEST_NAME_FILTER=""
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--test)
+            TEST_NAME_FILTER="$2"
+            shift 2
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -*)
+            print_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Restore positional parameters
+set -- "${POSITIONAL_ARGS[@]}"
+
 # Check if correct number of arguments provided
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-    print_error "Usage: $0 <llvm-project-path> [imex-project-path]"
-    print_error "  <llvm-project-path>: Path to llvm-project repository"
-    print_error "  [imex-project-path]: Optional path to IMEX repository"
-    print_error "                        (default: current directory if it's IMEX root, or parent of script directory)"
+    print_usage
     exit 1
 fi
 
@@ -213,10 +259,17 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     print_info "Enabling: MLIR_INCLUDE_INTEGRATION_TESTS, MLIR_ENABLE_LEVELZERO_RUNNER, MLIR_ENABLE_SYCL_RUNNER, IMEX_ENABLE_L0_RUNTIME"
     print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (ArithToVC, MathToVC, XeGPUToVC)"
     print_info "Disabling: IMEX_ENABLE_XEGPU_LAYOUT_PASSES (MaterializeMatrixOp, OptimizeTranspose)"
-    print_info "Setting LLVM_LIT_ARGS to filter XeGPU integration tests from IMEX"
 
     # Build lit filter pattern for the specific test directories
-    LIT_FILTER="Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
+    if [ -n "$TEST_NAME_FILTER" ]; then
+        # User provided a specific test filter
+        LIT_FILTER="$TEST_NAME_FILTER"
+        print_info "Using custom test filter: $LIT_FILTER"
+    else
+        # Default: all XeGPU integration test directories
+        LIT_FILTER="Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
+        print_info "Using default test filter for XeGPU integration tests"
+    fi
 
     cmake -S llvm -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -241,12 +294,24 @@ else
     print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (ArithToVC, MathToVC, XeGPUToVC)"
     print_info "Disabling: IMEX_ENABLE_XEGPU_LAYOUT_PASSES (MaterializeMatrixOp, OptimizeTranspose)"
 
+    # Build lit filter pattern
+    if [ -n "$TEST_NAME_FILTER" ]; then
+        # User provided a specific test filter
+        LIT_FILTER="$TEST_NAME_FILTER"
+        print_info "Using custom test filter: $LIT_FILTER"
+        LLVM_LIT_ARGS_OPTION="-DLLVM_LIT_ARGS=-v --filter='$LIT_FILTER'"
+    else
+        # No filter for out-of-tree build by default
+        LLVM_LIT_ARGS_OPTION=""
+    fi
+
     cmake -S . -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DMLIR_DIR="$MLIR_CMAKE_DIR" \
         -DIMEX_ENABLE_L0_RUNTIME=1 \
         -DIMEX_BUILD_VC_CONVERSIONS=OFF \
-        -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF
+        -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF \
+        $LLVM_LIT_ARGS_OPTION
 fi
 
 if [ $? -eq 0 ]; then
@@ -283,12 +348,16 @@ fi
 print_section "Running IMEX XeGPU Integration Tests"
 
 if [ "$USE_PREBUILT_LLVM" = false ]; then
-    print_info "Running check-imex target with filtered XeGPU integration tests"
-    print_info "Test directories:"
-    print_info "  - Integration/Dialect/XeGPU/SG"
-    print_info "  - Integration/Dialect/XeGPU/WG"
-    print_info "  - Integration/Dialect/XeGPU/SIMT"
-    print_info "  - Integration/Dialect/XeVM"
+    print_info "Running check-imex target with filtered tests"
+    if [ -n "$TEST_NAME_FILTER" ]; then
+        print_info "Test filter: $TEST_NAME_FILTER"
+    else
+        print_info "Test directories:"
+        print_info "  - Integration/Dialect/XeGPU/SG"
+        print_info "  - Integration/Dialect/XeGPU/WG"
+        print_info "  - Integration/Dialect/XeGPU/SIMT"
+        print_info "  - Integration/Dialect/XeVM"
+    fi
     echo ""
 
     # Run tests and capture exit code, but don't stop on failure
@@ -298,6 +367,9 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     set -e
 else
     print_info "Running check-imex target for out-of-tree build"
+    if [ -n "$TEST_NAME_FILTER" ]; then
+        print_info "Test filter: $TEST_NAME_FILTER"
+    fi
     echo ""
 
     # Run tests and capture exit code, but don't stop on failure
@@ -312,22 +384,6 @@ if [ $TEST_EXIT_CODE -eq 0 ]; then
 else
     print_warning "Some tests failed (exit code: $TEST_EXIT_CODE)"
     print_info "Continuing to cleanup section..."
-fi
-
-# Ask user about reverting llvm_version.txt
-print_section "Cleanup"
-
-echo ""
-read -p "Do you want to revert llvm_version.txt in IMEX project? (y/n): " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    cd "$IMEX_PROJECT_PATH"
-    print_info "Reverting llvm_version.txt..."
-    echo "$OLD_LLVM_SHA" > "$LLVM_VERSION_FILE"
-    print_success "Reverted llvm_version.txt to: $OLD_LLVM_SHA"
-else
-    print_info "Keeping updated llvm_version.txt: $LLVM_HEAD_SHA"
 fi
 
 # Final summary
@@ -351,6 +407,11 @@ else
 fi
 echo -e "${GREEN}VC Conversions:${NC} Disabled (IMEX_BUILD_VC_CONVERSIONS=OFF)"
 echo -e "${GREEN}XeGPU Layout Passes:${NC} Disabled (IMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF)"
+if [ -n "$TEST_NAME_FILTER" ]; then
+    echo -e "${GREEN}Test Filter:${NC} $TEST_NAME_FILTER"
+else
+    echo -e "${GREEN}Test Filter:${NC} Default (all XeGPU integration tests)"
+fi
 echo -e "${GREEN}Test Exit Code:${NC} $TEST_EXIT_CODE"
 
 print_success "Script completed successfully!"
