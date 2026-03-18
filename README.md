@@ -70,19 +70,20 @@ git apply ../mlir-extensions/build_tools/patches/*
 cmake -G Ninja -B build -S llvm \
    -DLLVM_ENABLE_PROJECTS=mlir \
    -DLLVM_BUILD_EXAMPLES=ON \
-   -DLLVM_TARGETS_TO_BUILD="X86" \
+   -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
    -DCMAKE_BUILD_TYPE=Release \
    -DLLVM_ENABLE_ASSERTIONS=ON \
    -DLLVM_EXTERNAL_PROJECTS="Imex" \
    -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
 
-# For GPU support pass thes cmake variables to enable the required runtime libraries
-#  -DIMEX_ENABLE_L0_RUNTIME=1
-#  -DIMEX_ENABLE_SYCL_RUNTIME=1
+# For GPU support pass these cmake variables for LLVM to enable L0 runtime
+  -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
 # Additional if using a non system wide Level Zero Loader built from source
-#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
+  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install \
 
+# build and run imex tests
 cmake --build build --target check-imex
+
 ```
 **Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
 will run using the `FileCheck` utility that is available in the build tree.
@@ -98,18 +99,22 @@ the rest of LLVM.
 Make sure the installed LLVM is built from the git commit sha as stated in
 `build_tools/llvm_version.txt`.
 And has all LLVM patches in `build_tools/patches` applied.
+For GPU support, make sure LLVM installation has SPIR-V backend and
+L0 runtime.
+```sh
+# For GPU support pass these cmake variables when building LLVM to enable
+# SPIR-V backend and L0 runtime
+  -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
+  -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
+```
+
 ```sh
 cmake -G Ninja -B build -S . \
    -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \
    -DLLVM_EXTERNAL_LIT=<PATH_TO_LIT> \
    -DCMAKE_BUILD_TYPE=Release
 
-# For GPU support pass thes cmake variables to enable the required runtime libraries
-#  -DIMEX_ENABLE_L0_RUNTIME=1
-#  -DIMEX_ENABLE_SYCL_RUNTIME=1
-# Additional if using a non system wide Level Zero Loader built from source
-#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
-
+# build and run imex tests
 cmake --build build --target check-imex
 ```
 
@@ -120,16 +125,18 @@ Make sure before building LLVM, checkout the git commit sha as stated in
 `build_tools/llvm_version.txt`.
 And apply all LLVM patches in `build_tools/patches`.
 ```sh
+# For GPU support pass these cmake variables when building LLVM to enable
+# SPIR-V backend and L0 runtime
+  -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
+  -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
+```
+
+```sh
 cmake -G Ninja -B build -S . \
    -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \
    -DCMAKE_BUILD_TYPE=Release
 
-# For GPU support pass thes cmake variables to enable the required runtime libraries
-#  -DIMEX_ENABLE_L0_RUNTIME=1
-#  -DIMEX_ENABLE_SYCL_RUNTIME=1
-# Additional if using a non system wide Level Zero Loader built from source
-#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
-
+# build and run imex tests
 cmake --build build --target check-imex
 ```
 
@@ -168,6 +175,63 @@ IMEX can be built with Python bindings. The `imex_mlir` Python package functions
 - pybind11 and nanobind are additional build dependencies.
 
 The `imex_mlir` package is located in the `<IMEX_ROOT>/python_packages/` directory, where `<IMEX_ROOT>` refers to the IMEX build or installation directory. To use the Python bindings, include `<IMEX_ROOT>/python_packages/` in your `PYTHONPATH` environment variable. Usage examples can be found in the [Python test suite](test/python/).
+
+
+## Build MLIR with Intel GPU support and run integration tests
+```sh
+git clone https://github.com/llvm/llvm-project.git
+cd llvm-project
+
+cmake -G Ninja -B build -S llvm \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_BUILD_EXAMPLES=OFF \
+    -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DMLIR_INCLUDE_INTEGRATION_TESTS=ON \
+    -DMLIR_ENABLE_LEVELZERO_RUNNER=1
+
+# build MLIR and run all tests including integration tests for Intel GPU.
+cmake --build build --target check-mlir
+
+# build MLIR and run only XeGPU dialect integration tests for Intel GPU.
+cmake --build build --target check-mlir-integration-dialect-xegpu
+
+# build MLIR and run only XeVM dialect integration tests for Intel GPU.
+cmake --build build --target check-mlir-integration-dialect-xevm
+```
+
+
+
+## Running MLIR GPU code on Intel GPU
+MLIR upstream has a high level pass [gpu-lower-to-xevm-pipeline](https://github.com/llvm/llvm-project/blob/main/mlir/lib/Dialect/GPU/Pipelines/GPUToXeVMPipeline.cpp) that lowers GPU code for execution on Intel GPU.
+The pass support subgroup or workgroup level gpu kernels with XeGPU dialect in addition to regular SIMT style gpu kernels.
+```sh
+# Pass option specify kernel abstaction level
+--gpu-lower-to-xevm-pipeline="xegpu-op-level=lane"  # Lane/SIMT level kernel
+--gpu-lower-to-xevm-pipeline="xegpu-op-level=subgroup"  # Subgroup level kernel
+--gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup"  # Workgroup level kernel
+```
+For a simple example of SIMT GPU kernel without XeGPU dialect, check the upstream integration test [no-xegpu-ops.mlir](https://github.com/llvm/llvm-project/blob/main/mlir/test/Integration/Dialect/XeGPU/LANE/no-xegpu-ops.mlir).
+
+To run the example, first make sure to build the required executables and shared libraries for GPU code generation and execution.
+
+```sh
+cmake --build build --target mlir-opt mlir-runner mlir_levelzero_runtime mlir_runner_utils
+```
+
+The first five lines of `no-xegpu-ops.mlir` list the commands to execute the file on Intel GPU. Here is the break down of the entire sequence. Running GPU code follows a two step process. First, apply `gpu-lower-to-xevm-pipeline` pass with MLIR pass driver `mlir-opt`. This step lowers code to LLVM dialect. Second, jit execute the lowered IR with MLIR jit execution engine for LLVM dialect `mlir-runner`.
+The lowered IR contains reference to external functions in external libraries. For example,`libmlir_levelzero_runtime.so` is a shared library for interacting with level zero runtime, and `libmlir_runner_utils.so` is a shared library that provide some utility functions like printing to MLIR code. `mlir-runner` has an option `--shared-libs` that can be used multiple times to specify those external libraries. `mlir-runner` also asks user to provide return type of the main entry function. For example, `--entry-point-result=void` indicates the return type of "main" is void.
+Everything put together, entire command will looks like the following.
+
+```sh
+mlir-opt <path_to_your_gpu_code.mlir> --gpu-lower-to-xevm-pipeline="xegpu-op-level=lane" \
+    | mlir-runner \
+       --shared-libs=<path_to_libmlir_levelzero_runtime.so> \
+       --shared-libs=<path_to_libmlir_runner_utils.so> \
+       --entry-point-result=void
+```
+
 
 ## Adding a new dialect
 ```sh
