@@ -185,34 +185,10 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     cd "$LLVM_PROJECT_PATH"
     LLVM_HEAD_SHA=$(git rev-parse HEAD)
     print_info "LLVM source repository SHA: $LLVM_HEAD_SHA"
-else
-    # Pre-built LLVM: find source repository (typically parent of build directory)
-    print_info "Searching for LLVM source repository..."
-    LLVM_SOURCE_DIR=""
-
-    # Check parent directory for LLVM source
-    PARENT_DIR="$(dirname "$LLVM_PROJECT_PATH")"
-    if [ -d "$PARENT_DIR/.git" ] && [ -d "$PARENT_DIR/mlir" ]; then
-        LLVM_SOURCE_DIR="$PARENT_DIR"
-        print_info "Found LLVM source at: $LLVM_SOURCE_DIR"
-    fi
-
-    if [ -z "$LLVM_SOURCE_DIR" ]; then
-        print_error "Cannot find LLVM source repository to extract SHA"
-        print_error "Pre-built LLVM path: $LLVM_PROJECT_PATH"
-        print_error "Tried parent directory: $PARENT_DIR"
-        print_error "Please provide path to LLVM source repository instead of build directory"
-        exit 1
-    fi
-
-    cd "$LLVM_SOURCE_DIR"
-    LLVM_HEAD_SHA=$(git rev-parse HEAD)
-    print_info "LLVM source repository SHA: $LLVM_HEAD_SHA"
+    cd "$IMEX_PROJECT_PATH"
+    echo "$LLVM_HEAD_SHA" > "$LLVM_VERSION_FILE"
+    print_success "Updated llvm_version.txt with SHA: $LLVM_HEAD_SHA"
 fi
-
-cd "$IMEX_PROJECT_PATH"
-echo "$LLVM_HEAD_SHA" > "$LLVM_VERSION_FILE"
-print_success "Updated llvm_version.txt with SHA: $LLVM_HEAD_SHA"
 
 # Configure build (different approach for source repo vs pre-built)
 if [ "$USE_PREBUILT_LLVM" = false ]; then
@@ -312,6 +288,7 @@ else
         -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
         -DMLIR_ENABLE_SYCL_RUNNER=1 \
         -DMLIR_SPIRV_BACKEND_ENABLED=1 \
+        -DIMEX_CHECK_LLVM_VERSION=OFF \
         -DIMEX_BUILD_VC_CONVERSIONS=OFF \
         -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF \
         -DLLVM_LIT_ARGS="-v --filter='$LIT_FILTER'"
