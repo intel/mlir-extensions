@@ -299,19 +299,22 @@ else
         # User provided a specific test filter
         LIT_FILTER="$TEST_NAME_FILTER"
         print_info "Using custom test filter: $LIT_FILTER"
-        LLVM_LIT_ARGS_OPTION="-DLLVM_LIT_ARGS=-v --filter='$LIT_FILTER'"
     else
-        # No filter for out-of-tree build by default
-        LLVM_LIT_ARGS_OPTION=""
+        # Default: all XeGPU integration test directories (same as source build)
+        LIT_FILTER="Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
+        print_info "Using default test filter for XeGPU integration tests"
     fi
 
     cmake -S . -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DMLIR_DIR="$MLIR_CMAKE_DIR" \
         -DIMEX_ENABLE_L0_RUNTIME=1 \
+        -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
+        -DMLIR_ENABLE_SYCL_RUNNER=1 \
+        -DMLIR_SPIRV_BACKEND_ENABLED=1 \
         -DIMEX_BUILD_VC_CONVERSIONS=OFF \
         -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF \
-        $LLVM_LIT_ARGS_OPTION
+        -DLLVM_LIT_ARGS="-v --filter='$LIT_FILTER'"
 fi
 
 if [ $? -eq 0 ]; then

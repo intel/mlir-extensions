@@ -38,13 +38,18 @@ if(LINUX)
 endif()
 
 
-string(FIND "${LLVM_TARGETS_TO_BUILD}" "SPIRV" SPIRV_FOUND)
-if(SPIRV_FOUND GREATER -1)
-  message(STATUS "SPIRV is part of the LLVM targets")
+
+if (MLIR_SPIRV_BACKEND_ENABLED)
   set(MLIR_SPIRV_BACKEND_ENABLED 1)
 else()
-  message(STATUS "SPIRV is not part of the LLVM targets")
-  set(MLIR_SPIRV_BACKEND_ENABLED 0)
+  string(FIND "${LLVM_TARGETS_TO_BUILD}" "SPIRV" SPIRV_FOUND)
+  if(SPIRV_FOUND GREATER -1)
+    message(STATUS "SPIRV is part of the LLVM targets")
+    set(MLIR_SPIRV_BACKEND_ENABLED 1)
+  else()
+    message(STATUS "SPIRV is not part of the LLVM targets")
+    set(MLIR_SPIRV_BACKEND_ENABLED 0)
+  endif()
 endif()
 
 # option(IMEX_BUILD_SPIRV_BACKEND "Append SPIRV to LLVM_TARGETS_TO_BUILD" ON)
