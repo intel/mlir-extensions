@@ -208,6 +208,35 @@ else
     cd "$LLVM_SOURCE_DIR"
     LLVM_HEAD_SHA=$(git rev-parse HEAD)
     print_info "LLVM source repository SHA: $LLVM_HEAD_SHA"
+
+    # Check if pre-built LLVM was built from current HEAD
+    print_info "Verifying pre-built LLVM matches current source..."
+    VCS_REVISION_FILE="$LLVM_PROJECT_PATH/include/llvm/Support/VCSRevision.h"
+
+    if [ -f "$VCS_REVISION_FILE" ]; then
+        # Extract LLVM_REVISION from VCSRevision.h (handles R"(...)" raw string literal)
+        BUILD_COMMIT=$(grep '#define LLVM_REVISION' "$VCS_REVISION_FILE" | sed 's/.*R"(\(.*\))".*/\1/' 2>/dev/null || echo "")
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+
+        if [ -n "$BUILD_COMMIT" ] && [ "$BUILD_COMMIT" != "$CURRENT_COMMIT" ]; then
+            print_error "Pre-built LLVM was built from a different commit!"
+            print_error "Build commit:  $BUILD_COMMIT"
+            print_error "Current HEAD:  $CURRENT_COMMIT"
+            print_error ""
+            print_error "The pre-built LLVM installation does not match the current source."
+            print_error "Please either:"
+            print_error "  1. Rebuild LLVM from current HEAD, or"
+            print_error "  2. Checkout the commit used for the build: git checkout $BUILD_COMMIT"
+            exit 1
+        elif [ -n "$BUILD_COMMIT" ]; then
+            print_success "Pre-built LLVM matches current HEAD commit"
+        else
+            print_warning "Cannot extract LLVM_REVISION from VCSRevision.h"
+        fi
+    else
+        print_warning "Cannot verify pre-built LLVM version (VCSRevision.h not found at: $VCS_REVISION_FILE)"
+        print_warning "Assuming pre-built LLVM is compatible with current source"
+    fi
 fi
 
 cd "$IMEX_PROJECT_PATH"
