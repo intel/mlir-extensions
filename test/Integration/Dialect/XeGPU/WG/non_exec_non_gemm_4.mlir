@@ -1,7 +1,5 @@
 // RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup"
 
-// XFAIL: *
-
 module attributes {gpu.container_module} {
   func.func @broadcast_entry(%arg0: memref<192xf32>, %arg1: memref<32x2x192xf32>, %arg2: memref<32x2x192xf32>) attributes {L2Mem = 0 : i64, gemm_tiles_x = dense<1> : vector<4xi64>, gemm_tiles_y = dense<[1, -1, 16, 24]> : vector<4xi64>, habana_runner.num_inputs = 2 : i64, habana_runner.tests = [{inputs = [dense<8.000000e+00> : tensor<192xf32>, dense<2.000000e+00> : tensor<32x2x192xf32>], outputs = [dense<1.000000e+01> : tensor<32x2x192xf32>]}], linear_block_size = array<i32: 1024, 1, 1>, linear_grid_size = array<i32: 16, 1, 1>, region_partition = 1 : i64, region_size = 16 : i64, syn.fusion_successful, syn.gemm_pipeline, syn.tensor_signature = (tensor<192xf32>, tensor<32x2x192xf32>) -> tensor<32x2x192xf32>, synFusionGenOps = 1 : i64, synFusionRequiredBeamSize = 1 : i64, synFusionTotalCost = 1.240800e+03 : f64} {
     %c2 = arith.constant 2 : index
