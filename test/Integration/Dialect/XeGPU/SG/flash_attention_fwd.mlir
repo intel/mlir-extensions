@@ -7,8 +7,6 @@
 // RUN:   --entry-point-result=void \
 // RUN: | FileCheck %s
 
-// XFAIL: *
-
 // Example of pass pipeline usage:
 // %python_executable %imex_runner --requires=mlir-levelzero-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
 //                                        --runner mlir-runner -e main \
