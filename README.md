@@ -295,12 +295,12 @@ to manually add `-DIMEX_ENABLE_BENCHMARK=ON` option when building the IMEX. The 
 script for running them will be generated under the `build/benchmarks` folder.
 
 Currently, IMEX provides benchmarks for the following 4 categories of operations:
-| Operation                             | CPU    | GPU    |
-| :---:                                 | :---:  | :---:  |
-| elementwise (relu and silu)           | Yes    | Yes    |
-| reduction (softmax)                   | Yes    | Yes    |
-| transpose (transpose)                 | Yes    | Yes    |
-| fusion (kInputFusion and kLoopFusion) | No     | Yes    |
+|               Operation               |  CPU  |  GPU  |
+| :-----------------------------------: | :---: | :---: |
+|      elementwise (relu and silu)      |  Yes  |  Yes  |
+|          reduction (softmax)          |  Yes  |  Yes  |
+|         transpose (transpose)         |  Yes  |  Yes  |
+| fusion (kInputFusion and kLoopFusion) |  No   |  Yes  |
 
 These test cases are mainly implemented using linalg dialect, and the spriv test cases for
 relu are also provided. Each testcase is named following the pattern of `opname_shape_dtype.mlir`
@@ -341,11 +341,24 @@ fp32, fp16, int32 etc.
 
 
 ## Profiling kernel execute time
-### sycl event
+### level-zero (l0) event
 ```sh
 export IMEX_ENABLE_PROFILING=ON
 run the test
 ```
+The profiling is based on warmup runs and profiling runs for stable results.
+By default, the number of warmup runs and profiling runs are 100 each.
+However, one can control them using envinronment variables:
+
+```sh
+# 10 warm-up runs
+export IMEX_PROFILING_WARMUPS = 10
+# 10 profiling runs
+export IMEX_PROFILING_RUNS = 10
+```
+
+The profiling result provides the min, max, avg, median and std dev of the execution time (in ms).
+
 ### trace tools
 ```sh
 python {your_path}/imex_runner.py xxx -o test.mlir
