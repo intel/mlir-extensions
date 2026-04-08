@@ -20,7 +20,7 @@ builtin.module(
     gpu-to-llvm{use-bare-pointers-for-kernels=true}
     finalize-memref-to-llvm
     convert-to-llvm
-    gpu-module-to-binary
+    gpu-module-to-binary{format=isa}
     lower-affine
     reconcile-unrealized-casts)
 // End
