@@ -13,7 +13,7 @@ index 01965da03882..35c0925215b0 100644
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 @@ -11,7 +11,10 @@
  //===----------------------------------------------------------------------===//
- 
+
  #include "level_zero/ze_api.h"
 +#include <algorithm>
 +#include <atomic>
@@ -33,7 +33,7 @@ index 01965da03882..35c0925215b0 100644
 @@ -328,6 +332,92 @@ struct DynamicEventPool {
    }
  };
- 
+
 +// EventPool TimeStamp events, needed for profiling
 +struct TimeStampEventPool {
 +  static constexpr size_t kNumEventsPerPool{128};
@@ -126,7 +126,7 @@ index 01965da03882..35c0925215b0 100644
 @@ -338,6 +428,75 @@ static DynamicEventPool &getDynamicEventPool() {
    return dynEventPool;
  }
- 
+
 +// Thread-local lazy singleton accessor
 +static TimeStampEventPool &getTimeStampEventPool() {
 +  thread_local static TimeStampEventPool pool{&getRtContext()};
@@ -202,7 +202,7 @@ index 01965da03882..35c0925215b0 100644
 @@ -406,6 +565,99 @@ loadModule(const void *data, size_t dataSize,
    return zeModule;
  }
- 
+
 +//===----------------------------------------------------------------------===//
 +// Utilities
 +//===----------------------------------------------------------------------===//
@@ -324,7 +324,7 @@ index 01965da03882..35c0925215b0 100644
 +    return allocDeviceMemory(size, alignment, isShared);
    });
  }
- 
+
 @@ -557,6 +793,71 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
    dispatch.groupCountX = static_cast<uint32_t>(gridX);
    dispatch.groupCountY = static_cast<uint32_t>(gridY);
@@ -397,6 +397,5 @@ index 01965da03882..35c0925215b0 100644
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
--- 
+--
 2.34.1
-
