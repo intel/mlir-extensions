@@ -1,17 +1,17 @@
-From a4c92dc66a3de2561ae1b9d4055b5498aa05d7aa Mon Sep 17 00:00:00 2001
+From 84d7ef0d9d969dc45435a20a040450e2913436b1 Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
-Date: Wed, 4 Mar 2026 01:02:08 +0100
-Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrappers.cpp
+Date: Sat, 28 Mar 2026 04:10:31 +0100
+Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrappers
 
 ---
- .../LevelZeroRuntimeWrappers.cpp              | 334 +++++++++++++++++-
- 1 file changed, 316 insertions(+), 18 deletions(-)
+ .../LevelZeroRuntimeWrappers.cpp              | 335 +++++++++++++++++-
+ 1 file changed, 318 insertions(+), 17 deletions(-)
 
 diff --git a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
-index 7859fb3feaab..6a1cd7ba3b4d 100644
+index 01965da03882..35c0925215b0 100644
 --- a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
-@@ -11,12 +11,16 @@
+@@ -11,7 +11,10 @@
  //===----------------------------------------------------------------------===//
 
  #include "level_zero/ze_api.h"
@@ -19,16 +19,18 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +#include <atomic>
  #include <cassert>
 +#include <cmath>
+ #include <cstring>
  #include <deque>
  #include <exception>
- #include <functional>
+@@ -19,6 +22,7 @@
  #include <iostream>
  #include <limits>
-+#include <numeric>
  #include <memory>
++#include <numeric>
  #include <stdexcept>
  #include <unordered_set>
-@@ -327,6 +331,92 @@ struct DynamicEventPool {
+ #include <vector>
+@@ -328,6 +332,92 @@ struct DynamicEventPool {
    }
  };
 
@@ -121,7 +123,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
  static L0RTContextWrapper &getRtContext() {
    thread_local static L0RTContextWrapper rtContext(0);
    return rtContext;
-@@ -337,6 +427,75 @@ static DynamicEventPool &getDynamicEventPool() {
+@@ -338,6 +428,75 @@ static DynamicEventPool &getDynamicEventPool() {
    return dynEventPool;
  }
 
@@ -197,7 +199,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
  struct StreamWrapper {
    // avoid event pointer invalidations
    std::deque<ze_event_handle_t> implicitEventStack;
-@@ -406,6 +565,98 @@ static ze_module_handle_t loadModule(const void *data, size_t dataSize) {
+@@ -406,6 +565,99 @@ loadModule(const void *data, size_t dataSize,
    return zeModule;
  }
 
@@ -206,24 +208,24 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +//===----------------------------------------------------------------------===//
 +
 +static void *allocDeviceMemory(uint64_t size, size_t alignment = 64,
-+                               bool isShared = false) {
++                 bool isShared = false) {
 +
 +  void *memPtr = nullptr;
 +  ze_device_mem_alloc_desc_t deviceDesc = {};
 +  deviceDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
 +  if (isShared) {
-+    ze_host_mem_alloc_desc_t hostDesc = {};
-+    hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
-+    L0_SAFE_CALL(zeMemAllocShared(getRtContext().context.get(), &deviceDesc,
-+                                  &hostDesc, size, alignment,
-+                                  getRtContext().device, &memPtr));
++  ze_host_mem_alloc_desc_t hostDesc = {};
++  hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
++  L0_SAFE_CALL(zeMemAllocShared(getRtContext().context.get(), &deviceDesc,
++                  &hostDesc, size, alignment,
++                  getRtContext().device, &memPtr));
 +  } else {
-+    L0_SAFE_CALL(zeMemAllocDevice(getRtContext().context.get(), &deviceDesc,
-+                                  size, alignment, getRtContext().device,
-+                                  &memPtr));
++  L0_SAFE_CALL(zeMemAllocDevice(getRtContext().context.get(), &deviceDesc,
++                  size, alignment, getRtContext().device,
++                  &memPtr));
 +  }
 +  if (!memPtr)
-+    throw std::runtime_error("mem allocation failed!");
++  throw std::runtime_error("mem allocation failed!");
 +  return memPtr;
 +}
 +
@@ -233,21 +235,21 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +  uint32_t CachePropCount = MaxPropertyEntries;
 +  ze_device_cache_properties_t CacheProperties[MaxPropertyEntries];
 +  for (uint32_t i = 0; i < MaxPropertyEntries; ++i) {
-+    CacheProperties[i].stype = ZE_STRUCTURE_TYPE_DEVICE_CACHE_PROPERTIES;
-+    CacheProperties[i].pNext = nullptr;
++  CacheProperties[i].stype = ZE_STRUCTURE_TYPE_DEVICE_CACHE_PROPERTIES;
++  CacheProperties[i].pNext = nullptr;
 +  }
 +  L0_SAFE_CALL(
-+      zeDeviceGetCacheProperties(zeDevice, &CachePropCount, CacheProperties));
++    zeDeviceGetCacheProperties(zeDevice, &CachePropCount, CacheProperties));
 +  size_t globaMemoryCacheSize = 0;
 +  for (uint32_t i = 0; i < CachePropCount; ++i) {
-+    // find largest cache that is not user-controlled
-+    if ((CacheProperties[i].flags &
-+         ZE_DEVICE_CACHE_PROPERTY_FLAG_USER_CONTROL) != 0u) {
-+      continue;
-+    }
-+    if (globaMemoryCacheSize < CacheProperties[i].cacheSize) {
-+      globaMemoryCacheSize = CacheProperties[i].cacheSize;
-+    }
++  // find largest cache that is not user-controlled
++  if ((CacheProperties[i].flags &
++     ZE_DEVICE_CACHE_PROPERTY_FLAG_USER_CONTROL) != 0u) {
++    continue;
++  }
++  if (globaMemoryCacheSize < CacheProperties[i].cacheSize) {
++    globaMemoryCacheSize = CacheProperties[i].cacheSize;
++  }
 +  }
 +  return globaMemoryCacheSize;
 +}
@@ -264,7 +266,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +template <typename T>
 +StatsResult computeStats(const std::vector<T> &data) {
 +  if (data.empty()) {
-+    throw std::invalid_argument("compute_stats: input vector is empty");
++  throw std::invalid_argument("compute_stats: input vector is empty");
 +  }
 +
 +  // ---- Min & Max ----
@@ -280,23 +282,24 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +  std::sort(sorted.begin(), sorted.end());
 +  size_t n = sorted.size();
 +  double median =
-+      (n % 2 == 0) ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0 : sorted[n / 2];
++    (n % 2 == 0) ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0 : sorted[n / 2];
 +
 +  // ---- Standard Deviation ----
 +  double variance = std::accumulate(data.begin(), data.end(), 0.0,
-+                                    [mean](double acc, double x) {
-+                                      return acc + (x - mean) * (x - mean);
-+                                    }) /
-+                    data.size(); // use (data.size() - 1) for sample stddev
++                  [mean](double acc, double x) {
++                    return acc + (x - mean) * (x - mean);
++                  }) /
++          data.size(); // use (data.size() - 1) for sample stddev
 +
 +  double stddev = std::sqrt(variance);
 +
 +  return {minVal, maxVal, mean, median, stddev};
 +}
++
  //===----------------------------------------------------------------------===//
  // L0 Wrappers definition
  //===----------------------------------------------------------------------===//
-@@ -453,24 +704,8 @@ extern "C" void mgpuEventRecord(ze_event_handle_t event,
+@@ -453,24 +705,8 @@ extern "C" void mgpuEventRecord(ze_event_handle_t event,
  extern "C" void *mgpuMemAlloc(uint64_t size, StreamWrapper *stream,
                                bool isShared) {
    return catchAll([&]() {
@@ -322,15 +325,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
    });
  }
 
-@@ -536,7 +771,6 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
-                                  size_t sharedMemBytes, StreamWrapper *stream,
-                                  void **params, void ** /*extra*/,
-                                  size_t paramsCount) {
--
-   if (sharedMemBytes > 0) {
-     paramsCount = paramsCount - 1; // Last param is shared memory size
-     L0_SAFE_CALL(
-@@ -550,6 +784,70 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+@@ -557,6 +793,71 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
    dispatch.groupCountX = static_cast<uint32_t>(gridX);
    dispatch.groupCountY = static_cast<uint32_t>(gridY);
    dispatch.groupCountZ = static_cast<uint32_t>(gridZ);
@@ -398,6 +393,7 @@ index 7859fb3feaab..6a1cd7ba3b4d 100644
 +    std::cout << "Median: " << statRes.median << "\n";
 +    std::cout << "Std Dev: " << statRes.stddev << "\n";
 +  }
++
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(

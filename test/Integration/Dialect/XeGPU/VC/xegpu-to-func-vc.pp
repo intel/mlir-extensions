@@ -36,6 +36,6 @@ builtin.module(
     convert-to-llvm
     lower-affine
     reconcile-unrealized-casts
-    gpu-module-to-binary)
+    gpu-module-to-binary{format=isa})
 
 // End
