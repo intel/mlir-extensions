@@ -62,6 +62,7 @@ gpu.module @test {
 
  //CHECK: store_matrix_strided_v2([[A:%.+]]: memref<64x64xf16>)
   gpu.func @store_matrix_strided_v2(%A: memref<64x64xf16>) {
+    //CHECK: [[poison:%.+]] = ub.poison
     //CHECK: [[offsets:%.+]] = arith.constant dense<[132, 140, 148, 156, 164, 172, 180, 188, 196, 204, 212, 220, 228, 236, 244, 252]> : vector<16xindex>
     //CHECK: [[mask:%.+]] = arith.constant dense<true> : vector<16xi1>
     //CHECK: [[c0:%.+]] = arith.constant 0 : index
@@ -70,7 +71,7 @@ gpu.module @test {
     //CHECK: [[alloca:%.+]] = memref.alloca() {alignment = 1024 : i64} : memref<2048xi8, 3>
     //CHECK: [[view:%.+]] = memref.view [[alloca]][[[c0]]][] : memref<2048xi8, 3> to memref<512xf32, 3>
     //CHECK: [[shapecast1:%.+]] = vector.shape_cast [[load]] {packed} : vector<8x16xf16> to vector<128xf16>
-    //CHECK: [[shuffle:%.+]] = vector.shuffle [[shapecast1]], [[shapecast1]]
+    //CHECK: [[shuffle:%.+]] = vector.shuffle [[shapecast1]], [[poison]]
     //CHECK: [[shapecast:%.+]] = vector.shape_cast [[shuffle]] : vector<128xf16> to vector<4x32xf16>
     //CHECK: [[bcast:%.+]] = vector.bitcast [[shapecast]] : vector<4x32xf16> to vector<4x16xf32>
     //CHECK: [[data:%.+]] = vector.transpose [[bcast]], [1, 0] : vector<4x16xf32> to vector<16x4xf32>
