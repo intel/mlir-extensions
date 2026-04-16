@@ -8,11 +8,9 @@ builtin.module(
       cse
       xegpu-propagate-layout{layout-kind="inst"}
       xegpu-blocking
-      canonicalize
       cse
       xegpu-propagate-layout{layout-kind="lane"}
       xegpu-optimize-peephole
-      canonicalize
       cse
       xegpu-propagate-layout{layout-kind="lane"}
       xegpu-subgroup-distribute
