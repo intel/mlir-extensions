@@ -1,7 +1,11 @@
-// RUN: %python_executable %imex_runner --requires=mlir-levelzero-runtime,spirv-backend -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
-// RUN:                                       --runner mlir-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup" \
+// RUN: | mlir-runner \
+// RUN:   --shared-libs=%mlir_levelzero_runtime \
+// RUN:   --shared-libs=%mlir_runner_utils \
+// RUN:   --shared-libs=%mlir_c_runner_utils \
+// RUN:   --shared-libs=%irunner_utils \
+// RUN:   --entry-point-result=void \
+// RUN: | FileCheck %s
 
 #q = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [8, 16]>
 #k = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [16, 16]>
@@ -13,6 +17,7 @@
 #out_t = #xegpu.layout<sg_layout = [1, 8], sg_data = [64, 16], inst_data = [16, 8], order = [0, 1]>
 #layout_128x1 = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 1], inst_data = [8, 1]>
 #layout_128x16 = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 16], inst_data = [8, 16] >
+#qk = #layout_128x16
 #layout_128x16_t = #xegpu.layout<sg_layout = [1, 8], sg_data = [16, 16], inst_data = [16, 8],  order = [0, 1]>
 #layout_128 = #xegpu.layout<sg_layout = [8], sg_data = [16], inst_data = [8]>
 module @flash_attention attributes {gpu.container_module} {
@@ -86,18 +91,18 @@ module @flash_attention attributes {gpu.container_module} {
 
 
       // Initialize m, l and acc
-      %m_i_row_in = arith.constant {layout_result_0 = #layout_128} dense<0xFF800000> : vector<128xf32> // -inf
-      %l_i_row_in = arith.constant {layout_result_0 = #layout_128} dense<1.0>  : vector<128xf32> // 1.0
-      %zero_dpas_128x16 = arith.constant {layout_result_0 = #layout_128x16} dense<0.0>  : vector<128x16xf32>
-      %zero_128x64 = arith.constant {layout_result_0 = #out} dense<0.0>  : vector<128x64xf32>
-      %zero_128 = arith.constant {layout_result_0 = #layout_128} dense<0.000000e+00>  : vector<128xf32>
-      %minus_inf_128 = arith.constant {layout_result_0 = #layout_128} dense<0xFF800000> : vector<128xf32> // -inf
+      %m_i_row_in = arith.constant  dense<0xFF800000> : vector<128xf32> // -inf
+      %l_i_row_in = arith.constant  dense<1.0>  : vector<128xf32> // 1.0
+      %zero_dpas_128x16 = arith.constant  dense<0.0>  : vector<128x16xf32>
+      %zero_128x64 = arith.constant dense<0.0>  : vector<128x64xf32>
+      %zero_128 = arith.constant  dense<0.000000e+00>  : vector<128xf32>
+      %minus_inf_128 = arith.constant  dense<0xFF800000> : vector<128xf32> // -inf
 
       // Softmax scaling
       // FIXME: value 0.5 is hard coded. need to take it from %sm_scale
-      %qk_scale_128 = arith.constant {layout_result_0 = #layout_128} dense<0.5> : vector<128xf32>
-      %qk_scale_128x1 = arith.constant {layout_result_0 = #layout_128x1}  dense<0.5> : vector<128x1xf32>
-      %qk_scale_128x16 = arith.constant {layout_result_0 = #layout_128x16} dense<0.5>  : vector<128x16xf32>
+      %qk_scale_128 = arith.constant  dense<0.5> : vector<128xf32>
+      %qk_scale_128x1 = arith.constant  dense<0.5> : vector<128x1xf32>
+      %qk_scale_128x16 = arith.constant  dense<0.5>  : vector<128x16xf32>
 
 
       // Load Q tile. Each WG loads 128x64xf16 tile of Q.
@@ -127,7 +132,7 @@ module @flash_attention attributes {gpu.container_module} {
           // Load first 16x64xf16 K slice. K is in column major layout, so we need to transpose after loading.
           %wg_x_offset_running = arith.addi %wg_x_offset, %k : index
           %k_value_slice_0_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
-          %k_value_slice_0 = vector.transpose %k_value_slice_0_t0, [1, 0] {layout_result_0 = #kt} : vector<16x64xf16> to vector<64x16xf16>
+          %k_value_slice_0 = vector.transpose %k_value_slice_0_t0, [1, 0] : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute first 128x16 of Q * K^T using DPAS.
           %qk_out_0 = xegpu.dpas %q_value, %k_value_slice_0, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
@@ -135,7 +140,7 @@ module @flash_attention attributes {gpu.container_module} {
           // Load second 16x64xf16 K slice.
           %wg_x_offset_running_plus_16 = arith.addi %wg_x_offset_running, %c16 : index
           %k_value_slice_1_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_16, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
-          %k_value_slice_1 = vector.transpose %k_value_slice_1_t0, [1, 0] {layout_result_0 = #kt} : vector<16x64xf16> to vector<64x16xf16>
+          %k_value_slice_1 = vector.transpose %k_value_slice_1_t0, [1, 0] : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute second 128x16 of Q * K^T using DPAS
           %qk_out_1 = xegpu.dpas %q_value, %k_value_slice_1, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
@@ -143,7 +148,7 @@ module @flash_attention attributes {gpu.container_module} {
           // Load third  16x64xf16 K slice
           %wg_x_offset_running_plus_32 = arith.addi %wg_x_offset_running_plus_16, %c16 : index
           %k_value_slice_2_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_32, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
-          %k_value_slice_2 = vector.transpose %k_value_slice_2_t0, [1, 0] {layout_result_0 = #kt}  : vector<16x64xf16> to vector<64x16xf16>
+          %k_value_slice_2 = vector.transpose %k_value_slice_2_t0, [1, 0]  : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute third 128x16 of Q * K^T using DPAS
           %qk_out_2 = xegpu.dpas %q_value, %k_value_slice_2, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16}  : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
@@ -151,98 +156,96 @@ module @flash_attention attributes {gpu.container_module} {
           // Load forth  16x64 K slice
           %wg_x_offset_running_plus_48 = arith.addi %wg_x_offset_running_plus_32, %c16 : index
           %k_value_slice_3_t0 = xegpu.load_nd %k_tile_slice[%wg_x_offset_running_plus_48, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k} : !xegpu.tensor_desc<16x64xf16, #k> -> vector<16x64xf16>
-          %k_value_slice_3 = vector.transpose %k_value_slice_3_t0, [1, 0] {layout_result_0 = #kt}  : vector<16x64xf16> to vector<64x16xf16>
+          %k_value_slice_3 = vector.transpose %k_value_slice_3_t0, [1, 0] : vector<16x64xf16> to vector<64x16xf16>
 
           // Compute forth 128x16 of Q * K^T using DPAS
           %qk_out_3 = xegpu.dpas %q_value, %k_value_slice_3, %zero_dpas_128x16 {layout_a = #q, layout_b = #kt, layout_cd = #layout_128x16} : vector<128x64xf16>, vector<64x16xf16>, vector<128x16xf32> -> vector<128x16xf32>
 
           // Softmax computation on QK_out tile
           // Do max reduction on qk_out
-          %qk_out_max_t0 = arith.maximumf %qk_out_0, %qk_out_1 fastmath<fast> {layout_result_0 = #layout_128x16}  : vector<128x16xf32>
-          %qk_out_max_t1 = arith.maximumf %qk_out_2, %qk_out_3 fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_max_t2 = arith.maximumf %qk_out_max_t0, %qk_out_max_t1 fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
+          %qk_out_max_t0 = arith.maximumf %qk_out_0, %qk_out_1 fastmath<fast>   : vector<128x16xf32>
+          %qk_out_max_t1 = arith.maximumf %qk_out_2, %qk_out_3 fastmath<fast>  : vector<128x16xf32>
+          %qk_out_max_t2 = arith.maximumf %qk_out_max_t0, %qk_out_max_t1 fastmath<fast>  : vector<128x16xf32>
           %qk_out_max_t3 = vector.multi_reduction <maximumf>, %qk_out_max_t2, %minus_inf_128
-            {layout_result_0 = #xegpu.slice<#layout_128x16, dims = [1]>}
             [1] : vector<128x16xf32> to vector<128xf32>
 
           // Scale
-          %qk_out_max_scaled = arith.mulf %qk_out_max_t3, %qk_scale_128 {layout_result_0 = #layout_128} : vector<128xf32>
+          %qk_out_max_scaled = arith.mulf %qk_out_max_t3, %qk_scale_128  : vector<128xf32>
           // Find m_ij_row
-          %m_ij_row = arith.maximumf %qk_out_max_scaled, %m_i_row fastmath<fast> {layout_result_0 = #layout_128} : vector<128xf32>
+          %m_ij_row = arith.maximumf %qk_out_max_scaled, %m_i_row fastmath<fast>  : vector<128xf32>
           // Scale qk_out by qk_scale
-          %qk_out_0_scaled = arith.mulf %qk_out_0, %qk_scale_128x16 {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_1_scaled = arith.mulf %qk_out_1, %qk_scale_128x16 {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_2_scaled = arith.mulf %qk_out_2, %qk_scale_128x16 {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_3_scaled = arith.mulf %qk_out_3, %qk_scale_128x16 {layout_result_0 = #layout_128x16} : vector<128x16xf32>
+          %qk_out_0_scaled = arith.mulf %qk_out_0, %qk_scale_128x16  : vector<128x16xf32>
+          %qk_out_1_scaled = arith.mulf %qk_out_1, %qk_scale_128x16  : vector<128x16xf32>
+          %qk_out_2_scaled = arith.mulf %qk_out_2, %qk_scale_128x16  : vector<128x16xf32>
+          %qk_out_3_scaled = arith.mulf %qk_out_3, %qk_scale_128x16  : vector<128x16xf32>
           // Broadcast m_ij_row to 128x16
-          %m_ij_row_broadcasted0 = vector.broadcast %m_ij_row {layout_result_0 = #layout_128x16_t} : vector<128xf32> to vector<16x128xf32>
-          %m_ij_row_broadcasted = vector.transpose %m_ij_row_broadcasted0, [1, 0] {layout_result_0 = #layout_128x16} : vector<16x128xf32> to vector<128x16xf32>
+          %m_ij_row_broadcasted0 = vector.broadcast %m_ij_row : vector<128xf32> to vector<16x128xf32>
+          %m_ij_row_broadcasted = vector.transpose %m_ij_row_broadcasted0, [1, 0]  : vector<16x128xf32> to vector<128x16xf32>
           // Center qk_out by m_ij_row
-          %qk_out_0_centered = arith.subf %qk_out_0_scaled, %m_ij_row_broadcasted {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_1_centered = arith.subf %qk_out_1_scaled, %m_ij_row_broadcasted {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_2_centered = arith.subf %qk_out_2_scaled, %m_ij_row_broadcasted {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_3_centered = arith.subf %qk_out_3_scaled, %m_ij_row_broadcasted {layout_result_0 = #layout_128x16} : vector<128x16xf32>
+          %qk_out_0_centered = arith.subf %qk_out_0_scaled, %m_ij_row_broadcasted  : vector<128x16xf32>
+          %qk_out_1_centered = arith.subf %qk_out_1_scaled, %m_ij_row_broadcasted  : vector<128x16xf32>
+          %qk_out_2_centered = arith.subf %qk_out_2_scaled, %m_ij_row_broadcasted  : vector<128x16xf32>
+          %qk_out_3_centered = arith.subf %qk_out_3_scaled, %m_ij_row_broadcasted  : vector<128x16xf32>
           // Take exp
-          %qk_out_0_exp = math.exp %qk_out_0_centered fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_1_exp = math.exp %qk_out_1_centered fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_2_exp = math.exp %qk_out_2_centered fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %qk_out_3_exp = math.exp %qk_out_3_centered fastmath<fast> {layout_result_0 = #layout_128x16} : vector<128x16xf32>
+          %qk_out_0_exp = math.exp %qk_out_0_centered fastmath<fast>  : vector<128x16xf32>
+          %qk_out_1_exp = math.exp %qk_out_1_centered fastmath<fast>  : vector<128x16xf32>
+          %qk_out_2_exp = math.exp %qk_out_2_centered fastmath<fast>  : vector<128x16xf32>
+          %qk_out_3_exp = math.exp %qk_out_3_centered fastmath<fast>  : vector<128x16xf32>
           // Do a sum reduction on exp output
-          %l_ij_row_t0 = arith.addf %qk_out_0_exp, %qk_out_1_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %l_ij_row_t1 = arith.addf %qk_out_2_exp, %qk_out_3_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32>
-          %l_ij_row_t2 = arith.addf %l_ij_row_t0, %l_ij_row_t1 {layout_result_0 = #layout_128x16} : vector<128x16xf32>
+          %l_ij_row_t0 = arith.addf %qk_out_0_exp, %qk_out_1_exp  : vector<128x16xf32>
+          %l_ij_row_t1 = arith.addf %qk_out_2_exp, %qk_out_3_exp  : vector<128x16xf32>
+          %l_ij_row_t2 = arith.addf %l_ij_row_t0, %l_ij_row_t1  : vector<128x16xf32>
           %l_ij_row_t3 = vector.multi_reduction <add>, %l_ij_row_t2, %zero_128
-            {layout_result_0 = #xegpu.slice<#layout_128x16, dims = [1]>}
             [1]  : vector<128x16xf32> to vector<128xf32>
           // Compute alpha
-          %alpha_row_t1 = arith.subf %m_i_row, %m_ij_row {layout_result_0 = #layout_128} : vector<128xf32>
-          %alpha_row = math.exp %alpha_row_t1 fastmath<fast> {layout_result_0 = #layout_128} : vector<128xf32>
+          %alpha_row_t1 = arith.subf %m_i_row, %m_ij_row  : vector<128xf32>
+          %alpha_row = math.exp %alpha_row_t1 fastmath<fast>  : vector<128xf32>
           // Update l_i
-          %l_i_row_new_t1 = arith.mulf %l_i_row, %alpha_row {layout_result_0 = #layout_128} : vector<128xf32>
-          %l_i_row_new = arith.addf %l_i_row_new_t1, %l_ij_row_t3 {layout_result_0 = #layout_128} : vector<128xf32>
+          %l_i_row_new_t1 = arith.mulf %l_i_row, %alpha_row  : vector<128xf32>
+          %l_i_row_new = arith.addf %l_i_row_new_t1, %l_ij_row_t3  : vector<128xf32>
           // Update acc
-          %alpha_row_broadcasted0 = vector.broadcast %alpha_row {layout_result_0 = #out_t} : vector<128xf32> to vector<64x128xf32>
-          %alpha_row_broadcasted = vector.transpose %alpha_row_broadcasted0, [1, 0] {layout_result_0 = #out} : vector<64x128xf32> to vector<128x64xf32>
-          %acc_in_updated = arith.mulf %acc_in, %alpha_row_broadcasted {layout_result_0 = #out} : vector<128x64xf32>
+          %alpha_row_broadcasted0 = vector.broadcast %alpha_row  : vector<128xf32> to vector<64x128xf32>
+          %alpha_row_broadcasted = vector.transpose %alpha_row_broadcasted0, [1, 0] : vector<64x128xf32> to vector<128x64xf32>
+          %acc_in_updated = arith.mulf %acc_in, %alpha_row_broadcasted : vector<128x64xf32>
 
           // Convert qk_out_tile to DPAS-A precision for P*V computation.
-          %qk_out_0_f16 = arith.truncf %qk_out_0_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32> to vector<128x16xf16>
-          %qk_out_1_f16 = arith.truncf %qk_out_1_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32> to vector<128x16xf16>
-          %qk_out_2_f16 = arith.truncf %qk_out_2_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32> to vector<128x16xf16>
-          %qk_out_3_f16 = arith.truncf %qk_out_3_exp {layout_result_0 = #layout_128x16} : vector<128x16xf32> to vector<128x16xf16>
+          %qk_out_0_f16 = arith.truncf %qk_out_0_exp  : vector<128x16xf32> to vector<128x16xf16>
+          %qk_out_1_f16 = arith.truncf %qk_out_1_exp  : vector<128x16xf32> to vector<128x16xf16>
+          %qk_out_2_f16 = arith.truncf %qk_out_2_exp  : vector<128x16xf32> to vector<128x16xf16>
+          %qk_out_3_f16 = arith.truncf %qk_out_3_exp  : vector<128x16xf32> to vector<128x16xf16>
 
           // Load first 16x64 V slice.
           %v_val_slice_0 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute first iteration update of 128x64 of P * V
-          %pv_out_iter0 = xegpu.dpas %qk_out_0_f16, %v_val_slice_0, %acc_in_updated {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter0 = xegpu.dpas %qk_out_0_f16, %v_val_slice_0, %acc_in_updated {layout_a = #qk, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load second 16x64 V slice.
           %v_val_slice_1 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_16, %c0] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute second iteration update of 128x64 of P * V
-          %pv_out_iter1 = xegpu.dpas %qk_out_1_f16, %v_val_slice_1, %pv_out_iter0 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter1 = xegpu.dpas %qk_out_1_f16, %v_val_slice_1, %pv_out_iter0 {layout_a = #qk, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load third 16x64 V slice.
           %v_val_slice_2 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_32, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute third iteration update of 128x64 of P * V
-          %pv_out_iter2 = xegpu.dpas %qk_out_2_f16, %v_val_slice_2, %pv_out_iter1 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter2 = xegpu.dpas %qk_out_2_f16, %v_val_slice_2, %pv_out_iter1 {layout_a = #qk, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           // Load forth 16x64 V slice.
           %v_val_slice_3 = xegpu.load_nd %v_tile_slice[%wg_x_offset_running_plus_48, %c0]  { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v} : !xegpu.tensor_desc<16x64xf16, #v> -> vector<16x64xf16>
           // Compute forth iteration update of 128x64 of P * V
-          %pv_out_iter3 = xegpu.dpas %qk_out_3_f16, %v_val_slice_3, %pv_out_iter2 {layout_a = #q, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+          %pv_out_iter3 = xegpu.dpas %qk_out_3_f16, %v_val_slice_3, %pv_out_iter2 {layout_a = #qk, layout_b = #v, layout_cd = #out} : vector<128x16xf16>, vector<16x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
           scf.yield %pv_out_iter3, %m_ij_row, %l_i_row_new : vector<128x64xf32>, vector<128xf32>, vector<128xf32>
-        } {layout_result_0 = #out, layout_result_1 = #layout_128, layout_result_2 = #layout_128}// end of inner loop
+        } // end of inner loop
       // Divide acc output by l_i
-      %l_i_row_broadcast0 = vector.broadcast %result#2 {layout_result_0 = #out_t} : vector<128xf32> to vector<64x128xf32>
-      %l_i_row_broadcast = vector.transpose %l_i_row_broadcast0, [1, 0] {layout_result_0 = #out} : vector<64x128xf32> to vector<128x64xf32>
-      %o_val_final_t = arith.divf %result#0, %l_i_row_broadcast {layout_result_0 = #out} : vector<128x64xf32>
+      %l_i_row_broadcast0 = vector.broadcast %result#2 : vector<128xf32> to vector<64x128xf32>
+      %l_i_row_broadcast = vector.transpose %l_i_row_broadcast0, [1, 0] : vector<64x128xf32> to vector<128x64xf32>
+      %o_val_final_t = arith.divf %result#0, %l_i_row_broadcast : vector<128x64xf32>
       // Store output tile.
-      %o_val_final = arith.truncf %o_val_final_t {layout_result_0 = #out} : vector<128x64xf32> to vector<128x64xf16>
+      %o_val_final = arith.truncf %o_val_final_t : vector<128x64xf32> to vector<128x64xf16>
       %Out_ptr = memref.extract_aligned_pointer_as_index %Out : memref<?x?xf16> -> index
       %Out_ptr_i64 = arith.index_cast %Out_ptr : index to i64
-      %o_tile  = xegpu.create_nd_tdesc %Out_ptr_i64, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : i64 -> !xegpu.tensor_desc<128x64xf16, #out>
-      xegpu.store_nd %o_val_final, %o_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>} : vector<128x64xf16>, !xegpu.tensor_desc<128x64xf16, #out>
+      %o_tile  = xegpu.create_nd_tdesc %Out_ptr_i64, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : i64 -> !xegpu.tensor_desc<128x64xf16>
+      xegpu.store_nd %o_val_final, %o_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>, layout = #out} : vector<128x64xf16>, !xegpu.tensor_desc<128x64xf16>
 
       gpu.return
     }
