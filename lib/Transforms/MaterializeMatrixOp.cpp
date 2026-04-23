@@ -207,33 +207,18 @@ public:
       bool tryFold = op.getData().hasOneUse();
       data = convertToPackedVector(rewriter, loc, data, tryFold);
       auto maskTy = VectorType::get(blockShape[1], rewriter.getI1Type());
-      auto mask = arith::ConstantOp::create(
+      Value mask = arith::ConstantOp::create(
           rewriter, loc,
           DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
       SmallVector<int64_t> permutation = {1, 0};
       data = vector::TransposeOp::create(rewriter, loc, data, permutation);
-      { // using old style.
-        MLIRContext *context = op.getContext();
-        auto converter = getTypeConverter();
-        int64_t chunkSize = dataShape[0] / packSize;
-
-        auto encoding = xegpu::ScatterTensorDescAttr::get(
-            context, xegpu::MemorySpace::SLM, chunkSize);
-        Type elemTy = converter->convertType(dataTy.getElementType());
-        auto tdescTy = TensorDescType::get(context, {vecSize, chunkSize},
-                                           elemTy, encoding, nullptr);
-
-        Value tdesc = xegpu::CreateDescOp::create(
-            rewriter, loc, tdescTy, adaptor.getMemDesc(), colOffsets);
-        rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(
-            op, data, tdesc, mask, nullptr, nullptr, nullptr);
-      }
-      { // new style.
-        // auto chunkSize = rewriter.getI64IntegerAttr(blockShape[0] /
-        // packSize); rewriter.replaceOpWithNewOp<xegpu::StoreScatterOp>(
-        //     op, data, adaptor.getMemDesc(), linearOffset, mask,
-        //     chunkSize, nullptr, nullptr, nullptr);
-      }
+      // New style: pass memref + offsets directly to StoreScatterOp
+      auto chunkSize = rewriter.getI64IntegerAttr(dataShape[0] / packSize);
+      xegpu::StoreScatterOp::create(rewriter, loc, data, adaptor.getMemDesc(),
+                                     colOffsets, mask, chunkSize,
+                                     xegpu::CachePolicyAttr(), xegpu::CachePolicyAttr(),
+                                     xegpu::CachePolicyAttr(), xegpu::DistributeLayoutAttr());
+      rewriter.eraseOp(op);
     } else { // lower to 1D block TenssorDesc
       MLIRContext *context = op.getContext();
       int vecSize = dataTy.getNumElements();

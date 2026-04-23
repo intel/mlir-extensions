@@ -22,15 +22,6 @@ func.func @test_create_nd_tdesc_vc(%src: memref<24x32xf32>) {
   return
 }
 
-// CHECK-LABEL: func @test_create_tdesc_vc({{.*}}) {
-func.func @test_create_tdesc_vc(%src: ui64, %offsets : vector<16 x index>) {
-  // CHECK: xegpu.create_tdesc %{{.*}} : ui64, vector<16xindex>
-  // CHECK-SAME: !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2 : i64>>
-  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16 x index>
-          -> !xegpu.tensor_desc<16x2xf32, #xegpu.scatter_tdesc_attr<chunk_size = 2>>
-  return
-}
-
 // CHECK-LABEL: func @test_load_nd_vc({{.*}}) {
 func.func @test_load_nd_vc(%src: memref<24x32xf16>, %x : index, %y : index) {
   // CHECK: xegpu.create_nd_tdesc

@@ -389,16 +389,15 @@ static void createStoreScatter(Value data, Value slm, Value base,
   if (chunkSize > 1)
     tdescShape.push_back(chunkSize);
 
-  auto tdescTy = xegpu::TensorDescType::get(tdescShape, type.getElementType(),
-                                            chunkSize, xegpu::MemorySpace::SLM);
-  auto desc = xegpu::CreateDescOp::create(rewriter, loc, tdescTy, slm, offsets);
-
   auto maskTy = VectorType::get(simdLanes, rewriter.getI1Type());
-  auto mask = arith::ConstantOp::create(
+  Value mask = arith::ConstantOp::create(
       rewriter, loc,
       DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
-  xegpu::StoreScatterOp::create(rewriter, loc, data, desc, mask, nullptr /*L1*/,
-                                nullptr /*L2*/, nullptr /*L3*/);
+  auto chunkSizeAttr = rewriter.getI64IntegerAttr(chunkSize);
+  xegpu::StoreScatterOp::create(rewriter, loc, data, slm, offsets, mask,
+                                 chunkSizeAttr, xegpu::CachePolicyAttr() /*L1*/,
+                                 xegpu::CachePolicyAttr() /*L2*/, xegpu::CachePolicyAttr() /*L3*/,
+                                 xegpu::DistributeLayoutAttr());
 }
 
 static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,

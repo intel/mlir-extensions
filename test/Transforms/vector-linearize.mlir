@@ -336,27 +336,21 @@ gpu.module @add_kernel_f32 attributes {spirv.target_env = #spirv.target_env<#spi
     %14 = arith.index_cast %12 : vector<1x16xi32> to vector<1x16xindex>
     %15 = arith.index_cast %13 : vector<1x16xi32> to vector<1x16xindex>
     %16 = vector.shape_cast %14 : vector<1x16xindex> to vector<16xindex>
-    %17 = xegpu.create_tdesc %cast, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
     %18 = vector.shape_cast %15 : vector<1x16xindex> to vector<16xindex>
-    %19 = xegpu.create_tdesc %cast, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
-    %20 = xegpu.load %17, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %20 = xegpu.load %cast[%16], %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, chunk_size = 1 : i64}> : memref<?xf32>, vector<16xindex>, vector<16xi1> -> vector<16xf32>
     %21 = vector.shape_cast %20 : vector<16xf32> to vector<1x16xf32>
-    %22 = xegpu.load %19, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %22 = xegpu.load %cast[%18], %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, chunk_size = 1 : i64}> : memref<?xf32>, vector<16xindex>, vector<16xi1> -> vector<16xf32>
     %23 = vector.shape_cast %22 : vector<16xf32> to vector<1x16xf32>
-    %24 = xegpu.create_tdesc %cast_2, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
-    %25 = xegpu.create_tdesc %cast_2, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
-    %26 = xegpu.load %24, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %26 = xegpu.load %cast_2[%16], %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, chunk_size = 1 : i64}> : memref<?xf32>, vector<16xindex>, vector<16xi1> -> vector<16xf32>
     %27 = vector.shape_cast %26 : vector<16xf32> to vector<1x16xf32>
-    %28 = xegpu.load %25, %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1> -> vector<16xf32>
+    %28 = xegpu.load %cast_2[%18], %cst <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, chunk_size = 1 : i64}> : memref<?xf32>, vector<16xindex>, vector<16xi1> -> vector<16xf32>
     %29 = vector.shape_cast %28 : vector<16xf32> to vector<1x16xf32>
     %30 = arith.addf %21, %27 : vector<1x16xf32>
     %31 = arith.addf %23, %29 : vector<1x16xf32>
-    %32 = xegpu.create_tdesc %cast_3, %16 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
-    %33 = xegpu.create_tdesc %cast_3, %18 : memref<?xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>
     %34 = vector.shape_cast %30 : vector<1x16xf32> to vector<16xf32>
-    xegpu.store %34, %32, %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1>
+    xegpu.store %34, %cast_3[%16], %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>, chunk_size = 1 : i64}> : vector<16xf32>, memref<?xf32>, vector<16xindex>, vector<16xi1>
     %35 = vector.shape_cast %31 : vector<1x16xf32> to vector<16xf32>
-    xegpu.store %35, %33, %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>}> : vector<16xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scatter_tdesc_attr<memory_space =  global, chunk_size = 1 : i64>>, vector<16xi1>
+    xegpu.store %35, %cast_3[%18], %cst <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>, chunk_size = 1 : i64}> : vector<16xf32>, memref<?xf32>, vector<16xindex>, vector<16xi1>
     gpu.return
   }
 }

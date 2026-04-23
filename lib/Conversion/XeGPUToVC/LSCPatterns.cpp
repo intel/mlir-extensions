@@ -668,7 +668,7 @@ static func::CallOp gen2DLoadIntrinsicCall(
     TypeRange resultType, std::optional<xegpu::CachePolicy> l1,
     std::optional<xegpu::CachePolicy> l3, xegpu::TensorDescType tdescTy,
     Value payload, Value passthru) {
-  assert(tdescTy.getRank() == 2 && !tdescTy.isScattered() &&
+  assert(tdescTy.getRank() == 2 &&
          "Only works on 2D block TensorDesc.");
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
@@ -684,7 +684,7 @@ gen2DPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
                            std::optional<xegpu::CachePolicy> l3,
                            xegpu::TensorDescType tdescTy, Value payload) {
 
-  assert(tdescTy.getRank() == 2 && !tdescTy.isScattered() &&
+  assert(tdescTy.getRank() == 2 &&
          "Only works on 2D block TensorDesc.");
 
   auto nblks = tdescTy.getArrayLength();
@@ -713,7 +713,7 @@ static func::CallOp gen2DStoreIntrinsicCall(
     xegpu::TensorDescType tdescTy, Value payload, Value data) {
   auto nblks = tdescTy.getArrayLength();
   auto rank = tdescTy.getRank();
-  assert(rank == 2 && !tdescTy.isScattered() &&
+  assert(rank == 2 &&
          "Only works on 2D block TensorDesc.");
   assert(nblks == 1 && "Block store only works on 1 block.");
 
@@ -1129,7 +1129,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSizeAsInt();
+    auto chunkSize = op.getChunkSize().value_or(1);
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType
@@ -1177,7 +1177,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSizeAsInt();
+    auto chunkSize = 1;
     auto simd_lanes = tdescTy.getShape()[0];
     auto scope = tdescTy.getMemorySpace();
 
@@ -1230,7 +1230,7 @@ public:
     auto loc = op.getLoc();
     auto tdescTy = op.getTensorDescType();
     auto elemTy = tdescTy.getElementType();
-    auto chunkSize = tdescTy.getChunkSizeAsInt();
+    auto chunkSize = op.getChunkSize().value_or(1);
     auto simd_lanes = tdescTy.getShape()[0];
 
     // make sure it is a hardware supported TensorDescType

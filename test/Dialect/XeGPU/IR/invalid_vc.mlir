@@ -20,25 +20,3 @@ func.func @test_create_nd_tdesc_vc_4(%input: memref<?x?xf32>) {
                               : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
-
-// -----
-func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
-  %0 = arith.constant dense<1>: vector<16xi1>
-  // CHECK: xegpu.create_tdesc {{.*}} : ui64, vector<16xindex>
-  // CHECK-SAME: !xegpu.tensor_desc<16x8xf32, #xegpu.scatter_tdesc_attr<chunk_size = 8 : i64>>
-  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-        -> !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>
-
-  // expected-error@+1 {{neither a valid distribution for SIMT nor consistent with the tensor descriptor for SIMD}}
-  %2 = xegpu.load %1, %0 {packed, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
-                          : !xegpu.tensor_desc<16x8xf16, #xegpu.scatter_tdesc_attr<chunk_size = 8>>, vector<16xi1> -> vector<8x8x4xf16>
-  return
-}
-
-// -----
-func.func @test_create_tdesc_unaligned(%src: ui64, %offsets : vector<16xindex>) {
-  %1 = xegpu.create_tdesc %src, %offsets : ui64, vector<16xindex>
-  // expected-error@+1 {{expected last dim of tensor to be a multiple of 2}}
-              -> !xegpu.tensor_desc<16x3xf16, #xegpu.scatter_tdesc_attr<chunk_size = 3>>
-  return
-}
