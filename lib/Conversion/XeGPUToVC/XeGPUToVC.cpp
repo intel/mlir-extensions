@@ -54,12 +54,10 @@ using mlir::scf::YieldOp;
 using mlir::vector::ShapeCastOp;
 using mlir::xegpu::AllocNbarrierOp;
 using mlir::xegpu::CompileHintOp;
-using mlir::xegpu::CreateDescOp;
 using mlir::xegpu::CreateNdDescOp;
 using mlir::xegpu::InitNbarrierOp;
 using mlir::xegpu::NbarrierWaitOp;
 using mlir::xegpu::UpdateNdOffsetOp;
-using mlir::xegpu::UpdateOffsetOp;
 
 namespace imex {
 
@@ -392,79 +390,6 @@ public:
   }
 };
 
-class CreateDescPattern : public OpConversionPattern<CreateDescOp> {
-public:
-  using OpConversionPattern<CreateDescOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(CreateDescOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto tdescTy = op.getTensorDescType();
-    auto elemTy = tdescTy.getElementType();
-    assert(elemTy.isIntOrFloat() && "only support int or float element type.");
-
-    // use 32-bit address for SLM and 64-bit address for UGM
-    auto scope = tdescTy.getMemorySpace();
-    auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
-
-    Value base = memref::ExtractAlignedPointerAsIndexOp::create(
-        rewriter, loc, adaptor.getSource());
-    base = arith::IndexCastUIOp::create(rewriter, loc, addrTy, base);
-
-    // Using an 1-D vector of index type elements to represent the payload
-    // It essentially holds the absolute address of the base pointer with
-    // each element in the vector representing the address for a simd land
-    auto simd_lanes = tdescTy.getShape()[0];
-    auto payloadTy = vecTy(simd_lanes, addrTy);
-
-    // offset is represented in number of elements, need to scale it to bytes
-    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
-    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
-                                        offsets, eTyBitWidth);
-
-    // create a payload with the base address broadcasted to all simd lanes
-    Value payload = vector::BroadcastOp::create(rewriter, loc, payloadTy, base);
-
-    // performing base + offsets to get the final address per simd lane
-    payload = addi(payload, offsets);
-
-    rewriter.replaceOp(op, payload);
-    return success();
-  }
-};
-
-class UpdateOffsetOpPattern : public OpConversionPattern<UpdateOffsetOp> {
-public:
-  using OpConversionPattern<UpdateOffsetOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(UpdateOffsetOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    auto tdescTy = op.getTensorDescType();
-    auto elemTy = tdescTy.getElementType();
-
-    assert(elemTy.isIntOrFloat() && "only support int or float element type.");
-
-    // use 32-bit address for SLM and 64-bit address for UGM
-    auto scope = tdescTy.getMemorySpace();
-    auto addrTy = scope == xegpu::MemorySpace::SLM ? (Type)i32Ty : (Type)i64Ty;
-
-    auto simd_lanes = tdescTy.getShape()[0];
-    auto payloadTy = VectorType::get(simd_lanes, addrTy);
-
-    auto eTyBitWidth = elemTy.getIntOrFloatBitWidth();
-    Value offsets = castValueTo(adaptor.getOffsets(), payloadTy, loc, rewriter);
-    offsets = getVecOffsetInUnitOfBytes(rewriter, loc, simd_lanes, addrTy,
-                                        offsets, eTyBitWidth);
-
-    auto payload = addi(adaptor.getTensorDesc(), offsets);
-    rewriter.replaceOp(op, payload);
-    return success();
-  }
-};
-
 class DpasPattern : public OpConversionPattern<DpasOp> {
 public:
   using OpConversionPattern<DpasOp>::OpConversionPattern;
@@ -706,10 +631,10 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       auto i32Type = IntegerType::get(&getContext(), 32);
       auto i64Type = IntegerType::get(&getContext(), 64);
 
-      if (type.isScattered() || rank == 1 || scope == xegpu::MemorySpace::SLM) {
+      if (rank == 1 || scope == xegpu::MemorySpace::SLM) {
         auto addrTy =
             scope == xegpu::MemorySpace::SLM ? (Type)i32Type : (Type)i64Type;
-        auto simd_lanes = type.isScattered() ? type.getShape()[0] : 1;
+        auto simd_lanes = 1; //(rank == 1) ? type.getShape()[0] : 1;
         return VectorType::get(simd_lanes, addrTy);
       } else if (rank == 2) {
         return VectorType::get(16, i32Type);
@@ -751,9 +676,9 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
     patterns.add<AllocNbarrierPattern, InitNbarrierPattern, NbarrierWaitPattern,
                  NbarrierArrivePattern>(patterns.getContext());
 
-    patterns.add<CreateNdDescPattern, UpdateNDOffsetPattern, CreateDescPattern,
-                 UpdateOffsetOpPattern, CompilerHintPattern, DpasPattern>(
-        typeConverter, patterns.getContext());
+    patterns.add<CreateNdDescPattern, UpdateNDOffsetPattern,
+                 CompilerHintPattern, DpasPattern>(typeConverter,
+                                                   patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);

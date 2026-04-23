@@ -3,6 +3,8 @@
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 
+// XFAIL: *
+
 module @transpose attributes {gpu.container_module} {
   func.func @test(%arg0: memref<32x32xf16>) -> memref<32x32xf16> attributes {llvm.emit_c_interface} {
     %c4 = arith.constant 4 : index
