@@ -668,8 +668,7 @@ static func::CallOp gen2DLoadIntrinsicCall(
     TypeRange resultType, std::optional<xegpu::CachePolicy> l1,
     std::optional<xegpu::CachePolicy> l3, xegpu::TensorDescType tdescTy,
     Value payload, Value passthru) {
-  assert(tdescTy.getRank() == 2 &&
-         "Only works on 2D block TensorDesc.");
+  assert(tdescTy.getRank() == 2 && "Only works on 2D block TensorDesc.");
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
   return gen2DBlockIntrinsicCall(rewriter, loc, intrinsicStr, resultType, l1,
@@ -684,8 +683,7 @@ gen2DPrefetchIntrinsicCall(ConversionPatternRewriter &rewriter, Location &loc,
                            std::optional<xegpu::CachePolicy> l3,
                            xegpu::TensorDescType tdescTy, Value payload) {
 
-  assert(tdescTy.getRank() == 2 &&
-         "Only works on 2D block TensorDesc.");
+  assert(tdescTy.getRank() == 2 && "Only works on 2D block TensorDesc.");
 
   auto nblks = tdescTy.getArrayLength();
   auto shape = tdescTy.getShape();
@@ -713,8 +711,7 @@ static func::CallOp gen2DStoreIntrinsicCall(
     xegpu::TensorDescType tdescTy, Value payload, Value data) {
   auto nblks = tdescTy.getArrayLength();
   auto rank = tdescTy.getRank();
-  assert(rank == 2 &&
-         "Only works on 2D block TensorDesc.");
+  assert(rank == 2 && "Only works on 2D block TensorDesc.");
   assert(nblks == 1 && "Block store only works on 1 block.");
 
   auto vecTy = cast<VectorType>(data.getType());

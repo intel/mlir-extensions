@@ -214,10 +214,10 @@ public:
       data = vector::TransposeOp::create(rewriter, loc, data, permutation);
       // New style: pass memref + offsets directly to StoreScatterOp
       auto chunkSize = rewriter.getI64IntegerAttr(dataShape[0] / packSize);
-      xegpu::StoreScatterOp::create(rewriter, loc, data, adaptor.getMemDesc(),
-                                     colOffsets, mask, chunkSize,
-                                     xegpu::CachePolicyAttr(), xegpu::CachePolicyAttr(),
-                                     xegpu::CachePolicyAttr(), xegpu::DistributeLayoutAttr());
+      xegpu::StoreScatterOp::create(
+          rewriter, loc, data, adaptor.getMemDesc(), colOffsets, mask,
+          chunkSize, xegpu::CachePolicyAttr(), xegpu::CachePolicyAttr(),
+          xegpu::CachePolicyAttr(), xegpu::DistributeLayoutAttr());
       rewriter.eraseOp(op);
     } else { // lower to 1D block TenssorDesc
       MLIRContext *context = op.getContext();

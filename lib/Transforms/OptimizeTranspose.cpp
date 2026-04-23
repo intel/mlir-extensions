@@ -394,10 +394,10 @@ static void createStoreScatter(Value data, Value slm, Value base,
       rewriter, loc,
       DenseElementsAttr::get(maskTy, rewriter.getBoolAttr(true)));
   auto chunkSizeAttr = rewriter.getI64IntegerAttr(chunkSize);
-  xegpu::StoreScatterOp::create(rewriter, loc, data, slm, offsets, mask,
-                                 chunkSizeAttr, xegpu::CachePolicyAttr() /*L1*/,
-                                 xegpu::CachePolicyAttr() /*L2*/, xegpu::CachePolicyAttr() /*L3*/,
-                                 xegpu::DistributeLayoutAttr());
+  xegpu::StoreScatterOp::create(
+      rewriter, loc, data, slm, offsets, mask, chunkSizeAttr,
+      xegpu::CachePolicyAttr() /*L1*/, xegpu::CachePolicyAttr() /*L2*/,
+      xegpu::CachePolicyAttr() /*L3*/, xegpu::DistributeLayoutAttr());
 }
 
 static Value createBlockLoad(TypedValue<MemRefType> slm, Value base,

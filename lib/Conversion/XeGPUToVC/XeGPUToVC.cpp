@@ -390,7 +390,6 @@ public:
   }
 };
 
-
 class DpasPattern : public OpConversionPattern<DpasOp> {
 public:
   using OpConversionPattern<DpasOp>::OpConversionPattern;
@@ -635,7 +634,7 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
       if (rank == 1 || scope == xegpu::MemorySpace::SLM) {
         auto addrTy =
             scope == xegpu::MemorySpace::SLM ? (Type)i32Type : (Type)i64Type;
-        auto simd_lanes = 1;//(rank == 1) ? type.getShape()[0] : 1;
+        auto simd_lanes = 1; //(rank == 1) ? type.getShape()[0] : 1;
         return VectorType::get(simd_lanes, addrTy);
       } else if (rank == 2) {
         return VectorType::get(16, i32Type);
@@ -678,8 +677,8 @@ struct XeGPUToVCPass : public imex::impl::ConvertXeGPUToVCBase<XeGPUToVCPass> {
                  NbarrierArrivePattern>(patterns.getContext());
 
     patterns.add<CreateNdDescPattern, UpdateNDOffsetPattern,
-                 CompilerHintPattern, DpasPattern>(
-        typeConverter, patterns.getContext());
+                 CompilerHintPattern, DpasPattern>(typeConverter,
+                                                   patterns.getContext());
 
     // Ops to LSC only patterns
     populateAtomicAndFenceLSCPatterns(typeConverter, patterns);
