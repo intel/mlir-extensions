@@ -10,7 +10,7 @@
 #data_layout = #xegpu.layout<sg_layout = [4, 16], sg_data = [2, 16], inst_data = [1, 16], lane_layout= [1, 16], lane_data=[1, 1]>
 module attributes {gpu.container_module} {
   gpu.module @reduction {
-    gpu.func @cross_sg_cross_lane_1D(%dst: memref<128xf32, 1>, %src: memref<8x256xf32, 1>) kernel {
+    gpu.func @cross_sg_cross_lane_2D_1D(%dst: memref<128xf32, 1>, %src: memref<8x256xf32, 1>) kernel {
       %dst1 = memref.memory_space_cast %dst : memref<128xf32, 1> to memref<128xf32>
       %dst_ptr_idx = memref.extract_aligned_pointer_as_index %dst1 : memref<128xf32> -> index
       %dst_ptr_i64 = arith.index_cast %dst_ptr_idx : index to i64
@@ -70,7 +70,7 @@ func.func @test(%dst : memref<128xf32>, %src : memref<8x256xf32>) attributes {ll
     %gpu_memref_dst_casted = memref.memory_space_cast %gpu_memref_dst : memref<128xf32> to memref<128xf32, 1>
     %gpu_memref_src_casted = memref.memory_space_cast %gpu_memref_src : memref<8x256xf32> to memref<8x256xf32, 1>
 
-    %stream0_5 = gpu.launch_func async[%stream0_4] @reduction::@cross_sg_cross_lane_1D blocks in (%c1, %c1, %c1) threads in (%c1024, %c1, %c1) args(%gpu_memref_dst_casted : memref<128xf32, 1>, %gpu_memref_src_casted : memref<8x256xf32, 1>)
+    %stream0_5 = gpu.launch_func async[%stream0_4] @reduction::@cross_sg_cross_lane_2D_1D blocks in (%c1, %c1, %c1) threads in (%c1024, %c1, %c1) args(%gpu_memref_dst_casted : memref<128xf32, 1>, %gpu_memref_src_casted : memref<8x256xf32, 1>)
 
     %stream0_6 = gpu.memcpy async [%stream0_5]  %dst, %gpu_memref_dst : memref<128xf32>, memref<128xf32>
     %stream0_8 = gpu.dealloc async [%stream0_6] %gpu_memref_dst : memref<128xf32>
