@@ -46,6 +46,7 @@ config.imex_enable_bindings_python = @IMEX_ENABLE_BINDINGS_PYTHON@
 config.mlir_enable_sycl_runtime = @MLIR_ENABLE_SYCL_RUNNER@
 config.mlir_enable_levelzero_runtime = @MLIR_ENABLE_LEVELZERO_RUNNER@
 config.mlir_enable_spirv_backend = @MLIR_SPIRV_BACKEND_ENABLED@
+config.imex_build_vc_conversions = 1 if "@IMEX_BUILD_VC_CONVERSIONS@" == "ON" else 0
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""

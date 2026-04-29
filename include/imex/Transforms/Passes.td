@@ -161,6 +161,7 @@ def RemoveTemporaries : Pass<"imex-remove-temporaries"> {
   let constructor = "imex::createRemoveTemporariesPass()";
 }
 
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
   let summary = "Remove <1xT> vectors, and replace them with scalars.";
   let constructor = "imex::createRemoveSingleElemVectorPass()";
@@ -169,7 +170,9 @@ def RemoveSingleElemVector : Pass<"imex-remove-single-elem-vector"> {
     "::mlir::memref::MemRefDialect"
   ];
 }
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
   let summary = "apply vnni transformation for to B operand of dpas instructions if necessary.";
   let constructor = "imex::createVnniTransformationPass()";
@@ -178,8 +181,9 @@ def VnniTransformation : Pass<"imex-xegpu-apply-vnni-transformation"> {
     "::mlir::vector::VectorDialect"
   ];
 }
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
-#ifdef IMEX_ENABLE_XEGPU_LAYOUT_PASSES
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
   let summary = "Eliminate in-register vector transpose by fusing with load.";
   let constructor = "imex::createOptimizeTransposePass()";
@@ -194,8 +198,9 @@ def OptimizeTranspose : Pass<"imex-xegpu-optimize-transpose"> {
             "gpu platform architecture where these ops are running">
  ];
 }
-#endif // IMEX_ENABLE_XEGPU_LAYOUT_PASSES
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
   let summary = "Move vector transpose ops closer to the load ops to enable load+tranpose fusion by OptimizeTranpose pass later in the pipeline.";
   let constructor = "imex::createHoistTransposePass()";
@@ -204,6 +209,7 @@ def HoistTranspose : Pass<"imex-xegpu-hoist-transpose"> {
     "::mlir::vector::VectorDialect"
   ];
 }
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
 def TileLoops : Pass<"tile-loops", "::mlir::func::FuncOp"> {
   let summary = "Tile linalg.generic loops for GPU offloading";
@@ -228,7 +234,7 @@ def TileLoops : Pass<"tile-loops", "::mlir::func::FuncOp"> {
   ];
 }
 
-#ifdef IMEX_ENABLE_XEGPU_LAYOUT_PASSES
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 def MaterializeMatrixOp: Pass<"imex-xegpu-materialize-matrix-op"> {
   let summary = "materialize matrix ops for Xe2/Xe3";
   let description = [{
@@ -243,6 +249,6 @@ def MaterializeMatrixOp: Pass<"imex-xegpu-materialize-matrix-op"> {
     "::mlir::memref::MemRefDialect"
   ];
 }
-#endif // IMEX_ENABLE_XEGPU_LAYOUT_PASSES
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

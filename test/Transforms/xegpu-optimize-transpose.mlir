@@ -1,3 +1,4 @@
+// REQUIRES: vc-conversions
 // RUN: imex-opt %s -split-input-file -imex-xegpu-optimize-transpose | FileCheck %s
 
 // CHECK-LABEL: @test_no_scf

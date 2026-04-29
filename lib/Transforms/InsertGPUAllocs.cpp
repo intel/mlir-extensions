@@ -295,13 +295,6 @@ public:
         findXeGPULoadStore;
     findXeGPULoadStore = [&](mlir::Operation *use, bool onDevice,
                              AccessType &ret) {
-      if (auto tile_update =
-              mlir::dyn_cast<mlir::xegpu::UpdateNdOffsetOp>(use)) {
-        auto res = tile_update->getResult(0);
-        for (auto u : res.getUsers()) {
-          findXeGPULoadStore(u, onDevice, ret);
-        }
-      }
       if (auto tile_for = mlir::dyn_cast<::mlir::scf::ForOp>(use)) {
         for (size_t idx = 0; idx < tile_for.getInits().size(); idx++) {
           auto a = tile_for.getRegionIterArg(idx);

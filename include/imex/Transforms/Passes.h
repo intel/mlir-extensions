@@ -34,14 +34,17 @@ std::unique_ptr<mlir::Pass> createLowerMemRefCopyPass();
 std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
 std::unique_ptr<mlir::Pass> createCastIndexPass();
 std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
-std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
+std::unique_ptr<mlir::Pass> createEmulateNonNativeBF16Pass();
+std::unique_ptr<mlir::Pass> createTileLoopsPass();
+
+#ifdef IMEX_BUILD_VC_CONVERSIONS
 std::unique_ptr<mlir::Pass>
 createOptimizeTransposePass(const std::string &device = "pvc");
 std::unique_ptr<mlir::Pass> createHoistTransposePass();
 std::unique_ptr<mlir::Pass> createVnniTransformationPass();
-std::unique_ptr<mlir::Pass> createEmulateNonNativeBF16Pass();
-std::unique_ptr<mlir::Pass> createTileLoopsPass();
 std::unique_ptr<mlir::Pass> createMaterializeMatrixOpPass();
+std::unique_ptr<mlir::Pass> createRemoveSingleElemVectorPass();
+#endif // IMEX_BUILD_VC_CONVERSIONS
 
 #define GEN_PASS_DECL
 #include "imex/Transforms/Passes.h.inc"

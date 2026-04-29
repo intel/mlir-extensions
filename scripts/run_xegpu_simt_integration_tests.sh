@@ -233,8 +233,7 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     print_info "LLVM External Projects: Imex"
     print_info "IMEX Source Directory: $IMEX_PROJECT_PATH"
     print_info "Enabling: MLIR_INCLUDE_INTEGRATION_TESTS, MLIR_ENABLE_LEVELZERO_RUNNER, MLIR_ENABLE_SYCL_RUNNER, IMEX_ENABLE_L0_RUNTIME"
-    print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (ArithToVC, MathToVC, XeGPUToVC)"
-    print_info "Disabling: IMEX_ENABLE_XEGPU_LAYOUT_PASSES (MaterializeMatrixOp, OptimizeTranspose)"
+    print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (obsolete VC backend: ArithToVC, MathToVC, XeGPUToVC, RemoveSingleElemVector, XeGPU layout passes)"
 
     # Build lit filter pattern for the specific test directories
     if [ -n "$TEST_NAME_FILTER" ]; then
@@ -259,7 +258,6 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
         -DMLIR_ENABLE_SYCL_RUNNER=1 \
         -DIMEX_ENABLE_L0_RUNTIME=1 \
         -DIMEX_BUILD_VC_CONVERSIONS=OFF \
-        -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF \
         -DLLVM_LIT_ARGS="-v --filter='$LIT_FILTER'"
 else
     # Option 3: Out-of-Tree Build with Pre-built LLVM
@@ -267,8 +265,7 @@ else
     print_info "MLIR CMake Directory: $MLIR_CMAKE_DIR"
     print_info "IMEX Source Directory: $IMEX_PROJECT_PATH"
     print_info "Enabling: IMEX_ENABLE_L0_RUNTIME"
-    print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (ArithToVC, MathToVC, XeGPUToVC)"
-    print_info "Disabling: IMEX_ENABLE_XEGPU_LAYOUT_PASSES (MaterializeMatrixOp, OptimizeTranspose)"
+    print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (obsolete VC backend: ArithToVC, MathToVC, XeGPUToVC, RemoveSingleElemVector, XeGPU layout passes)"
 
     # Build lit filter pattern
     if [ -n "$TEST_NAME_FILTER" ]; then
@@ -290,7 +287,6 @@ else
         -DMLIR_SPIRV_BACKEND_ENABLED=1 \
         -DIMEX_CHECK_LLVM_VERSION=OFF \
         -DIMEX_BUILD_VC_CONVERSIONS=OFF \
-        -DIMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF \
         -DLLVM_LIT_ARGS="-v --filter='$LIT_FILTER'"
 fi
 
@@ -385,8 +381,7 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
 else
     echo -e "${GREEN}Build Type:${NC} IMEX Out-of-Tree Build"
 fi
-echo -e "${GREEN}VC Conversions:${NC} Disabled (IMEX_BUILD_VC_CONVERSIONS=OFF)"
-echo -e "${GREEN}XeGPU Layout Passes:${NC} Disabled (IMEX_ENABLE_XEGPU_LAYOUT_PASSES=OFF)"
+echo -e "${GREEN}Obsolete VC Backend:${NC} Disabled (IMEX_BUILD_VC_CONVERSIONS=OFF)"
 if [ -n "$TEST_NAME_FILTER" ]; then
     echo -e "${GREEN}Test Filter:${NC} $TEST_NAME_FILTER"
 else
