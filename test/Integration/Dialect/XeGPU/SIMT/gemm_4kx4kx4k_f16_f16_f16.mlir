@@ -1,4 +1,4 @@
-// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=lane" \
+// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=lane igc-cmd-options=-ze-opt-large-register-file" \
 // RUN: | mlir-runner \
 // RUN:   --shared-libs=%mlir_levelzero_runtime \
 // RUN:   --shared-libs=%mlir_runner_utils \
@@ -209,8 +209,12 @@ module @gemm attributes {gpu.container_module} {
           ) ->
           (vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>,vector<8xf32>)
           {
-        // sync all threads
-        gpu.barrier
+        // sync all threads, this barrier is only needed so that some threads do not go too
+        // far forward with the prefetching that other threads necessary prefetched data
+        // is thrown out of the cache. However, doing gpu.barrier is very expensive.
+        // Untill we have somehting of a named_barrier type available, skipping this
+        // barrier is more performant.
+        // gpu.barrier
         // load A tiles
         %a_val_t0 = xegpu.load_nd %A_tile[%C_sg_tile_offset_x, %k]   {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64xf16>
         %a_val = vector.shape_cast %a_val_t0 : vector<64xf16> to vector<2x32xf16>
@@ -377,8 +381,8 @@ module @gemm attributes {gpu.container_module} {
     %C = memref.alloc() : memref<4096x4096xf16>
     %C_ref = memref.alloc() : memref<4096x4096xf32>
     %c_gen_int = arith.constant 0 : i1
-    %cf_lower = arith.constant -0.5 : f32
-    %cf_upper = arith.constant 0.5 : f32
+    %cf_lower = arith.constant 0.0 : f32
+    %cf_upper = arith.constant 1.0 : f32
     // Use one of the two options to initialize the A matrix
     // Option 1: intialize matrix A ; A[i, j] = j
     // scf.for %i = %c0 to %c4096 step %c1 {

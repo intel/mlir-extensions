@@ -18,7 +18,7 @@
 #a_prefetch = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 32], inst_data = [8, 16]>
 #b_prefetch = #xegpu.layout<sg_layout = [4, 8], sg_data = [8, 32], inst_data = [8, 16]>
 module @gemm attributes {gpu.container_module} {
-  func.func @test(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf32>) -> memref<4096x4096xf32> attributes {llvm.emit_c_interface} {
+  func.func @test(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf16>) -> memref<4096x4096xf16> attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c4 = arith.constant 4 : index
     %c8 = arith.constant 8 : index
@@ -31,21 +31,21 @@ module @gemm attributes {gpu.container_module} {
     gpu.memcpy %A_gpu, %A : memref<4096x4096xf16>, memref<4096x4096xf16>
     %B_gpu = gpu.alloc () : memref<4096x4096xf16>
     gpu.memcpy %B_gpu, %B : memref<4096x4096xf16>, memref<4096x4096xf16>
-    %C_gpu = gpu.alloc () : memref<4096x4096xf32>
-    gpu.memcpy %C_gpu, %C : memref<4096x4096xf32>, memref<4096x4096xf32>
+    %C_gpu = gpu.alloc () : memref<4096x4096xf16>
+    gpu.memcpy %C_gpu, %C : memref<4096x4096xf16>, memref<4096x4096xf16>
     // NOTE: Here we can't use [8, 64] wi threads following the SG thread layout of [8, 4]. Because runtime will linearize the x dimension first (we need y dimension to be linearized first).
     // So just use linearized thread layout of [512, 1] wi threads.
-    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c16, %c16, %c1) threads in (%c512, %c1, %c1) args(%A_gpu : memref<4096x4096xf16>, %B_gpu : memref<4096x4096xf16>, %C_gpu : memref<4096x4096xf32>)
+    gpu.launch_func  @test_kernel::@test_kernel blocks in (%c16, %c16, %c1) threads in (%c512, %c1, %c1) args(%A_gpu : memref<4096x4096xf16>, %B_gpu : memref<4096x4096xf16>, %C_gpu : memref<4096x4096xf16>)
     gpu.wait // Wait for the kernel to finish.
-    gpu.memcpy %C, %C_gpu : memref<4096x4096xf32>, memref<4096x4096xf32>
+    gpu.memcpy %C, %C_gpu : memref<4096x4096xf16>, memref<4096x4096xf16>
     gpu.dealloc %A_gpu : memref<4096x4096xf16>
     gpu.dealloc %B_gpu : memref<4096x4096xf16>
-    gpu.dealloc %C_gpu : memref<4096x4096xf32>
-    return %C : memref<4096x4096xf32>
+    gpu.dealloc %C_gpu : memref<4096x4096xf16>
+    return %C : memref<4096x4096xf16>
   }
 
   gpu.module @test_kernel   {
-    gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf32>) kernel  {
+    gpu.func @test_kernel(%A: memref<4096x4096xf16>, %B: memref<4096x4096xf16>, %C: memref<4096x4096xf16>) kernel  {
       %c0 = arith.constant 0 : index
       %c1 = arith.constant 1 : index
       %c32 = arith.constant 32 : index
@@ -57,8 +57,22 @@ module @gemm attributes {gpu.container_module} {
       %block_id_y = gpu.block_id y
       %m = arith.muli %block_id_x, %c256 : index
       %n = arith.muli %block_id_y, %c256 : index
-      %c_tdesc = xegpu.create_nd_tdesc %C : memref<4096x4096xf32> -> !xegpu.tensor_desc<256x256xf32, #c>
-      %c_init_value = xegpu.load_nd %c_tdesc[%m, %n] {layout = #c}: !xegpu.tensor_desc<256x256xf32, #c> -> vector<256x256xf32>
+      %c_tdesc_f16 = xegpu.create_nd_tdesc %C : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x256xf16, #c>
+      // There are two different ways to get the initial value of C tile:
+      //  1. load from global memory (matrix-multiply-accumulate)  or
+      //  2. initialize with 0 (matrix-multiply).
+      // We choose to initialize with 0 here to save the global memory bandwidth.
+      // Also most bencmarking is done with matrix-multiply, which doesn't require the initial value of C tile,
+      // so initializing with 0 can better reflect the performance of matrix multiply itself.
+      // The load version is kept in comments for reference and potential future use.
+
+      // Option 1: Loading C tile from memory
+      // %c_init_value_f16 = xegpu.load_nd %c_tdesc_f16[%m, %n] {layout = #c}: !xegpu.tensor_desc<256x256xf16, #c> -> vector<256x256xf16>
+      // %c_init_value = arith.extf %c_init_value_f16 : vector<256x256xf16> to vector<256x256xf32>
+
+      // Option 2: Using constant C tile initialized to 0
+      %c_init_value = arith.constant dense<0.0> : vector<256x256xf32>
+
       %a_tdesc = xegpu.create_nd_tdesc %A : memref<4096x4096xf16> -> !xegpu.tensor_desc<256x32xf16, #a>
       %b_tdesc = xegpu.create_nd_tdesc %B : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x256xf16, #b>
       // Prefetch A 3 times.
@@ -85,7 +99,8 @@ module @gemm attributes {gpu.container_module} {
           : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
         scf.yield %c_new_value : vector<256x256xf32>
       }
-      xegpu.store_nd %out, %c_tdesc[%m, %n] {layout = #c}: vector<256x256xf32>, !xegpu.tensor_desc<256x256xf32, #c>
+      %out_f16 = arith.truncf %out : vector<256x256xf32> to vector<256x256xf16>
+      xegpu.store_nd %out_f16, %c_tdesc_f16[%m, %n] {layout = #c}: vector<256x256xf16>, !xegpu.tensor_desc<256x256xf16, #c>
       gpu.return
     }
   }
@@ -100,7 +115,7 @@ module @gemm attributes {gpu.container_module} {
     %cf_1 = arith.constant 1.0 : f16
     %A = memref.alloc() : memref<4096x4096xf16>
     %B = memref.alloc() : memref<4096x4096xf16>
-    %C = memref.alloc() : memref<4096x4096xf32>
+    %C = memref.alloc() : memref<4096x4096xf16>
     %C_ref = memref.alloc() : memref<4096x4096xf32>
     %c_gen_int = arith.constant 0 : i1
     %cf_lower = arith.constant 0.0 : f32
@@ -142,17 +157,18 @@ module @gemm attributes {gpu.container_module} {
 
 
     // Initialize matrix C and C_ref ; C[i, j] = 0
-    %c0_f32 = arith.constant 0.0 : f32
+    %c0_f16_init = arith.constant 0.0 : f16
+    %c0_f32_init = arith.constant 0.0 : f32
     scf.for %i = %c0 to %c4096 step %c1 {
       scf.for %j = %c0 to %c4096 step %c1 {
-        memref.store %c0_f32, %C[%i, %j] : memref<4096x4096xf32>
-        memref.store %c0_f32, %C_ref[%i, %j] : memref<4096x4096xf32>
+        memref.store %c0_f16_init, %C[%i, %j] : memref<4096x4096xf16>
+        memref.store %c0_f32_init, %C_ref[%i, %j] : memref<4096x4096xf32>
       }
     }
 
     // Run GPU version.
-    %2 = call @test(%A, %B, %C) : (memref<4096x4096xf16>, memref<4096x4096xf16>, memref<4096x4096xf32>) -> memref<4096x4096xf32>
-    %gpu_result_cast = memref.cast %2 : memref<4096x4096xf32> to memref<*xf32>
+    %2 = call @test(%A, %B, %C) : (memref<4096x4096xf16>, memref<4096x4096xf16>, memref<4096x4096xf16>) -> memref<4096x4096xf16>
+    %gpu_result_cast = memref.cast %2 : memref<4096x4096xf16> to memref<*xf16>
 
     // Run CPU version.
     %A_cast = memref.cast %A : memref<4096x4096xf16> to memref<*xf16>
@@ -162,22 +178,23 @@ module @gemm attributes {gpu.container_module} {
 
     %C_row_0 = memref.subview %C_ref[0, 0][1, 4096][1, 1] : memref<4096x4096xf32> to memref<1x4096xf32, strided<[4096, 1], offset:0>>
     %C_row_0_cast = memref.cast %C_row_0 : memref<1x4096xf32, strided<[4096, 1], offset: 0>> to memref<*xf32>
-    call @printMemrefF32(%C_row_0_cast) : (memref<*xf32>) -> ()
+    // call @printMemrefF32(%C_row_0_cast) : (memref<*xf32>) -> ()
 
-    %C_row_0_gpu  = memref.subview %2[0, 0][1, 4096][1, 1] : memref<4096x4096xf32> to memref<1x4096xf32, strided<[4096, 1], offset:0>>
-    %C_row_0_cast_gpu = memref.cast %C_row_0_gpu : memref<1x4096xf32, strided<[4096, 1], offset: 0>> to memref<*xf32>
-    call @printMemrefF32(%C_row_0_cast_gpu) : (memref<*xf32>) -> ()
+    %C_row_0_gpu  = memref.subview %2[0, 0][1, 4096][1, 1] : memref<4096x4096xf16> to memref<1x4096xf16, strided<[4096, 1], offset:0>>
+    %C_row_0_cast_gpu = memref.cast %C_row_0_gpu : memref<1x4096xf16, strided<[4096, 1], offset: 0>> to memref<*xf16>
+    // call @printMemrefF16(%C_row_0_cast_gpu) : (memref<*xf16>) -> ()
 
     // CHECK: [ALLCLOSE: TRUE]
-    call @printAllcloseF32(%gpu_result_cast, %C_cast) : (memref<*xf32>, memref<*xf32>) -> ()
+    call @printAllcloseF16(%gpu_result_cast, %C_cast) : (memref<*xf16>, memref<*xf32>) -> ()
     memref.dealloc %A : memref<4096x4096xf16>
     memref.dealloc %B : memref<4096x4096xf16>
-    memref.dealloc %C : memref<4096x4096xf32>
+    memref.dealloc %C : memref<4096x4096xf16>
     memref.dealloc %C_ref : memref<4096x4096xf32>
     return
   }
+  func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
-  func.func private @printAllcloseF32(memref<*xf32>, memref<*xf32>) attributes {llvm.emit_c_interface}
+  func.func private @printAllcloseF16(memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printMaxErrorF16(memref<*xf16>, memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @fillResource1DRandomF16(memref<*xf16>, f32, f32, i1) attributes {llvm.emit_c_interface}
   func.func private @gemmF16F16F32(memref<*xf16>, memref<*xf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
