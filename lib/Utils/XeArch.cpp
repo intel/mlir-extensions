@@ -243,8 +243,9 @@ mlir::LogicalResult XeuArchInterface::isLegalDpasOp(mlir::Operation *op) {
     if (!(lhsShape[0] >= 1 && lhsShape[0] <= M)) {
       return op->emitOpError()
              << "A matrix has incorrect size and does not match dpas config. "
-             << "A[" << lhsShape[0] << "x" << aK << "], dpas config: "
-             << "mxnxk = " << M << "x" << N << "x" << K << "\n";
+             << "A[" << lhsShape[0] << "x" << aK
+             << "], dpas config: " << "mxnxk = " << M << "x" << N << "x" << K
+             << "\n";
     }
 
     if (aK != K || bK != K)
@@ -281,9 +282,9 @@ mlir::LogicalResult XeuArchInterface::verify2dBlockRestriction(
        (width * getInMemoryBitWidth(elemTyBitWidth) / 8) % 4 != 0))
     return op->emitOpError()
            << "Invalid width size for 2D block load.  "
-           << "The specification expects the value to "
-           << "be in range [" << configParams.blockWidth.min << ", "
-           << configParams.blockWidth.max << "], and "
+           << "The specification expects the value to " << "be in range ["
+           << configParams.blockWidth.min << ", " << configParams.blockWidth.max
+           << "], and "
            << "the total data size (width * elemTyBytes) to be multiple of 4. "
            << "Given width: " << width << " and data size: "
            << width * getInMemoryBitWidth(elemTyBitWidth) / 8;
