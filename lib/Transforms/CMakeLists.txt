@@ -1,13 +1,16 @@
-# Conditionally add XeGPU layout transform sources
-if(IMEX_ENABLE_XEGPU_LAYOUT_PASSES)
-  set(XEGPU_LAYOUT_SOURCES
+# Conditionally add obsolete VC backend transforms
+if(IMEX_BUILD_VC_CONVERSIONS)
+  set(VC_TRANSFORM_SOURCES
+    RemoveSingleElemVector.cpp
     MaterializeMatrixOp.cpp
     OptimizeTranspose.cpp
+    VnniTransformation.cpp
+    HoistTranspose.cpp
   )
-  message(STATUS "Including XeGPU layout transformation passes")
+  message(STATUS "Including obsolete VC backend passes (RemoveSingleElemVector, MaterializeMatrixOp, OptimizeTranspose, VnniTransformation, HoistTranspose)")
 else()
-  set(XEGPU_LAYOUT_SOURCES "")
-  message(STATUS "Excluding XeGPU layout transformation passes (set IMEX_ENABLE_XEGPU_LAYOUT_PASSES=ON to enable)")
+  set(VC_TRANSFORM_SOURCES "")
+  message(STATUS "Excluding obsolete VC backend passes (set IMEX_BUILD_VC_CONVERSIONS=ON to enable)")
 endif()
 
 add_mlir_library(IMEXTransforms
@@ -18,15 +21,12 @@ add_mlir_library(IMEXTransforms
   InsertGPUAllocs.cpp
   InsertGPUCopy.cpp
   LowerMemRefCopy.cpp
-  RemoveSingleElemVector.cpp
   RemoveTemporaries.cpp
   SerializeSPIRV.cpp
   SetSPIRVAbiAttribute.cpp
   SetSPIRVCapabilities.cpp
-  VnniTransformation.cpp
-  HoistTranspose.cpp
   TileLoops.cpp
-  ${XEGPU_LAYOUT_SOURCES}
+  ${VC_TRANSFORM_SOURCES}
 
   PARTIAL_SOURCES_INTENDED
 

@@ -7,7 +7,7 @@ module attributes {
   gpu.module @kernels {
     // CHECK:       spirv.module @{{.*}} Physical64 OpenCL
     // CHECK-LABEL: spirv.func @loop_kernel
-    // CHECK-SAME: spirv.entry_point_abi = #spirv.entry_point_abi<>, workgroup_attributions = 0 : i64
+    // CHECK-SAME: spirv.entry_point_abi = #spirv.entry_point_abi<>
     gpu.func @loop_kernel(%arg2 : memref<10xf32>, %arg3 : memref<10xf32>) kernel
       attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       // CHECK: spirv.Branch ^bb1

@@ -1,3 +1,4 @@
+// REQUIRES: vc-conversions
 // RUN: imex-opt %s -split-input-file -imex-xegpu-hoist-transpose | FileCheck %s
 
 // CHECK-LABEL: func.func @test_hoist_transpose_0(

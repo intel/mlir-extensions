@@ -1,3 +1,4 @@
+// REQUIRES: vc-conversions
 // RUN: imex-opt --split-input-file -imex-xegpu-materialize-matrix-op -cse -canonicalize %s -verify-diagnostics -o -| FileCheck %s
 
 gpu.module @test {

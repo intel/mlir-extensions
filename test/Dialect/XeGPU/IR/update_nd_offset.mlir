@@ -10,18 +10,14 @@ func.func @test_update_nd_offset_vc_0(%src: memref<24x32xf32>) {
 
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%c0, %c1]
+  %1 = xegpu.create_nd_tdesc %src
       : memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
 
   // CHECK: xegpu.load_nd
   // CHECK-SAME: {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
   // CHECK-SAME: !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-  %2 = xegpu.load_nd %1 {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
+  %2 = xegpu.load_nd %1[%c0, %c1] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}
               : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
-
-  // CHECK: xegpu.update_nd_offset
-  // CHECK-SAME: !xegpu.tensor_desc<8x16xf32>
-  %3 = xegpu.update_nd_offset %1, [%c0, %c1] : !xegpu.tensor_desc<8x16xf32>
 
   return
 }

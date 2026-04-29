@@ -84,3 +84,7 @@ llvm_config.with_environment(
     ],
     append_path=True,
 )
+
+# Add features for conditional test execution
+if config.imex_build_vc_conversions:
+    config.available_features.add('vc-conversions')
