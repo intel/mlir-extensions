@@ -7,10 +7,11 @@
 // RUN:   --entry-point-result=void \
 // RUN: | FileCheck %s
 
-#data_layout = #xegpu.layout<sg_layout = [4, 16], sg_data = [2, 16], inst_data = [1, 16], lane_layout= [1, 16], lane_data=[1, 1]>
+#data_layout = #xegpu.layout<sg_layout = [1, 16], sg_data = [4, 16], inst_data = [1, 16], lane_layout = [1, 16], lane_data = [1, 1]>
 module attributes {gpu.container_module} {
-  gpu.module @reduction {
-    gpu.func @cross_sg_cross_lane_1D(%dst: memref<128xf32, 1>, %src: memref<8x256xf32, 1>) kernel {
+
+gpu.module @reduction {
+    gpu.func @cross_sg_sub_size_cross_lane_2D_1D(%dst: memref<128xf32, 1>, %src: memref<8x256xf32, 1>) kernel {
       %dst1 = memref.memory_space_cast %dst : memref<128xf32, 1> to memref<128xf32>
       %dst_ptr_idx = memref.extract_aligned_pointer_as_index %dst1 : memref<128xf32> -> index
       %dst_ptr_i64 = arith.index_cast %dst_ptr_idx : index to i64
@@ -41,16 +42,7 @@ module attributes {gpu.container_module} {
 
 func.func @test(%dst : memref<128xf32>, %src : memref<8x256xf32>) attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
-    %c16 = arith.constant 16 : index
-
-    %c32 = arith.constant 32 : index
-    %c64 = arith.constant 64 : index
-    %c128 = arith.constant 128 : index
-
-    %c1024 = arith.constant 1024 : index // 4 * 16 * 16
-
-    %c2 = arith.constant 2 : index
-    %c4 = arith.constant 4 : index
+    %c256 = arith.constant 256 : index
 
     %stream0_0 = gpu.wait async
 
@@ -60,17 +52,10 @@ func.func @test(%dst : memref<128xf32>, %src : memref<8x256xf32>) attributes {ll
     %gpu_memref_src, %stream0_3 = gpu.alloc async [%stream0_2] () : memref<8x256xf32>
     %stream0_4 = gpu.memcpy async [%stream0_3] %gpu_memref_src, %src  : memref<8x256xf32>, memref<8x256xf32>
 
-
-    %dst_ptr_idx = memref.extract_aligned_pointer_as_index %gpu_memref_dst : memref<128xf32> -> index
-    %dst_ptr_i64 = arith.index_cast %dst_ptr_idx : index to i64
-
-    %src_ptr_idx = memref.extract_aligned_pointer_as_index %gpu_memref_src : memref<8x256xf32> -> index
-    %src_ptr_i64 = arith.index_cast %src_ptr_idx : index to i64
-
     %gpu_memref_dst_casted = memref.memory_space_cast %gpu_memref_dst : memref<128xf32> to memref<128xf32, 1>
     %gpu_memref_src_casted = memref.memory_space_cast %gpu_memref_src : memref<8x256xf32> to memref<8x256xf32, 1>
 
-    %stream0_5 = gpu.launch_func async[%stream0_4] @reduction::@cross_sg_cross_lane_1D blocks in (%c1, %c1, %c1) threads in (%c1024, %c1, %c1) args(%gpu_memref_dst_casted : memref<128xf32, 1>, %gpu_memref_src_casted : memref<8x256xf32, 1>)
+    %stream0_5 = gpu.launch_func async[%stream0_4] @reduction::@cross_sg_sub_size_cross_lane_2D_1D blocks in (%c1, %c1, %c1) threads in (%c256, %c1, %c1) args(%gpu_memref_dst_casted : memref<128xf32, 1>, %gpu_memref_src_casted : memref<8x256xf32, 1>)
 
     %stream0_6 = gpu.memcpy async [%stream0_5]  %dst, %gpu_memref_dst : memref<128xf32>, memref<128xf32>
     %stream0_8 = gpu.dealloc async [%stream0_6] %gpu_memref_dst : memref<128xf32>
@@ -92,24 +77,17 @@ func.func @test(%dst : memref<128xf32>, %src : memref<8x256xf32>) attributes {ll
     scf.for %i = %c0 to %c8 step %c1 {
       scf.for %j = %c0 to %c256 step %c1 {
         %i_f32 = arith.index_cast %i : index to i32
-        %j_f32 = arith.index_cast %j : index to i32
         %i_float = arith.sitofp %i_f32 : i32 to f32
-        %j_float = arith.sitofp %j_f32 : i32 to f32
-        %c1000_f32 = arith.constant 1000.0 : f32
-        %j_scaled = arith.divf %j_float, %c1000_f32 : f32
-        %val = arith.addf %i_float, %j_scaled : f32
-        // Input is in format (#row_idx).(#col_idx/1000.0)
         memref.store %i_float, %src[%i, %j] : memref<8x256xf32>
       }
     }
-        %c0_i64 = arith.constant 0 : i64
 
     scf.for %i = %c0 to %c128 step %c1 {
       memref.store %c0_f32, %dst[%i] : memref<128xf32>
     }
+
     call @test(%dst, %src) : (memref<128xf32>, memref<8x256xf32>) -> ()
     %dst_cast = memref.cast %dst : memref<128xf32> to memref<*xf32>
-    %src_cast = memref.cast %src : memref<8x256xf32> to memref<*xf32>
 
     // CHECK: Unranked Memref base@ = 0x{{[0-9a-f]+}}
     // CHECK-NEXT: [0,  256,  512,  768,  1024,  1280,  1536,  1792,  0,
