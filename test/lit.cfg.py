@@ -54,9 +54,7 @@ config.substitutions.append(('%irunner_utils', config.imex_runner_utils))
 # Resolve %zebin_chip to the active Intel GPU target (pvc/bmg/cri) so tests
 # can use a single RUN line across configurations. When no target is
 # explicitly enabled at configure time, default to bmg.
-if config.imex_enable_cri_simulator:
-    config.zebin_chip = 'cri'
-elif config.imex_enable_pvc_target:
+if config.imex_enable_pvc_target:
     config.zebin_chip = 'pvc'
 else:
     config.zebin_chip = 'bmg'
