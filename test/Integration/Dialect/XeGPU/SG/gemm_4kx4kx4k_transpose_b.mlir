@@ -157,9 +157,9 @@ module @gemm attributes {gpu.container_module} {
         // sync all threads
         gpu.barrier
         // load A tiles
-        %a_val = xegpu.load_nd %A_tile[%C_sg_tile_offset_x, %k]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
-        %a_val_0 = vector.extract %a_val [0] : vector<32x16xf16> from vector<2x32x16xf16>
-        %a_val_1 = vector.extract %a_val [1] : vector<32x16xf16> from vector<2x32x16xf16>
+        %a_val = xegpu.load_nd %A_tile[%C_sg_tile_offset_x, %k]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
+        %a_val_0 = vector.extract_strided_slice %a_val {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %a_val_1 = vector.extract_strided_slice %a_val {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
 
         // load B tiles (transposed view)
         %k_plus_16 = arith.addi %k, %c16 : index

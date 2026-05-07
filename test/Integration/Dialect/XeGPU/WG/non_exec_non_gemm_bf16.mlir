@@ -1,9 +1,5 @@
 // RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup"
 
-// XFAIL: *
-
-# It currently fails since bfloat ops require the following SPIR-V extension: SPV_KHR_bfloat16
-
 module attributes {gpu.container_module} {
   func.func @main(%arg0: memref<16x16xbf16>, %arg1: memref<16x16xbf16>, %arg2: memref<16x16xbf16>) attributes {L2Mem = 512 : i64, gemm_tiles_x = dense<1> : vector<4xi64>, gemm_tiles_y = dense<[1, -1, 1, 16]> : vector<4xi64>, habana_runner.num_inputs = 2 : i64, habana_runner.tests = [{inputs = [1.000000e+00 : bf16, 2.000000e+00 : bf16]}], linear_block_size = array<i32: 1024, 1, 1>, linear_grid_size = array<i32: 1, 1, 1>, region_partition = 1 : i64, region_size = 1 : i64, syn.fusion_successful, syn.gemm_pipeline, syn.tensor_signature = (tensor<16x16xbf16>, tensor<16x16xbf16>) -> tensor<16x16xbf16>, synFusionGenOps = 1 : i64, synFusionRequiredBeamSize = 1 : i64, synFusionTotalCost = 1.398000e+02 : f64} {
     %cst = arith.constant {layout_result_0 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} dense<0.000000e+00> : vector<16x32xbf16>

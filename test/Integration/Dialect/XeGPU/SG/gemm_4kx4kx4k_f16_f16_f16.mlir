@@ -204,19 +204,19 @@ module @gemm attributes {gpu.container_module} {
         // gpu.barrier
 
         // load A tiles
-        %a_val = xegpu.load_nd %A_load_tile [%C_sg_tile_offset_x, %k] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
-        %a_val_0 = vector.extract %a_val [0] : vector<32x16xf16> from vector<2x32x16xf16>
-        %a_val_1 = vector.extract %a_val [1] : vector<32x16xf16> from vector<2x32x16xf16>
+        %a_val = xegpu.load_nd %A_load_tile [%C_sg_tile_offset_x, %k] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
+        %a_val_0 = vector.extract_strided_slice %a_val {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %a_val_1 = vector.extract_strided_slice %a_val {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
 
         // load B tiles
-        %b_val_arr_0 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
+        %b_val_arr_0 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
 
-        %b_val_arr_1 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y_plus_32] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<2x32x16xf16>
+        %b_val_arr_1 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y_plus_32] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
 
-        %b_val_0 = vector.extract %b_val_arr_0 [0] : vector<32x16xf16> from vector<2x32x16xf16>
-        %b_val_1 = vector.extract %b_val_arr_0 [1] : vector<32x16xf16> from vector<2x32x16xf16>
-        %b_val_2 = vector.extract %b_val_arr_1 [0] : vector<32x16xf16> from vector<2x32x16xf16>
-        %b_val_3 = vector.extract %b_val_arr_1 [1] : vector<32x16xf16> from vector<2x32x16xf16>
+        %b_val_0 = vector.extract_strided_slice %b_val_arr_0 {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_1 = vector.extract_strided_slice %b_val_arr_0 {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_2 = vector.extract_strided_slice %b_val_arr_1 {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_3 = vector.extract_strided_slice %b_val_arr_1 {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
 
         // A prefetch tile must jump by 32 in y direction from the last prefetch offset.
         %k_plus_96 = arith.addi %k, %c96 : index
