@@ -1,0 +1,55 @@
+From e448e3107788b55b7af4de8de111b0b983f57af1 Mon Sep 17 00:00:00 2001
+From: Andrey Pavlenko <andrey.a.pavlenko@gmail.com>
+Date: Sat, 31 Aug 2024 20:56:31 +0200
+Subject: [PATCH][mlir][spirv] Added mapping for the gpu memory space
+
+---
+ .../MapMemRefStorageClassPass.cpp             | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/mlir/lib/Conversion/MemRefToSPIRV/MapMemRefStorageClassPass.cpp b/mlir/lib/Conversion/MemRefToSPIRV/MapMemRefStorageClassPass.cpp
+index 4cbc3dfdae22..ac278c908fc5 100644
+--- a/mlir/lib/Conversion/MemRefToSPIRV/MapMemRefStorageClassPass.cpp
++++ b/mlir/lib/Conversion/MemRefToSPIRV/MapMemRefStorageClassPass.cpp
+@@ -27,6 +27,7 @@
+ #include "llvm/ADT/SmallVectorExtras.h"
+ #include "llvm/ADT/StringExtras.h"
+ #include "llvm/Support/Debug.h"
++#include <mlir/Dialect/GPU/IR/GPUDialect.h>
+ #include <optional>
+
+ namespace mlir {
+@@ -121,6 +122,21 @@ spirv::mapMemorySpaceToOpenCLStorageClass(Attribute memorySpaceAttr) {
+   if (!memorySpaceAttr)
+     return spirv::StorageClass::CrossWorkgroup;
+
++  if (auto gpuSpace = dyn_cast<mlir::gpu::AddressSpaceAttr>(memorySpaceAttr)) {
++    switch (gpuSpace.getValue()) {
++    case mlir::gpu::AddressSpace::Global:
++      return spirv::StorageClass::CrossWorkgroup;
++    case mlir::gpu::AddressSpace::Workgroup:
++      return spirv::StorageClass::Workgroup;
++    case mlir::gpu::AddressSpace::Private:
++      return spirv::StorageClass::Private;
++    default:
++      LLVM_DEBUG(llvm::dbgs() << "cannot convert " << memorySpaceAttr
++                              << " due to unknown memory space value\n");
++      return std::nullopt;
++    }
++  }
++
+   // Unknown dialect custom attributes are not supported by default.
+   // Downstream callers should plug in more specialized ones.
+   auto intAttr = dyn_cast<IntegerAttr>(memorySpaceAttr);
+@@ -207,7 +223,8 @@ spirv::MemorySpaceToStorageClassConverter::MemorySpaceToStorageClassConverter(
+ static bool isLegalType(Type type) {
+   if (auto memRefType = dyn_cast<BaseMemRefType>(type)) {
+     Attribute spaceAttr = memRefType.getMemorySpace();
+-    return isa_and_nonnull<spirv::StorageClassAttr>(spaceAttr);
++    return isa_and_nonnull<spirv::StorageClassAttr>(spaceAttr) ||
++           isa_and_nonnull<mlir::gpu::AddressSpaceAttr>(spaceAttr);
+   }
+   return true;
+ }
+--
+2.43.0
