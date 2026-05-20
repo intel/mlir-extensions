@@ -38,7 +38,7 @@ module @print_simple attributes {gpu.container_module} {
     spirv.GlobalVariable @printfMsg1 initializer(@printfMsg1_scc) {Constant} : !spirv.ptr<!spirv.array<14 x i8>, UniformConstant>
 
 
-    spirv.func @test_kernel(%arg0: i32, %arg1: f32) "None" attributes {gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 1, 1, 1>, workgroup_attributions = 0 : i64, VectorComputeFunctionINTEL} {
+    spirv.func @test_kernel(%arg0: i32, %arg1: f32) "None" attributes {gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 1, 1, 1>, workgroup_attributions = 0 : i64} {
       %printfMsg0_addr = spirv.mlir.addressof @printfMsg0 : !spirv.ptr<!spirv.array<7 x i8>, UniformConstant>
       %2 = spirv.Bitcast %printfMsg0_addr : !spirv.ptr<!spirv.array<7 x i8>, UniformConstant> to !spirv.ptr<i8, UniformConstant>
       %3 = spirv.CL.printf %2 : !spirv.ptr<i8, UniformConstant> -> i32

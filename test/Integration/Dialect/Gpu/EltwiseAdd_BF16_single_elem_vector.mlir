@@ -23,7 +23,7 @@ module @eltwise_add attributes {gpu.container_module} {
     return %alloc : memref<10x20xbf16>
   }
   gpu.module @test_kernel {
-    gpu.func @test_kernel(%arg0: memref<10x20xbf16>, %arg1: memref<10x20xbf16>, %arg2: memref<10x20xbf16>) kernel attributes {VectorComputeFunctionINTEL, gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 10, 20, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+    gpu.func @test_kernel(%arg0: memref<10x20xbf16>, %arg1: memref<10x20xbf16>, %arg2: memref<10x20xbf16>) kernel attributes {gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 10, 20, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %block_id_x = gpu.block_id  x
       %block_id_y = gpu.block_id  y
       %cst = arith.constant dense<5.000000e-01> : vector<1xbf16>
