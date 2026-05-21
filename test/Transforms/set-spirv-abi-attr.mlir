@@ -4,7 +4,7 @@
 gpu.module @main_kernel {
   gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel {
   // OPENCL-LABEL: gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes
-  // OPENCL-SAME:    {VectorComputeFunctionINTEL, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  // OPENCL-SAME:    {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
   // VULKAN-LABEL: gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes
   // VULKAN-SAME:    {spirv.entry_point_abi = #spirv.entry_point_abi<workgroup_size = [1, 1, 1]>} {
     cf.br ^bb1
@@ -29,7 +29,7 @@ module {
     }
     gpu.module @run_kernel {
       // OPENCL-LABEL: gpu.func @run_kernel(%arg0: memref<4096x4096xf16>) kernel attributes
-      // OPENCL-SAME:    {VectorComputeFunctionINTEL, known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>,
+      // OPENCL-SAME:    {known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>,
       // OPENCL-SAME:     spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       // VULKAN-LABEL: gpu.func @run_kernel(%arg0: memref<4096x4096xf16>) kernel attributes
       // VULKAN-SAME:    {known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>,

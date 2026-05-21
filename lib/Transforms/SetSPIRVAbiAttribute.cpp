@@ -65,9 +65,6 @@ public:
           if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
               gpuFunc->getAttr(attrName))
             continue;
-
-          gpuFunc->setAttr("VectorComputeFunctionINTEL",
-                           mlir::UnitAttr::get(context));
           gpuFunc->setAttr(attrName, abi);
         }
       } else if (clientAPI == "vulkan") {
