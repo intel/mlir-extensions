@@ -202,7 +202,7 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     BUILD_DIR="$LLVM_PROJECT_PATH/build_integration_xegpu"
 else
     cd "$IMEX_PROJECT_PATH"
-    BUILD_DIR="$IMEX_PROJECT_PATH/build"
+    BUILD_DIR="$IMEX_PROJECT_PATH/build_simt_imex"
 fi
 
 if [ -d "$BUILD_DIR" ]; then
