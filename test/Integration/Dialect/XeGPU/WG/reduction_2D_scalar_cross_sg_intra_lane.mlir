@@ -17,8 +17,7 @@ module attributes {gpu.container_module} {
       %cst_2 = arith.constant  dense<32> : vector<32xindex>
       %c1024 = arith.constant 1024 : index
       %block_id_y = gpu.block_id y
-      // TODO: Remove explicit layout once #1641 is resolved.
-      %0 = vector.step {layout_result_0 = #xegpu.slice<#xegpu.layout<sg_layout = [32, 1], sg_data = [1, 1]>, dims = [1]>} : vector<32xindex>
+      %0 = vector.step : vector<32xindex>
       %1 = arith.muli %0, %cst_2 : vector<32xindex>
       %2 = vector.step : vector<32xindex>
       %3 = vector.shape_cast %1 : vector<32xindex> to vector<32x1xindex>
