@@ -126,7 +126,7 @@ Make sure before building LLVM, checkout the git commit sha as stated in
 And apply all LLVM patches in `build_tools/patches`.
 ```sh
 # For GPU support pass these cmake variables when building LLVM to enable
-# SPIR-V backend and L0 runtime
+# SPIR-V backend and L0 runtime.
   -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
   -DMLIR_ENABLE_LEVELZERO_RUNNER=1 \
 ```
