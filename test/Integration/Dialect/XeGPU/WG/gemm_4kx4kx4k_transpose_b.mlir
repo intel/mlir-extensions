@@ -13,8 +13,8 @@
 //                                        --entry-point-result=void \
 //                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
 #a = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 32], inst_data = [8, 16]>
-#b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [16, 16], order = [1, 0], lane_layout = [1, 16], lane_data = [2, 1]>
-#bt = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [16, 16], order = [0, 1], lane_layout = [16, 1], lane_data = [1, 2]>
+#b = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [16, 16], order = [1, 0]>
+#bt = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [16, 16], order = [0, 1]>
 #c = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [8, 16]>
 #a_prefetch = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 32], inst_data = [8, 16]>
 #b_prefetch = #xegpu.layout<sg_layout = [32, 1], sg_data = [8, 32], inst_data = [8, 16]>
@@ -82,7 +82,7 @@ module @gemm attributes {gpu.container_module} {
         %prefetch_offset = arith.addi %k, %c96 : index
         xegpu.prefetch_nd %a_prefetch_tdesc[%m, %prefetch_offset] {layout = #a_prefetch}: !xegpu.tensor_desc<256x32xf16, #a_prefetch>
         xegpu.prefetch_nd %b_prefetch_tdesc[%n, %prefetch_offset] {layout = #b_prefetch}: !xegpu.tensor_desc<256x32xf16, #b_prefetch>
-        %b_transposed = vector.transpose %b_value, [1, 0] {layout_result_0 = #b} : vector<256x32xf16> to vector<32x256xf16>
+        %b_transposed = vector.transpose %b_value, [1, 0]: vector<256x32xf16> to vector<32x256xf16>
         %c_new_value = xegpu.dpas %a_value, %b_transposed, %c_value {layout_a = #a, layout_b = #b, layout_cd = #c}
           : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
         scf.yield %c_new_value : vector<256x256xf32>
