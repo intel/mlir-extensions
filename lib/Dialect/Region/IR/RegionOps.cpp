@@ -53,7 +53,7 @@ void EnvironmentRegionOp::getSuccessorRegions(
   }
 
   // Otherwise, the region branches back to the parent operation.
-  regions.push_back(::mlir::RegionSuccessor::parent());
+  regions.push_back(::mlir::RegionSuccessor(getOperation()));
 }
 
 // Legacy compatibility method with old signature
@@ -61,13 +61,13 @@ void EnvironmentRegionOp::getSuccessorRegions(
     ::mlir::Region &region,
     ::mlir::SmallVectorImpl<::mlir::RegionSuccessor> &regions) {
   // The region is the body of the operation, so it branches back to parent
-  regions.push_back(::mlir::RegionSuccessor::parent());
+  regions.push_back(::mlir::RegionSuccessor(getOperation()));
 }
 
 ::mlir::ValueRange
 EnvironmentRegionOp::getSuccessorInputs(::mlir::RegionSuccessor successor) {
-  return successor.isParent() ? getOperation()->getResults()
-                              : ::mlir::ValueRange();
+  return successor.isOperation() ? getOperation()->getResults()
+                                 : ::mlir::ValueRange();
 }
 
 void EnvironmentRegionOp::inlineIntoParent(::mlir::PatternRewriter &builder,
