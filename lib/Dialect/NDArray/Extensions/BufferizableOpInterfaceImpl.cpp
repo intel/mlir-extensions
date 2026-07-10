@@ -171,7 +171,7 @@ struct InsertSliceOpInterface
 
       // Copy tensor. If this tensor.insert_slice has a matching
       // tensor.extract_slice, the copy operation will eventually fold away.
-      if (failed(options.createMemCpy(rewriter, loc, *srcMemref, subView)))
+      if (failed(options.memCpyFn(rewriter, loc, *srcMemref, subView)))
         return failure();
     }
 
