@@ -197,8 +197,8 @@ template <typename T> float getFloat(T val) {
 // `equalNan=true` (the numpy default); the `_mlir_ciface_allcloseStrict*`
 // symbols call it with `equalNan=false`.
 template <typename T>
-bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M, UnrankedMemRefType<float> *N,
-                           bool equalNan) {
+bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
+                           UnrankedMemRefType<float> *N, bool equalNan) {
   // atol, rtol values copied from
   // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
   // values may need to adjusted in the future
@@ -281,8 +281,8 @@ void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
     const bool i_inf = std::isinf(i_val);
     const bool j_inf = std::isinf(j_val);
     if (i_nan || j_nan || i_inf || j_inf) {
-      const bool tolerated = (equalNan && i_nan && j_nan) ||
-                             (i_inf && j_inf && i_val == j_val);
+      const bool tolerated =
+          (equalNan && i_nan && j_nan) || (i_inf && j_inf && i_val == j_val);
       if (!tolerated) {
         if (nan_inf_mismatch_count == 0) {
           first_nan_inf_idx = idx;
