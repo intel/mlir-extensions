@@ -182,9 +182,23 @@ template <typename T> float getFloat(T val) {
 
 // For information on how to Iterate over UnrankedMemRefType, start with
 // https://github.com/llvm/llvm-project/blob/main/mlir/include/mlir/ExecutionEngine/CRunnerUtils.h
+//
+// Comparison follows numpy.allclose:
+//   - `equalNan=true`  → NaNs at the same index are equal (numpy default for
+//                        `allclose(equal_nan=True)`).
+//   - `equalNan=false` → any NaN on either side fails (numpy's
+//                        `allclose(equal_nan=False)`, the strict variant).
+//   - In both modes: a NaN paired with a non-NaN is never close; same-sign
+//     infinities are equal; +Inf vs -Inf and Inf vs finite are not.
+// A naive IEEE-754 test silently accepts NaN-vs-finite and +Inf-vs-(-Inf)
+// because any compare with NaN is false and the tolerance bound becomes +Inf.
+//
+// The public `_mlir_ciface_allclose*` symbols call this with
+// `equalNan=true` (the numpy default); the `_mlir_ciface_allcloseStrict*`
+// symbols call it with `equalNan=false`.
 template <typename T>
-bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
-                           UnrankedMemRefType<float> *N) {
+bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M, UnrankedMemRefType<float> *N,
+                           bool equalNan) {
   // atol, rtol values copied from
   // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
   // values may need to adjusted in the future
@@ -197,6 +211,22 @@ bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
   for (; i != DM.end() && j != DN.end(); ++i, ++j) {
     float lhs = getFloat(*i);
     float rhs = *j;
+    if (std::isnan(lhs) || std::isnan(rhs)) {
+      if (equalNan && std::isnan(lhs) && std::isnan(rhs)) {
+        continue;
+      }
+      return false;
+    }
+    if (std::isinf(lhs) || std::isinf(rhs)) {
+      // Same-sign infinities compare equal; +Inf vs -Inf and Inf vs finite
+      // are not close. The tolerance check below would otherwise spuriously
+      // accept +Inf vs -Inf because both bound and delta become +Inf and
+      // `Inf > Inf` is false.
+      if (lhs == rhs) {
+        continue;
+      }
+      return false;
+    }
     if (fabs(lhs - rhs) > atol + rtol * fabs(rhs)) {
       return false;
     }
@@ -206,17 +236,23 @@ bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
 
 template <typename T>
 void _mlir_ciface_printAllclose(UnrankedMemRefType<T> *M,
-                                UnrankedMemRefType<float> *N) {
-  if (_mlir_ciface_allclose(M, N)) {
+                                UnrankedMemRefType<float> *N, bool equalNan) {
+  if (_mlir_ciface_allclose(M, N, equalNan)) {
     std::cout << "[ALLCLOSE: TRUE]\n";
   } else {
     std::cout << "[ALLCLOSE: FALSE]\n";
   }
 }
 
+// Reports the max absolute/relative error between M and N, and additionally
+// surfaces NaN/Inf mismatches that a naive max would silently swallow (any
+// compare with NaN is false, so `NaN > running_max` never updates the max).
+// `equalNan` matches numpy.allclose: when true, NaNs at the same index are
+// tolerated; when false, any NaN pairing counts as a mismatch. Same-sign
+// infinities are always tolerated; +Inf vs -Inf and Inf vs finite are not.
 template <typename T>
 void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
-                                UnrankedMemRefType<T> *N) {
+                                UnrankedMemRefType<T> *N, bool equalNan) {
   DynamicMemRefType<T> DM = DynamicMemRefType<T>(*M);
   DynamicMemRefType<T> DN = DynamicMemRefType<T>(*N);
   DynamicMemRefIterator<T> i = DM.begin();
@@ -228,9 +264,35 @@ void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
          max_rel_error_j = std::numeric_limits<double>::infinity();
   double max_abs_error_i = std::numeric_limits<double>::infinity(),
          max_abs_error_j = std::numeric_limits<double>::infinity();
+  // Track NaN/Inf mismatches separately so they cannot be silently swallowed
+  // by IEEE-754 comparisons (any compare with NaN is false, so a naive max
+  // would never update). A pair is a mismatch when one side is NaN/Inf and
+  // the other is a different value (with `equalNan` controlling whether
+  // matched NaNs at the same index are tolerated, matching numpy.allclose).
+  uint64_t nan_inf_mismatch_count = 0;
+  uint64_t first_nan_inf_idx = 0;
+  double first_nan_inf_i = 0.0;
+  double first_nan_inf_j = 0.0;
   for (; i != DM.end() && j != DN.end(); ++i, ++j, ++idx) {
     const double i_val = getFloat(*i);
     const double j_val = getFloat(*j);
+    const bool i_nan = std::isnan(i_val);
+    const bool j_nan = std::isnan(j_val);
+    const bool i_inf = std::isinf(i_val);
+    const bool j_inf = std::isinf(j_val);
+    if (i_nan || j_nan || i_inf || j_inf) {
+      const bool tolerated = (equalNan && i_nan && j_nan) ||
+                             (i_inf && j_inf && i_val == j_val);
+      if (!tolerated) {
+        if (nan_inf_mismatch_count == 0) {
+          first_nan_inf_idx = idx;
+          first_nan_inf_i = i_val;
+          first_nan_inf_j = j_val;
+        }
+        ++nan_inf_mismatch_count;
+      }
+      continue;
+    }
     const double delta = fabs(i_val - j_val);
     const double rel_error = delta / fmax(fabs(i_val), fabs(j_val));
     if (delta > max_abs_err_idx.first) {
@@ -252,6 +314,12 @@ void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
             << " at idx=" << std::distance(DM.begin(), max_rel_err_idx.second)
             << " (i=" << max_rel_error_i << ", j=" << max_rel_error_j << ")"
             << '\n';
+  std::cout << "NaN/Inf mismatch count: " << nan_inf_mismatch_count;
+  if (nan_inf_mismatch_count > 0) {
+    std::cout << " (first at idx=" << first_nan_inf_idx
+              << ", i=" << first_nan_inf_i << ", j=" << first_nan_inf_j << ")";
+  }
+  std::cout << '\n';
 }
 
 template <typename ABTy, typename CTy>
@@ -337,49 +405,105 @@ void _mlir_ciface_gemm(UnrankedMemRefType<ABTy> *A, UnrankedMemRefType<ABTy> *B,
   free(storageB);
 }
 
+// The default `printMaxError*`/`allclose*`/`printAllclose*` symbols use
+// numpy's `equal_nan=True` (matched NaNs at the same index are tolerated).
+// The `*Strict*` symbols use `equal_nan=False` — any NaN on either side is a
+// hard failure — for tests that produce finite results and want a NaN to be
+// flagged. In both modes NaN-vs-finite and mismatched infinities fail.
 extern "C" void _mlir_ciface_printMaxErrorF16(UnrankedMemRefType<f16> *M,
                                               UnrankedMemRefType<f16> *N) {
-  _mlir_ciface_printMaxError(M, N);
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/true);
 }
 
 extern "C" void _mlir_ciface_printMaxErrorBF16(UnrankedMemRefType<bf16> *M,
                                                UnrankedMemRefType<bf16> *N) {
-  _mlir_ciface_printMaxError(M, N);
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/true);
 }
 
 extern "C" void _mlir_ciface_printMaxErrorF32(UnrankedMemRefType<float> *M,
                                               UnrankedMemRefType<float> *N) {
-  _mlir_ciface_printMaxError(M, N);
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/true);
+}
+
+extern "C" void
+_mlir_ciface_printMaxErrorStrictF16(UnrankedMemRefType<f16> *M,
+                                    UnrankedMemRefType<f16> *N) {
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/false);
+}
+
+extern "C" void
+_mlir_ciface_printMaxErrorStrictBF16(UnrankedMemRefType<bf16> *M,
+                                     UnrankedMemRefType<bf16> *N) {
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/false);
+}
+
+extern "C" void
+_mlir_ciface_printMaxErrorStrictF32(UnrankedMemRefType<float> *M,
+                                    UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printMaxError(M, N, /*equalNan=*/false);
 }
 
 extern "C" bool _mlir_ciface_allcloseF16(UnrankedMemRefType<f16> *M,
                                          UnrankedMemRefType<float> *N) {
-  return _mlir_ciface_allclose(M, N);
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/true);
 }
 
 extern "C" bool _mlir_ciface_allcloseBF16(UnrankedMemRefType<bf16> *M,
                                           UnrankedMemRefType<float> *N) {
-  return _mlir_ciface_allclose(M, N);
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/true);
 }
 
 extern "C" bool _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
                                          UnrankedMemRefType<float> *N) {
-  return _mlir_ciface_allclose(M, N);
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/true);
+}
+
+extern "C" bool _mlir_ciface_allcloseStrictF16(UnrankedMemRefType<f16> *M,
+                                               UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/false);
+}
+
+extern "C" bool _mlir_ciface_allcloseStrictBF16(UnrankedMemRefType<bf16> *M,
+                                                UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/false);
+}
+
+extern "C" bool _mlir_ciface_allcloseStrictF32(UnrankedMemRefType<float> *M,
+                                               UnrankedMemRefType<float> *N) {
+  return _mlir_ciface_allclose(M, N, /*equalNan=*/false);
 }
 
 extern "C" void _mlir_ciface_printAllcloseF16(UnrankedMemRefType<f16> *M,
                                               UnrankedMemRefType<float> *N) {
-  _mlir_ciface_printAllclose(M, N);
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/true);
 }
 
 extern "C" void _mlir_ciface_printAllcloseBF16(UnrankedMemRefType<bf16> *M,
                                                UnrankedMemRefType<float> *N) {
-  _mlir_ciface_printAllclose(M, N);
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/true);
 }
 
 extern "C" void _mlir_ciface_printAllcloseF32(UnrankedMemRefType<float> *M,
                                               UnrankedMemRefType<float> *N) {
-  _mlir_ciface_printAllclose(M, N);
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/true);
+}
+
+extern "C" void
+_mlir_ciface_printAllcloseStrictF16(UnrankedMemRefType<f16> *M,
+                                    UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/false);
+}
+
+extern "C" void
+_mlir_ciface_printAllcloseStrictBF16(UnrankedMemRefType<bf16> *M,
+                                     UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/false);
+}
+
+extern "C" void
+_mlir_ciface_printAllcloseStrictF32(UnrankedMemRefType<float> *M,
+                                    UnrankedMemRefType<float> *N) {
+  _mlir_ciface_printAllclose(M, N, /*equalNan=*/false);
 }
 
 extern "C" void _mlir_ciface_gemmF16F16F32(UnrankedMemRefType<f16> *A,
