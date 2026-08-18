@@ -51,17 +51,21 @@ void _mlir_ciface_fillResource1DRandom(UnrankedMemRefType<T> *ptr,
 
 template <typename T> void _mlir_ciface_printMemref(UnrankedMemRefType<T> *M);
 
+// `equalNan` follows numpy.allclose: true tolerates matched NaNs at the same
+// index, false treats any NaN as a mismatch. The public C entry points below
+// expose both via the default (`equalNan=true`) and `*Strict*`
+// (`equalNan=false`) symbols.
 template <typename T>
 bool _mlir_ciface_allclose(UnrankedMemRefType<T> *M,
-                           UnrankedMemRefType<float> *N);
+                           UnrankedMemRefType<float> *N, bool equalNan);
 
 template <typename T>
 void _mlir_ciface_printAllclose(UnrankedMemRefType<T> *M,
-                                UnrankedMemRefType<float> *N);
+                                UnrankedMemRefType<float> *N, bool equalNan);
 
 template <typename T>
 void _mlir_ciface_printMaxError(UnrankedMemRefType<T> *M,
-                                UnrankedMemRefType<T> *N);
+                                UnrankedMemRefType<T> *N, bool equalNan);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_fillResource1DRandomBF16(UnrankedMemRefType<bf16> *ptr,
@@ -86,6 +90,8 @@ extern "C" IMEX_RUNNERUTILS_EXPORT void printMemrefBF16(int64_t rank,
                                                         void *ptr);
 extern "C" IMEX_RUNNERUTILS_EXPORT void printMemrefF16(int64_t rank, void *ptr);
 
+// Default allclose: numpy `equal_nan=True` — matched NaNs at the same index
+// are tolerated. NaN-vs-finite and mismatched infinities always fail.
 extern "C" IMEX_RUNNERUTILS_EXPORT bool
 _mlir_ciface_allcloseBF16(UnrankedMemRefType<bf16> *M,
                           UnrankedMemRefType<float> *N);
@@ -96,6 +102,19 @@ extern "C" IMEX_RUNNERUTILS_EXPORT bool
 _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
                          UnrankedMemRefType<float> *N);
 
+// Strict allclose: numpy `equal_nan=False` — any NaN on either side fails.
+// Same atol/rtol/Inf semantics as the default `allclose*` symbols. Tests that
+// expect finite results and want a NaN to be a hard failure call these.
+extern "C" IMEX_RUNNERUTILS_EXPORT bool
+_mlir_ciface_allcloseStrictBF16(UnrankedMemRefType<bf16> *M,
+                                UnrankedMemRefType<float> *N);
+extern "C" IMEX_RUNNERUTILS_EXPORT bool
+_mlir_ciface_allcloseStrictF16(UnrankedMemRefType<f16> *M,
+                               UnrankedMemRefType<float> *N);
+extern "C" IMEX_RUNNERUTILS_EXPORT bool
+_mlir_ciface_allcloseStrictF32(UnrankedMemRefType<float> *M,
+                               UnrankedMemRefType<float> *N);
+
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printAllcloseBF16(UnrankedMemRefType<bf16> *M,
                                UnrankedMemRefType<float> *N);
@@ -105,6 +124,17 @@ _mlir_ciface_printAllcloseF16(UnrankedMemRefType<f16> *M,
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printAllcloseF32(UnrankedMemRefType<float> *M,
                               UnrankedMemRefType<float> *N);
+
+// Strict variants (numpy `equal_nan=False`).
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printAllcloseStrictBF16(UnrankedMemRefType<bf16> *M,
+                                     UnrankedMemRefType<float> *N);
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printAllcloseStrictF16(UnrankedMemRefType<f16> *M,
+                                    UnrankedMemRefType<float> *N);
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printAllcloseStrictF32(UnrankedMemRefType<float> *M,
+                                    UnrankedMemRefType<float> *N);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMaxErrorF16(UnrankedMemRefType<f16> *M,
@@ -117,6 +147,19 @@ _mlir_ciface_printMaxErrorBF16(UnrankedMemRefType<bf16> *M,
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMaxErrorF32(UnrankedMemRefType<float> *M,
                               UnrankedMemRefType<float> *N);
+
+// Strict variants (numpy `equal_nan=False`).
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorStrictF16(UnrankedMemRefType<f16> *M,
+                                    UnrankedMemRefType<f16> *N);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorStrictBF16(UnrankedMemRefType<bf16> *M,
+                                     UnrankedMemRefType<bf16> *N);
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_printMaxErrorStrictF32(UnrankedMemRefType<float> *M,
+                                    UnrankedMemRefType<float> *N);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_gemmF16F16F16(UnrankedMemRefType<f16> *A,
