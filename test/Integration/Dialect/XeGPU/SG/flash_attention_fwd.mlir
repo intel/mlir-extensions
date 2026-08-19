@@ -1,4 +1,4 @@
-// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=subgroup" \
+// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=subgroup igc-cmd-options=-ze-opt-large-register-file" \
 // RUN: | mlir-runner \
 // RUN:   --shared-libs=%mlir_levelzero_runtime \
 // RUN:   --shared-libs=%mlir_runner_utils \
@@ -12,6 +12,10 @@
 //                                        --runner mlir-runner -e main \
 //                                        --entry-point-result=void \
 //                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%mlir_levelzero_runtime --filecheck
+
+// -ze-opt-large-register-file gives the kernel 256 GRF. At the default 128 GRF
+// the loop-carried accumulators do not fit and IGC spills (~7.4 KB, ~234
+// spill/fill accesses in the loop body).
 module @flash_attention attributes {gpu.container_module} {
   gpu.module @flash_attention_fwd {
     gpu.func @flash_attention_fwd(
@@ -74,16 +78,14 @@ module @flash_attention attributes {gpu.container_module} {
       %v_tile_slice = xegpu.create_nd_tdesc %V, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
 
       // K prefetch.
-      // Prefetch 16x32 tiles in 4x2 layout to cover 64x64
-      // x offset for prefetch is same as for q tiles. This means that WGs assigned to same batch also collaborate on prefetching
-      // the K, V tiles.
-      // NOTE: We also tried WGs prefetching from the begining of the K, V tiles but that did not work well because multiple
-      // WGs compete to prefetch the same data.
+      // Prefetch 16x32 tiles in 4x2 layout to cover 64x64.
+      // x offset for prefetch is the same as for the K, V loads (%wg_x_offset),
+      // so the prefetch tracks the loads BLOCK_N_3 rows ahead.
       %sg_layout_x = arith.divui %sg_id, %c2 : index
       %sg_layout_y = arith.remui %sg_id, %c2 : index
 
       %prefetch_offset_x_t0 = arith.muli %sg_layout_x, %c16 : index
-      %prefetch_offset_x = arith.addi %wg_q_x_offset, %prefetch_offset_x_t0 : index
+      %prefetch_offset_x = arith.addi %wg_x_offset, %prefetch_offset_x_t0 : index
       %prefetch_offset_y = arith.muli %sg_layout_y, %c32 : index
 
       %k_prefetch_tile = xegpu.create_nd_tdesc %K , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
@@ -154,15 +156,15 @@ module @flash_attention attributes {gpu.container_module} {
           vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>,
           vector<8x1xf32>, vector<8x1xf32>, vector<8x1xf32>, vector<8x1xf32>
          ) {
-          gpu.barrier
 
-          // K prefetch
+          // K prefetch. Cache hints are required, otherwise the prefetch uses the
+          // default L1 policy and does not populate L1 for the loads below.
           %prefetch_offset_x_running_t = arith.addi %BLOCK_N_3, %k : index
           %prefetch_offset_x_running = arith.addi %prefetch_offset_x, %prefetch_offset_x_running_t : index
-          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %prefetch_offset_y] : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
           // V prefetch
-          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %prefetch_offset_y] : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
           // Load first 16x64xf16 (i.e. 16x32xf32) K slice.
           %wg_x_offset_running = arith.addi %wg_x_offset, %k : index
@@ -693,8 +695,8 @@ module @flash_attention attributes {gpu.container_module} {
     %magic = arith.constant 0.625 : f32
     %c0_f16 = arith.constant 0.0 : f16
     %c1_f32 = arith.constant 0.5 : f32
-    %Z = arith.constant 2 : index // number of batches
-    %H = arith.constant 2 : index // number of heads
+    %Z = arith.constant 4 : index // number of batches
+    %H = arith.constant 4 : index // number of heads
     %N_CTX = arith.constant 4096 : index // sequence len
     %D_HEAD = arith.constant 64 : index // head dim
     %sm_scale = arith.constant 0.5 : f32 // softmax scale

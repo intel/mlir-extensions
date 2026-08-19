@@ -1,4 +1,4 @@
-// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup" \
+// RUN: imex-opt %s --gpu-lower-to-xevm-pipeline="xegpu-op-level=workgroup igc-cmd-options=-ze-opt-large-register-file" \
 // RUN: | mlir-runner \
 // RUN:   --shared-libs=%mlir_levelzero_runtime \
 // RUN:   --shared-libs=%mlir_runner_utils \
@@ -6,6 +6,10 @@
 // RUN:   --shared-libs=%irunner_utils \
 // RUN:   --entry-point-result=void \
 // RUN: | FileCheck %s
+
+// -ze-opt-large-register-file gives the kernel 256 GRF. At the default 128 GRF
+// the loop-carried accumulators do not fit and IGC spills (~8.9 KB, ~282
+// spill/fill accesses in the loop body).
 
 #q = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [8, 16]>
 #k = #xegpu.layout<sg_layout = [8, 1], sg_data = [16, 64], inst_data = [16, 16]>
@@ -73,19 +77,20 @@ module @flash_attention attributes {gpu.container_module} {
 
       // K prefetch. Each WG must prefetch 64x64xf16 tile of K per iteration of inner loop.
       // For prefetch SG layout is 4x2. Each SG prefetch 16x32xf16 tile.
-      // Note that prefetch x offset is same as Q x offset. This is because WGs in same batch colloborate on K and V prefetch.
+      // x offset for prefetch is the same as for the K, V loads (%wg_x_offset),
+      // so the prefetch tracks the loads BLOCK_N_3 rows ahead.
       %k_prefetch_tile = xegpu.create_nd_tdesc %K , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #k_prefetch>
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
-      %wg_q_x_offset_plus_BLOCK_N = arith.addi %wg_q_x_offset, %BLOCK_N : index
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
-      %wg_q_x_offset_plus_2_BLOCK_N = arith.addi %wg_q_x_offset_plus_BLOCK_N, %BLOCK_N : index
-      xegpu.prefetch_nd %k_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      xegpu.prefetch_nd %k_prefetch_tile[%wg_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      %prefetch_offset_x_plus_BLOCK_N = arith.addi %wg_x_offset, %BLOCK_N : index
+      xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      %prefetch_offset_x_plus_2_BLOCK_N = arith.addi %prefetch_offset_x_plus_BLOCK_N, %BLOCK_N : index
+      xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
 
       // V prefetch is similar to K
       %v_prefetch_tile = xegpu.create_nd_tdesc %V , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_BLOCK_N, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
-      xegpu.prefetch_nd %v_prefetch_tile[%wg_q_x_offset_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%wg_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
       %BLOCK_N_3_t = arith.addi %BLOCK_N, %BLOCK_N : index
       %BLOCK_N_3 = arith.addi %BLOCK_N_3_t, %BLOCK_N : index
 
@@ -119,15 +124,13 @@ module @flash_attention attributes {gpu.container_module} {
          -> (
           vector<128x64xf32>, vector<128xf32>, vector<128xf32>
          ) {
-          gpu.barrier
-
           // K prefetch
           %prefetch_offset_x_running_t = arith.addi %BLOCK_N_3, %k : index
-          %prefetch_offset_x_running = arith.addi %wg_q_x_offset, %prefetch_offset_x_running_t : index
-          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #k_prefetch}: !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+          %prefetch_offset_x_running = arith.addi %wg_x_offset, %prefetch_offset_x_running_t : index
+          xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #k_prefetch, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}: !xegpu.tensor_desc<64x64xf16, #k_prefetch>
 
           // V prefetch
-          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #v_prefetch}: !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+          xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_running, %c0]  {layout = #v_prefetch, l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}: !xegpu.tensor_desc<64x64xf16, #v_prefetch>
 
           // Load first 16x64xf16 K slice. K is in column major layout, so we need to transpose after loading.
           %wg_x_offset_running = arith.addi %wg_x_offset, %k : index
@@ -449,8 +452,8 @@ module @flash_attention attributes {gpu.container_module} {
     %magic = arith.constant 0.625 : f32
     %c0_f16 = arith.constant 0.0 : f16
     %c1_f32 = arith.constant 0.5 : f32
-    %Z = arith.constant 2 : index // number of batches
-    %H = arith.constant 2 : index // number of heads
+    %Z = arith.constant 4 : index // number of batches
+    %H = arith.constant 4 : index // number of heads
     %N_CTX = arith.constant 4096 : index // sequence len
     %D_HEAD = arith.constant 64 : index // head dim
     %sm_scale = arith.constant 0.5 : f32 // softmax scale
