@@ -129,21 +129,21 @@ func.func @test_copy(%a: tensor<?xi64>) -> tensor<?xi64> {
 // CHECK-SAME: [[varg0:%.*]]: tensor<?xi64>) -> tensor<?xi64> {
 // CHECK-NEXT: [[vc0:%.*]] = arith.constant 0 : index
 // CHECK-NEXT: [[vdim:%.*]] = tensor.dim [[varg0]], [[vc0]] : tensor<?xi64>
-// CHECK-NEXT: [[valloc:%.*]] = memref.alloc([[vdim]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[valloc:%.*]] = memref.alloc([[vdim]]) alignment = 8 : memref<?xi64>
 // CHECK-NEXT: [[v0:%.*]] = bufferization.to_buffer [[varg0]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: region.env_region "protect_copy_op" {
 // CHECK-NEXT: memref.copy [[v0]], [[valloc]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>
 // CHECK: [[v1:%.*]] = bufferization.to_tensor [[valloc]] restrict writable : memref<?xi64> to tensor<?xi64>
 // CHECK-NEXT: [[vc0_0:%.*]] = arith.constant 0 : index
 // CHECK-NEXT: [[vdim_1:%.*]] = tensor.dim [[v1]], [[vc0_0]] : tensor<?xi64>
-// CHECK-NEXT: [[valloc_2:%.*]] = memref.alloc([[vdim_1]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[valloc_2:%.*]] = memref.alloc([[vdim_1]]) alignment = 8 : memref<?xi64>
 // CHECK-NEXT: [[v2:%.*]] = bufferization.to_buffer [[v1]] : tensor<?xi64> to memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: region.env_region "protect_copy_op" {
 // CHECK-NEXT: memref.copy [[v2]], [[valloc_2]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>
 // CHECK: [[v3:%.*]] = bufferization.to_tensor [[valloc_2]] restrict writable : memref<?xi64> to tensor<?xi64, #region.gpu_env<device = "XeGPU">>
 // CHECK-NEXT: [[vc0_3:%.*]] = arith.constant 0 : index
 // CHECK-NEXT: [[vdim_4:%.*]] = tensor.dim [[v3]], [[vc0_3]] : tensor<?xi64, #region.gpu_env<device = "XeGPU">>
-// CHECK-NEXT: [[valloc_5:%.*]] = memref.alloc([[vdim_4]]) {alignment = 8 : i64} : memref<?xi64>
+// CHECK-NEXT: [[valloc_5:%.*]] = memref.alloc([[vdim_4]]) alignment = 8 : memref<?xi64>
 // CHECK-NEXT: [[v4:%.*]] = bufferization.to_buffer [[v3]] : tensor<?xi64, #region.gpu_env<device = "XeGPU">> to memref<?xi64, strided<[?], offset: ?>>
 // CHECK-NEXT: region.env_region "protect_copy_op" {
 // CHECK-NEXT: memref.copy [[v4]], [[valloc_5]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64>

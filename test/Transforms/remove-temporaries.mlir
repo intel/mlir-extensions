@@ -4,7 +4,7 @@
 #map2 = affine_map<(d0, d1) -> (d0, d1)>
 module {
   func.func @ewbinop_inplace(%arg0: memref<64xi64, strided<[?], offset: ?>>, %arg1: memref<64xi64, strided<[?], offset: ?>>, %arg2: memref<64xi64, strided<[?], offset: ?>>) {
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<64xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64, strided<[?], offset: ?>>, memref<64xi64, strided<[?], offset: ?>>) outs(%alloc : memref<64xi64>) {
     ^bb0(%in: i64, %in_0: i64, %out: i64):
       %0 = arith.addi %in, %in_0 : i64
@@ -22,7 +22,7 @@ module {
     // CHECK-NEXT:  return
   }
   func.func @ewbinop_subview(%arg0: memref<64xi64, strided<[?], offset: ?>>, %arg1: memref<64xi64, strided<[?], offset: ?>>, %arg2: memref<65xi64, strided<[?], offset: ?>>) {
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<64xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64, strided<[?], offset: ?>>, memref<64xi64, strided<[?], offset: ?>>) outs(%alloc : memref<64xi64>) {
     ^bb0(%in: i64, %in_0: i64, %out: i64):
       %0 = arith.addi %in, %in_0 : i64
@@ -45,7 +45,7 @@ module {
     // CHECK-NEXT:  linalg.generic
   }
   func.func @ewbinop_regions(%arg0: memref<64xi64, strided<[?], offset: ?>>, %arg1: memref<64xi64, strided<[?], offset: ?>>, %arg2: memref<64xi64, strided<[?], offset: ?>>) {
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<64xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64, strided<[?], offset: ?>>, memref<64xi64, strided<[?], offset: ?>>) outs(%alloc : memref<64xi64>) {
     ^bb0(%in: i64, %in_0: i64, %out: i64):
       %0 = arith.addi %in, %in_0 : i64
@@ -68,9 +68,9 @@ module {
   }
   func.func @ewbinop_raw_conflict() {
     %c1_i64 = arith.constant 1 : i64
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<16x16xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<16x16xi64>
     %subview = memref.subview %alloc[0, 1] [16, 10] [1, 1] : memref<16x16xi64> to memref<16x10xi64, strided<[16, 1], offset: 1>>
-    %alloc_0 = memref.alloc() {alignment = 64 : i64} : memref<16x10xi64>
+    %alloc_0 = memref.alloc() alignment = 64 : memref<16x10xi64>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview : memref<16x10xi64, strided<[16, 1], offset: 1>>) outs(%alloc_0 : memref<16x10xi64>) {
     ^bb0(%in: i64, %out: i64):
       %0 = arith.addi %in, %c1_i64 : i64
@@ -89,10 +89,10 @@ module {
   }
   func.func @ewbinop_raw_conflict2() {
     %c1_i64 = arith.constant 1 : i64
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<16x16xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<16x16xi64>
     %subview = memref.subview %alloc[0, 1] [16, 10] [1, 1] : memref<16x16xi64> to memref<16x10xi64, strided<[16, 1], offset: 1>>
     %subview_0 = memref.subview %subview[2, 0] [14, 10] [1, 1] : memref<16x10xi64, strided<[16, 1], offset: 1>> to memref<14x10xi64, strided<[16, 1], offset: 33>>
-    %alloc_1 = memref.alloc() {alignment = 64 : i64} : memref<14x10xi64>
+    %alloc_1 = memref.alloc() alignment = 64 : memref<14x10xi64>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview_0 : memref<14x10xi64, strided<[16, 1], offset: 33>>) outs(%alloc_1 : memref<14x10xi64>) {
     ^bb0(%in: i64, %out: i64):
       %0 = arith.addi %in, %c1_i64 : i64
@@ -112,10 +112,10 @@ module {
   }
   func.func @ewbinop_raw_conflict3() {
     %c1_i64 = arith.constant 1 : i64
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<16x16xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<16x16xi64>
     %subview = memref.subview %alloc[0, 1] [16, 10] [1, 1] : memref<16x16xi64> to memref<16x10xi64, strided<[16, 1], offset: 1>>
     %subview_0 = memref.subview %subview[1, 0] [14, 10] [1, 1] : memref<16x10xi64, strided<[16, 1], offset: 1>> to memref<14x10xi64, strided<[16, 1], offset: 17>>
-    %alloc_1 = memref.alloc() {alignment = 64 : i64} : memref<14x10xi64>
+    %alloc_1 = memref.alloc() alignment = 64 : memref<14x10xi64>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview_0 : memref<14x10xi64, strided<[16, 1], offset: 17>>) outs(%alloc_1 : memref<14x10xi64>) {
     ^bb0(%in: i64, %out: i64):
       %0 = arith.addi %in, %c1_i64 : i64
@@ -135,9 +135,9 @@ module {
   }
   func.func @ewbinop_raw_conflict_subview() {
     %c1_i64 = arith.constant 1 : i64
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<8x16xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<8x16xi64>
     %subview = memref.subview %alloc[0, 3] [2, 10] [1, 1] : memref<8x16xi64> to memref<2x10xi64, strided<[16, 1], offset: 3>>
-    %alloc_0 = memref.alloc() {alignment = 64 : i64} : memref<5x10xi64>
+    %alloc_0 = memref.alloc() alignment = 64 : memref<5x10xi64>
     %subview_1 = memref.subview %alloc_0[3, 0] [2, 10] [1, 1] : memref<5x10xi64> to memref<2x10xi64, strided<[10, 1], offset: 30>>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview : memref<2x10xi64, strided<[16, 1], offset: 3>>) outs(%subview_1 : memref<2x10xi64, strided<[10, 1], offset: 30>>) {
     ^bb0(%in: i64, %out: i64):
@@ -157,9 +157,9 @@ module {
   }
   func.func @ewbinop_raw_conflict_subview2() {
     %c1_i64 = arith.constant 1 : i64
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<8x16xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<8x16xi64>
     %subview = memref.subview %alloc[3, 3] [2, 10] [1, 1] : memref<8x16xi64> to memref<2x10xi64, strided<[16, 1], offset: 51>>
-    %alloc_0 = memref.alloc() {alignment = 64 : i64} : memref<5x10xi64>
+    %alloc_0 = memref.alloc() alignment = 64 : memref<5x10xi64>
     %subview_1 = memref.subview %alloc_0[3, 0] [2, 10] [1, 1] : memref<5x10xi64> to memref<2x10xi64, strided<[10, 1], offset: 30>>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview : memref<2x10xi64, strided<[16, 1], offset: 51>>) outs(%subview_1 : memref<2x10xi64, strided<[10, 1], offset: 30>>) {
     ^bb0(%in: i64, %out: i64):
@@ -185,7 +185,7 @@ module {
     %c1_i64 = arith.constant 1 : i64
     %subview = memref.subview %arg0[0, 1] [16, 10] [1, 1] : memref<16x16xi64, strided<[?, ?], offset: ?>> to memref<16x10xi64, strided<[?, ?], offset: ?>>
     %subview_0 = memref.subview %subview[2, 0] [14, 10] [1, 1] : memref<16x10xi64, strided<[?, ?], offset: ?>> to memref<14x10xi64, strided<[?, ?], offset: ?>>
-    %alloc_1 = memref.alloc() {alignment = 64 : i64} : memref<14x10xi64>
+    %alloc_1 = memref.alloc() alignment = 64 : memref<14x10xi64>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview_0 : memref<14x10xi64, strided<[?, ?], offset: ?>>) outs(%alloc_1 : memref<14x10xi64>) {
     ^bb0(%in: i64, %out: i64):
       %0 = arith.addi %in, %c1_i64 : i64
@@ -210,7 +210,7 @@ module {
   func.func @ewbinop_farg_raw_conflict_subview(%arg0 : memref<8x16xi64, strided<[?, ?], offset: ?>>) {
     %c1_i64 = arith.constant 1 : i64
     %subview = memref.subview %arg0[3, 3] [2, 10] [1, 1] : memref<8x16xi64, strided<[?, ?], offset: ?>> to memref<2x10xi64, strided<[?, ?], offset: ?>>
-    %alloc_0 = memref.alloc() {alignment = 64 : i64} : memref<5x10xi64>
+    %alloc_0 = memref.alloc() alignment = 64 : memref<5x10xi64>
     %subview_1 = memref.subview %alloc_0[3, 0] [2, 10] [1, 1] : memref<5x10xi64> to memref<2x10xi64, strided<[10, 1], offset: 30>>
     linalg.generic {indexing_maps = [#map2, #map2], iterator_types = ["parallel", "parallel"]} ins(%subview : memref<2x10xi64, strided<[?, ?], offset: ?>>) outs(%subview_1 : memref<2x10xi64, strided<[10, 1], offset: 30>>) {
     ^bb0(%in: i64, %out: i64):
@@ -235,13 +235,13 @@ module {
   }
   func.func @ewbinop_double_copy(%arg0: memref<12xi64>, %arg1: memref<12xi64>) {
     %subview = memref.subview %arg1[0] [6] [1] : memref<12xi64> to memref<6xi64, strided<[1]>>
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<6xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<6xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%subview, %subview : memref<6xi64, strided<[1]>>, memref<6xi64, strided<[1]>>) outs(%alloc : memref<6xi64>) {
     ^bb0(%in: i64, %in_2: i64, %out: i64):
       %0 = arith.addi %in, %in_2 : i64
       linalg.yield %0 : i64
     }
-    %alloc_0 = memref.alloc() {alignment = 64 : i64} : memref<12xi64>
+    %alloc_0 = memref.alloc() alignment = 64 : memref<12xi64>
     memref.copy %arg0, %alloc_0 : memref<12xi64> to memref<12xi64>
     %subview_1 = memref.subview %alloc_0[0] [6] [1] : memref<12xi64> to memref<6xi64, strided<[1]>>
     memref.copy %alloc, %subview_1 : memref<6xi64> to memref<6xi64, strided<[1]>>
@@ -263,7 +263,7 @@ module {
     // CHECK-NEXT:  return
   }
   func.func @ewbinop_return_alias(%arg0: memref<64xi64>, %arg1: memref<64xi64>, %arg2: memref<64xi64>) -> memref<64xi64> {
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<64xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64>, memref<64xi64>) outs(%alloc : memref<64xi64>) {
     ^bb0(%in: i64, %in_0: i64, %out: i64):
       %0 = arith.addi %in, %in_0 : i64
@@ -281,8 +281,8 @@ module {
     // CHECK-NEXT:  memref.copy
   }
   func.func @ewbinop_return_alias2(%arg0: memref<64xi64>, %arg1: memref<64xi64>) -> (memref<64xi64>, memref<64xi64>) {
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
-    %arg2 = memref.alloc() {alignment = 64 : i64} : memref<64xi64>
+    %alloc = memref.alloc() alignment = 64 : memref<64xi64>
+    %arg2 = memref.alloc() alignment = 64 : memref<64xi64>
     linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%arg0, %arg1 : memref<64xi64>, memref<64xi64>) outs(%alloc : memref<64xi64>) {
     ^bb0(%in: i64, %in_0: i64, %out: i64):
       %0 = arith.addi %in, %in_0 : i64

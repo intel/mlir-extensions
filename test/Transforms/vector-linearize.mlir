@@ -54,7 +54,7 @@ func.func @test_create_mask() -> vector<1x16xi1> {
 //       CHECK: %[[RES:.*]] = vector.shape_cast %[[SHUFFLE]] : vector<64xf32> to vector<8x8xf32>
 //       CHECK: return %[[RES]] : vector<8x8xf32>
 func.func @test_extract_strided_slice_1(%arg0 : vector<8x16xf32>) -> vector<8x8xf32> {
-  %0 = vector.extract_strided_slice %arg0 { sizes = [8, 8], strides = [1, 1], offsets = [0, 8]}
+  %0 = vector.extract_strided_slice %arg0 offsets = [0, 8], sizes = [8, 8], strides = [1, 1]
      : vector<8x16xf32> to vector<8x8xf32>
   return %0 : vector<8x8xf32>
 }
@@ -75,7 +75,7 @@ func.func @test_extract_strided_slice_1(%arg0 : vector<8x16xf32>) -> vector<8x8x
 //       CHECK: %[[RES:.*]] = vector.shape_cast %[[SHUFFLE]] : vector<64xf32> to vector<1x8x8xf32>
 //       CHECK: return %[[RES]] : vector<1x8x8xf32>
 func.func @test_extract_strided_slice_2(%arg0 : vector<2x32x8xf32>) -> vector<1x8x8xf32> {
-  %0 = vector.extract_strided_slice %arg0 { offsets = [1, 24], strides = [1, 1], sizes = [1, 8] }
+  %0 = vector.extract_strided_slice %arg0 offsets = [1, 24], sizes = [1, 8], strides = [1, 1]
     : vector<2x32x8xf32> to vector<1x8x8xf32>
   return %0 : vector<1x8x8xf32>
 }

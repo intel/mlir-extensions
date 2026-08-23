@@ -27,8 +27,8 @@ module @gemm attributes {gpu.container_module} {
       // store the result
       %0 = xegpu.create_nd_tdesc %arg0[%c0, %c0] : memref<32x16xf32> -> !xegpu.tensor_desc<32x8xf32, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
       %1 = xegpu.load_nd %0  : !xegpu.tensor_desc<32x8xf32, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x8xf32>
-      %2 = vector.extract_strided_slice %1 {offsets = [0, 24], sizes = [1, 8], strides = [1, 1]} : vector<2x32x8xf32> to vector<1x8x8xf32>
-      %3 = vector.extract_strided_slice %1 {offsets = [1, 24], sizes = [1, 8], strides = [1, 1]} : vector<2x32x8xf32> to vector<1x8x8xf32>
+      %2 = vector.extract_strided_slice %1 offsets = [0, 24], sizes = [1, 8], strides = [1, 1] : vector<2x32x8xf32> to vector<1x8x8xf32>
+      %3 = vector.extract_strided_slice %1 offsets = [1, 24], sizes = [1, 8], strides = [1, 1] : vector<2x32x8xf32> to vector<1x8x8xf32>
       %4 = vector.shape_cast %2 : vector<1x8x8xf32> to vector<8x8xf32>
       %5 = vector.shape_cast %3 : vector<1x8x8xf32> to vector<8x8xf32>
       %6 = vector.shuffle %4, %5 [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15] : vector<8x8xf32>, vector<8x8xf32>

@@ -41,8 +41,8 @@ module @gemm attributes {gpu.container_module} {
       %7 = xegpu.load_nd %5 <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
       %8 = xegpu.dpas %2, %6 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
       %9 = xegpu.dpas %3, %7 : vector<8x16xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-      %10 = vector.extract_strided_slice %8 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
-      %11 = vector.extract_strided_slice %9 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
+      %10 = vector.extract_strided_slice %8 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
+      %11 = vector.extract_strided_slice %9 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
       %cst = arith.constant dense<1.000000e+00> : vector<64xf32>
       %12 = vector.shape_cast %cst : vector<64xf32> to vector<8x8xf32>
       %13 = vector.shuffle %10, %12 [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15] : vector<8x8xf32>, vector<8x8xf32>

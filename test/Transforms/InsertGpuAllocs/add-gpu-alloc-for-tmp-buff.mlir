@@ -22,10 +22,10 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %out_buff: memre
   // VULKAN: %[[MEMREF2:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: memref.copy %[[arg0]], %[[MEMREF2]] : memref<2x5xf32> to memref<2x5xf32>
 
-  %tmp_buff = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
+  %tmp_buff = memref.alloc() alignment = 128 : memref<2x5xf32>
   // OPENCL-NOT:  %[[MEMREF3:.*]] = memref.alloc().*
   // OPENCL:  %[[MEMREF3:.*]] = gpu.alloc () : memref<2x5xf32>
-  // VULKAN:  %[[MEMREF3:.*]] = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
+  // VULKAN:  %[[MEMREF3:.*]] = memref.alloc() alignment = 128 : memref<2x5xf32>
 
   %c1_0 = arith.constant 1 : index
   %1 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c2)[%c0, %c1]

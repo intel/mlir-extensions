@@ -25,8 +25,8 @@ module @gemm attributes {gpu.container_module} {
       %reduce = vector.multi_reduction <add>, %in_val, %cst [1] : vector<16x16xf16> to vector<16xf16>
       %reduce_1 = vector.shape_cast %reduce : vector<16xf16> to vector<16x1xf16>
       %broadcast = vector.broadcast %reduce_1 : vector<16x1xf16> to vector<16x16xf16>
-      %broadcast0 = vector.extract_strided_slice %broadcast {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %broadcast1 = vector.extract_strided_slice %broadcast {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
+      %broadcast0 = vector.extract_strided_slice %broadcast offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %broadcast1 = vector.extract_strided_slice %broadcast offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
       xegpu.store_nd %broadcast0, %c_tdesc0[%c0, %c0] : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       xegpu.store_nd %broadcast1, %c_tdesc1[%c8, %c0] : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       gpu.return

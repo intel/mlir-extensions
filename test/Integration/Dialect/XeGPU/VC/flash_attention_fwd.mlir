@@ -126,21 +126,21 @@ module @flash_attention attributes {gpu.container_module} {
       %71 = vector.shape_cast %67 : vector<16x16xf16> to vector<256xf16>
       %72 = vector.shape_cast %68 : vector<16x16xf16> to vector<256xf16>
       %73 = vector.shape_cast %69 : vector<16x16xf16> to vector<256xf16>
-      %74 = vector.extract_strided_slice %70 {offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %74 = vector.extract_strided_slice %70 offsets = [0], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %75 = vector.shape_cast %74 : vector<128xf16> to vector<8x16xf16>
-      %76 = vector.extract_strided_slice %70 {offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %76 = vector.extract_strided_slice %70 offsets = [128], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %77 = vector.shape_cast %76 : vector<128xf16> to vector<8x16xf16>
-      %78 = vector.extract_strided_slice %71 {offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %78 = vector.extract_strided_slice %71 offsets = [0], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %79 = vector.shape_cast %78 : vector<128xf16> to vector<8x16xf16>
-      %80 = vector.extract_strided_slice %71 {offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %80 = vector.extract_strided_slice %71 offsets = [128], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %81 = vector.shape_cast %80 : vector<128xf16> to vector<8x16xf16>
-      %82 = vector.extract_strided_slice %72 {offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %82 = vector.extract_strided_slice %72 offsets = [0], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %83 = vector.shape_cast %82 : vector<128xf16> to vector<8x16xf16>
-      %84 = vector.extract_strided_slice %72 {offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %84 = vector.extract_strided_slice %72 offsets = [128], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %85 = vector.shape_cast %84 : vector<128xf16> to vector<8x16xf16>
-      %86 = vector.extract_strided_slice %73 {offsets = [0], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %86 = vector.extract_strided_slice %73 offsets = [0], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %87 = vector.shape_cast %86 : vector<128xf16> to vector<8x16xf16>
-      %88 = vector.extract_strided_slice %73 {offsets = [128], sizes = [128], strides = [1]} : vector<256xf16> to vector<128xf16>
+      %88 = vector.extract_strided_slice %73 offsets = [128], sizes = [128], strides = [1] : vector<256xf16> to vector<128xf16>
       %89 = vector.shape_cast %88 : vector<128xf16> to vector<8x16xf16>
       xegpu.alloc_nbarrier 16
       // inner loop. This loop iterate over K and V tiles and update the accumulator by computing softmax(q*k^T)*v
@@ -286,17 +286,17 @@ module @flash_attention attributes {gpu.container_module} {
         %196 = arith.maximumf %146, %159 fastmath<nnan> : vector<8x16xf32>
         %197 = arith.maximumf %175, %191 fastmath<nnan> : vector<8x16xf32>
         %198 = arith.maximumf %196, %197 fastmath<nnan> : vector<8x16xf32>
-        %199 = vector.extract_strided_slice %198 {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
-        %200 = vector.extract_strided_slice %198 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
+        %199 = vector.extract_strided_slice %198 offsets = [0, 0], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
+        %200 = vector.extract_strided_slice %198 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
         %201 = arith.maximumf %199, %200 fastmath<nnan> : vector<8x8xf32>
-        %202 = vector.extract_strided_slice %201 {offsets = [0, 0], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
-        %203 = vector.extract_strided_slice %201 {offsets = [0, 4], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
+        %202 = vector.extract_strided_slice %201 offsets = [0, 0], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
+        %203 = vector.extract_strided_slice %201 offsets = [0, 4], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
         %204 = arith.maximumf %202, %203 fastmath<nnan> : vector<8x4xf32>
-        %205 = vector.extract_strided_slice %204 {offsets = [0, 0], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
-        %206 = vector.extract_strided_slice %204 {offsets = [0, 2], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
+        %205 = vector.extract_strided_slice %204 offsets = [0, 0], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
+        %206 = vector.extract_strided_slice %204 offsets = [0, 2], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
         %207 = arith.maximumf %205, %206 fastmath<nnan> : vector<8x2xf32>
-        %208 = vector.extract_strided_slice %207 {offsets = [0, 0], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
-        %209 = vector.extract_strided_slice %207 {offsets = [0, 1], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
+        %208 = vector.extract_strided_slice %207 offsets = [0, 0], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
+        %209 = vector.extract_strided_slice %207 offsets = [0, 1], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
         %210 = arith.maximumf %208, %209 fastmath<nnan> : vector<8x1xf32>
         %211 = arith.mulf %210, %63 : vector<8x1xf32>
         %212 = arith.maximumf %211, %arg70 fastmath<nnan> : vector<8x1xf32>
@@ -318,17 +318,17 @@ module @flash_attention attributes {gpu.container_module} {
         %228 = arith.addf %224, %225 : vector<8x16xf32>
         %229 = arith.addf %226, %227 : vector<8x16xf32>
         %230 = arith.addf %228, %229 : vector<8x16xf32>
-        %231 = vector.extract_strided_slice %230 {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
-        %232 = vector.extract_strided_slice %230 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
+        %231 = vector.extract_strided_slice %230 offsets = [0, 0], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
+        %232 = vector.extract_strided_slice %230 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
         %233 = arith.addf %231, %232 : vector<8x8xf32>
-        %234 = vector.extract_strided_slice %233 {offsets = [0, 0], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
-        %235 = vector.extract_strided_slice %233 {offsets = [0, 4], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
+        %234 = vector.extract_strided_slice %233 offsets = [0, 0], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
+        %235 = vector.extract_strided_slice %233 offsets = [0, 4], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
         %236 = arith.addf %234, %235 : vector<8x4xf32>
-        %237 = vector.extract_strided_slice %236 {offsets = [0, 0], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
-        %238 = vector.extract_strided_slice %236 {offsets = [0, 2], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
+        %237 = vector.extract_strided_slice %236 offsets = [0, 0], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
+        %238 = vector.extract_strided_slice %236 offsets = [0, 2], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
         %239 = arith.addf %237, %238 : vector<8x2xf32>
-        %240 = vector.extract_strided_slice %239 {offsets = [0, 0], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
-        %241 = vector.extract_strided_slice %239 {offsets = [0, 1], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
+        %240 = vector.extract_strided_slice %239 offsets = [0, 0], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
+        %241 = vector.extract_strided_slice %239 offsets = [0, 1], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
         %242 = arith.addf %240, %241 : vector<8x1xf32>
         %243 = arith.subf %arg70, %212 : vector<8x1xf32>
         %244 = math.exp %243 : vector<8x1xf32>
@@ -345,17 +345,17 @@ module @flash_attention attributes {gpu.container_module} {
         %254 = arith.maximumf %147, %163 fastmath<nnan> : vector<8x16xf32>
         %255 = arith.maximumf %179, %195 fastmath<nnan> : vector<8x16xf32>
         %256 = arith.maximumf %254, %255 fastmath<nnan> : vector<8x16xf32>
-        %257 = vector.extract_strided_slice %256 {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
-        %258 = vector.extract_strided_slice %256 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
+        %257 = vector.extract_strided_slice %256 offsets = [0, 0], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
+        %258 = vector.extract_strided_slice %256 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
         %259 = arith.maximumf %257, %258 fastmath<nnan> : vector<8x8xf32>
-        %260 = vector.extract_strided_slice %259 {offsets = [0, 0], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
-        %261 = vector.extract_strided_slice %259 {offsets = [0, 4], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
+        %260 = vector.extract_strided_slice %259 offsets = [0, 0], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
+        %261 = vector.extract_strided_slice %259 offsets = [0, 4], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
         %262 = arith.maximumf %260, %261 fastmath<nnan> : vector<8x4xf32>
-        %263 = vector.extract_strided_slice %262 {offsets = [0, 0], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
-        %264 = vector.extract_strided_slice %262 {offsets = [0, 2], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
+        %263 = vector.extract_strided_slice %262 offsets = [0, 0], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
+        %264 = vector.extract_strided_slice %262 offsets = [0, 2], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
         %265 = arith.maximumf %263, %264 fastmath<nnan> : vector<8x2xf32>
-        %266 = vector.extract_strided_slice %265 {offsets = [0, 0], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
-        %267 = vector.extract_strided_slice %265 {offsets = [0, 1], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
+        %266 = vector.extract_strided_slice %265 offsets = [0, 0], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
+        %267 = vector.extract_strided_slice %265 offsets = [0, 1], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
         %268 = arith.maximumf %266, %267 fastmath<nnan> : vector<8x1xf32>
         %269 = arith.mulf %268, %63 : vector<8x1xf32>
         %270 = arith.maximumf %269, %arg71 fastmath<nnan> : vector<8x1xf32>
@@ -377,17 +377,17 @@ module @flash_attention attributes {gpu.container_module} {
         %286 = arith.addf %282, %283 : vector<8x16xf32>
         %287 = arith.addf %284, %285 : vector<8x16xf32>
         %288 = arith.addf %286, %287 : vector<8x16xf32>
-        %289 = vector.extract_strided_slice %288 {offsets = [0, 0], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
-        %290 = vector.extract_strided_slice %288 {offsets = [0, 8], sizes = [8, 8], strides = [1, 1]} : vector<8x16xf32> to vector<8x8xf32>
+        %289 = vector.extract_strided_slice %288 offsets = [0, 0], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
+        %290 = vector.extract_strided_slice %288 offsets = [0, 8], sizes = [8, 8], strides = [1, 1] : vector<8x16xf32> to vector<8x8xf32>
         %291 = arith.addf %289, %290 : vector<8x8xf32>
-        %292 = vector.extract_strided_slice %291 {offsets = [0, 0], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
-        %293 = vector.extract_strided_slice %291 {offsets = [0, 4], sizes = [8, 4], strides = [1, 1]} : vector<8x8xf32> to vector<8x4xf32>
+        %292 = vector.extract_strided_slice %291 offsets = [0, 0], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
+        %293 = vector.extract_strided_slice %291 offsets = [0, 4], sizes = [8, 4], strides = [1, 1] : vector<8x8xf32> to vector<8x4xf32>
         %294 = arith.addf %292, %293 : vector<8x4xf32>
-        %295 = vector.extract_strided_slice %294 {offsets = [0, 0], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
-        %296 = vector.extract_strided_slice %294 {offsets = [0, 2], sizes = [8, 2], strides = [1, 1]} : vector<8x4xf32> to vector<8x2xf32>
+        %295 = vector.extract_strided_slice %294 offsets = [0, 0], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
+        %296 = vector.extract_strided_slice %294 offsets = [0, 2], sizes = [8, 2], strides = [1, 1] : vector<8x4xf32> to vector<8x2xf32>
         %297 = arith.addf %295, %296 : vector<8x2xf32>
-        %298 = vector.extract_strided_slice %297 {offsets = [0, 0], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
-        %299 = vector.extract_strided_slice %297 {offsets = [0, 1], sizes = [8, 1], strides = [1, 1]} : vector<8x2xf32> to vector<8x1xf32>
+        %298 = vector.extract_strided_slice %297 offsets = [0, 0], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
+        %299 = vector.extract_strided_slice %297 offsets = [0, 1], sizes = [8, 1], strides = [1, 1] : vector<8x2xf32> to vector<8x1xf32>
         %300 = arith.addf %298, %299 : vector<8x1xf32>
         %301 = arith.subf %arg71, %270 : vector<8x1xf32>
         %302 = math.exp %301 : vector<8x1xf32>

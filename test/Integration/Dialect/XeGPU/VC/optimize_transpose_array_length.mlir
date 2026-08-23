@@ -45,27 +45,27 @@ module @gemm attributes {gpu.container_module} {
       %11 = xegpu.create_nd_tdesc %arg2[%2, %5] : memref<256x256xf32> -> !xegpu.tensor_desc<16x16xf32>
       %12 = xegpu.load_nd %10 <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16x16xf32> -> vector<16x16xf32>
       %13 = xegpu.load_nd %11 <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16x16xf32> -> vector<16x16xf32>
-      %14 = vector.extract_strided_slice %12 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf32> to vector<8x16xf32>
-      %15 = vector.extract_strided_slice %12 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf32> to vector<8x16xf32>
-      %16 = vector.extract_strided_slice %13 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf32> to vector<8x16xf32>
-      %17 = vector.extract_strided_slice %13 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf32> to vector<8x16xf32>
+      %14 = vector.extract_strided_slice %12 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf32> to vector<8x16xf32>
+      %15 = vector.extract_strided_slice %12 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf32> to vector<8x16xf32>
+      %16 = vector.extract_strided_slice %13 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf32> to vector<8x16xf32>
+      %17 = vector.extract_strided_slice %13 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf32> to vector<8x16xf32>
       %18 = xegpu.create_nd_tdesc %arg0[%2, %c0] : memref<256x256xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
       %19 = xegpu.create_nd_tdesc %arg1[%3, %c0] : memref<256x256xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>
       %20:6 = scf.for %arg3 = %c0 to %c256 step %c32 iter_args(%arg4 = %18, %arg5 = %19, %arg6 = %14, %arg7 = %16, %arg8 = %15, %arg9 = %17) -> (!xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>, !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>, vector<8x16xf32>) {
         %21 = xegpu.load_nd %arg4 <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x16x16xf16>
         %22 = vector.extract %21[0] : vector<16x16xf16> from vector<2x16x16xf16>
         %23 = vector.extract %21[1] : vector<16x16xf16> from vector<2x16x16xf16>
-        %24 = vector.extract_strided_slice %22 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-        %25 = vector.extract_strided_slice %22 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-        %26 = vector.extract_strided_slice %23 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-        %27 = vector.extract_strided_slice %23 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
+        %24 = vector.extract_strided_slice %22 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+        %25 = vector.extract_strided_slice %22 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+        %26 = vector.extract_strided_slice %23 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+        %27 = vector.extract_strided_slice %23 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
         %28 = xegpu.load_nd %arg5 <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2 : i64>> -> vector<2x32x16xf16>
         %29 = vector.extract %28[0] : vector<32x16xf16> from vector<2x32x16xf16>
         %30 = vector.extract %28[1] : vector<32x16xf16> from vector<2x32x16xf16>
-        %31 = vector.extract_strided_slice %29 {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-        %32 = vector.extract_strided_slice %29 {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-        %33 = vector.extract_strided_slice %30 {offsets = [0, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
-        %34 = vector.extract_strided_slice %30 {offsets = [16, 0], sizes = [16, 16], strides = [1, 1]} : vector<32x16xf16> to vector<16x16xf16>
+        %31 = vector.extract_strided_slice %29 offsets = [0, 0], sizes = [16, 16], strides = [1, 1] : vector<32x16xf16> to vector<16x16xf16>
+        %32 = vector.extract_strided_slice %29 offsets = [16, 0], sizes = [16, 16], strides = [1, 1] : vector<32x16xf16> to vector<16x16xf16>
+        %33 = vector.extract_strided_slice %30 offsets = [0, 0], sizes = [16, 16], strides = [1, 1] : vector<32x16xf16> to vector<16x16xf16>
+        %34 = vector.extract_strided_slice %30 offsets = [16, 0], sizes = [16, 16], strides = [1, 1] : vector<32x16xf16> to vector<16x16xf16>
         %35 = vector.transpose %31, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
         %36 = vector.transpose %32, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
         %37 = vector.transpose %33, [1, 0] : vector<16x16xf16> to vector<16x16xf16>
