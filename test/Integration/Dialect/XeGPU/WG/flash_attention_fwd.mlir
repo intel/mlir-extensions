@@ -79,7 +79,7 @@ module @flash_attention attributes {gpu.container_module} {
       // For prefetch SG layout is 4x2. Each SG prefetch 16x32xf16 tile.
       // x offset for prefetch is the same as for the K, V loads (%wg_x_offset),
       // so the prefetch tracks the loads BLOCK_N_3 rows ahead.
-      %k_prefetch_tile = xegpu.create_nd_tdesc %K , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #k_prefetch>
+      %k_prefetch_tile = xegpu.create_nd_tdesc %K : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #k_prefetch>
       xegpu.prefetch_nd %k_prefetch_tile[%wg_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
       %prefetch_offset_x_plus_BLOCK_N = arith.addi %wg_x_offset, %BLOCK_N : index
       xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
@@ -87,7 +87,7 @@ module @flash_attention attributes {gpu.container_module} {
       xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #k_prefetch} : !xegpu.tensor_desc<64x64xf16, #k_prefetch>
 
       // V prefetch is similar to K
-      %v_prefetch_tile = xegpu.create_nd_tdesc %V , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #v_prefetch>
+      %v_prefetch_tile = xegpu.create_nd_tdesc %V : memref<?x?xf16> -> !xegpu.tensor_desc<64x64xf16, #v_prefetch>
       xegpu.prefetch_nd %v_prefetch_tile[%wg_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
       xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %c0] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
       xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %c0]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>, layout = #v_prefetch} : !xegpu.tensor_desc<64x64xf16, #v_prefetch>
