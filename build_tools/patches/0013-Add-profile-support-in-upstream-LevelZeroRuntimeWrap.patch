@@ -399,4 +399,3 @@ index 0ae7f0b0f3ef..2d4a1fff69e8 100644
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
 --
 2.43.0
-
