@@ -53,7 +53,7 @@ module @gemm attributes {gpu.container_module} {
         %8 = xegpu.load_nd %7 <{packed}> : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
         %9 = xegpu.create_nd_tdesc %arg3[%c0, %c0] : memref<1x32xf16> -> !xegpu.tensor_desc<1x32xf16>
         %10 = xegpu.load_nd %9  : !xegpu.tensor_desc<1x32xf16> -> vector<1x32xf16>
-        %11 = vector.extract_strided_slice %10 {offsets = [0, 0], sizes = [1, 16], strides = [1, 1]} : vector<1x32xf16> to vector<1x16xf16>
+        %11 = vector.extract_strided_slice %10 offsets = [0, 0], sizes = [1, 16], strides = [1, 1] : vector<1x32xf16> to vector<1x16xf16>
         %12 = vector.broadcast %11 : vector<1x16xf16> to vector<8x16xf16>
         %13 = arith.addf %6, %12 : vector<8x16xf16>
         %14 = xegpu.dpas %13, %8, %arg5 : vector<8x16xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>

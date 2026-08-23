@@ -3,7 +3,7 @@ module attributes {torch.debug_module_name = "ReLU"} {
   func.func @forward(%arg0: memref<512x640x20x15xf32>) -> memref<512x640x20x15xf32> {
     %cst = arith.constant 0.000000e+00 : f32
     %collapse_shape = memref.collapse_shape %arg0 [[0, 1, 2, 3]] : memref<512x640x20x15xf32> into memref<98304000xf32>
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<98304000xf32>
+    %alloc = memref.alloc() alignment = 64 : memref<98304000xf32>
     %c0 = arith.constant 0 : index
     %c48000 = arith.constant 48000 : index
     %c1 = arith.constant 1 : index

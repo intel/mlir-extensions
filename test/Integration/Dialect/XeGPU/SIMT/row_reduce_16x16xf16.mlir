@@ -45,8 +45,8 @@ module @gemm attributes {gpu.container_module} {
         scf.yield %r : vector<16xf16>
       }
       // Store the result.
-      %out_extract0 = vector.extract_strided_slice %r {offsets = [0], sizes = [8], strides = [1]} : vector<16xf16> to vector<8xf16>
-      %out_extract1 = vector.extract_strided_slice %r {offsets = [8], sizes = [8], strides = [1]} : vector<16xf16> to vector<8xf16>
+      %out_extract0 = vector.extract_strided_slice %r offsets = [0], sizes = [8], strides = [1] : vector<16xf16> to vector<8xf16>
+      %out_extract1 = vector.extract_strided_slice %r offsets = [8], sizes = [8], strides = [1] : vector<16xf16> to vector<8xf16>
       xegpu.store_nd %out_extract0, %c_tdesc[%c0, %c0] : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
       xegpu.store_nd %out_extract1, %c_tdesc[%c8, %c0] : vector<8xf16>, !xegpu.tensor_desc<8x16xf16>
       gpu.return

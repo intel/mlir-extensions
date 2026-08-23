@@ -205,18 +205,18 @@ module @gemm attributes {gpu.container_module} {
 
         // load A tiles
         %a_val = xegpu.load_nd %A_load_tile [%C_sg_tile_offset_x, %k] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
-        %a_val_0 = vector.extract_strided_slice %a_val {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
-        %a_val_1 = vector.extract_strided_slice %a_val {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %a_val_0 = vector.extract_strided_slice %a_val offsets = [0], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
+        %a_val_1 = vector.extract_strided_slice %a_val offsets = [32], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
 
         // load B tiles
         %b_val_arr_0 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
 
         %b_val_arr_1 = xegpu.load_nd %B_load_tile [%k, %C_sg_tile_offset_y_plus_32] { l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<32x16xf16, #xegpu.block_tdesc_attr<array_length = 2>> -> vector<64x16xf16>
 
-        %b_val_0 = vector.extract_strided_slice %b_val_arr_0 {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
-        %b_val_1 = vector.extract_strided_slice %b_val_arr_0 {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
-        %b_val_2 = vector.extract_strided_slice %b_val_arr_1 {offsets = [0], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
-        %b_val_3 = vector.extract_strided_slice %b_val_arr_1 {offsets = [32], sizes = [32], strides = [1]} : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_0 = vector.extract_strided_slice %b_val_arr_0 offsets = [0], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_1 = vector.extract_strided_slice %b_val_arr_0 offsets = [32], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_2 = vector.extract_strided_slice %b_val_arr_1 offsets = [0], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
+        %b_val_3 = vector.extract_strided_slice %b_val_arr_1 offsets = [32], sizes = [32], strides = [1] : vector<64x16xf16> to vector<32x16xf16>
 
         // A prefetch tile must jump by 32 in y direction from the last prefetch offset.
         %k_plus_96 = arith.addi %k, %c96 : index
@@ -226,39 +226,39 @@ module @gemm attributes {gpu.container_module} {
         %B_sg_prefetch_offset_x_plus_96_plus_k = arith.addi %B_sg_prefetch_offset_x_plus_96, %k : index
         xegpu.prefetch_nd %B_sg_prefetch_tile [%B_sg_prefetch_offset_x_plus_96_plus_k, %B_sg_prefetch_offset_y] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
-        %a_val_0_0 = vector.extract_strided_slice %a_val_0 { offsets = [0], sizes = [8], strides = [1]} :
+        %a_val_0_0 = vector.extract_strided_slice %a_val_0 offsets = [0], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_1_0 = vector.extract_strided_slice %a_val_0 { offsets = [8], sizes = [8], strides = [1]} :
+        %a_val_1_0 = vector.extract_strided_slice %a_val_0 offsets = [8], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_2_0 = vector.extract_strided_slice  %a_val_0 { offsets = [16], sizes = [8], strides = [1]} :
+        %a_val_2_0 = vector.extract_strided_slice  %a_val_0 offsets = [16], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_3_0 = vector.extract_strided_slice %a_val_0 { offsets = [24], sizes = [8], strides = [1]} :
+        %a_val_3_0 = vector.extract_strided_slice %a_val_0 offsets = [24], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_0_1 = vector.extract_strided_slice %a_val_1 { offsets = [0], sizes = [8], strides = [1]} :
+        %a_val_0_1 = vector.extract_strided_slice %a_val_1 offsets = [0], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_1_1 = vector.extract_strided_slice %a_val_1 {offsets = [8], sizes = [8], strides = [1]} :
+        %a_val_1_1 = vector.extract_strided_slice %a_val_1 offsets = [8], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_2_1 = vector.extract_strided_slice %a_val_1 { offsets = [16], sizes = [8], strides = [1]} :
+        %a_val_2_1 = vector.extract_strided_slice %a_val_1 offsets = [16], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
-        %a_val_3_1 = vector.extract_strided_slice %a_val_1 { offsets = [24], sizes = [8], strides = [1]} :
+        %a_val_3_1 = vector.extract_strided_slice %a_val_1 offsets = [24], sizes = [8], strides = [1] :
           vector<32x16xf16> to vector<8x16xf16>
 
 
-        %b_val_0_0 = vector.extract_strided_slice %b_val_0 { offsets = [0], sizes = [16], strides = [1]} :
+        %b_val_0_0 = vector.extract_strided_slice %b_val_0 offsets = [0], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_1_0 = vector.extract_strided_slice %b_val_0 { offsets = [16], sizes = [16], strides = [1]} :
+        %b_val_1_0 = vector.extract_strided_slice %b_val_0 offsets = [16], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_0_1 = vector.extract_strided_slice %b_val_1 { offsets = [0], sizes = [16], strides = [1]} :
+        %b_val_0_1 = vector.extract_strided_slice %b_val_1 offsets = [0], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_1_1 = vector.extract_strided_slice %b_val_1 { offsets = [16], sizes = [16], strides = [1]} :
+        %b_val_1_1 = vector.extract_strided_slice %b_val_1 offsets = [16], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_0_2 = vector.extract_strided_slice %b_val_2 { offsets = [0], sizes = [16], strides = [1]} :
+        %b_val_0_2 = vector.extract_strided_slice %b_val_2 offsets = [0], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_1_2 = vector.extract_strided_slice %b_val_2 { offsets = [16], sizes = [16], strides = [1]} :
+        %b_val_1_2 = vector.extract_strided_slice %b_val_2 offsets = [16], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_0_3 = vector.extract_strided_slice  %b_val_3 { offsets = [0], sizes = [16], strides = [1]} :
+        %b_val_0_3 = vector.extract_strided_slice  %b_val_3 offsets = [0], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
-        %b_val_1_3 = vector.extract_strided_slice %b_val_3 {offsets = [16], sizes = [16], strides = [1]} :
+        %b_val_1_3 = vector.extract_strided_slice %b_val_3 offsets = [16], sizes = [16], strides = [1] :
           vector<32x16xf16> to vector<16x16xf16>
 
         // do DPAS

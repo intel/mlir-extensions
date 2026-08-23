@@ -26,22 +26,22 @@ module {
       //CHECK:  %{{.*}} = vector.shape_cast %{{.*}} : vector<128xf16> to vector<8x16xf16>
       %11 = vector.shape_cast %10 : vector<128xf16> to vector<8x16xf16>
       //CHECK-COUNT-16: %{{.*}} = vector.extract %{{.*}}[{{.*}}] : f16 from vector<16x1xf16>
-      %12 = vector.extract_strided_slice %0 {offsets = [0], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %13 = vector.extract_strided_slice %0 {offsets = [1], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %14 = vector.extract_strided_slice %0 {offsets = [2], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %15 = vector.extract_strided_slice %0 {offsets = [3], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %16 = vector.extract_strided_slice %0 {offsets = [4], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %17 = vector.extract_strided_slice %0 {offsets = [5], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %18 = vector.extract_strided_slice %0 {offsets = [6], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %19 = vector.extract_strided_slice %0 {offsets = [7], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %20 = vector.extract_strided_slice %0 {offsets = [8], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %21 = vector.extract_strided_slice %0 {offsets = [9], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %22 = vector.extract_strided_slice %0 {offsets = [10], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %23 = vector.extract_strided_slice %0 {offsets = [11], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %24 = vector.extract_strided_slice %0 {offsets = [12], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %25 = vector.extract_strided_slice %0 {offsets = [13], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %26 = vector.extract_strided_slice %0 {offsets = [14], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
-      %27 = vector.extract_strided_slice %0 {offsets = [15], sizes = [1], strides = [1]} : vector<16xf16> to vector<1xf16>
+      %12 = vector.extract_strided_slice %0 offsets = [0], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %13 = vector.extract_strided_slice %0 offsets = [1], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %14 = vector.extract_strided_slice %0 offsets = [2], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %15 = vector.extract_strided_slice %0 offsets = [3], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %16 = vector.extract_strided_slice %0 offsets = [4], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %17 = vector.extract_strided_slice %0 offsets = [5], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %18 = vector.extract_strided_slice %0 offsets = [6], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %19 = vector.extract_strided_slice %0 offsets = [7], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %20 = vector.extract_strided_slice %0 offsets = [8], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %21 = vector.extract_strided_slice %0 offsets = [9], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %22 = vector.extract_strided_slice %0 offsets = [10], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %23 = vector.extract_strided_slice %0 offsets = [11], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %24 = vector.extract_strided_slice %0 offsets = [12], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %25 = vector.extract_strided_slice %0 offsets = [13], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %26 = vector.extract_strided_slice %0 offsets = [14], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
+      %27 = vector.extract_strided_slice %0 offsets = [15], sizes = [1], strides = [1] : vector<16xf16> to vector<1xf16>
       //CHECK-COUNT-16: {{.*}} = math.exp %{{.*}} : f16
       %28 = math.exp %12 : vector<1xf16>
       %29 = math.exp %13 : vector<1xf16>

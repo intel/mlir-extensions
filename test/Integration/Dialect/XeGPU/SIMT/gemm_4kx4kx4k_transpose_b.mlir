@@ -261,21 +261,21 @@ module @gemm attributes {gpu.container_module} {
         xegpu.prefetch_nd %B_sg_prefetch_tile[%B_sg_prefetch_offset_y, %B_prefetch_offset_x] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<8x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
 
-        %a_val_0_0 = vector.extract_strided_slice %a_val_0 { offsets = [0], sizes = [8], strides = [1]} :
+        %a_val_0_0 = vector.extract_strided_slice %a_val_0 offsets = [0], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_1_0 = vector.extract_strided_slice %a_val_0 { offsets = [8], sizes = [8], strides = [1]} :
+        %a_val_1_0 = vector.extract_strided_slice %a_val_0 offsets = [8], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_2_0 = vector.extract_strided_slice  %a_val_0 { offsets = [16], sizes = [8], strides = [1]} :
+        %a_val_2_0 = vector.extract_strided_slice  %a_val_0 offsets = [16], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_3_0 = vector.extract_strided_slice %a_val_0 { offsets = [24], sizes = [8], strides = [1]} :
+        %a_val_3_0 = vector.extract_strided_slice %a_val_0 offsets = [24], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_0_1 = vector.extract_strided_slice %a_val_1 { offsets = [0], sizes = [8], strides = [1]} :
+        %a_val_0_1 = vector.extract_strided_slice %a_val_1 offsets = [0], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_1_1 = vector.extract_strided_slice %a_val_1 {offsets = [8], sizes = [8], strides = [1]} :
+        %a_val_1_1 = vector.extract_strided_slice %a_val_1 offsets = [8], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_2_1 = vector.extract_strided_slice %a_val_1 { offsets = [16], sizes = [8], strides = [1]} :
+        %a_val_2_1 = vector.extract_strided_slice %a_val_1 offsets = [16], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
-        %a_val_3_1 = vector.extract_strided_slice %a_val_1 { offsets = [24], sizes = [8], strides = [1]} :
+        %a_val_3_1 = vector.extract_strided_slice %a_val_1 offsets = [24], sizes = [8], strides = [1] :
           vector<32xf16> to vector<8xf16>
 
         // do DPAS

@@ -3,7 +3,7 @@
 // -----
 func.func @test() -> vector<4x2xf16> {
   %cst = arith.constant dense<0.0> : vector<8x1xf32>
-  %1 = vector.extract_strided_slice %cst {offsets = [0, 0], sizes = [4, 1], strides = [1, 1]} : vector<8x1xf32> to vector<4x1xf32>
+  %1 = vector.extract_strided_slice %cst offsets = [0, 0], sizes = [4, 1], strides = [1, 1] : vector<8x1xf32> to vector<4x1xf32>
   //CHECK: %[[r1:.*]] = vector.bitcast %{{.*}} : vector<4xf32> to vector<8xf16>
   //CHECK: %[[r2:.*]] = vector.shape_cast %[[r1]] : vector<8xf16> to vector<4x2xf16>
   %2 = vector.bitcast %1 : vector<4x1xf32> to vector<4x2xf16>
@@ -16,9 +16,9 @@ func.func @test() -> vector<2x4xf32> {
   %src = arith.constant dense<1.0> : vector<1x2xf32>
   %dst = arith.constant dense<1.0> : vector<2x4xf32>
   //CHECK: vector.shuffle %{{.*}}, %{{.*}} [8, 9, 2, 3, 4, 5, 6, 7] : vector<8xf32>, vector<2xf32>
-  %1 = vector.insert_strided_slice %src, %dst {offsets = [0, 0], strides = [1, 1]} : vector<1x2xf32> into vector<2x4xf32>
+  %1 = vector.insert_strided_slice %src, %dst offsets = [0, 0], strides = [1, 1] : vector<1x2xf32> into vector<2x4xf32>
   //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 8, 9] : vector<8xf32>, vector<2xf32>
-  %2 = vector.insert_strided_slice %src, %1 {offsets = [1, 2], strides = [1, 1]} : vector<1x2xf32> into vector<2x4xf32>
+  %2 = vector.insert_strided_slice %src, %1 offsets = [1, 2], strides = [1, 1] : vector<1x2xf32> into vector<2x4xf32>
   return %2 : vector<2x4xf32>
 }
 
@@ -50,7 +50,7 @@ func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32>
   //CHECK-SAME: 120, 121, 122, 123, 124, 125, 126, 127] : vector<128xf32>, vector<32xf32>
   //CHECK: vector.shape_cast %{{.*}} : vector<128xf32> to vector<8x16xf32>
   %cst = arith.constant dense <0.0> : vector<8x16xf32>
-  %0 = vector.insert_strided_slice %arg0, %cst {offsets = [0, 0], strides = [1, 1]} : vector<4x8xf32> into vector<8x16xf32>
+  %0 = vector.insert_strided_slice %arg0, %cst offsets = [0, 0], strides = [1, 1] : vector<4x8xf32> into vector<8x16xf32>
   return %0 : vector<8x16xf32>
 }
 

@@ -35,19 +35,19 @@ module @argmax attributes {gpu.container_module} {
     %c0 = arith.constant 0 : index
     %memref = gpu.alloc  host_shared () : memref<1x4x4x3xf32>
     memref.copy %arg0, %memref : memref<1x4x4x3xf32> to memref<1x4x4x3xf32>
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<f32>
+    %alloc = memref.alloc() alignment = 64 : memref<f32>
     memref.store %cst, %alloc[] : memref<f32>
     %memref_0 = gpu.alloc  host_shared () : memref<f32>
     memref.copy %alloc, %memref_0 : memref<f32> to memref<f32>
     gpu.launch_func  @test_kernel::@test_kernel blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref : memref<1x4x4x3xf32>, %c0 : index, %memref_0 : memref<f32>, %c3 : index, %c1 : index, %c4 : index)
     %memref_1 = gpu.alloc  () : memref<1x4x4x3xi32>
     gpu.launch_func  @test_kernel_0::@test_kernel blocks in (%c1, %c4, %c4) threads in (%c1, %c1, %c1) args(%c0_i32 : i32, %memref_1 : memref<1x4x4x3xi32>, %c0 : index, %c3 : index, %c1 : index)
-    %alloc_2 = memref.alloc() {alignment = 64 : i64} : memref<i32>
+    %alloc_2 = memref.alloc() alignment = 64 : memref<i32>
     memref.store %c0_i32, %alloc_2[] : memref<i32>
     %memref_3 = gpu.alloc  host_shared () : memref<i32>
     memref.copy %alloc_2, %memref_3 : memref<i32> to memref<i32>
     gpu.launch_func  @test_kernel_1::@test_kernel blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref : memref<1x4x4x3xf32>, %c0 : index, %memref_0 : memref<f32>, %memref_1 : memref<1x4x4x3xi32>, %memref_3 : memref<i32>, %c0_i32 : i32, %c3 : index, %c1 : index, %c4 : index)
-    %alloc_4 = memref.alloc() {alignment = 64 : i64} : memref<i32>
+    %alloc_4 = memref.alloc() alignment = 64 : memref<i32>
     %0 = memref.load %memref_3[] : memref<i32>
     memref.store %0, %alloc_4[] : memref<i32>
     gpu.dealloc  %memref_1 : memref<1x4x4x3xi32>

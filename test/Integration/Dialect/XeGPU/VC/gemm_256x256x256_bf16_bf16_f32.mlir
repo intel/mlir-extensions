@@ -240,39 +240,39 @@ module @gemm attributes {gpu.container_module} {
         %88 = vector.shape_cast %74 : vector<2x8x16x2xbf16> to vector<512xbf16>
         %89 = vector.shape_cast %75 : vector<2x8x16x2xbf16> to vector<512xbf16>
         %90 = vector.shape_cast %76 : vector<2x8x16x2xbf16> to vector<512xbf16>
-        %91 = vector.extract_strided_slice %87 {offsets = [0], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %91 = vector.extract_strided_slice %87 offsets = [0], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %92 = vector.shape_cast %91 : vector<256xbf16> to vector<8x16x2xbf16>
-        %93 = vector.extract_strided_slice %87 {offsets = [256], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %93 = vector.extract_strided_slice %87 offsets = [256], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %94 = vector.shape_cast %93 : vector<256xbf16> to vector<8x16x2xbf16>
-        %95 = vector.extract_strided_slice %88 {offsets = [0], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %95 = vector.extract_strided_slice %88 offsets = [0], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %96 = vector.shape_cast %95 : vector<256xbf16> to vector<8x16x2xbf16>
-        %97 = vector.extract_strided_slice %88 {offsets = [256], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %97 = vector.extract_strided_slice %88 offsets = [256], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %98 = vector.shape_cast %97 : vector<256xbf16> to vector<8x16x2xbf16>
-        %99 = vector.extract_strided_slice %89 {offsets = [0], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %99 = vector.extract_strided_slice %89 offsets = [0], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %100 = vector.shape_cast %99 : vector<256xbf16> to vector<8x16x2xbf16>
-        %101 = vector.extract_strided_slice %89 {offsets = [256], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %101 = vector.extract_strided_slice %89 offsets = [256], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %102 = vector.shape_cast %101 : vector<256xbf16> to vector<8x16x2xbf16>
-        %103 = vector.extract_strided_slice %90 {offsets = [0], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %103 = vector.extract_strided_slice %90 offsets = [0], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %104 = vector.shape_cast %103 : vector<256xbf16> to vector<8x16x2xbf16>
-        %105 = vector.extract_strided_slice %90 {offsets = [256], sizes = [256], strides = [1]} : vector<512xbf16> to vector<256xbf16>
+        %105 = vector.extract_strided_slice %90 offsets = [256], sizes = [256], strides = [1] : vector<512xbf16> to vector<256xbf16>
         %106 = vector.shape_cast %105 : vector<256xbf16> to vector<8x16x2xbf16>
         %107 = vector.shape_cast %77 : vector<2x16x16xbf16> to vector<512xbf16>
         %108 = vector.shape_cast %78 : vector<2x16x16xbf16> to vector<512xbf16>
-        %109 = vector.extract_strided_slice %107 {offsets = [0], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %109 = vector.extract_strided_slice %107 offsets = [0], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %110 = vector.shape_cast %109 : vector<128xbf16> to vector<8x16xbf16>
-        %111 = vector.extract_strided_slice %107 {offsets = [128], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %111 = vector.extract_strided_slice %107 offsets = [128], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %112 = vector.shape_cast %111 : vector<128xbf16> to vector<8x16xbf16>
-        %113 = vector.extract_strided_slice %107 {offsets = [256], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %113 = vector.extract_strided_slice %107 offsets = [256], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %114 = vector.shape_cast %113 : vector<128xbf16> to vector<8x16xbf16>
-        %115 = vector.extract_strided_slice %107 {offsets = [384], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %115 = vector.extract_strided_slice %107 offsets = [384], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %116 = vector.shape_cast %115 : vector<128xbf16> to vector<8x16xbf16>
-        %117 = vector.extract_strided_slice %108 {offsets = [0], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %117 = vector.extract_strided_slice %108 offsets = [0], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %118 = vector.shape_cast %117 : vector<128xbf16> to vector<8x16xbf16>
-        %119 = vector.extract_strided_slice %108 {offsets = [128], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %119 = vector.extract_strided_slice %108 offsets = [128], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %120 = vector.shape_cast %119 : vector<128xbf16> to vector<8x16xbf16>
-        %121 = vector.extract_strided_slice %108 {offsets = [256], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %121 = vector.extract_strided_slice %108 offsets = [256], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %122 = vector.shape_cast %121 : vector<128xbf16> to vector<8x16xbf16>
-        %123 = vector.extract_strided_slice %108 {offsets = [384], sizes = [128], strides = [1]} : vector<512xbf16> to vector<128xbf16>
+        %123 = vector.extract_strided_slice %108 offsets = [384], sizes = [128], strides = [1] : vector<512xbf16> to vector<128xbf16>
         %124 = vector.shape_cast %123 : vector<128xbf16> to vector<8x16xbf16>
         xegpu.compile_hint
         %125 = xegpu.dpas %110, %92, %arg10 : vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>

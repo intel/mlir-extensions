@@ -20,7 +20,7 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>, %gpu_arg0: memre
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: memref.copy %arg0, %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
 
-  %0 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
+  %0 = memref.alloc() alignment = 128 : memref<2x5xf32>
   // OPENCL:  %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
 
   %c1_0 = arith.constant 1 : index

@@ -3,10 +3,10 @@
 module {
   func.func @copy_with_later_use(%arg0: memref<10x20xf32>) -> memref<10x20xf32> {
     %cst = arith.constant 0.000000e+00 : f32
-    %alloc = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
-    %alloc_0 = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
+    %alloc = memref.alloc() alignment = 128 : memref<10x20xf32>
+    %alloc_0 = memref.alloc() alignment = 128 : memref<10x20xf32>
     linalg.fill ins(%cst : f32) outs(%alloc_0 : memref<10x20xf32>)
-    %alloc_1 = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
+    %alloc_1 = memref.alloc() alignment = 128 : memref<10x20xf32>
     memref.copy %alloc_0, %alloc_1 : memref<10x20xf32> to memref<10x20xf32>
     "some_use" (%alloc_0) {} : (memref<10x20xf32>) -> ()
     // CHECK-LABEL: func @copy_with_later_use
@@ -21,10 +21,10 @@ module {
   }
   func.func @copy_without_later_use(%arg0: memref<10x20xf32>) -> memref<10x20xf32> {
     %cst = arith.constant 0.000000e+00 : f32
-    %alloc = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
-    %alloc_0 = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
+    %alloc = memref.alloc() alignment = 128 : memref<10x20xf32>
+    %alloc_0 = memref.alloc() alignment = 128 : memref<10x20xf32>
     linalg.fill ins(%cst : f32) outs(%alloc_0 : memref<10x20xf32>)
-    %alloc_1 = memref.alloc() {alignment = 128 : i64} : memref<10x20xf32>
+    %alloc_1 = memref.alloc() alignment = 128 : memref<10x20xf32>
     memref.copy %alloc_0, %alloc_1 : memref<10x20xf32> to memref<10x20xf32>
     // CHECK-LABEL: func @copy_without_later_use
     // CHECK:       linalg.generic

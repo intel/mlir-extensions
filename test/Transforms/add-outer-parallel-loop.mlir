@@ -58,7 +58,7 @@ func.func @two_dependent_loops_with_iterargs(%arg0: memref<10x20xf32>) -> memref
   %c20 = arith.constant 20 : index
   %cst = arith.constant 0.000000e+00 : f32
   %cst1 = arith.constant 1.000000e+00 : f32
-  %alloc = memref.alloc() {alignment = 128 : i64} : memref<f32>
+  %alloc = memref.alloc() alignment = 128 : memref<f32>
   // CHECK: scf.parallel
   // CHECK-NEXT: scf.for
   // CHECK-NEXT: scf.for

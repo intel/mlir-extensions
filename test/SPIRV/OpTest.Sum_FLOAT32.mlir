@@ -32,7 +32,7 @@ module @sum attributes {gpu.container_module} {
     %c0 = arith.constant 0 : index
     %memref = gpu.alloc  host_shared () : memref<10x20xf32>
     memref.copy %arg0, %memref : memref<10x20xf32> to memref<10x20xf32>
-    %alloc = memref.alloc() {alignment = 64 : i64} : memref<f32>
+    %alloc = memref.alloc() alignment = 64 : memref<f32>
     memref.store %cst, %alloc[] : memref<f32>
     %memref_0 = gpu.alloc  host_shared () : memref<f32>
     memref.copy %alloc, %memref_0 : memref<f32> to memref<f32>

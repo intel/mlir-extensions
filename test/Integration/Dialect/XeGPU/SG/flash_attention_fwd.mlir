@@ -126,14 +126,14 @@ module @flash_attention attributes {gpu.container_module} {
       %q_block_value_2 = xegpu.load_nd %q_tile[%sg_q_x_offset, %c32] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}  : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
       %q_block_value_3 = xegpu.load_nd %q_tile[%sg_q_x_offset, %c48] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>}  : !xegpu.tensor_desc<16x16xf16> -> vector<16x16xf16>
 
-      %q_block_value_0_0 = vector.extract_strided_slice %q_block_value_0 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_1_0 = vector.extract_strided_slice %q_block_value_0 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_0_1 = vector.extract_strided_slice %q_block_value_1 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_1_1 = vector.extract_strided_slice %q_block_value_1 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_0_2 = vector.extract_strided_slice %q_block_value_2 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_1_2 = vector.extract_strided_slice %q_block_value_2 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_0_3 = vector.extract_strided_slice %q_block_value_3 {offsets = [0, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
-      %q_block_value_1_3 = vector.extract_strided_slice %q_block_value_3 {offsets = [8, 0], sizes = [8, 16], strides = [1, 1]} : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_0_0 = vector.extract_strided_slice %q_block_value_0 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_1_0 = vector.extract_strided_slice %q_block_value_0 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_0_1 = vector.extract_strided_slice %q_block_value_1 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_1_1 = vector.extract_strided_slice %q_block_value_1 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_0_2 = vector.extract_strided_slice %q_block_value_2 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_1_2 = vector.extract_strided_slice %q_block_value_2 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_0_3 = vector.extract_strided_slice %q_block_value_3 offsets = [0, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
+      %q_block_value_1_3 = vector.extract_strided_slice %q_block_value_3 offsets = [8, 0], sizes = [8, 16], strides = [1, 1] : vector<16x16xf16> to vector<8x16xf16>
 
       // Inner loop. This loop iterate over K and V tiles and update the accumulator by computing softmax(q*k^T)*v
       %result:12 = scf.for %k = %c0 to %N_CTX step %BLOCK_N iter_args

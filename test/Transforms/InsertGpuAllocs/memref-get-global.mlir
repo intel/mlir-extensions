@@ -13,7 +13,7 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
   %c5 = arith.constant 5 : index
   %0 = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   %1 = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
-  %2 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
+  %2 = memref.alloc() alignment = 128 : memref<2x5xf32>
 
   // OPENCL: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>

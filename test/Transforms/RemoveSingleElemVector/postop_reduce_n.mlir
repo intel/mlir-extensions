@@ -63,14 +63,14 @@ module {
         %39 = vector.shape_cast %arg4 : vector<8x1xf32> to vector<8xf32>
         // Disabling remove single elem vector.extra_stride_slice for now.
         // CHECK-COUNT-8: vector.extract {{.*}} : f32 from vector<8x1xf32>
-        %40 = vector.extract_strided_slice %39 {offsets = [0], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %41 = vector.extract_strided_slice %39 {offsets = [1], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %42 = vector.extract_strided_slice %39 {offsets = [2], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %43 = vector.extract_strided_slice %39 {offsets = [3], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %44 = vector.extract_strided_slice %39 {offsets = [4], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %45 = vector.extract_strided_slice %39 {offsets = [5], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %46 = vector.extract_strided_slice %39 {offsets = [6], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %47 = vector.extract_strided_slice %39 {offsets = [7], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
+        %40 = vector.extract_strided_slice %39 offsets = [0], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %41 = vector.extract_strided_slice %39 offsets = [1], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %42 = vector.extract_strided_slice %39 offsets = [2], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %43 = vector.extract_strided_slice %39 offsets = [3], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %44 = vector.extract_strided_slice %39 offsets = [4], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %45 = vector.extract_strided_slice %39 offsets = [5], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %46 = vector.extract_strided_slice %39 offsets = [6], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %47 = vector.extract_strided_slice %39 offsets = [7], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
         %48 = arith.muli %arg3, %c512 : index
         %49 = arith.addi %48, %21 : index
         %50 = arith.addi %49, %24 : index
@@ -470,14 +470,14 @@ module {
         %364 = vector.shuffle %356, %359 [1, 3, 5, 7] : vector<4xf32>, vector<4xf32>
         %365 = arith.addf %363, %364 : vector<4xf32>
         %366 = vector.shuffle %362, %365 [0, 1, 2, 3, 4, 5, 6, 7] : vector<4xf32>, vector<4xf32>
-        %367 = vector.extract_strided_slice %366 {offsets = [0], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %368 = vector.extract_strided_slice %366 {offsets = [1], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %369 = vector.extract_strided_slice %366 {offsets = [2], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %370 = vector.extract_strided_slice %366 {offsets = [3], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %371 = vector.extract_strided_slice %366 {offsets = [4], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %372 = vector.extract_strided_slice %366 {offsets = [5], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %373 = vector.extract_strided_slice %366 {offsets = [6], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
-        %374 = vector.extract_strided_slice %366 {offsets = [7], sizes = [1], strides = [1]} : vector<8xf32> to vector<1xf32>
+        %367 = vector.extract_strided_slice %366 offsets = [0], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %368 = vector.extract_strided_slice %366 offsets = [1], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %369 = vector.extract_strided_slice %366 offsets = [2], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %370 = vector.extract_strided_slice %366 offsets = [3], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %371 = vector.extract_strided_slice %366 offsets = [4], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %372 = vector.extract_strided_slice %366 offsets = [5], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %373 = vector.extract_strided_slice %366 offsets = [6], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
+        %374 = vector.extract_strided_slice %366 offsets = [7], sizes = [1], strides = [1] : vector<8xf32> to vector<1xf32>
         // CHECK-COUNT=8: arith.addf %{{.*}}, %{{.*}} : f32
         %375 = arith.addf %40, %367 : vector<1xf32>
         %376 = arith.addf %41, %368 : vector<1xf32>
