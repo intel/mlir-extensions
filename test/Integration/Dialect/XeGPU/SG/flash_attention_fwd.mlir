@@ -66,7 +66,7 @@ module @flash_attention attributes {gpu.container_module} {
       %sg_q_x_offset = arith.addi %wg_q_x_offset, %sg_q_x_offset_t0 : index
 
       // Init Q tile
-      %q_tile  = xegpu.create_nd_tdesc %Q, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %q_tile  = xegpu.create_nd_tdesc %Q : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
 
       // Init K tile. K is transposed, HW only supports 32-bit transpose. So K tile is created in f32 dtype.
       %k_ptr_index = memref.extract_aligned_pointer_as_index %K : memref<?x?xf16> -> index
@@ -75,7 +75,7 @@ module @flash_attention attributes {gpu.container_module} {
       %k_tile_slice = xegpu.create_nd_tdesc %k_ptr_i64, shape: [%size_x, %BLOCK_MODEL_DIV_2], strides: [%BLOCK_MODEL_DIV_2, %c1] : i64 -> !xegpu.tensor_desc<16x8xf32>
 
       // Init V tile.
-      %v_tile_slice = xegpu.create_nd_tdesc %V, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %v_tile_slice = xegpu.create_nd_tdesc %V : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16>
 
       // K prefetch.
       // Prefetch 16x32 tiles in 4x2 layout to cover 64x64.
@@ -88,7 +88,7 @@ module @flash_attention attributes {gpu.container_module} {
       %prefetch_offset_x = arith.addi %wg_x_offset, %prefetch_offset_x_t0 : index
       %prefetch_offset_y = arith.muli %sg_layout_y, %c32 : index
 
-      %k_prefetch_tile = xegpu.create_nd_tdesc %K , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+      %k_prefetch_tile = xegpu.create_nd_tdesc %K : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       %prefetch_offset_x_plus_BLOCK_N = arith.addi %prefetch_offset_x, %BLOCK_N : index
       xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
@@ -96,7 +96,7 @@ module @flash_attention attributes {gpu.container_module} {
       xegpu.prefetch_nd %k_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
 
       // V prefetch is similar to K
-      %v_prefetch_tile = xegpu.create_nd_tdesc %V , shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
+      %v_prefetch_tile = xegpu.create_nd_tdesc %V : memref<?x?xf16> -> !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_BLOCK_N, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
       xegpu.prefetch_nd %v_prefetch_tile[%prefetch_offset_x_plus_2_BLOCK_N, %prefetch_offset_y]  {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<cached>, l3_hint = #xegpu.cache_hint<cached>} : !xegpu.tensor_desc<16x16xf16, #xegpu.block_tdesc_attr<array_length = 2>>
@@ -480,7 +480,7 @@ module @flash_attention attributes {gpu.container_module} {
 
       // FIXME: Output is stored in 8x16 shape even though HW can do 8x32 stores. This is due to limitation in vector
       // distribution. Inserting 8x16 into 8x32 is not supported in subgroup distribution.
-      %o_tile  = xegpu.create_nd_tdesc %Out, shape: [%size_x, %BLOCK_DMODEL], strides: [%BLOCK_DMODEL, %c1] : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %o_tile  = xegpu.create_nd_tdesc %Out : memref<?x?xf16> -> !xegpu.tensor_desc<8x16xf16>
 
       xegpu.store_nd %o_val_final_0_0, %o_tile[%sg_q_x_offset, %c0]  {l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>} : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
       xegpu.store_nd %o_val_final_0_1, %o_tile[%sg_q_x_offset, %c16]  {l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<write_back>, l3_hint = #xegpu.cache_hint<write_back>} : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
