@@ -14,6 +14,10 @@
 
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 
+#include <llvm/ADT/SmallBitVector.h>
+
+#include <optional>
+
 unsigned imex::ndarray::InsertSliceOp::getDestinationRank() {
   auto dstType = getDestination().getType();
   return mlir::dyn_cast<mlir::RankedTensorType>(dstType).getRank();
@@ -80,6 +84,48 @@ void imex::ndarray::InsertSliceOp::build(
 
 namespace {
 
+/// Compute the dimensions of a rank-extending insert_slice op which are dropped
+/// in its source, i.e. which of the (destination-rank many) `mixedSizes` have
+/// no corresponding dimension in `reducedShape` (the source shape).
+/// Ported from mlir::tensor (getDroppedDims), but reports a mismatch instead of
+/// asserting so that the caller can simply bail out.
+static std::optional<llvm::SmallBitVector>
+computeDroppedDims(mlir::ArrayRef<int64_t> reducedShape,
+                   mlir::ArrayRef<mlir::OpFoldResult> mixedSizes) {
+  llvm::SmallBitVector droppedDims(mixedSizes.size());
+  int64_t shapePos = static_cast<int64_t>(reducedShape.size()) - 1;
+
+  for (const auto &size : llvm::enumerate(llvm::reverse(mixedSizes))) {
+    size_t idx = mixedSizes.size() - size.index() - 1;
+    // Rank-reduced dims must have a static unit dimension.
+    bool isStaticUnitSize = mlir::getConstantIntValue(size.value()) == 1;
+
+    if (shapePos < 0) {
+      // There are no more dims in the reduced shape. All remaining sizes must
+      // be rank-reduced dims.
+      if (!isStaticUnitSize)
+        return std::nullopt;
+      droppedDims.set(idx);
+      continue;
+    }
+
+    // Dim is preserved if the size is not a static 1 or if the reduced shape
+    // dim is also 1.
+    if (!isStaticUnitSize || reducedShape[shapePos] == 1) {
+      --shapePos;
+      continue;
+    }
+
+    // Otherwise: Dim is dropped.
+    droppedDims.set(idx);
+  }
+
+  // Dimension mismatch: not all source dims were matched.
+  if (shapePos >= 0)
+    return std::nullopt;
+  return droppedDims;
+}
+
 /// Pattern to rewrite a insert_slice op with constant arguments.
 /// Ported from mlir::tensor::InsertSliceOp
 template <typename InsertOpTy>
@@ -105,28 +151,21 @@ public:
       return mlir::failure();
 
     auto sourceType = insertSliceOp.getSourceType();
-    auto dstTnsrType = insertSliceOp.getDestinationType();
 
-    // Create the new op in canonical form.
-    auto sourceTnsrType =
-        mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-            insertSliceOp.getSourceType().getRank(), dstTnsrType, mixedSizes);
-    auto newSourceType = sourceType.cloneWith(sourceTnsrType.getShape(),
-                                              sourceTnsrType.getElementType());
+    // Create the new op in canonical form. Apply the rank transformation of
+    // the original op (instead of inferring a canonical one) so that the
+    // folded source type keeps matching the sliced destination dimensions.
+    auto droppedDims = computeDroppedDims(sourceType.getShape(), mixedSizes);
+    if (!droppedDims)
+      return mlir::failure();
+    auto newSourceType =
+        mlir::tensor::inferSliceType(sourceType, mixedSizes, *droppedDims);
 
     mlir::Value toInsert = insertSliceOp.getSource();
     if (newSourceType != sourceType) {
-      if (sourceType.getRank() == 0) {
-        if (newSourceType.getRank() > 1) {
-          return mlir::failure();
-        }
-      } else if (newSourceType.getRank() != sourceType.getRank()) {
-        return mlir::failure();
-      } else {
-        mlir::OpBuilder::InsertionGuard g(rewriter);
-        toInsert = mlir::tensor::CastOp::create(
-            rewriter, insertSliceOp.getLoc(), newSourceType, toInsert);
-      }
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      toInsert = mlir::tensor::CastOp::create(rewriter, insertSliceOp.getLoc(),
+                                              newSourceType, toInsert);
     }
 
     rewriter.replaceOpWithNewOp<InsertOpTy>(
