@@ -1,0 +1,16 @@
+name: "IMEX CodeQL config"
+
+# paths/paths-ignore apply to interpreted languages and to no-build (build-mode: none)
+# analysis. For build-mode: manual C++, scope is determined by what the build compiles.
+paths-ignore:
+  - build_tools/patches
+  - docs
+  - '**/*.md'
+  # Generated/scaffolding Python that is not shipped:
+  - test/lit.cfg.py
+
+query-filters:
+  # Example placeholder -- add exclusions only with a written justification during
+  # Phase 3 triage. Prefer dismissing individual alerts with a reason in the UI over
+  # blanket filters, so coverage regressions stay visible.
+  []
