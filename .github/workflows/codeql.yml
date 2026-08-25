@@ -44,7 +44,7 @@ jobs:
           # Phase 1: build-mode none (public preview for C/C++, no LLVM needed).
           # Phase 2: switch to manual and enable the build steps below.
           - language: c-cpp
-            build-mode: none
+            build-mode: manual
 
     defaults:
       run:
