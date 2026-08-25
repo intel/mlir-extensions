@@ -1,0 +1,124 @@
+name: CodeQL
+
+on:
+  schedule:
+    # Weekly, Tuesday 05:23 UTC. Off-peak; avoids top-of-hour scheduling congestion.
+    - cron: '23 5 * * 2'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - '.github/workflows/**'
+
+permissions: read-all
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.language == 'c-cpp' && 360 || 30 }}
+
+    permissions:
+      security-events: write   # required to upload SARIF
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: python
+            build-mode: none
+          # Phase 1: build-mode none (public preview for C/C++, no LLVM needed).
+          # Phase 2: switch to manual and enable the build steps below.
+          - language: c-cpp
+            build-mode: none
+
+    defaults:
+      run:
+        shell: bash -leo pipefail {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- Phase 2 only: build MLIR + IMEX so CodeQL can trace the compiler ----
+      - name: Setup cache vars
+        if: matrix.build-mode == 'manual'
+        run: echo "LLVM_SHA=$(cat build_tools/llvm_version.txt)" | tee -a $GITHUB_ENV
+
+      - name: Restore LLVM-MLIR install (shared with build.yml)
+        if: matrix.build-mode == 'manual'
+        id: cache-llvm
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/mlir
+          # Must match the key written by build.yml (bump LLVM_CACHE_NUMBER there in lockstep).
+          key: ${{ runner.os }}-build-llvm-2-${{ env.LLVM_SHA }}
+
+      - name: Install build tools
+        if: matrix.build-mode == 'manual'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build binutils
+
+      - name: Build LLVM-MLIR (cache miss only)
+        if: matrix.build-mode == 'manual' && steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch
+          cd llvm-project
+          git checkout "$LLVM_SHA"
+          git apply ../build_tools/patches/*.patch
+          cmake -G Ninja -B build -S llvm \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DLLVM_ENABLE_PROJECTS=mlir \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_USE_LINKER=gold \
+            -DLLVM_INSTALL_UTILS=ON \
+            -DLLVM_TARGETS_TO_BUILD="X86;SPIRV" \
+            -DLLVM_ENABLE_BINDINGS=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/mlir
+          cmake --build build --target install
+          rm -rf build   # reclaim runner disk before CodeQL DB creation
+
+      # ---- CodeQL ----
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+          # Phase 3: uncomment once the initial backlog is cleared.
+          # queries: security-extended
+
+      # Standalone (out-of-tree) IMEX build: puts ONLY IMEX C++ in the database.
+      # Do NOT use scripts/compile.sh here -- it configures LLVM with
+      # LLVM_EXTERNAL_PROJECTS=Imex and would pull all of LLVM into the DB.
+      - name: Build IMEX
+        if: matrix.build-mode == 'manual'
+        run: |
+          pip install lit
+          cmake -S . -B _build -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_EXTERNAL_LIT="$(which lit)" \
+            -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir \
+            -DLLVM_LIT_ARGS=-a
+          cmake --build _build   # build targets only; lit tests are not needed for CodeQL
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
