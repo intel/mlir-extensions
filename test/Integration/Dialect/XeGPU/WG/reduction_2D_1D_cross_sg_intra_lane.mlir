@@ -27,7 +27,7 @@ module attributes {gpu.container_module} {
 
       %offset = vector.step : vector<32xindex>
       %mask = arith.constant dense<1> : vector<32xi1>
-      xegpu.store %res, %dst_ptr_i64[%offset], %mask { layout = #xegpu.slice<#data_layout, dims = [0]> } : vector<32xf32>, i64, vector<32xindex>, vector<32xi1>
+      xegpu.store %res, %dst_ptr_i64[%offset], %mask <{layout = #xegpu.slice<#data_layout, dims = [0]>}> : vector<32xf32>, i64, vector<32xindex>, vector<32xi1>
       gpu.return
     }
   }

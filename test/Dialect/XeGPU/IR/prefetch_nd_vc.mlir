@@ -23,7 +23,7 @@ func.func @test_prefetch_nd_tdesc_vc_1(%src: memref<24x32xf16>, %x : index, %y :
   %1 = xegpu.create_nd_tdesc %src
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK: xegpu.prefetch_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : !xegpu.tensor_desc<8x16xf16>
-  xegpu.prefetch_nd %1[%x, %y] {l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}: !xegpu.tensor_desc<8x16xf16>
+  xegpu.prefetch_nd %1[%x, %y] <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}>: !xegpu.tensor_desc<8x16xf16>
   return
 }
 
@@ -48,6 +48,6 @@ func.func @test_prefetch_nd_tdesc_vc_bf16(%src: memref<24x32xbf16>, %x : index, 
   %1 = xegpu.create_nd_tdesc %src
       : memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16>
   // CHECK: xegpu.prefetch_nd %{{.*}} <{l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<cached>}> : !xegpu.tensor_desc<8x16xbf16>
-  xegpu.prefetch_nd %1[%x, %y] {l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<cached>}: !xegpu.tensor_desc<8x16xbf16>
+  xegpu.prefetch_nd %1[%x, %y] <{l1_hint = #xegpu.cache_hint<uncached>, l2_hint = #xegpu.cache_hint<cached>}>: !xegpu.tensor_desc<8x16xbf16>
   return
 }

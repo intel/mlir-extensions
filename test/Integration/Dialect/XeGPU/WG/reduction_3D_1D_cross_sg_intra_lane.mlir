@@ -23,7 +23,7 @@ module attributes {gpu.container_module} {
 
       %offset_ld = arith.constant dense<0> : vector<1x256x256xindex>
       %mask_ld = arith.constant dense<1> : vector<1x256x256xi1>
-      %val = xegpu.load %src_ptr_i64[%offset_ld], %mask_ld {layout = #data_layout_leading_unit_dim} : i64, vector<1x256x256xindex>, vector<1x256x256xi1> -> vector<1x256x256xf32>
+      %val = xegpu.load %src_ptr_i64[%offset_ld], %mask_ld <{layout = #data_layout_leading_unit_dim}> : i64, vector<1x256x256xindex>, vector<1x256x256xi1> -> vector<1x256x256xf32>
 
       %acc = arith.constant dense<0.0> : vector<1xf32>
       %res = vector.multi_reduction <add>, %val, %acc [1, 2] : vector<1x256x256xf32> to vector<1xf32>
@@ -31,7 +31,7 @@ module attributes {gpu.container_module} {
       %offset = arith.constant dense<0> : vector<1xindex>
       %mask = arith.constant dense<1> : vector<1xi1>
 
-      xegpu.store %res, %dst_ptr_i64[%offset], %mask { layout = #xegpu.slice<#data_layout_leading_unit_dim, dims = [1, 2]>} : vector<1xf32>, i64, vector<1xindex>, vector<1xi1>
+      xegpu.store %res, %dst_ptr_i64[%offset], %mask <{layout = #xegpu.slice<#data_layout_leading_unit_dim, dims = [1, 2]>}> : vector<1xf32>, i64, vector<1xindex>, vector<1xi1>
       gpu.return
     }
   }

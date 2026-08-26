@@ -96,11 +96,11 @@ module attributes {gpu.container_module} {
           !xegpu.tensor_desc<16x128xf16, #xegpu.block_tdesc_attr<boundary_check = false>, #xegpu.layout<sg_layout = [1, 4], sg_data = [16, 32]>>
           -> vector<16x128xf16>
         %8 = xegpu.dpas %6, %7, %arg4
-          {
+          <{
             layout_a = #xegpu.layout<sg_layout = [2, 1], sg_data = [32, 16]>,
             layout_b = #xegpu.layout<sg_layout = [1, 4], sg_data = [16, 32]>,
             layout_cd = #xegpu.layout<sg_layout = [2, 4], sg_data = [32, 32]>
-          } : vector<64x16xf16>, vector<16x128xf16>, vector<64x128xf16> -> vector<64x128xf16>
+          }> : vector<64x16xf16>, vector<16x128xf16>, vector<64x128xf16> -> vector<64x128xf16>
         scf.yield %8 : vector<64x128xf16>
       }
       %5 = xegpu.create_nd_tdesc %arg2 : memref<4096x4096xf16> ->

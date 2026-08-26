@@ -35,7 +35,7 @@ gpu.module @reduction {
 
       %offset = vector.step : vector<8xindex>
       %mask = arith.constant dense<1> : vector<8xi1>
-      xegpu.store %res, %dst_ptr_i64[%offset], %mask { layout = #xegpu.slice<#data_layout, dims = [1]> } : vector<8xf32>, i64, vector<8xindex>, vector<8xi1>
+      xegpu.store %res, %dst_ptr_i64[%offset], %mask <{layout = #xegpu.slice<#data_layout, dims = [1]>}> : vector<8xf32>, i64, vector<8xindex>, vector<8xi1>
       gpu.return
     }
   }

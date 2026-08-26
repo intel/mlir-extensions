@@ -36,16 +36,16 @@ module attributes {gpu.container_module} {
       %8 = vector.broadcast %7 {layout_result_0 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<32xi1> to vector<16x32xi1>
       %intptr = memref.extract_aligned_pointer_as_index %arg0 : memref<16x16xbf16> -> index
       %9 = arith.index_cast %intptr : index to i64
-      %10 = xegpu.load %9[%6], %8  {layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : i64, vector<16x32xindex>, vector<16x32xi1> -> vector<16x32xbf16>
+      %10 = xegpu.load %9[%6], %8  <{layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>}> : i64, vector<16x32xindex>, vector<16x32xi1> -> vector<16x32xbf16>
       %11 = arith.select %8, %10, %cst_0 {layout_result_0 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<16x32xi1>, vector<16x32xbf16>
       %intptr_1 = memref.extract_aligned_pointer_as_index %arg1 : memref<16x16xbf16> -> index
       %12 = arith.index_cast %intptr_1 : index to i64
-      %13 = xegpu.load %12[%6], %8  {layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : i64, vector<16x32xindex>, vector<16x32xi1> -> vector<16x32xbf16>
+      %13 = xegpu.load %12[%6], %8  <{layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>}> : i64, vector<16x32xindex>, vector<16x32xi1> -> vector<16x32xbf16>
       %14 = arith.select %8, %13, %cst_0 {layout_result_0 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<16x32xi1>, vector<16x32xbf16>
       %15 = arith.addf %11, %14 {layout_result_0 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<16x32xbf16>
       %intptr_2 = memref.extract_aligned_pointer_as_index %arg2 : memref<16x16xbf16> -> index
       %16 = arith.index_cast %intptr_2 : index to i64
-      xegpu.store %15, %16[%6], %8  {layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>, layout_operand_2 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<16x32xbf16>, i64, vector<16x32xindex>, vector<16x32xi1>
+      xegpu.store %15, %16[%6], %8  <{layout = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>}> {layout_operand_2 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [16, 1], sg_data = [1, 32]>} : vector<16x32xbf16>, i64, vector<16x32xindex>, vector<16x32xi1>
       gpu.return
     }
   }

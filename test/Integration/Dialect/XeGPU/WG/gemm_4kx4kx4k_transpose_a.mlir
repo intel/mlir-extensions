@@ -44,7 +44,7 @@ module attributes {gpu.container_module} {
         %6 = xegpu.load_nd %2[%arg3, %1] <{layout = #xegpu.layout<sg_layout = [4, 8], sg_data = [32, 32], inst_data = [16, 16]>}> : !xegpu.tensor_desc<32x256xf16, #xegpu.block_tdesc_attr<boundary_check = false>> -> vector<32x256xf16>
         %7 = xegpu.load_nd %3[%arg3, %0] <{layout = #xegpu.layout<sg_layout = [8, 4], sg_data = [32, 64], inst_data = [16, 16], order = [0, 1]>}> : !xegpu.tensor_desc<32x256xf16, #xegpu.block_tdesc_attr<boundary_check = false>> -> vector<32x256xf16>
         %8 = vector.transpose %7, [1, 0] : vector<32x256xf16> to vector<256x32xf16>
-        %9 = xegpu.dpas %8, %6, %arg4 {layout_a = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [8, 16]>, layout_b = #xegpu.layout<sg_layout = [4, 8], sg_data = [32, 32], inst_data = [16, 16]>, layout_cd = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [8, 16]>} : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
+        %9 = xegpu.dpas %8, %6, %arg4 <{layout_a = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [8, 16]>, layout_b = #xegpu.layout<sg_layout = [4, 8], sg_data = [32, 32], inst_data = [16, 16]>, layout_cd = #xegpu.layout<sg_layout = [4, 8], sg_data = [64, 32], inst_data = [8, 16]>}> : vector<256x32xf16>, vector<32x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
         scf.yield %9 : vector<256x256xf32>
       }
       %5 = xegpu.create_nd_tdesc %arg2 : memref<4096x4096xf32> -> !xegpu.tensor_desc<256x256xf32, #xegpu.block_tdesc_attr<boundary_check = false>>
