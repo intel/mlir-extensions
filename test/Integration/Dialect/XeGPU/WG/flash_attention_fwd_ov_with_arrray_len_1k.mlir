@@ -116,7 +116,7 @@ module @fragment_name attributes {gpu.container_module} {
 
       // Compute Q * K^T
       %k_value_t = vector.transpose %k_value, [1, 0] : vector<64x64xf16> to vector<64x64xf16>
-      %qk_out = xegpu.dpas %q_value, %k_value_t, %zero_acc {layout_a = #q, layout_b = #kv, layout_cd = #q} : vector<128x64xf16>, vector<64x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+      %qk_out = xegpu.dpas %q_value, %k_value_t, %zero_acc <{layout_a = #q, layout_b = #kv, layout_cd = #q}> : vector<128x64xf16>, vector<64x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
       %qk_scaled = arith.mulf %qk_out, %qk_scale : vector<128x64xf32>
 
       // Online softmax: compute row-wise max
@@ -147,7 +147,7 @@ module @fragment_name attributes {gpu.container_module} {
       %p_out_f16 = arith.truncf %p_out : vector<128x64xf32> to vector<128x64xf16>
 
       // Compute P * V and add to scaled accumulator
-      %pv_out = xegpu.dpas %p_out_f16, %v_value, %acc_scaled {layout_a = #q, layout_b = #kv, layout_cd = #q} : vector<128x64xf16>, vector<64x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
+      %pv_out = xegpu.dpas %p_out_f16, %v_value, %acc_scaled <{layout_a = #q, layout_b = #kv, layout_cd = #q}> : vector<128x64xf16>, vector<64x64xf16>, vector<128x64xf32> -> vector<128x64xf32>
 
       scf.yield %pv_out, %m_ij, %l_i_new : vector<128x64xf32>, vector<128xf32>, vector<128xf32>
     }

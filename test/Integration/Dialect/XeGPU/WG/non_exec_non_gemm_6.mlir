@@ -34,14 +34,14 @@ module attributes {gpu.container_module} {
       %6 = arith.addi %4, %5 {layout_result_0 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : vector<8x32xindex>
       %intptr = memref.extract_aligned_pointer_as_index %arg0 : memref<256xf16> -> index
       %7 = arith.index_cast %intptr : index to i64
-      %8 = xegpu.load %7[%6], %cst_0  {layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : i64, vector<8x32xindex>, vector<8x32xi1> -> vector<8x32xf16>
+      %8 = xegpu.load %7[%6], %cst_0  <{layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>}> : i64, vector<8x32xindex>, vector<8x32xi1> -> vector<8x32xf16>
       %intptr_1 = memref.extract_aligned_pointer_as_index %arg1 : memref<256xf16> -> index
       %9 = arith.index_cast %intptr_1 : index to i64
-      %10 = xegpu.load %9[%6], %cst_0  {layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : i64, vector<8x32xindex>, vector<8x32xi1> -> vector<8x32xf16>
+      %10 = xegpu.load %9[%6], %cst_0  <{layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>}> : i64, vector<8x32xindex>, vector<8x32xi1> -> vector<8x32xf16>
       %11 = arith.addf %8, %10 {layout_result_0 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : vector<8x32xf16>
       %intptr_2 = memref.extract_aligned_pointer_as_index %arg2 : memref<256xf16> -> index
       %12 = arith.index_cast %intptr_2 : index to i64
-      xegpu.store %11, %12[%6], %cst_0  {layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>, layout_operand_2 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : vector<8x32xf16>, i64, vector<8x32xindex>, vector<8x32xi1>
+      xegpu.store %11, %12[%6], %cst_0  <{layout = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>}> {layout_operand_2 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [8, 1], sg_data = [1, 32]>} : vector<8x32xf16>, i64, vector<8x32xindex>, vector<8x32xi1>
       gpu.return
     }
   }

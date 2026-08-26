@@ -106,7 +106,7 @@ module @gemm attributes {gpu.container_module} {
         %16 = xegpu.load_nd %11[%arg4, %1] <{layout = #b_load}> : !xegpu.tensor_desc<64x256xf16, #xegpu.block_tdesc_attr<boundary_check = false>> -> vector<64x256xf16>
         %17 = xegpu.convert_layout %15 <{input_layout = #a_load, target_layout = #a}> : vector<256x64xf16>
         %18 = xegpu.convert_layout %16 <{input_layout = #b_load, target_layout = #b}> : vector<64x256xf16>
-        %19 = xegpu.dpas %17, %18, %arg5 {layout_a = #a, layout_b = #b, layout_cd = #c} : vector<256x64xf16>, vector<64x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
+        %19 = xegpu.dpas %17, %18, %arg5 <{layout_a = #a, layout_b = #b, layout_cd = #c}> : vector<256x64xf16>, vector<64x256xf16>, vector<256x256xf32> -> vector<256x256xf32>
         scf.yield %19 : vector<256x256xf32>
       }
       %13 = arith.addf %7, %12 : vector<256x256xf32>

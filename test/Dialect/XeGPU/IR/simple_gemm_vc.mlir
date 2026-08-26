@@ -39,7 +39,7 @@ func.func @test_gemm_vc_bf16(%a : memref<1024x1024xbf16>, %b: memref<1024x1024xb
 
         // CHECK: xegpu.load_nd
         // CHECK-SAME: !xegpu.tensor_desc<16x16xbf16> -> vector<8x16x2xbf16>
-        %5 = xegpu.load_nd %subB[%c0, %j] {packed} : !xegpu.tensor_desc<16x16xbf16> -> vector<8x16x2xbf16>
+        %5 = xegpu.load_nd %subB[%c0, %j] <{packed}> : !xegpu.tensor_desc<16x16xbf16> -> vector<8x16x2xbf16>
 
         // CHECK: xegpu.dpas
         // CHECK-SAME: vector<8x16xbf16>, vector<8x16x2xbf16>, vector<8x16xf32> -> vector<8x16xf32>

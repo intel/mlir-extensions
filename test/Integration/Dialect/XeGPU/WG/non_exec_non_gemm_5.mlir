@@ -64,7 +64,7 @@ module attributes {gpu.container_module} {
       %24 = arith.addi %23, %16 {layout_result_0 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xindex>
       %intptr = memref.extract_aligned_pointer_as_index %arg1 : memref<32x2x192xf32> -> index
       %25 = arith.index_cast %intptr : index to i64
-      xegpu.store %4, %25[%24], %cst_2  {layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_2 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xf32>, i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1>
+      xegpu.store %4, %25[%24], %cst_2  <{layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>}> {layout_operand_2 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xf32>, i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1>
       gpu.return
     }
   }

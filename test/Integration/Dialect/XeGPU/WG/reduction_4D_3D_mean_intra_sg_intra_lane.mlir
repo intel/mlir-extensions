@@ -66,7 +66,7 @@ module attributes {gpu.container_module} {
       %37 = arith.addi %36, %33 : vector<1x1x16x1xindex>
       %intptr_8 = memref.extract_aligned_pointer_as_index %arg1 : memref<1x24x1024x1xf32> -> index
       %38 = arith.index_cast %intptr_8 : index to i64
-      xegpu.store %24, %38[%37], %cst {layout = #xegpu.layout<sg_layout = [1, 1, 1, 1], sg_data = [1, 1, 16, 1]>} : vector<1x1x16x1xf32>, i64, vector<1x1x16x1xindex>, vector<1x1x16x1xi1>
+      xegpu.store %24, %38[%37], %cst <{layout = #xegpu.layout<sg_layout = [1, 1, 1, 1], sg_data = [1, 1, 16, 1]>}> : vector<1x1x16x1xf32>, i64, vector<1x1x16x1xindex>, vector<1x1x16x1xi1>
       gpu.return
     }
   }

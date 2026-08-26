@@ -60,14 +60,14 @@ module attributes {gpu.container_module} {
       %22 = arith.addi %21, %14 {layout_result_0 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xindex>
       %intptr = memref.extract_aligned_pointer_as_index %arg0 : memref<32x2x192xf32> -> index
       %23 = arith.index_cast %intptr : index to i64
-      %24 = xegpu.load %23[%22], %cst_2  {layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1> -> vector<2x2x6x32xf32>
+      %24 = xegpu.load %23[%22], %cst_2  <{layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>}> : i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1> -> vector<2x2x6x32xf32>
       %intptr_4 = memref.extract_aligned_pointer_as_index %arg1 : memref<32x2x192xf32> -> index
       %25 = arith.index_cast %intptr_4 : index to i64
-      %26 = xegpu.load %25[%22], %cst_2  {layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1> -> vector<2x2x6x32xf32>
+      %26 = xegpu.load %25[%22], %cst_2  <{layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>}> : i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1> -> vector<2x2x6x32xf32>
       %27 = arith.minimumf %24, %26 fastmath<nnan> {layout_result_0 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xf32>
       %intptr_5 = memref.extract_aligned_pointer_as_index %arg2 : memref<32x2x192xf32> -> index
       %28 = arith.index_cast %intptr_5 : index to i64
-      xegpu.store %27, %28[%22], %cst_2  {layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_2 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xf32>, i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1>
+      xegpu.store %27, %28[%22], %cst_2  <{layout = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>}> {layout_operand_2 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>, layout_operand_3 = #xegpu.layout<sg_layout = [2, 2, 6, 1], sg_data = [1, 1, 1, 32]>} : vector<2x2x6x32xf32>, i64, vector<2x2x6x32xindex>, vector<2x2x6x32xi1>
       gpu.return
     }
   }
