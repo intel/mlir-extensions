@@ -23,10 +23,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Interpreted languages and workflow files. These need no build, so they are cheap
+  # enough to run on every push and pull request.
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: ${{ matrix.language == 'c-cpp' && 360 || 30 }}
+    # Public repo only.
+    if: github.repository == 'intel/mlir-extensions'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
 
     permissions:
       security-events: write   # required to upload SARIF
@@ -36,15 +40,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: actions
-            build-mode: none
-          - language: python
-            build-mode: none
-          # Phase 1: build-mode none (public preview for C/C++, no LLVM needed).
-          # Phase 2: switch to manual and enable the build steps below.
-          - language: c-cpp
-            build-mode: manual
+        language: [actions, python]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+          # Uncomment once the initial backlog is cleared.
+          # queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  # C++ needs a traced build, which means a full LLVM/MLIR build whenever the cache
+  # written by build.yml has been evicted (~2 h). Restrict it to the weekly schedule and
+  # to manual runs so that ordinary pull requests -- which only ever match the .py and
+  # workflow path filters above -- are not billed for it.
+  analyze-cpp:
+    name: Analyze (c-cpp)
+    if: >-
+      github.repository == 'intel/mlir-extensions'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    permissions:
+      security-events: write   # required to upload SARIF
+      contents: read
+      actions: read
 
     defaults:
       run:
@@ -54,13 +85,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---- Phase 2 only: build MLIR + IMEX so CodeQL can trace the compiler ----
       - name: Setup cache vars
-        if: matrix.build-mode == 'manual'
         run: echo "LLVM_SHA=$(cat build_tools/llvm_version.txt)" | tee -a $GITHUB_ENV
 
       - name: Restore LLVM-MLIR install (shared with build.yml)
-        if: matrix.build-mode == 'manual'
         id: cache-llvm
         uses: actions/cache/restore@v4
         with:
@@ -69,13 +97,12 @@ jobs:
           key: ${{ runner.os }}-build-llvm-2-${{ env.LLVM_SHA }}
 
       - name: Install build tools
-        if: matrix.build-mode == 'manual'
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build binutils
 
       - name: Build LLVM-MLIR (cache miss only)
-        if: matrix.build-mode == 'manual' && steps.cache-llvm.outputs.cache-hit != 'true'
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/llvm/llvm-project --branch main --single-branch
           cd llvm-project
@@ -94,21 +121,19 @@ jobs:
           cmake --build build --target install
           rm -rf build   # reclaim runner disk before CodeQL DB creation
 
-      # ---- CodeQL ----
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          languages: c-cpp
+          build-mode: manual
           config-file: ./.github/codeql/codeql-config.yml
-          # Phase 3: uncomment once the initial backlog is cleared.
+          # Uncomment once the initial backlog is cleared.
           # queries: security-extended
 
       # Standalone (out-of-tree) IMEX build: puts ONLY IMEX C++ in the database.
       # Do NOT use scripts/compile.sh here -- it configures LLVM with
       # LLVM_EXTERNAL_PROJECTS=Imex and would pull all of LLVM into the DB.
       - name: Build IMEX
-        if: matrix.build-mode == 'manual'
         run: |
           pip install lit
           cmake -S . -B _build -GNinja \
@@ -121,4 +146,4 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: /language:${{ matrix.language }}
+          category: /language:c-cpp
