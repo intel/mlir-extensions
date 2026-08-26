@@ -27,12 +27,9 @@ jobs:
   # enough to run on every push and pull request.
   analyze:
     name: Analyze (${{ matrix.language }})
-    # Public repo only. sync.yml merges upstream/main into the innersource repo, so this
-    # file lands there as well; the guard keeps it dormant there. Same idiom as
-    # coverity.yml. The innersource repo has no GitHub-hosted runners and would need
-    # Advanced Security seats, so it must not run there.
+    # Public repo only.
     if: github.repository == 'intel/mlir-extensions'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     permissions:
@@ -72,7 +69,7 @@ jobs:
     if: >-
       github.repository == 'intel/mlir-extensions'
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 360
 
     permissions:
