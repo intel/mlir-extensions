@@ -28,12 +28,13 @@ module {
       return %arg0 : memref<4096x4096xf16>
     }
     gpu.module @run_kernel {
+      // Discardable attributes print before the inherent ones.
       // OPENCL-LABEL: gpu.func @run_kernel(%arg0: memref<4096x4096xf16>) kernel attributes
-      // OPENCL-SAME:    {known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>,
-      // OPENCL-SAME:     spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+      // OPENCL-SAME:    {spirv.entry_point_abi = #spirv.entry_point_abi<>,
+      // OPENCL-SAME:     known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>} {
       // VULKAN-LABEL: gpu.func @run_kernel(%arg0: memref<4096x4096xf16>) kernel attributes
-      // VULKAN-SAME:    {known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>,
-      // VULKAN-SAME:     spirv.entry_point_abi = #spirv.entry_point_abi<workgroup_size = [1, 1, 1]>} {
+      // VULKAN-SAME:    {spirv.entry_point_abi = #spirv.entry_point_abi<workgroup_size = [1, 1, 1]>,
+      // VULKAN-SAME:     known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>} {
       gpu.func @run_kernel(%arg0: memref<4096x4096xf16>) kernel attributes {known_block_size = array<i32: 1, 1, 1>, known_grid_size = array<i32: 1, 1, 1>} {
       gpu.return
       }
