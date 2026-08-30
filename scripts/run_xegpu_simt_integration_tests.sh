@@ -45,16 +45,21 @@ print_usage() {
     echo "Options:"
     echo "  -t, --test <pattern>   Test name pattern (regex) to pass to LIT --filter"
     echo "                         Example: -t 'load_nd.*f16' or -t 'transpose'"
+    echo "  --upstream-tests       Run upstream MLIR XeGPU integration tests (LANE/SG/WG)"
+    echo "                         directly via mlir-opt/mlir-runner (default: enabled)"
+    echo "  --no-upstream-tests    Skip the upstream MLIR XeGPU integration tests"
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 /path/to/llvm-project"
     echo "  $0 -t 'load_nd.*f16' /path/to/llvm-project"
     echo "  $0 --test 'transpose' /path/to/llvm-project /path/to/imex"
+    echo "  $0 --no-upstream-tests /path/to/llvm-project"
 }
 
 # Parse command-line options
 TEST_NAME_FILTER=""
+RUN_UPSTREAM_TESTS=true
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +67,14 @@ while [[ $# -gt 0 ]]; do
         -t|--test)
             TEST_NAME_FILTER="$2"
             shift 2
+            ;;
+        --upstream-tests)
+            RUN_UPSTREAM_TESTS=true
+            shift
+            ;;
+        --no-upstream-tests)
+            RUN_UPSTREAM_TESTS=false
+            shift
             ;;
         -h|--help)
             print_usage
@@ -339,7 +352,7 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     # Run tests and capture exit code, but don't stop on failure
     set +e
     ninja -C "$BUILD_DIR" check-imex
-    TEST_EXIT_CODE=$?
+    IMEX_TEST_EXIT_CODE=$?
     set -e
 else
     print_info "Running check-imex target for out-of-tree build"
@@ -351,14 +364,191 @@ else
     # Run tests and capture exit code, but don't stop on failure
     set +e
     cmake --build "$BUILD_DIR" --target check-imex
-    TEST_EXIT_CODE=$?
+    IMEX_TEST_EXIT_CODE=$?
     set -e
 fi
+
+# Run upstream MLIR XeGPU integration tests directly (bypassing lit).
+# We parse each test's `// RUN:` header, substitute known lit variables,
+# and execute the pipeline via the freshly-built tools. Tests whose RUN
+# line contains `zebin-chip=cri` are compile-only (mlir-opt with
+# binary-format=isa) - the ocloc step is skipped since environments
+# outside Intel-internal toolchains typically do not recognise `cri`.
+# Tests carrying `// XFAIL:` are skipped rather than reported as failures.
+#
+# This stage requires an LLVM *source tree* (the tests live under
+# mlir/test/Integration/Dialect/XeGPU). It therefore only runs when the caller
+# passed an LLVM source repository; a pre-built LLVM installation has no source
+# tree and is skipped.
+if [ "$RUN_UPSTREAM_TESTS" != true ]; then
+    print_info "Skipping upstream MLIR XeGPU integration tests (--no-upstream-tests)"
+    UPSTREAM_TEST_EXIT_CODE=0
+elif [ "$USE_PREBUILT_LLVM" = true ]; then
+    # The upstream tests live in the LLVM source tree (mlir/test/Integration/...).
+    # A pre-built build dir has no source tree, so there is nothing to run.
+    print_info "Skipping upstream MLIR XeGPU integration tests (pre-built LLVM: no source tree available)"
+    UPSTREAM_TEST_EXIT_CODE=0
+else
+    UPSTREAM_TOOLS_DIR="$BUILD_DIR"
+    UPSTREAM_XEGPU_TESTS_DIR="$LLVM_PROJECT_PATH/mlir/test/Integration/Dialect/XeGPU"
+fi
+
+if [ "$RUN_UPSTREAM_TESTS" != true ] || [ "$USE_PREBUILT_LLVM" = true ]; then
+    : # already handled above; UPSTREAM_TEST_EXIT_CODE set to 0
+elif [ -z "$UPSTREAM_XEGPU_TESTS_DIR" ] || [ ! -d "$UPSTREAM_XEGPU_TESTS_DIR" ]; then
+    print_warning "Upstream MLIR XeGPU tests directory not found (skipped)"
+    UPSTREAM_TEST_EXIT_CODE=0
+elif [ ! -x "$UPSTREAM_TOOLS_DIR/bin/mlir-opt" ]; then
+    print_warning "mlir-opt not found at $UPSTREAM_TOOLS_DIR/bin/mlir-opt (skipped)"
+    UPSTREAM_TEST_EXIT_CODE=0
+else
+    print_section "Running upstream MLIR XeGPU Integration Tests"
+    print_info "Tests dir: $UPSTREAM_XEGPU_TESTS_DIR"
+    print_info "Tools dir: $UPSTREAM_TOOLS_DIR"
+    print_info "Note: tests with zebin-chip=cri are compile-only (skip mlir-runner)."
+    print_info "Note: tests marked '// XFAIL:' are skipped."
+    echo ""
+
+    set +e
+    UPSTREAM_TOOLS_DIR="$UPSTREAM_TOOLS_DIR" \
+    UPSTREAM_XEGPU_TESTS_DIR="$UPSTREAM_XEGPU_TESTS_DIR" \
+    python3 - <<'PYEOF'
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+RUN_RE = re.compile(r"^\s*//\s*RUN:\s*(.*)$")
+XFAIL_RE = re.compile(r"^\s*//\s*XFAIL:\s*(.*)$")
+
+
+def collect_run_command(text):
+    parts = []
+    for raw in text.splitlines():
+        m = RUN_RE.match(raw)
+        if not m:
+            if parts:
+                break
+            continue
+        chunk = m.group(1).rstrip()
+        if chunk.endswith("\\"):
+            parts.append(chunk[:-1].strip())
+            continue
+        parts.append(chunk)
+        break
+    return " ".join(parts)
+
+
+def substitute(cmd, subs):
+    for key in sorted(subs, key=len, reverse=True):
+        cmd = cmd.replace(f"%{key}", subs[key])
+    return cmd
+
+
+def build_cmd(run_cmd):
+    if "zebin-chip=cri" in run_cmd:
+        compile_only = run_cmd.split("|", 1)[0].strip()
+        if "binary-format" not in compile_only:
+            compile_only = compile_only.replace(
+                "zebin-chip=cri", "zebin-chip=cri binary-format=isa", 1
+            )
+        return compile_only, "compile-only (cri)"
+    return run_cmd, "full (opt+runner+FileCheck)"
+
+
+tools = Path(os.environ["UPSTREAM_TOOLS_DIR"]).resolve()
+tests_dir = Path(os.environ["UPSTREAM_XEGPU_TESTS_DIR"]).resolve()
+bindir = tools / "bin"
+libdir = tools / "lib"
+
+for tool in ("mlir-opt", "mlir-runner", "FileCheck"):
+    if not (bindir / tool).is_file():
+        print(f"error: {bindir / tool} not found", file=sys.stderr)
+        sys.exit(2)
+
+subs = {
+    "mlir_runner_utils": str(libdir / "libmlir_runner_utils.so"),
+    "mlir_c_runner_utils": str(libdir / "libmlir_c_runner_utils.so"),
+    "mlir_levelzero_runtime": str(libdir / "libmlir_levelzero_runtime.so"),
+    "mlir_async_runtime": str(libdir / "libmlir_async_runtime.so"),
+    "mlir_float16_utils": str(libdir / "libmlir_float16_utils.so"),
+}
+
+env = os.environ.copy()
+env["PATH"] = f"{bindir}{os.pathsep}{env.get('PATH', '')}"
+
+tests = []
+for sub in ("LANE", "SG", "WG"):
+    d = tests_dir / sub
+    if d.is_dir():
+        tests.extend(sorted(d.glob("*.mlir")))
+
+if not tests:
+    print(f"error: no tests found under {tests_dir}", file=sys.stderr)
+    sys.exit(2)
+
+passed, failed, skipped = [], [], []
+for t in tests:
+    rel = t.relative_to(tests_dir)
+    text = t.read_text()
+
+    xfail_line = next(
+        (m.group(1).strip() for m in (XFAIL_RE.match(l) for l in text.splitlines()) if m),
+        None,
+    )
+    if xfail_line is not None:
+        skipped.append((t, f"XFAIL: {xfail_line}"))
+        print(f"SKIP  {rel}  (XFAIL: {xfail_line})")
+        continue
+
+    run_cmd = collect_run_command(text)
+    if not run_cmd:
+        skipped.append((t, "no RUN line"))
+        print(f"SKIP  {rel}  (no RUN line)")
+        continue
+
+    subs["s"] = str(t)
+    cmd, label = build_cmd(substitute(run_cmd, subs))
+
+    print(f"RUN   {rel}  [{label}]")
+    proc = subprocess.run(
+        cmd, shell=True, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    out = proc.stdout.decode("utf-8", errors="replace")
+    if proc.returncode == 0:
+        passed.append(t)
+        print(f"PASS  {rel}")
+    else:
+        failed.append((t, proc.returncode, out))
+        print(f"FAIL  {rel}  (exit {proc.returncode})")
+
+print()
+print("=" * 60)
+print(f"Total:   {len(tests)}")
+print(f"Passed:  {len(passed)}")
+print(f"Failed:  {len(failed)}")
+print(f"Skipped: {len(skipped)}")
+print("=" * 60)
+
+for t, rc, out in failed:
+    rel = t.relative_to(tests_dir)
+    print(f"\n--- FAIL: {rel} (exit {rc}) ---")
+    print("\n".join(out.splitlines()[-40:]))
+
+sys.exit(1 if failed else 0)
+PYEOF
+    UPSTREAM_TEST_EXIT_CODE=$?
+    set -e
+fi
+
+TEST_EXIT_CODE=$(( IMEX_TEST_EXIT_CODE | UPSTREAM_TEST_EXIT_CODE ))
 
 if [ $TEST_EXIT_CODE -eq 0 ]; then
     print_success "All tests passed!"
 else
-    print_warning "Some tests failed (exit code: $TEST_EXIT_CODE)"
+    print_warning "Some tests failed (IMEX exit: $IMEX_TEST_EXIT_CODE, upstream exit: $UPSTREAM_TEST_EXIT_CODE)"
     print_info "Continuing to cleanup section..."
 fi
 
@@ -382,12 +572,15 @@ else
     echo -e "${GREEN}Build Type:${NC} IMEX Out-of-Tree Build"
 fi
 echo -e "${GREEN}Obsolete VC Backend:${NC} Disabled (IMEX_BUILD_VC_CONVERSIONS=OFF)"
+echo -e "${GREEN}Upstream Tests:${NC} $([ "$RUN_UPSTREAM_TESTS" = true ] && echo "Enabled" || echo "Disabled (--no-upstream-tests)")"
 if [ -n "$TEST_NAME_FILTER" ]; then
     echo -e "${GREEN}Test Filter:${NC} $TEST_NAME_FILTER"
 else
     echo -e "${GREEN}Test Filter:${NC} Default (all XeGPU integration tests)"
 fi
-echo -e "${GREEN}Test Exit Code:${NC} $TEST_EXIT_CODE"
+echo -e "${GREEN}IMEX Test Exit Code:${NC} $IMEX_TEST_EXIT_CODE"
+echo -e "${GREEN}Upstream Test Exit Code:${NC} $UPSTREAM_TEST_EXIT_CODE"
+echo -e "${GREEN}Combined Test Exit Code:${NC} $TEST_EXIT_CODE"
 
 print_success "Script completed successfully!"
 
