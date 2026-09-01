@@ -227,9 +227,12 @@ private:
         llvm::dyn_cast<mlir::MemRefType>(memcpyOp.getSrc().getType());
     mlir::MemRefDescriptor srcDesc(adaptor.getSrc());
 
-    // Compute number of elements.
-    mlir::Value numElements = mlir::LLVM::ConstantOp::create(
-        rewriter, loc, getIndexType(), rewriter.getIndexAttr(1));
+    // Compute number of elements. Build the attribute from the converted index
+    // type: llvm.mlir.constant requires the value attribute's type to match the
+    // result type exactly, so an index-typed attribute on an i64 result no
+    // longer verifies.
+    mlir::Value numElements =
+        createIndexAttrConstant(rewriter, loc, getIndexType(), 1);
     for (int pos = 0; pos < srcMemRefType.getRank(); ++pos) {
       auto size = srcDesc.size(rewriter, loc, pos);
       numElements = mlir::LLVM::MulOp::create(rewriter, loc, numElements, size);
