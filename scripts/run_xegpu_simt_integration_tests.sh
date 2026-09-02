@@ -242,7 +242,7 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
         print_info "Using custom test filter: $LIT_FILTER"
     else
         # Default: all XeGPU integration test directories
-        LIT_FILTER="Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
+        LIT_FILTER="Integration/Dialect/Vector|Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
         print_info "Using default test filter for XeGPU integration tests"
     fi
 
@@ -274,7 +274,7 @@ else
         print_info "Using custom test filter: $LIT_FILTER"
     else
         # Default: all XeGPU integration test directories (same as source build)
-        LIT_FILTER="Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
+        LIT_FILTER="Integration/Dialect/Vector|Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
         print_info "Using default test filter for XeGPU integration tests"
     fi
 
