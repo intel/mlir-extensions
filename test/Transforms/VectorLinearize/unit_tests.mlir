@@ -12,12 +12,16 @@ func.func @test() -> vector<4x2xf16> {
 
 // -----
 // test the insert_strided_slice
-func.func @test() -> vector<2x4xf32> {
-  %src = arith.constant dense<1.0> : vector<1x2xf32>
-  %dst = arith.constant dense<1.0> : vector<2x4xf32>
-  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [8, 9, 2, 3, 4, 5, 6, 7] : vector<8xf32>, vector<2xf32>
+// The source and destination are function arguments rather than splat
+// constants, so that the inserts are not folded away before they are checked.
+//CHECK-LABEL: @test_insert_strided_slice
+func.func @test_insert_strided_slice(%src: vector<1x2xf32>, %dst: vector<2x4xf32>) -> vector<2x4xf32> {
+  // The narrow source is widened to the destination size first, so that both
+  // shuffle operands have the same type.
+  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0, 1, -1, -1, -1, -1, -1, -1] : vector<2xf32>, vector<2xf32>
+  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [8, 9, 2, 3, 4, 5, 6, 7] : vector<8xf32>, vector<8xf32>
   %1 = vector.insert_strided_slice %src, %dst offsets = [0, 0], strides = [1, 1] : vector<1x2xf32> into vector<2x4xf32>
-  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 8, 9] : vector<8xf32>, vector<2xf32>
+  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 8, 9] : vector<8xf32>, vector<8xf32>
   %2 = vector.insert_strided_slice %src, %1 offsets = [1, 2], strides = [1, 1] : vector<1x2xf32> into vector<2x4xf32>
   return %2 : vector<2x4xf32>
 }
@@ -40,6 +44,11 @@ func.func @test() -> vector<2x4xf32> {
 // -----
 //CHECK: test_vector_insert_2d_idx(%[[arg0:.*]]: vector<4x8xf32>)
 func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32> {
+  // The narrow source is widened to the destination size first, so that both
+  // shuffle operands have the same type.
+  //CHECK: vector.shuffle %{{.*}}, %{{.*}} [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+  //CHECK-SAME: 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, -1,
+  //CHECK-SAME: -1] : vector<32xf32>, vector<32xf32>
   //CHECK: vector.shuffle %{{.*}}, %{{.*}} [128, 129, 130, 131, 132, 133, 134, 135,
   //CHECK-SAME: 8, 9, 10, 11, 12, 13, 14, 15, 136, 137, 138, 139, 140, 141, 142, 143,
   //CHECK-SAME: 24, 25, 26, 27, 28, 29, 30, 31, 144, 145, 146, 147, 148, 149, 150, 151,
@@ -47,7 +56,7 @@ func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32>
   //CHECK-SAME: 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
   //CHECK-SAME: 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102,
   //CHECK-SAME: 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119,
-  //CHECK-SAME: 120, 121, 122, 123, 124, 125, 126, 127] : vector<128xf32>, vector<32xf32>
+  //CHECK-SAME: 120, 121, 122, 123, 124, 125, 126, 127] : vector<128xf32>, vector<128xf32>
   //CHECK: vector.shape_cast %{{.*}} : vector<128xf32> to vector<8x16xf32>
   %cst = arith.constant dense <0.0> : vector<8x16xf32>
   %0 = vector.insert_strided_slice %arg0, %cst offsets = [0, 0], strides = [1, 1] : vector<4x8xf32> into vector<8x16xf32>
@@ -58,7 +67,7 @@ func.func @test_vector_insert_2d_idx(%arg0: vector<4x8xf32>) -> vector<8x16xf32>
 func.func @gather_memref_2d(%base: memref<?x?xf32>, %v: vector<2x3xindex>, %mask: vector<2x3xi1>, %pass_thru: vector<2x3xf32>) -> vector<2x3xf32> {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-// CHECK:    %{{.*}}:2 = affine.delinearize_index %8 into (%dim, %dim_0) : index, index
+// CHECK:    %{{.*}}:2 = affine.delinearize_index %{{.*}} into (%dim, %dim_0) : index, index
 // CHECK:    %{{.*}}  = scf.if %{{.*}} -> (vector<3xf32>)
 // CHECK:      [[LD0:%.+]]   = vector.load %{{.*}}[%{{.*}}#0, %{{.*}}#1] : memref<?x?xf32>, vector<1xf32>
 // CHECK:      [[ELEM0:%.+]] = vector.extract [[LD0]][0] : f32 from vector<1xf32>
