@@ -33,6 +33,25 @@ print_section() {
     echo -e "${GREEN}========================================${NC}\n"
 }
 
+# Integration test directories owned by this script. This is the single source of
+# truth for the default LIT filter: it is used to build the --filter regex for the
+# cmake configurations below, and CI workflows query it via `--print-lit-filter` to
+# build the complementary --filter-out for their check-imex runs, so that the two
+# do not overlap. Keep it here only - do not repeat the pattern elsewhere.
+DEFAULT_LIT_FILTER_DIRS=(
+    "Integration/Dialect/Vector"
+    "Integration/Dialect/XeGPU/SG"
+    "Integration/Dialect/XeGPU/WG"
+    "Integration/Dialect/XeGPU/SIMT"
+    "Integration/Dialect/XeVM"
+)
+
+# Join DEFAULT_LIT_FILTER_DIRS into a LIT --filter regex alternation
+default_lit_filter() {
+    local IFS='|'
+    echo "${DEFAULT_LIT_FILTER_DIRS[*]}"
+}
+
 # Function to print usage
 print_usage() {
     print_error "Usage: $0 [options] <llvm-project-path> [imex-project-path]"
@@ -45,16 +64,20 @@ print_usage() {
     echo "Options:"
     echo "  -t, --test <pattern>   Test name pattern (regex) to pass to LIT --filter"
     echo "                         Example: -t 'load_nd.*f16' or -t 'transpose'"
+    echo "  --print-lit-filter     Print the effective LIT filter regex and exit"
+    echo "                         (no build/test run; honors -t if given)"
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 /path/to/llvm-project"
     echo "  $0 -t 'load_nd.*f16' /path/to/llvm-project"
     echo "  $0 --test 'transpose' /path/to/llvm-project /path/to/imex"
+    echo "  $0 --print-lit-filter"
 }
 
 # Parse command-line options
 TEST_NAME_FILTER=""
+PRINT_LIT_FILTER_ONLY=false
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +85,10 @@ while [[ $# -gt 0 ]]; do
         -t|--test)
             TEST_NAME_FILTER="$2"
             shift 2
+            ;;
+        --print-lit-filter)
+            PRINT_LIT_FILTER_ONLY=true
+            shift
             ;;
         -h|--help)
             print_usage
@@ -81,6 +108,20 @@ done
 
 # Restore positional parameters
 set -- "${POSITIONAL_ARGS[@]}"
+
+# Resolve the effective LIT filter once, before any other output
+if [ -n "$TEST_NAME_FILTER" ]; then
+    LIT_FILTER="$TEST_NAME_FILTER"
+else
+    LIT_FILTER="$(default_lit_filter)"
+fi
+
+# --print-lit-filter: emit the regex on stdout only, so other tooling (CI workflows)
+# can consume it with command substitution instead of duplicating the pattern
+if [ "$PRINT_LIT_FILTER_ONLY" = true ]; then
+    echo "$LIT_FILTER"
+    exit 0
+fi
 
 # Check if correct number of arguments provided
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
@@ -227,6 +268,12 @@ fi
 print_info "Running CMake configuration..."
 print_info "Build directory: $BUILD_DIR"
 
+if [ -n "$TEST_NAME_FILTER" ]; then
+    print_info "Using custom test filter: $LIT_FILTER"
+else
+    print_info "Using default test filter for XeGPU integration tests: $LIT_FILTER"
+fi
+
 if [ "$USE_PREBUILT_LLVM" = false ]; then
     # Option 1: LLVM External Project Build
     print_info "Build type: IMEX as LLVM External Project"
@@ -234,17 +281,6 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
     print_info "IMEX Source Directory: $IMEX_PROJECT_PATH"
     print_info "Enabling: MLIR_INCLUDE_INTEGRATION_TESTS, MLIR_ENABLE_LEVELZERO_RUNNER, MLIR_ENABLE_SYCL_RUNNER, IMEX_ENABLE_L0_RUNTIME"
     print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (obsolete VC backend: ArithToVC, MathToVC, XeGPUToVC, RemoveSingleElemVector, XeGPU layout passes)"
-
-    # Build lit filter pattern for the specific test directories
-    if [ -n "$TEST_NAME_FILTER" ]; then
-        # User provided a specific test filter
-        LIT_FILTER="$TEST_NAME_FILTER"
-        print_info "Using custom test filter: $LIT_FILTER"
-    else
-        # Default: all XeGPU integration test directories
-        LIT_FILTER="Integration/Dialect/Vector|Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
-        print_info "Using default test filter for XeGPU integration tests"
-    fi
 
     cmake -S llvm -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -266,17 +302,6 @@ else
     print_info "IMEX Source Directory: $IMEX_PROJECT_PATH"
     print_info "Enabling: IMEX_ENABLE_L0_RUNTIME"
     print_info "Disabling: IMEX_BUILD_VC_CONVERSIONS (obsolete VC backend: ArithToVC, MathToVC, XeGPUToVC, RemoveSingleElemVector, XeGPU layout passes)"
-
-    # Build lit filter pattern
-    if [ -n "$TEST_NAME_FILTER" ]; then
-        # User provided a specific test filter
-        LIT_FILTER="$TEST_NAME_FILTER"
-        print_info "Using custom test filter: $LIT_FILTER"
-    else
-        # Default: all XeGPU integration test directories (same as source build)
-        LIT_FILTER="Integration/Dialect/Vector|Integration/Dialect/XeGPU/SG|Integration/Dialect/XeGPU/WG|Integration/Dialect/XeGPU/SIMT|Integration/Dialect/XeVM"
-        print_info "Using default test filter for XeGPU integration tests"
-    fi
 
     cmake -S . -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -329,10 +354,9 @@ if [ "$USE_PREBUILT_LLVM" = false ]; then
         print_info "Test filter: $TEST_NAME_FILTER"
     else
         print_info "Test directories:"
-        print_info "  - Integration/Dialect/XeGPU/SG"
-        print_info "  - Integration/Dialect/XeGPU/WG"
-        print_info "  - Integration/Dialect/XeGPU/SIMT"
-        print_info "  - Integration/Dialect/XeVM"
+        for test_dir in "${DEFAULT_LIT_FILTER_DIRS[@]}"; do
+            print_info "  - $test_dir"
+        done
     fi
     echo ""
 
@@ -383,9 +407,9 @@ else
 fi
 echo -e "${GREEN}Obsolete VC Backend:${NC} Disabled (IMEX_BUILD_VC_CONVERSIONS=OFF)"
 if [ -n "$TEST_NAME_FILTER" ]; then
-    echo -e "${GREEN}Test Filter:${NC} $TEST_NAME_FILTER"
+    echo -e "${GREEN}Test Filter:${NC} $LIT_FILTER"
 else
-    echo -e "${GREEN}Test Filter:${NC} Default (all XeGPU integration tests)"
+    echo -e "${GREEN}Test Filter:${NC} Default (all XeGPU integration tests): $LIT_FILTER"
 fi
 echo -e "${GREEN}Test Exit Code:${NC} $TEST_EXIT_CODE"
 
