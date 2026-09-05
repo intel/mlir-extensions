@@ -8,9 +8,9 @@ We propose a basic region concept which allows groups of operations to carry ann
 
 ## Motivation
 
-At this point there is not standard and convenient way in MLIR to annotate operations or groups of operations in way that can by default persists unrelated passes. Attributes often do not survive passes like the canonicalizer. Annotations using use-def chains are more persistent but using them can become relatively involved.
+At this point there is no standard and convenient way in MLIR to annotate operations or groups of operations in way that can by default persist unrelated passes. Attributes often do not survive passes like the canonicalizer. Annotations using use-def chains are more persistent but using them can become relatively involved.
 
-One example for the need of persistent annotations is the compute-follows-data model: data is allocated in a specific location, like a GPU, and operations on that data are expected to be executed in the same location (e.g. on the same device). The location might be assigned in a higher-level tensor dialect but the actual lowering for the specific device will happen much later when the information of the higher level dialect is gone. This requires some mechanism to persists annotations from a higher level dialect to lower levels.
+One example for the need of persistent annotations is the compute-follows-data model: data is allocated in a specific location, like a GPU, and operations on that data are expected to be executed in the same location (e.g. on the same device). The location might be assigned in a higher-level tensor dialect but the actual lowering for the specific device will happen much later when the information of the higher level dialect is gone. This requires some mechanism to persist annotations from a higher level dialect to lower levels.
 
 ## Proposal
 

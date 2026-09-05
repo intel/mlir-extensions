@@ -4,12 +4,12 @@ Core MLIR Team
 
 ## Summary
 
-The GPUX dialect allows us to expose stream/device/context creation/destruction ops.These ops are required by the underlying runtimes (Level zero & Sycl) for explicit stream/context/device creation. Hence, we propose the GPUX dialect as an extension of the upstream GPU dialect.
+The GPUX dialect allows us to expose stream/device/context creation/destruction ops. These ops are required by the underlying runtimes (Level zero & Sycl) for explicit stream/context/device creation. Hence, we propose the GPUX dialect as an extension of the upstream GPU dialect.
 The GPUX dialect will also have some of the upstream GPU dialect ops extended with an added argument for stream in those ops.
 
 ## Motivation
 
-Upstream MLIR has a Dialect called the [GPU Dialect](https://mlir.llvm.org/docs/Dialects/GPU/) which provides middle-level abstractions for launching GPU kernels following a programming model similar to that of CUDA or OpenCL. The upstream dialect exposes all the operation required to launch the kernel on a GPU device. But, the drawback with the upstream dialect is it does not expose Stream as an operation in the dialect. For example, if the user wants to launch the kernel on a particular stream(provided by the user), there is no way to do that today. For the upstream dialect, stream is created internally while lowering to LLVM runtime calls and it refers specifically to the CUDA stream. Therefore, the need to create a GPUX Dialect arises. The GPUX dialect is an extension of the upstream GPU dialect with following ops - CreateDeviceOp, DestroyDeviceOp, CreateContextOp, DestroyContextOp, CreateStreamOp, DestroyStreamOp, LaunchFuncOp, AllocOp, DeallocOp, WaitOp, MemcpyOp & MemsetOp.
+Upstream MLIR has a Dialect called the [GPU Dialect](https://mlir.llvm.org/docs/Dialects/GPU/) which provides middle-level abstractions for launching GPU kernels following a programming model similar to that of CUDA or OpenCL. The upstream dialect exposes all the operations required to launch the kernel on a GPU device. But, the drawback with the upstream dialect is it does not expose Stream as an operation in the dialect. For example, if the user wants to launch the kernel on a particular stream(provided by the user), there is no way to do that today. For the upstream dialect, stream is created internally while lowering to LLVM runtime calls and it refers specifically to the CUDA stream. Therefore, the need to create a GPUX Dialect arises. The GPUX dialect is an extension of the upstream GPU dialect with following ops - CreateDeviceOp, DestroyDeviceOp, CreateContextOp, DestroyContextOp, CreateStreamOp, DestroyStreamOp, LaunchFuncOp, AllocOp, DeallocOp, WaitOp, MemcpyOp & MemsetOp.
 
 ## Proposal
 
@@ -151,7 +151,7 @@ operation ::= gpu.wait custom<AsyncDependencies>(type($asyncToken), $asyncDepend
               $gpux_stream attr-dict
 ```
 
-This op is an extension of upstream gpu.wait op with one added argument for stream on which to wait on.
+This op is an extension of upstream gpu.wait op with one added argument for stream on which to wait.
 
 
 #### gpux.memcpy (gpux::MemcpyOp)
