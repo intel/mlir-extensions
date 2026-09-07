@@ -1,7 +1,7 @@
 # SetSPIRVAbiAttribute Pass
 
 
-The SetSPIRVAbiAttribute pass, adds a kernel attribute called spv.entry_point_abi to the kernel function. Since SPIR-V programs themselves are not enough for running workloads on GPU; a companion host application is needed to manage the resources referenced by SPIR-V programs and dispatch the workload. It is also quite possible that both those programs are written by different frond-end languages.Hence the need to add the entry point abi.
+The SetSPIRVAbiAttribute pass, adds a kernel attribute called spv.entry_point_abi to the kernel function. Since SPIR-V programs themselves are not enough for running workloads on GPU; a companion host application is needed to manage the resources referenced by SPIR-V programs and dispatch the workload. It is also quite possible that both those programs are written by different front-end languages. Hence the need to add the entry point abi.
 spv.entry_point_abi is a struct attribute that should be attached to the entry function. Some of the lowering passes expect this attribute to perform the lowering.
 
 # Example
