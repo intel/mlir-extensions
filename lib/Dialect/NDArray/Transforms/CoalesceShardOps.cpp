@@ -79,17 +79,12 @@ bool isElementwise(::mlir::Operation *op) {
       ::mlir::tosa::ExpOp, ::mlir::tosa::FloorOp, ::mlir::tosa::LogOp,
       ::mlir::tosa::LogicalNotOp, ::mlir::tosa::NegateOp,
       ::mlir::tosa::ReciprocalOp, ::mlir::tosa::RsqrtOp, ::mlir::tosa::SinOp,
-      ::mlir::linalg::AbsOp, ::mlir::linalg::AddOp, ::mlir::linalg::CeilOp,
-      ::mlir::linalg::Conv3DOp, ::mlir::linalg::CopyOp, ::mlir::linalg::DivOp,
-      ::mlir::linalg::DivUnsignedOp, ::mlir::linalg::ErfOp,
-      ::mlir::linalg::ExpOp, ::mlir::linalg::FillOp,
-      ::mlir::linalg::FillRng2DOp, ::mlir::linalg::FloorOp,
-      ::mlir::linalg::LogOp, ::mlir::linalg::MapOp, ::mlir::linalg::MaxOp,
-      ::mlir::linalg::MinOp, ::mlir::linalg::MulOp, ::mlir::linalg::NegFOp,
-      ::mlir::linalg::PowFOp, ::mlir::linalg::ReciprocalOp,
-      ::mlir::linalg::RoundOp, ::mlir::linalg::RsqrtOp, ::mlir::linalg::SqrtOp,
-      ::mlir::linalg::SquareOp, ::mlir::linalg::SubOp, ::mlir::linalg::TanhOp>(
-      op);
+      // The unary/binary/ternary linalg named ops (linalg.add, linalg.exp,
+      // linalg.select, ...) were removed upstream in favour of the single
+      // linalg.elementwise op carrying an elementwise_kind attribute.
+      ::mlir::linalg::ElementwiseOp, ::mlir::linalg::Conv3DOp,
+      ::mlir::linalg::CopyOp, ::mlir::linalg::FillOp,
+      ::mlir::linalg::FillRng2DOp, ::mlir::linalg::MapOp>(op);
 }
 
 // *******************************
@@ -227,16 +222,19 @@ struct CoalesceShardOpsPass
   }
 
   // return ShardOp that annotates the given operand/value
-  ::mlir::shard::GridOp getShardOpOfOperand(::mlir::Value val) {
+  ::mlir::shard::ShardOp getShardOpOfOperand(::mlir::Value val) {
     auto op = val.getDefiningOp();
     // FIXME as long as we have NDArrays we might meet casts
-    if (::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
+    if (op && ::mlir::isa<::mlir::UnrealizedConversionCastOp>(op)) {
       assert(op->getNumOperands() == 1 && op->getNumResults() == 1);
       assert(op->hasOneUse() && op->getNumOperands() == 1);
       op = op->getOperand(0).getDefiningOp();
     }
+    if (!op) {
+      return {};
+    }
     assert(op->hasOneUse());
-    return ::mlir::dyn_cast<::mlir::shard::GridOp>(op);
+    return ::mlir::dyn_cast<::mlir::shard::ShardOp>(op);
   }
 
   void backPropagateBaseSharding(const ::mlir::Value &val,
@@ -492,8 +490,8 @@ struct CoalesceShardOpsPass
         } else if (auto insertSlcOp =
                        ::mlir::dyn_cast<::imex::ndarray::InsertSliceOp>(
                            *currOp)) {
-          shardOps.emplace_back(shardOps.emplace_back(
-              getShardOpOfOperand(insertSlcOp.getDestination())));
+          shardOps.emplace_back(
+              getShardOpOfOperand(insertSlcOp.getDestination()));
         }
       }
 
@@ -535,6 +533,10 @@ struct CoalesceShardOpsPass
 
       // update shardOps of dependent Subview/InsertSliceOps
       for (auto svShardOp : shardOps) {
+        // the operand might not be annotated by a ShardOp at all
+        if (!svShardOp) {
+          continue;
+        }
         backPropagateBaseSharding(svShardOp, newSharding.getResult());
         // svShardOp.getShardingMutable().assign(newSharding);
         // assert(svShardOp->hasOneUse());
