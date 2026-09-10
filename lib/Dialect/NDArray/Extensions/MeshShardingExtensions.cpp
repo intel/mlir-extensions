@@ -420,12 +420,13 @@ struct SubviewShardingInterface
     return success();
   }
 
-  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<Sharding> operandShardings,
-                        ArrayRef<Sharding> resultShardings,
-                        IRMapping &spmdizationMap,
-                        SymbolTableCollection &symbolTableCollection,
-                        OpBuilder &builder) const {
+  LogicalResult partition(::mlir::Operation *op,
+                          ArrayRef<Value> spmdizedOperands,
+                          ArrayRef<Sharding> operandShardings,
+                          ArrayRef<Sharding> resultShardings,
+                          IRMapping &spmdizationMap,
+                          SymbolTableCollection &symbolTableCollection,
+                          OpBuilder &builder) const {
     if (resultShardings.size() != 1) {
       return failure();
     }
@@ -477,12 +478,13 @@ struct InsertSliceShardingInterface
     return success();
   }
 
-  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<Sharding> operandShardings,
-                        ArrayRef<Sharding> resultShardings,
-                        IRMapping &spmdizationMap,
-                        SymbolTableCollection &symbolTableCollection,
-                        OpBuilder &builder) const {
+  LogicalResult partition(::mlir::Operation *op,
+                          ArrayRef<Value> spmdizedOperands,
+                          ArrayRef<Sharding> operandShardings,
+                          ArrayRef<Sharding> resultShardings,
+                          IRMapping &spmdizationMap,
+                          SymbolTableCollection &symbolTableCollection,
+                          OpBuilder &builder) const {
     if (resultShardings.size() != 1 || operandShardings.size() < 2 ||
         resultShardings[0] != operandShardings[0]) {
       return op->emitOpError("incorrect sharding annotations");
@@ -569,12 +571,13 @@ struct LinspaceShardingInterface
     return success();
   }
 
-  LogicalResult spmdize(::mlir::Operation *op, ArrayRef<Value> spmdizedOperands,
-                        ArrayRef<Sharding> operandShardings,
-                        ArrayRef<Sharding> resultShardings,
-                        IRMapping &spmdizationMap,
-                        SymbolTableCollection &symbolTableCollection,
-                        OpBuilder &builder) const {
+  LogicalResult partition(::mlir::Operation *op,
+                          ArrayRef<Value> spmdizedOperands,
+                          ArrayRef<Sharding> operandShardings,
+                          ArrayRef<Sharding> resultShardings,
+                          IRMapping &spmdizationMap,
+                          SymbolTableCollection &symbolTableCollection,
+                          OpBuilder &builder) const {
     if (resultShardings.size() != 1) {
       return failure();
     }

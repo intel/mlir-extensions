@@ -12,7 +12,7 @@ func.func @test_region(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
     %1 = tensor.empty(%c22) : tensor<?xi64, #GPUENV>
     %10 = ndarray.subview %0[%c0][22][%c3] : tensor<33xi64, #GPUENV> to tensor<22xi64, #GPUENV>
     %o1 = tensor.empty() : tensor<22xi64, #GPUENV>
-    %20 = linalg.add ins(%10, %1 : tensor<22xi64, #GPUENV>, tensor<?xi64, #GPUENV>) outs(%o1 : tensor<22xi64, #GPUENV>) -> tensor<22xi64, #GPUENV>
+    %20 = linalg.elementwise kind=#linalg.elementwise_kind<add> ins(%10, %1 : tensor<22xi64, #GPUENV>, tensor<?xi64, #GPUENV>) outs(%o1 : tensor<22xi64, #GPUENV>) -> tensor<22xi64, #GPUENV>
     %o2 = tensor.empty() : tensor<i64, #GPUENV>
     %21 = linalg.reduce { arith.addi } ins(%20 : tensor<22xi64, #GPUENV>) outs(%o2 : tensor<i64, #GPUENV>) dimensions = [0]
     %30 = builtin.unrealized_conversion_cast %21 : tensor<i64, #GPUENV> to i64
@@ -40,7 +40,7 @@ func.func @test_region(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
       // CHECK-NEXT: [[v9:%.*]] = tensor.empty() : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
       // CHECK-NEXT: region.env_region_yield [[v9]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v5:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
-      // CHECK-NEXT: [[v9:%.*]] = linalg.add ins([[v3]], [[v2]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>, tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) outs([[v4]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) -> tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
+      // CHECK-NEXT: [[v9:%.*]] = linalg.elementwise kind=#linalg.elementwise_kind<add> ins([[v3]], [[v2]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>, tensor<?xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) outs([[v4]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>) -> tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
       // CHECK-NEXT: region.env_region_yield [[v9]] : tensor<22xi64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>
     // CHECK: [[v6:%.*]] = region.env_region #region.gpu_env<device = "XeGPU"> -> tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>> {
       // CHECK-NEXT: [[v9:%.*]] = tensor.empty() : tensor<i64, #ndarray.envs<#region.gpu_env<device = "XeGPU">>>

@@ -10,9 +10,9 @@ builtin.module attributes {dlti.map = #dlti.map<"MPI:Implementation" = "MPICH", 
         %2 = ndarray.subview %0[0, 4][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
         %3 = ndarray.subview %0[4, 0][1000, 1000][1, 1] : tensor<1200x1200xi64> to tensor<1000x1000xi64>
         %o1 = tensor.empty() : tensor<1000x1000xi64>
-        %4 = linalg.add ins(%1, %2 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o1 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
+        %4 = linalg.elementwise kind=#linalg.elementwise_kind<add> ins(%1, %2 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o1 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
         %o2 = tensor.empty() : tensor<1000x1000xi64>
-        %5 = linalg.add ins(%3, %4 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o2 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
+        %5 = linalg.elementwise kind=#linalg.elementwise_kind<add> ins(%3, %4 : tensor<1000x1000xi64>, tensor<1000x1000xi64>) outs(%o2 : tensor<1000x1000xi64>) -> tensor<1000x1000xi64>
         %6 = ndarray.insert_slice %5 into %0[2, 2][1000, 1000][1, 1] : tensor<1000x1000xi64> into tensor<1200x1200xi64>
         return %6 : tensor<1200x1200xi64>
     }
