@@ -18,18 +18,28 @@ module @gemm attributes {gpu.container_module} {
         %srcce = memref.memory_space_cast %src : memref<128xf32, 1> to memref<128xf32>
         %dstte = memref.memory_space_cast %dst : memref<128xf32, 1> to memref<128xf32>
 
+        %c1 = arith.constant 1 : index
         %c2 = arith.constant 2 : index
         %tid_x = gpu.thread_id x
-        %offsets = arith.muli %tid_x, %c2 : index
+        %base = arith.muli %tid_x, %c2 : index
+        %base1 = arith.addi %base, %c1 : index
 
-        %mask = arith.constant 1 : i1
-        %loaded = xegpu.load %srcce[%offsets], %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>, chunk_size = 2}> : memref<128xf32>, index, i1 -> vector<2xf32>
+        // Chunk size/contiguous block access size is not needed anymore
+        // in the lane-level form.
+        // Chunk is derived from the shape of the result.
+        // chunk corresponds to the number of elements in the vector in FCD.
+        // Each element now carries its own offset and mask bit. XeGPUToXeVM
+        // folds them back into one block access of `vector<2xf32>`, taking the
+        // base offset and the mask bit from element 0 if the mask is uniform.
+        %offsets = vector.from_elements %base, %base1 : vector<2xindex>
+        %mask = arith.constant dense<true> : vector<2xi1>
+        %loaded = xegpu.load %srcce[%offsets], %mask <{l1_hint = #xegpu.cache_hint<cached>, l2_hint = #xegpu.cache_hint<uncached>}> : memref<128xf32>, vector<2xindex>, vector<2xi1> -> vector<2xf32>
 
         %tid_x_i32 = arith.index_cast %tid_x : index to i32
         %tid_x_f32 = arith.sitofp %tid_x_i32 : i32 to f32
         %loaded_modified = vector.insert %tid_x_f32, %loaded[0] : f32 into vector<2xf32>
 
-        xegpu.store %loaded_modified, %dstte[%offsets], %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>, chunk_size = 2}> : vector<2xf32>, memref<128xf32>, index, i1
+        xegpu.store %loaded_modified, %dstte[%offsets], %mask <{l1_hint = #xegpu.cache_hint<write_back>, l2_hint = #xegpu.cache_hint<uncached>}> : vector<2xf32>, memref<128xf32>, vector<2xindex>, vector<2xi1>
         gpu.return
     }
   }
