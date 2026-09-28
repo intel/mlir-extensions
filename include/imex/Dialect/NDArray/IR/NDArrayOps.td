@@ -416,7 +416,7 @@ def ReshapeOp : NDArray_Op<"reshape", []> {
   let results = (outs AnyRankedTensor);
 
   let assemblyFormat = [{
-    $source $shape attr-dict `:` qualified(type($source)) `->` qualified(type(results))
+    $source $shape (`copy` $copy^)? attr-dict `:` qualified(type($source)) `->` qualified(type(results))
   }];
 
   let builders = [
@@ -432,7 +432,7 @@ def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
     let arguments = (ins AnyRankedTensor:$input, OptionalAttr<I1Attr>:$copy);
     let results = (outs AnyRankedTensor);
 
-    let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type(results))";
+    let assemblyFormat = "$input (`copy` $copy^)? attr-dict `:` qualified(type($input)) `to` qualified(type(results))";
 
     let hasCanonicalizer = 1;
 }
