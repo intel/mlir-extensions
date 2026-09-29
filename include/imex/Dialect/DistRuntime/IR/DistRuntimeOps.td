@@ -124,7 +124,7 @@ def CopyReshapeOp : DistRuntime_Op<"copy_reshape",
                        Variadic<Index>:$ngShape, Variadic<Index>:$nlOffsets, Variadic<Index>:$nlShape);
   let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
-    $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_g_shape` $ngShape `n_offs` $nlOffsets `n_shape` $nlShape attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
+    `team` $team $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_g_shape` $ngShape `n_offs` $nlOffsets `n_shape` $nlShape attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];
   let hasCanonicalizer = 1;
 }
@@ -168,7 +168,7 @@ def CopyPermuteOp : DistRuntime_Op<"copy_permute",
                        DenseI64ArrayAttr:$axes);
   let results = (outs DistRuntime_AsyncHandle:$handle, AnyRankedTensor:$nlArray);
   let assemblyFormat = [{
-    $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_offs` $nlOffsets `n_shape` $nlShape `axes` $axes attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
+    `team` $team $lArray `g_shape` $gShape `l_offs` $lOffsets `to` `n_offs` $nlOffsets `n_shape` $nlShape `axes` $axes attr-dict `:` `(` type(operands) `)` `->` `(` qualified(type(results)) `)`
   }];
   let hasCanonicalizer = 1;
 }
