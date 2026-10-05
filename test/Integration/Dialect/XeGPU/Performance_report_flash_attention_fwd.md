@@ -1,6 +1,7 @@
 # Flash Attention Performance study on BMG B580
 
 **Workload:** Flash attention forward pass with 4K sequence length.
+**IMEX test used:** test/Integration/Dialect/XeGPU/WG/flash_attention_fwd_ov_with_arrray_len_4k.mlir
 
 ### Machine-specific information:
 -----------------------------

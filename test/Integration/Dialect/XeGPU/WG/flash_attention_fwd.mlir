@@ -483,13 +483,13 @@ module @flash_attention attributes {gpu.container_module} {
     %k_random = memref.cast %k : memref<?x?xf16> to memref<*xf16>
     %v_random = memref.cast %v : memref<?x?xf16> to memref<*xf16>
     // Option 1: fill with random numbers
-    // call @fillResource1DRandomF16(%q_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
-    // call @fillResource1DRandomF16(%k_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
-    // call @fillResource1DRandomF16(%v_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
+    call @fillResource1DRandomF16(%q_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
+    call @fillResource1DRandomF16(%k_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
+    call @fillResource1DRandomF16(%v_random, %rand_low, %rand_high, %gen_int) : (memref<*xf16>, f32, f32, i1) -> ()
     // Option 2: fill with some magic constant for validation
-    call @fillResource1DF16(%q_random, %magic) : (memref<*xf16>, f32) -> ()
-    call @fillResource1DF16(%k_random, %magic) : (memref<*xf16>, f32) -> ()
-    call @fillResource1DF16(%v_random, %magic) : (memref<*xf16>, f32) -> ()
+    // call @fillResource1DF16(%q_random, %magic) : (memref<*xf16>, f32) -> ()
+    // call @fillResource1DF16(%k_random, %magic) : (memref<*xf16>, f32) -> ()
+    // call @fillResource1DF16(%v_random, %magic) : (memref<*xf16>, f32) -> ()
 
     // // initialize output to 0.0
     // %o_random = memref.collapse_shape %o [[0, 1, 2, 3]] : memref<?x?x?x?xf16> into memref<?xf16>
