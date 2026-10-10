@@ -60,11 +60,11 @@ As shown in the example above, the memref.allocs in the IR are referring to devi
 
 ## Limitations of this pass.
 
-1. This pass only supports only memref::AllocOp and not its variants like memref::AllocaOp, memref::AllocaScopeOp & AllocaScopeReturnOp.
+1. This pass only supports memref::AllocOp and not its variants like memref::AllocaOp, memref::AllocaScopeOp & AllocaScopeReturnOp.
 2. This pass needs to be run before the GpuKernelOutlining pass since it operates on gpu.launch blocks and not on gpu.launch_func.
 3. This pass only covers static shapes and shapes with unknown dims and known rank.
 
-Note: We plan to add support for these limitations in incremental future PR's.
+Note: We plan to add support for these limitations in incremental future PRs.
 
 ## Reason for this Custom Pass:
 

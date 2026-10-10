@@ -3,7 +3,7 @@
 
 BF16ToGPU pass transforms gpu dialect with bf16 dtype to a form that can be lowered to
 spirv and execute on Intel GPUs.
-Since bf16 is not a type directly supported by spirv, bf16 type is passes as an i16 type to
+Since bf16 is not a type directly supported by spirv, bf16 type is passed as an i16 type to
 spirv functions. This requires changing gpu.launch_func (caller) and gpu.func (callee).
 
 * Caller side changes are as follows:  
@@ -18,8 +18,8 @@ gpu.func's bf16 arguments replaced with i16 arguments. bf16 type usage inside gp
 can be divided into two different types. First, operations that interpret bits according to
 bf16 specification. Second, operations that only care about the size of the types.
 First type of operations include most of Arithmetic dialect and Math dialect operations
-expect for bit cast. The operation's bf16 operands and results types are replaced with f32.
-bf16 operands are replaced with a seqeuence i16 to bf16 bitcast followed by bf16 to f32 extf.
+except for bit cast. The operation's bf16 operands and results types are replaced with f32.
+bf16 operands are replaced with a sequence i16 to bf16 bitcast followed by bf16 to f32 extf.
 bf16 results are replaced with a sequence of f32 to bf16 truncf followed by bf16 to i16 bitcast.
 The resulting code, in summary, has two parts.
     1) bf16 operations emulated by f32 operations with the help of widening and truncating.
