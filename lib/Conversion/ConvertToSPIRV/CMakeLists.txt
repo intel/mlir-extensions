@@ -8,6 +8,7 @@ add_imex_conversion_library(IMEXConvertToSPIRV
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
+  MLIRArithCommonConversion
   MLIRArithToSPIRV
   MLIRControlFlowToSPIRV
   MLIRFuncToSPIRV
