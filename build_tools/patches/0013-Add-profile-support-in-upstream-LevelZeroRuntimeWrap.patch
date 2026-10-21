@@ -1,14 +1,24 @@
-From e0f2ae695f78429b72403d127114cbcf3a952543 Mon Sep 17 00:00:00 2001
+From b086169e11fc390563817383ca089fb86ca9ba4b Mon Sep 17 00:00:00 2001
 From: Garra1980 <igor.zamyatin@intel.com>
 Date: Sat, 28 Mar 2026 04:10:31 +0100
 Subject: [PATCH] Add profile support in upstream LevelZeroRuntimeWrappers
 
+The profiling cache flush fills a device scratch buffer four times the
+size of the L3 cache with zeros, and the host now waits for the fill to
+complete before the timed kernel is launched. The fill and the kernel are
+submitted to different command lists, so without the wait the kernel can
+start while the fill is still running.
+
+Flush resources are allocated only when IMEX_ENABLE_CACHE_FLUSHING is set.
+A device that reports no cache size disables flushing with a message.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- .../LevelZeroRuntimeWrappers.cpp              | 335 +++++++++++++++++-
- 1 file changed, 318 insertions(+), 17 deletions(-)
+ .../LevelZeroRuntimeWrappers.cpp              | 383 +++++++++++++++++-
+ 1 file changed, 366 insertions(+), 17 deletions(-)
 
 diff --git a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
-index 0ae7f0b0f3ef..2d4a1fff69e8 100644
+index 0ae7f0b0f3ef..827726213450 100644
 --- a/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 +++ b/mlir/lib/ExecutionEngine/LevelZeroRuntimeWrappers.cpp
 @@ -11,7 +11,10 @@
@@ -325,7 +335,63 @@ index 0ae7f0b0f3ef..2d4a1fff69e8 100644
    });
  }
 
-@@ -583,6 +819,71 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
+@@ -553,6 +789,55 @@ extern "C" ze_module_handle_t mgpuModuleLoadJIT(void *data, int optLevel,
+   });
+ }
+
++// Cache flush for profiling (IMEX_ENABLE_CACHE_FLUSHING=1).
++//
++// Before each timed run the profiler evicts the L3 (global memory cache) so
++// every run starts from the same, cold, state. The flush is a zero fill of a
++// device scratch buffer FOUR times the L3 size, and the host waits for it
++// before the timed kernel is launched.
++//
++// Why 4x: measured with a working set that fits in the L3, a fill had to be
++// about 2.5 to 3 times the L3 size before that working set was fully evicted;
++// smaller fills left part of it cached. 4x leaves margin, and matches the 4x
++// rule oneDNN's benchdnn uses for its GPU cold cache.
++struct CacheFlusher {
++  size_t cacheSize = 0;
++  void *scratch = nullptr;
++  bool enabled = false;
++
++  void init() {
++    if (!getenv("IMEX_ENABLE_CACHE_FLUSHING"))
++      return;
++    cacheSize = getGlobalMemoryCacheSize(getRtContext().device);
++    if (cacheSize == 0) {
++      std::cerr << "IMEX_ENABLE_CACHE_FLUSHING: device reports no global memory "
++                   "cache size; flushing disabled\n";
++      return;
++    }
++    scratch = allocDeviceMemory(4 * cacheSize, 64, false);
++    enabled = true;
++  }
++
++  void flush() {
++    if (!enabled)
++      return;
++    uint8_t val = 0;
++    L0_SAFE_CALL(zeCommandListAppendMemoryFill(
++        getRtContext().immCmdListCopy.get(), scratch, &val, sizeof(val),
++        4 * cacheSize, nullptr, 0, nullptr));
++    L0_SAFE_CALL(zeCommandListHostSynchronize(
++        getRtContext().immCmdListCopy.get(),
++        std::numeric_limits<uint64_t>::max()));
++  }
++
++  void destroy() {
++    if (scratch)
++      L0_SAFE_CALL(zeMemFree(getRtContext().context.get(), scratch));
++    scratch = nullptr;
++    enabled = false;
++  }
++};
++
+ extern "C" ze_kernel_handle_t mgpuModuleGetFunction(ze_module_handle_t module,
+                                                     const char *name) {
+   assert(module && name);
+@@ -583,6 +868,70 @@ extern "C" void mgpuLaunchKernel(ze_kernel_handle_t kernel, size_t gridX,
    dispatch.groupCountX = static_cast<uint32_t>(gridX);
    dispatch.groupCountY = static_cast<uint32_t>(gridY);
    dispatch.groupCountZ = static_cast<uint32_t>(gridZ);
@@ -334,9 +400,10 @@ index 0ae7f0b0f3ef..2d4a1fff69e8 100644
 +    auto rounds = 100;
 +    auto warmups = 100;
 +
-+    size_t cacheSize = getGlobalMemoryCacheSize(getRtContext().device);
-+    std::cout << "Cache Size: " << cacheSize << "\n";
-+    auto *cache = allocDeviceMemory(2 * cacheSize, 64, false);
++    std::cerr << "Cache Size: " << getGlobalMemoryCacheSize(getRtContext().device)
++              << "\n";
++    CacheFlusher flusher;
++    flusher.init();
 +
 +    if (getenv("IMEX_PROFILING_RUNS")) {
 +      auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), nullptr, 10L);
@@ -365,12 +432,7 @@ index 0ae7f0b0f3ef..2d4a1fff69e8 100644
 +
 +    // Profiling loop
 +    for (int r = 0; r < rounds; r++) {
-+      if (getenv("IMEX_ENABLE_CACHE_FLUSHING")) {
-+        int init_val = 5;
-+        L0_SAFE_CALL(zeCommandListAppendMemoryFill(
-+            getRtContext().immCmdListCopy.get(), cache, &init_val, 1, cacheSize,
-+            nullptr, 0, nullptr));
-+      }
++      flusher.flush();
 +
 +      TimeStampEvent tstampEvent;
 +      double execTimeNS = tstampEvent.measure([&](ze_event_handle_t tStmpEvt) {
@@ -381,21 +443,24 @@ index 0ae7f0b0f3ef..2d4a1fff69e8 100644
 +      executionTime[r] = execTimeNS / 1e6; // convert ns ->ms
 +    }
 +
-+    if (cache)
-+      L0_SAFE_CALL(zeMemFree(getRtContext().context.get(), cache));
++    flusher.destroy();
 +
 +    // Compute stats
 +    StatsResult statRes = computeStats<double>(executionTime);
 +
-+    std::cout << "Min: " << statRes.min << "\n";
-+    std::cout << "Max: " << statRes.max << "\n";
-+    std::cout << "Avg: " << statRes.mean << "\n";
-+    std::cout << "Median: " << statRes.median << "\n";
-+    std::cout << "Std Dev: " << statRes.stddev << "\n";
++    // Print the profiling stats on stderr, not stdout. The integration tests
++    // pipe the runner's stdout into FileCheck, which consumes it, so stats
++    // printed there are lost. lit keeps stderr, and it does not mix with the
++    // output that FileCheck checks.
++    std::cerr << "Min: " << statRes.min << "\n";
++    std::cerr << "Max: " << statRes.max << "\n";
++    std::cerr << "Avg: " << statRes.mean << "\n";
++    std::cerr << "Median: " << statRes.median << "\n";
++    std::cerr << "Std Dev: " << statRes.stddev << "\n";
 +  }
 +
    stream->enqueueOp([&](ze_event_handle_t newEvent, uint32_t numWaitEvents,
                          ze_event_handle_t *waitEvents) {
      L0_SAFE_CALL(zeCommandListAppendLaunchKernel(
 --
-2.43.0
+2.34.1
