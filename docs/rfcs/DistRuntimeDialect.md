@@ -122,7 +122,7 @@ Arguments:
 
 `gShape`, `lOffsets`, `bbOffsets` and `bbSizes` are variadic arguments with same
 size `r` where `r` is the rank of the global array (e.g., one number for each
-dimension of the global array). 1trim Returns an `AsyncHandle`, the left and the
+dimension of the global array). Returns an `AsyncHandle`, the left and the
 right halo.
 
 Syntax:
