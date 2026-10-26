@@ -16,21 +16,18 @@
 // exp2/log2e softmax, and the "tir-dropped-*" hint attributes preserved). It is
 // kept verbatim ON PURPOSE.
 //
-// This test is an EXPECTED FAILURE: the WG pipeline silently zeroes the dynamic
-// leading (z,h) batch offsets on the rank-4 transfers, so only head (0,0) is
-// correct and the allclose check actually reports FALSE — while we assert the
-// desired [ALLCLOSE: TRUE]. When the batch-offset bug (issue 1824 / 1809) is
-// fixed this test will start passing and lit will flag it as an XPASS, which is
-// the signal to drop the expected-failure line and keep it as a normal passing
-// test. The rank-2 rewrite that makes it [ALLCLOSE: TRUE] today lives alongside
-// that root-cause writeup.
+// The test covers the lowering of high-dimensional (rank-4) nd transfers. The
+// transfers carry dynamic leading (z,h) batch offsets, and the lowering must
+// fold them into the 2D block load/store address. The allclose check covers
+// all Z*H heads, so the test fails if the lowering drops or zeroes any of
+// those offsets.
 //
 // The ONLY edit relative to the front-end output is dropping the explicit
 // `to_nearest_even` qualifier from the two `arith.truncf` ops: it lowers to
 // `llvm.experimental.constrained.fptrunc`, which the XeVM/SPIR-V backend cannot
 // translate (hard `LLVM ERROR` at compile). Nearest-even is the default rounding
 // anyway, so removing the qualifier is semantically a no-op and lets the kernel
-// compile and *run* (to a wrong result) rather than crash the compiler.
+// compile and run rather than crash the compiler.
 //
 // Problem shape (fixed by the kernel's vector types / index math):
 //   Z (batch)   = 2
@@ -302,8 +299,6 @@ module @fmha attributes {gpu.container_module} {
     %gpu_out_u = memref.cast %gpu_out : memref<2x8x512x64xf16> to memref<*xf16>
     %ref_u = memref.cast %O_ref : memref<2x8x512x64xf32> to memref<*xf32>
 
-    // Assert the DESIRED result. This does not hold today (see the header): the
-    // check actually reports FALSE, which is why the test is marked XFAIL.
     // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF16(%gpu_out_u, %ref_u) : (memref<*xf16>, memref<*xf32>) -> ()
 
