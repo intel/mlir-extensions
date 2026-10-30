@@ -55,12 +55,20 @@ module @gemm attributes {gpu.container_module} {
     }
   }
 
-  func.func @test(%a : memref<8x64xf4E2M1FN>, %b : memref<32x16xi8>, %c : memref<8x16xf32>, %scale_a : memref<8x2xf8E8M0FNU>, %scale_b : memref<2x16xf8E8M0FNU>) -> memref<8x16xf32> attributes {llvm.emit_c_interface} {
+  // The packed FP4 A matrix (8x64xf4E2M1FN) is passed in as a flat 256xi8
+  // buffer because the GPU-to-LLVM conversion of host code (gpu.alloc /
+  // gpu.memcpy) cannot compute the correct buffer size for sub-byte element
+  // types. The buffer is allocated and copied as bytes, then reinterpreted as
+  // memref<8x64xf4E2M1FN> with memref.view for the kernel launch.
+  func.func @test(%a_flat : memref<256xi8>, %b : memref<32x16xi8>, %c : memref<8x16xf32>, %scale_a : memref<8x2xf8E8M0FNU>, %scale_b : memref<2x16xf8E8M0FNU>) -> memref<8x16xf32> attributes {llvm.emit_c_interface} {
+    %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
 
-    %memref_a = gpu.alloc() : memref<8x64xf4E2M1FN>
-    gpu.memcpy %memref_a, %a : memref<8x64xf4E2M1FN>, memref<8x64xf4E2M1FN>
+    // Keep packed FP4 buffers byte-addressable at the GPU runtime boundary.
+    %memref_a_flat = gpu.alloc() : memref<256xi8>
+    gpu.memcpy %memref_a_flat, %a_flat : memref<256xi8>, memref<256xi8>
+    %memref_a = memref.view %memref_a_flat[%c0][] : memref<256xi8> to memref<8x64xf4E2M1FN>
 
     %memref_b = gpu.alloc() : memref<32x16xi8>
     gpu.memcpy %memref_b, %b : memref<32x16xi8>, memref<32x16xi8>
@@ -76,7 +84,7 @@ module @gemm attributes {gpu.container_module} {
 
     gpu.launch_func @kernel::@dpas_mx_e2m1 blocks in (%c1, %c1, %c1) threads in (%c16, %c1, %c1)
     args(%memref_a : memref<8x64xf4E2M1FN>, %memref_b : memref<32x16xi8>, %memref_c : memref<8x16xf32>, %memref_scale_a : memref<8x2xf8E8M0FNU>, %memref_scale_b : memref<2x16xf8E8M0FNU>)
-    gpu.dealloc %memref_a : memref<8x64xf4E2M1FN>
+    gpu.dealloc %memref_a_flat : memref<256xi8>
     gpu.dealloc %memref_b : memref<32x16xi8>
     gpu.dealloc %memref_scale_a : memref<8x2xf8E8M0FNU>
     gpu.dealloc %memref_scale_b : memref<2x16xf8E8M0FNU>
@@ -95,13 +103,13 @@ module @gemm attributes {gpu.container_module} {
     %c16 = arith.constant 16 : index
     %c32 = arith.constant 32 : index
     %c256 = arith.constant 256 : index
-    %c1e2m1 = arith.constant 1.0 : f4E2M1FN
+
     %c1packed_e2m1 = arith.constant 0x22 : i8
     %c0f32 = arith.constant 0.0 : f32
     %c1f8E8M0FNU = arith.constant 1.0 : f8E8M0FNU
 
     %A_flatbytes = memref.alloc() : memref<256xi8>
-    %A = memref.view %A_flatbytes[%c0][] : memref<256xi8> to memref<8x64xf4E2M1FN>
+
     scf.for %i = %c0 to %c256 step %c1 {
       memref.store %c1packed_e2m1, %A_flatbytes[%i] : memref<256xi8>
     }
@@ -134,7 +142,7 @@ module @gemm attributes {gpu.container_module} {
       }
     }
 
-    %C_res = call @test(%A, %B, %C, %scale_A, %scale_B) : (memref<8x64xf4E2M1FN>, memref<32x16xi8>, memref<8x16xf32>, memref<8x2xf8E8M0FNU>, memref<2x16xf8E8M0FNU>) -> memref<8x16xf32>
+    %C_res = call @test(%A_flatbytes, %B, %C, %scale_A, %scale_B) : (memref<256xi8>, memref<32x16xi8>, memref<8x16xf32>, memref<8x2xf8E8M0FNU>, memref<2x16xf8E8M0FNU>) -> memref<8x16xf32>
     %C_cast = memref.cast %C_res : memref<8x16xf32> to memref<*xf32>
     call @printMemrefF32(%C_cast) : (memref<*xf32>) -> ()
 
