@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Lee, Sang Ik" <sang.ik.lee@intel.com>
+Date: Wed, 28 Oct 2026 00:00:00 +0000
+Subject: [PATCH] [SPIRV] Keep the allocated type of allocas passed to mangled
+ declarations
+
+Code change from https://github.com/llvm/llvm-project/pull/236532,
+without its lit test.
+
+Since #230342, the pointee type parsed from a mangled declaration
+replaces the allocated type of an alloca passed to it. The variable is
+then sized from the callee parameter type, e.g. a 4-byte uint instead
+of `[8 x uint]` for `intel_sub_group_2d_block_read_32b_8r16x1c(...,
+private uint *)`. After #232579 this breaks every XeVM 2D block
+load/store. Handle allocas like GEPs: keep the allocated type and cast
+the pointer at the call.
+
+Drop this patch once #236532 is in the pinned LLVM version.
+---
+ llvm/lib/Target/SPIRV/SPIRVEmitIntrinsics.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/llvm/lib/Target/SPIRV/SPIRVEmitIntrinsics.cpp b/llvm/lib/Target/SPIRV/SPIRVEmitIntrinsics.cpp
+index 9b45b9ebc32c..0ead6083903c 100644
+--- a/llvm/lib/Target/SPIRV/SPIRVEmitIntrinsics.cpp
++++ b/llvm/lib/Target/SPIRV/SPIRVEmitIntrinsics.cpp
+@@ -3680,7 +3680,9 @@ void SPIRVEmitIntrinsicsImpl::applyDemangledPtrArgTypes(IRBuilder<> &B) {
+             B.SetCurrentDebugLocation(DebugLoc());
+             GR->buildAssignPtr(B, ElemTy, Arg);
+           }
+-        } else if (isaGEP(Param)) {
++        } else if (isaGEP(Param) || isa<AllocaInst>(Param)) {
++          // The allocated type defines the size of an alloca, so cast at the
++          // call instead of overriding its pointee type.
+           replaceUsesOfWithSpvPtrcast(
+               Param, normalizeType(ElemTy, CanUseAnyVectorRank), CI, Ptrcasts);
+         } else if (isa<Instruction>(Param)) {
+--
+2.43.0
