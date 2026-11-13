@@ -121,6 +121,22 @@ jobs:
           cmake --build build --target install
           rm -rf build   # reclaim runner disk before CodeQL DB creation
 
+      # The traced build runs the CodeQL extractor alongside every compiler
+      # invocation, so both disk and memory are much tighter than in build.yml.
+      # Reclaim the pre-installed toolchains we never use and add swap, then
+      # record what is left so a future failure can be diagnosed from the log.
+      - name: Free runner resources
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/share/powershell \
+                      /usr/share/swift "$AGENT_TOOLSDIRECTORY" || true
+          sudo fallocate -l 8G /mnt/codeql-swap
+          sudo chmod 600 /mnt/codeql-swap
+          sudo mkswap /mnt/codeql-swap
+          sudo swapon /mnt/codeql-swap
+          df -h /
+          free -h
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -138,10 +154,15 @@ jobs:
           pip install lit
           cmake -S . -B _build -GNinja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS=-g0 \
             -DLLVM_EXTERNAL_LIT="$(which lit)" \
             -DMLIR_DIR=${{ github.workspace }}/mlir/lib/cmake/mlir \
             -DLLVM_LIT_ARGS=-a
-          cmake --build _build   # build targets only; lit tests are not needed for CodeQL
+          # Build targets only; lit tests are not needed for CodeQL.
+          # -j2 keeps peak memory below the 16 GB runner limit: the four
+          # default jobs plus their extractors were killing the runner.
+          cmake --build _build -- -j2
+          free -h
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
