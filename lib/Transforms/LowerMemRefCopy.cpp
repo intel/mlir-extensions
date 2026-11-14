@@ -64,8 +64,14 @@ struct LowerMemRefCopy
         }
       }
 
+      // dst can only be replaced by src if dst is not used before the copy,
+      // otherwise these earlier uses would access src instead of dst.
+      bool dstHasPriorUse = llvm::any_of(dst.getUsers(), [&](Operation *user) {
+        return user != op && !domInfo.properlyDominates(op, user);
+      });
+
       // replace copy with linalg.generic
-      if (hasSubsequentUse) {
+      if (hasSubsequentUse || dstHasPriorUse) {
         OpBuilder builder(op);
         linalg::makeMemRefCopyOp(builder, op.getLoc(), src, dst);
       } else {

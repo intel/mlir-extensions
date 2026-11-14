@@ -36,4 +36,25 @@ module {
     }
     return %alloc_1 : memref<10x20xf32>
   }
+  func.func @copy_target_used_before_copy() -> (i64, i64) {
+    %c0 = arith.constant 0 : index
+    %c5 = arith.constant 5 : i64
+    %c7 = arith.constant 7 : i64
+    %alloc = memref.alloc() : memref<1xi64>
+    %alloc_0 = memref.alloc() : memref<1xi64>
+    memref.store %c5, %alloc_0[%c0] : memref<1xi64>
+    memref.store %c7, %alloc[%c0] : memref<1xi64>
+    %0 = memref.load %alloc_0[%c0] : memref<1xi64>
+    memref.copy %alloc, %alloc_0 : memref<1xi64> to memref<1xi64>
+    %1 = memref.load %alloc_0[%c0] : memref<1xi64>
+    // CHECK-LABEL: func @copy_target_used_before_copy
+    // CHECK:       %[[SRC:.*]] = memref.alloc() : memref<1xi64>
+    // CHECK:       %[[DST:.*]] = memref.alloc() : memref<1xi64>
+    // CHECK:       memref.store %{{.*}}, %[[DST]]
+    // CHECK:       memref.store %{{.*}}, %[[SRC]]
+    // CHECK:       memref.load %[[DST]]
+    // CHECK:       linalg.generic {{.*}} ins(%[[SRC]] : memref<1xi64>) outs(%[[DST]] : memref<1xi64>)
+    // CHECK:       memref.load %[[DST]]
+    return %0, %1 : i64, i64
+  }
 }
