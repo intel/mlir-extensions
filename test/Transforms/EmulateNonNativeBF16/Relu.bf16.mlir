@@ -48,12 +48,11 @@ module @relu attributes {gpu.container_module} {
       %1 = gpu.block_id  y
       %2 = memref.load %arg0[%0, %1] : memref<4x5xi1>
       %3 = memref.load %arg1[%0, %1] : memref<4x5xbf16>
-      // CHECK: %[[VAR4_2:.*]] = arith.extf %arg2 : bf16 to f32
-      // CHECK: %[[VAR5_2:.*]] = arith.extf %[[VAR3_2:.*]] : bf16 to f32
-      // CHECK: %[[VAR6_2:.*]] = arith.select %[[VAR2_2:.*]], %[[VAR4_2]], %[[VAR5_2]] : f32
-      // CHECK: %[[VAR7_2:.*]] = arith.truncf %[[VAR6_2]] : f32 to bf16
+      // CHECK: %[[VAR4_2:.*]] = arith.select %[[VAR2_2:.*]], %arg2, %[[VAR3_2:.*]] : bf16
+      // CHECK: %[[VAR5_2:.*]] = arith.extf %[[VAR4_2]] : bf16 to f32
+      // CHECK: %[[VAR6_2:.*]] = arith.truncf %[[VAR5_2]] : f32 to bf16
       %4 = arith.select %2, %arg2, %3 : bf16
-      // CHECK: memref.store %[[VAR7_2]], %arg3[%[[VAR0_2:.*]], %[[VAR1_2:.*]]] : memref<4x5xbf16>
+      // CHECK: memref.store %[[VAR6_2]], %arg3[%[[VAR0_2:.*]], %[[VAR1_2:.*]]] : memref<4x5xbf16>
       memref.store %4, %arg3[%0, %1] : memref<4x5xbf16>
       gpu.return
     }

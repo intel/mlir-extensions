@@ -62,15 +62,13 @@ module @relu attributes {gpu.container_module} {
       %2 = memref.load %arg0[%0, %1] : memref<4x5xi1>
       // CHECK: %[[VAR3_2:.*]] = memref.load %arg1[%[[VAR0_2:.*]], %[[VAR1_2:.*]]] : memref<4x5xi16>
       %3 = memref.load %arg1[%0, %1] : memref<4x5xbf16>
-      // CHECK: %[[VAR4_2:.*]] = arith.bitcast %arg2 : i16 to bf16
-      // CHECK: %[[VAR5_2:.*]] = arith.extf %[[VAR4_2]] : bf16 to f32
-      // CHECK: %[[VAR6_2:.*]] = arith.bitcast %[[VAR3_2]] : i16 to bf16
-      // CHECK: %[[VAR7_2:.*]] = arith.extf %[[VAR6_2]] : bf16 to f32
-      // CHECK: %[[VAR8_2:.*]] = arith.select %[[VAR2_2:.*]], %[[VAR5_2]], %[[VAR7_2]] : f32
-      // CHECK: %[[VAR9_2:.*]] = arith.truncf %[[VAR8_2]] : f32 to bf16
-      // CHECK: %[[VAR10_2:.*]] = arith.bitcast %[[VAR9_2]] : bf16 to i16
+      // CHECK: %[[VAR4_2:.*]] = arith.select %[[VAR2_2:.*]], %arg2, %[[VAR3_2]] : i16
+      // CHECK: %[[VAR5_2:.*]] = arith.bitcast %[[VAR4_2]] : i16 to bf16
+      // CHECK: %[[VAR6_2:.*]] = arith.extf %[[VAR5_2]] : bf16 to f32
+      // CHECK: %[[VAR7_2:.*]] = arith.truncf %[[VAR6_2]] : f32 to bf16
+      // CHECK: %[[VAR8_2:.*]] = arith.bitcast %[[VAR7_2]] : bf16 to i16
       %4 = arith.select %2, %arg2, %3 : bf16
-      // CHECK: memref.store %[[VAR10_2]], %arg3[%[[VAR0_2]], %[[VAR1_2]]] : memref<4x5xi16>
+      // CHECK: memref.store %[[VAR8_2]], %arg3[%[[VAR0_2]], %[[VAR1_2]]] : memref<4x5xi16>
       memref.store %4, %arg3[%0, %1] : memref<4x5xbf16>
       gpu.return
     }
