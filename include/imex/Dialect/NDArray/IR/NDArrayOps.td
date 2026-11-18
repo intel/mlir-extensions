@@ -53,6 +53,9 @@ def NDArray_Dialect : Dialect {
 
         }];
 
+    // Canonicalization patterns of ndarray ops create tensor.cast ops.
+    let dependentDialects = ["::mlir::tensor::TensorDialect"];
+
     //  We use the default parser/printer which handles registered attrs
     let useDefaultAttributePrinterParser = true;
 }
