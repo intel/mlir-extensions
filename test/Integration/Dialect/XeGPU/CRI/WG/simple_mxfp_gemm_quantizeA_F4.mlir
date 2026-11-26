@@ -7,7 +7,7 @@
 // RUN: | FileCheck %s
 
 // XFAIL: *
-// Fails on the CRI simulator since the LLVM bump to bf2e146e5334: mismatches: 4096 (all elements differ).
+// Fails since the LLVM bump to bf2e146e5334: mismatches: 4096 (all elements differ).
 
 // Note: layouts used by dpas_mx need to match HW constaint. Otherwise dpas_mx is not unrolled.
 // Problem size M = 64, N = 64, K = 2048, C is f32, dispatched as
