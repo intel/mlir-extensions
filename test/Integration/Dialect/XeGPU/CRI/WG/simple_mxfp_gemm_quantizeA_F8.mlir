@@ -7,7 +7,7 @@
 // RUN: | FileCheck %s
 
 // XFAIL: *
-// Fails on the CRI simulator since the LLVM bump to bf2e146e5334: results are inf/nan.
+// Fails since the LLVM bump to bf2e146e5334: results are inf/nan.
 
 // mx-fp8 counterpart of simple_mxfp_gemm_quantizeA_F4.mlir. A is loaded as bf16
 // and quantized in-kernel to f8E5M2 plus an f8E8M0 scale per 32 elements along
